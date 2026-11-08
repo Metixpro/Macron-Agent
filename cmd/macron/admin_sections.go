@@ -593,7 +593,7 @@ func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 		row(b.button(l.t("🗑 حذف"), "a:em:del", ""), b.button(l.t("🧹 حذف همه"), "a:em:clear", telegram.StyleDanger)),
 		row(b.button(l.t("✨ ساخت ایموجی وضعیت‌ها"), "a:em:make", telegram.StylePrimary)),
 		row(b.button(l.t("🎙 ایموجی شنیدن"), "a:em:slot:listen", ""), b.button(l.t("🎧 ایموجی گوش دادن"), "a:em:slot:transcribe", "")),
-		row(b.back(l, "a:st")),
+		row(b.back(l, "a:ws")),
 	)}
 }
 

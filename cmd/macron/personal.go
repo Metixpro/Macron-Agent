@@ -182,7 +182,7 @@ func (b *Bot) viewHome(ctx context.Context, admin int64) panelView {
 	rows := [][]telegram.InlineKeyboardButton{
 		row(b.button(l.t("📊 آمار و سرور"), "a:stats", telegram.StylePrimary), b.button(l.t("🤖 پروایدرها"), "a:pv", "")),
 		row(b.button(l.t("🦾 ایجنت و ابزارها"), "a:ai", ""), b.button(b.learnLabel(ctx, l), "a:learn", "")),
-		row(b.button(l.t("⚙️ تنظیمات عمومی"), "a:st", "")),
+		row(b.button(l.t("⚙️ تنظیمات"), "a:st", "")),
 		row(b.button(l.t("🔄 بروزرسانی"), "a:home", ""), b.button(l.t("✖️ بستن"), "a:close", telegram.StyleDanger)),
 	}
 	return panelView{html: html, kb: keyboard(rows...)}

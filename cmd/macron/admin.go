@@ -208,6 +208,14 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 	// ----- settings
 	case "st":
 		switch arg(2) {
+		case "remoji":
+			i, err := strconv.Atoi(arg(3))
+			if err != nil || i < 0 || i >= len(reactionEmojis) {
+				answer("", false)
+				break
+			}
+			_ = b.st.SetSetting(ctx, store.SettingReactionEmoji, reactionEmojis[i])
+			answer(reactionEmojis[i], false)
 		case "react", "premium", "failover", "trace", "gapprove", "worklog":
 			key := map[string]string{"react": store.SettingReactions, "premium": store.SettingPremiumEmoji, "failover": store.SettingFailover,
 				"trace": store.SettingLiveTrace, "gapprove": store.SettingGroupApproval, "worklog": store.SettingWorkLog}[arg(2)]
@@ -268,11 +276,17 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 			show(b.viewProviders(ctx, l))
 		case arg(3) == "gr":
 			show(b.viewGroups(ctx, l))
+		case arg(3) == "ws":
+			show(b.viewShowWork(l))
 		case arg(2) == "auto":
 			show(b.viewAgent(l))
 		default:
 			show(b.viewSettings(l))
 		}
+
+	case "ws":
+		answer("", false)
+		show(b.viewShowWork(l))
 
 	// ----- the agent and its tools
 	case "ai":
@@ -653,27 +667,62 @@ const usersPerPage = 8
 
 // ---------------------------------------------------------------- settings and admins
 
+// reactionEmojis are the reactions offered for a message that was read.
+var reactionEmojis = []string{"👀", "👍", "✍", "🫡", "🤔", "⚡"}
+
+// seenReaction is the reaction a message gets when it is read.
+func (b *Bot) seenReaction() string {
+	if v, ok := b.st.Setting(store.SettingReactionEmoji); ok {
+		for _, e := range reactionEmojis {
+			if e == v {
+				return v
+			}
+		}
+	}
+	return reactionEmojis[0]
+}
+
+// viewSettings is the settings page: the reactions, nothing else (how the
+// work is shown lives in 🦾 the agent and its tools → 🖥 showing the work).
 func (b *Bot) viewSettings(l lang) panelView {
-	html := l.f(`⚙️ <b>تنظیمات عمومی</b>
-
-😍 ری‌اکشن روی پیام‌ها: %s
-
-<b>نمایش کار</b>
-🖥 ترمینال زنده (نمایش مراحل کار): %s
-🎨 ظاهر ترمینال: %s
-🧰 گزارش کار بالای جواب (کارهای چندمرحله‌ای): %s
-👁 نمایش کار توی پیوی (پیش‌فرض؛ با /mode عوض می‌شه): %s
-✨ ایموجی پریمیوم: %s`,
-		onOff(l, b.st.SettingBool(store.SettingReactions, true)), onOff(l, b.st.SettingBool(store.SettingLiveTrace, true)),
-		traceStyleName(l, b.consoleStyle()), onOff(l, b.st.SettingBool(store.SettingWorkLog, true)), liveName(l, b.liveDefault()),
-		onOff(l, b.st.SettingBool(store.SettingPremiumEmoji, false)))
-	html += l.t("\n\n<i>قدرت ایجنت، حافظه و ابزارها توی 🦾 ایجنت و ابزارها.</i>")
+	on := b.st.SettingBool(store.SettingReactions, true)
+	html := l.f("⚙️ <b>تنظیمات</b>\n\n😍 ری‌اکشن روی پیام‌ها: %s\nایموجی پیش‌فرض (وقتی پیام خونده شد): %s", onOff(l, on), b.seenReaction())
+	toggle := l.t("😍 ری‌اکشن: روشن")
+	if !on {
+		toggle = l.t("😍 ری‌اکشن: خاموش")
+	}
+	var emojis []telegram.InlineKeyboardButton
+	for i, e := range reactionEmojis {
+		label := e
+		if e == b.seenReaction() {
+			label = "✅ " + e
+		}
+		emojis = append(emojis, b.button(label, "a:st:remoji:"+strconv.Itoa(i), ""))
+	}
 	return panelView{html: html, kb: keyboard(
-		row(b.button(l.t("😍 ری‌اکشن"), "a:st:react", ""), b.button(l.t("✨ ایموجی پریمیوم"), "a:em", "")),
-		row(b.button(l.t("🖥 ترمینال زنده"), "a:st:trace", ""), b.button(l.t("🎨 ظاهر ترمینال"), "a:st:tstyle", "")),
-		row(b.button(l.t("🧰 گزارش کار"), "a:st:worklog", ""), b.button(l.t("👁 نمایش کار توی پیوی"), "a:st:live", "")),
+		row(b.button(toggle, "a:st:react", "")),
+		row(emojis...),
 		row(b.back(l, "a:home")),
 	)}
+}
+
+// viewShowWork is how the work is shown while the agent works: the live
+// terminal, its look, the work log, and the private chats' default.
+func (b *Bot) viewShowWork(l lang) panelView {
+	html := l.f("🖥 <b>نمایش کار</b>\n\n🖥 ترمینال زنده (نمایش مراحل کار): %s\n🎨 ظاهر ترمینال: %s\n🧰 گزارش کار بالای جواب (کارهای چندمرحله‌ای): %s\n👁 نمایش کار توی پیوی (پیش‌فرض؛ با /mode عوض می‌شه): %s",
+		onOff(l, b.st.SettingBool(store.SettingLiveTrace, true)), traceStyleName(l, b.consoleStyle()),
+		onOff(l, b.st.SettingBool(store.SettingWorkLog, true)), liveName(l, b.liveDefault()))
+	rows := [][]telegram.InlineKeyboardButton{
+		row(b.button(l.t("🖥 ترمینال زنده"), "a:st:trace:ws", ""), b.button(l.t("🎨 ظاهر ترمینال"), "a:st:tstyle:ws", "")),
+		row(b.button(l.t("🧰 گزارش کار"), "a:st:worklog:ws", ""), b.button(l.t("👁 نمایش کار توی پیوی"), "a:st:live:ws", "")),
+	}
+	// Premium emoji is off by default and turned on outside the panel
+	// (macron config set premium_emoji true); once on, its packs are managed here.
+	if b.st.SettingBool(store.SettingPremiumEmoji, false) {
+		rows = append(rows, row(b.button(l.t("✨ ایموجی پریمیوم"), "a:em", "")))
+	}
+	rows = append(rows, row(b.back(l, "a:ai")))
+	return panelView{html: html, kb: keyboard(rows...)}
 }
 
 // viewAgent is everything about how the agent works: its budget, how much
@@ -713,6 +762,7 @@ func (b *Bot) viewAgent(l lang) panelView {
 		row(b.button(l.t("🔎 جستجوی وب"), "a:sr", ""), b.button(l.t("📥 دانلودر"), "a:dl", "")),
 		row(b.button(l.t("🎙 صدا به متن"), "a:stt", ""), b.button(l.t("🎨 ساخت عکس"), "a:ig", "")),
 		row(b.button(l.t("🖼 ویرایش عکس"), "a:ie", ""), b.button(l.t("🎤 ساخت آهنگ"), "a:mu", "")),
+		row(b.button(l.t("🖥 نمایش کار"), "a:ws", "")),
 		row(b.back(l, "a:home")),
 	)}
 }

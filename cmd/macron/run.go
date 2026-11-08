@@ -211,7 +211,7 @@ func (b *Bot) interject(u *store.User, m *telegram.Message, text string) bool {
 	case !ok:
 		return false // the job ended in the meantime
 	case queued:
-		react.set("👀", false) // runs right after the current answer
+		react.set(b.seenReaction(), false) // runs right after the current answer
 	default:
 		react.set("✍", false) // added to the job
 	}

@@ -4,7 +4,6 @@ package main
 
 func init() {
 	for fa, en := range map[string]string{
-		"\n\n<i>قدرت ایجنت، حافظه و ابزارها توی 🦾 ایجنت و ابزارها.</i>":                                                   "\n\n<i>The agent's power, memory and tools are under 🦾 Agent and tools.</i>",
 		"\n\nℹ️ مدل معمولی همون پروایدر فعاله (⭐ توی 🤖 پروایدرها).":                                                       "\n\nℹ️ The regular model is the active provider (⭐ in 🤖 Providers).",
 		"\n\nℹ️ ⏸ خاموش: هیچ درخواستی بهش نمی‌ره (نه پیش‌فرض، نه سوییچ خودکار). ⭐ فعال کن: پیش‌فرض همه درخواست‌ها می‌شه.": "\n\nℹ️ ⏸ Off: no request goes to it (not as the default, not by automatic switching). ⭐ Activate: it becomes the default for all requests.",
 		"\n▫️ معمولی: %s\n": "\n▫️ Regular: %s\n",
@@ -13,8 +12,7 @@ func init() {
 		"▫️ مدل معمولی":                     "▫️ Regular model",
 		"▫️ مدل معمولی (مسیریابی خاموشه)\n": "▫️ Regular model (routing is off)\n",
 		"▫️ مدل معمولی — %s\n":              "▫️ Regular model — %s\n",
-		"⚙️ <b>تنظیمات عمومی</b>\n\n😍 ری‌اکشن روی پیام‌ها: %s\n\n<b>نمایش کار</b>\n🖥 ترمینال زنده (نمایش مراحل کار): %s\n🎨 ظاهر ترمینال: %s\n🧰 گزارش کار بالای جواب (کارهای چندمرحله‌ای): %s\n👁 نمایش کار توی پیوی (پیش‌فرض؛ با /mode عوض می‌شه): %s\n✨ ایموجی پریمیوم: %s": "⚙️ <b>General settings</b>\n\n😍 Reactions to messages: %s\n\n<b>Showing the work</b>\n🖥 Live terminal (the steps of the work): %s\n🎨 Terminal style: %s\n🧰 Work report above the answer (multi-step jobs): %s\n👁 Showing the work in private (the default; /mode changes it): %s\n✨ Premium emoji: %s",
-		"💪 <b>مدل قوی</b>\n\nکارهای سنگین اول به این پروایدر می‌رن (اگه خطا بده، بقیه جاش جواب می‌دن). «هیچ» یعنی مسیریابی خاموش و همه چیز با مدل معمولی.":                                                                                                                  "💪 <b>Strong model</b>\n\nHeavy jobs go to this provider first (if it fails, the others answer in its place). «None» turns routing off: everything goes to the regular model.",
+		"💪 <b>مدل قوی</b>\n\nکارهای سنگین اول به این پروایدر می‌رن (اگه خطا بده، بقیه جاش جواب می‌دن). «هیچ» یعنی مسیریابی خاموش و همه چیز با مدل معمولی.": "💪 <b>Strong model</b>\n\nHeavy jobs go to this provider first (if it fails, the others answer in its place). «None» turns routing off: everything goes to the regular model.",
 		"💪 قوی: %s\n": "💪 Strong: %s\n",
 		"💪 قوی: %s ⚠️ خاموشه؛ تا روشن نشه همه چیز با مدل معمولیه\n": "💪 Strong: %s ⚠️ it is off; until it is on everything goes to the regular model\n",
 		"💪 قوی: %s ⚠️ همون مدل معمولیه\n":                           "💪 Strong: %s ⚠️ it is the regular model\n",

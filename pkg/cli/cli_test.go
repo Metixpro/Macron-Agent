@@ -415,3 +415,30 @@ func TestSetupAsksInOrder(t *testing.T) {
 		t.Errorf("time zone %q", got)
 	}
 }
+
+// A lower_case key is one of the agent's own settings: it goes to the
+// database, where the panel reads it, not to config.env.
+func TestConfigSetsADatabaseSetting(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MACRON_HOME", home)
+	t.Setenv("MACRON_ENV_FILE", "")
+	io, out := testIO("")
+	if _, code := Run([]string{"config", "set", "premium_emoji", "true"}, io); code != 0 {
+		t.Fatalf("set: %d %s", code, out)
+	}
+	io, out = testIO("")
+	if _, code := Run([]string{"config", "get", "premium_emoji"}, io); code != 0 || strings.TrimSpace(out.String()) != "true" {
+		t.Fatalf("get: %d %q", code, out)
+	}
+	if env, _ := loadEnvFile(filepath.Join(home, "config.env")); env != nil {
+		if _, ok := env.Get("premium_emoji"); ok {
+			t.Fatal("a database setting went to config.env")
+		}
+	}
+	io, _ = testIO("")
+	Run([]string{"config", "unset", "premium_emoji"}, io)
+	io, _ = testIO("")
+	if _, code := Run([]string{"config", "get", "premium_emoji"}, io); code == 0 {
+		t.Fatal("unset")
+	}
+}

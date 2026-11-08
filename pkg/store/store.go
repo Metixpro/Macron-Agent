@@ -179,6 +179,7 @@ const (
 	SettingSysDisk        = "sys_disk_limit"
 	SettingPremiumEmoji   = "premium_emoji"
 	SettingReactions      = "reactions"
+	SettingReactionEmoji  = "reaction_emoji" // the reaction a message gets when it is read (default 👀)
 	SettingActiveProvider = "active_provider"
 	SettingFailover       = "provider_failover"
 	SettingLiveTrace      = "live_trace"     // show the live terminal while working

@@ -19,7 +19,11 @@ import (
 func configCmd(io *IO, args []string) int {
 	if len(args) == 0 {
 		io.println("usage: macron config list | get KEY | set KEY VALUE | unset KEY | path")
+		io.println("  UPPER_CASE keys are config.env; lower_case keys are the agent's own settings (the panel's), e.g. premium_emoji")
 		return 2
+	}
+	if len(args) >= 2 && dbSettingKey(args[1]) && (args[0] == "get" || args[0] == "set" || args[0] == "unset") {
+		return dbSettingCmd(io, args)
 	}
 	path := config.EnvFilePath()
 	env, err := loadEnvFile(path)
@@ -214,4 +218,60 @@ func backup(io *IO, args []string) int {
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// dbSettingKey: a lower_case key is one of the agent's own settings, kept in
+// its database (what the panel changes); UPPER_CASE keys live in config.env.
+func dbSettingKey(k string) bool {
+	if k == "" || k[0] < 'a' || k[0] > 'z' {
+		return false
+	}
+	for _, r := range k {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+// dbSettingCmd reads or changes one of the agent's own settings.
+func dbSettingCmd(io *IO, args []string) int {
+	ctx := context.Background()
+	path := config.HomePath(config.FileDB)
+	if !fileExists(path) && args[0] != "set" {
+		io.printf("❌ no database yet (%s)\n", path)
+		return 1
+	}
+	st, err := store.Open(ctx, path, store.Options{SecretKey: "config"})
+	if err != nil {
+		io.printf("❌ the database does not open: %v\n", err)
+		return 1
+	}
+	defer st.Close()
+	key := args[1]
+	switch args[0] {
+	case "get":
+		v, ok := st.Setting(key)
+		if !ok {
+			return 1
+		}
+		io.println(v)
+		return 0
+	case "set":
+		if len(args) != 3 {
+			io.println("usage: macron config set KEY VALUE")
+			return 2
+		}
+		if err := st.SetSetting(ctx, key, args[2]); err != nil {
+			io.printf("❌ %v\n", err)
+			return 1
+		}
+	case "unset":
+		if err := st.DeleteSetting(ctx, key); err != nil {
+			io.printf("❌ %v\n", err)
+			return 1
+		}
+	}
+	io.println("✅ saved; restart the agent to use it: macron service restart")
+	return 0
 }

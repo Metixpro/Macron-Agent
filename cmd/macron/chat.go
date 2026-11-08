@@ -326,7 +326,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		react.enabled = false
 	}
 	defer react.wait()
-	react.set("👀", false)
+	react.set(b.seenReaction(), false)
 
 	// The live card comes first: reading the message (a voice message is
 	// written down) can take a while, and the card shows it.

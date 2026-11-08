@@ -343,8 +343,8 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	home, _ := callbacks(lastOf(h, "sendMessage"))
 	hubs := map[string][]string{
 		"a:stats": {"a:sys:1h"},
-		"a:ai":    {"a:sr", "a:dl", "a:stt", "a:ig", "a:ie", "a:mu", "a:soul", "a:st:steps", "a:st:window", "a:st:ctx"},
-		"a:st":    {"a:em", "a:st:trace"},
+		"a:ai":    {"a:sr", "a:dl", "a:stt", "a:ig", "a:ie", "a:mu", "a:soul", "a:ws", "a:st:steps", "a:st:window", "a:st:ctx"},
+		"a:st":    {"a:st:react", "a:st:remoji:0"},
 		"a:pv":    {"a:rt"},
 	}
 	where := map[string]string{}
@@ -385,5 +385,70 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 				t.Errorf("%s goes back to %q, not to %s", c, back, hub)
 			}
 		}
+	}
+}
+
+// The settings page is the reactions and nothing else; how the work is shown
+// lives once, in 🦾 the agent → 🖥 showing the work, and premium emoji is
+// not in the panel until it is turned on outside it.
+func TestSettingsIsReactionsOnly(t *testing.T) {
+	h := newHarness(t)
+	h.send(private(ownerID, "/admin"))
+	if !strings.Contains(lastMarkup(h), "⚙️ تنظیمات") || strings.Contains(lastMarkup(h), "تنظیمات عمومی") {
+		t.Fatalf("home: %s", lastMarkup(h))
+	}
+	h.click(ownerID, ownerID, 9, "a:st")
+	st := lastOf(h, "editMessageText")
+	for _, gone := range []string{"a:em", "a:st:trace", "a:st:tstyle", "a:st:worklog", "a:st:live"} {
+		if hasButton(buttons(st), "→ "+gone) {
+			t.Errorf("the settings page still has %s", gone)
+		}
+	}
+	if n := len(buttons(st)); n != 1+len(reactionEmojis)+1 {
+		t.Errorf("%d buttons: the switch, %d emojis and back", n, len(reactionEmojis))
+	}
+	h.click(ownerID, ownerID, 9, "a:st:remoji:3")
+	if h.bot.seenReaction() != reactionEmojis[3] {
+		t.Fatalf("default reaction %q", h.bot.seenReaction())
+	}
+	h.click(ownerID, ownerID, 9, "a:st:remoji:99") // not offered
+	if h.bot.seenReaction() != reactionEmojis[3] {
+		t.Fatal("an emoji that is not offered")
+	}
+	_ = h.st.SetSetting(bg, store.SettingReactionEmoji, "💩")
+	if h.bot.seenReaction() != "👀" {
+		t.Fatal("an unknown stored emoji falls back to 👀")
+	}
+	h.click(ownerID, ownerID, 9, "a:st:react")
+	if h.st.SettingBool(store.SettingReactions, true) {
+		t.Fatal("reactions toggle")
+	}
+
+	// Showing the work: one page, under the agent.
+	h.click(ownerID, ownerID, 9, "a:ws")
+	ws := lastOf(h, "editMessageText")
+	for _, want := range []string{"a:st:trace:ws", "a:st:tstyle:ws", "a:st:worklog:ws", "a:st:live:ws"} {
+		if !hasButton(buttons(ws), "→ "+want) {
+			t.Errorf("showing the work lacks %s", want)
+		}
+	}
+	if hasButton(buttons(ws), "→ a:em") {
+		t.Error("premium emoji is off: not in the panel")
+	}
+	h.click(ownerID, ownerID, 9, "a:st:trace:ws")
+	h.click(ownerID, ownerID, 9, "a:st:worklog:ws")
+	h.click(ownerID, ownerID, 9, "a:st:tstyle:ws")
+	h.click(ownerID, ownerID, 9, "a:st:live:ws")
+	if h.st.SettingBool(store.SettingLiveTrace, true) || h.st.SettingBool(store.SettingWorkLog, true) || h.bot.consoleStyle() ||
+		h.bot.liveDefault() == liveModes[0] {
+		t.Fatal("the work settings did not change")
+	}
+	if v := fmt.Sprint(lastOf(h, "editMessageText").body["text"]); !strings.Contains(v, "نمایش کار") {
+		t.Fatalf("a change stays on its page: %s", v)
+	}
+	_ = h.st.SetSetting(bg, store.SettingPremiumEmoji, "true")
+	h.click(ownerID, ownerID, 9, "a:ws")
+	if !hasButton(buttons(lastOf(h, "editMessageText")), "→ a:em") {
+		t.Error("once on, premium emoji's packs are managed from showing the work")
 	}
 }
