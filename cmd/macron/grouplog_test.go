@@ -55,7 +55,16 @@ func TestGroupCatchUp(t *testing.T) {
 	h.wantText("فقط ادمین‌های گروه")
 	h.tg.reset()
 	h.send(g.msg(ali, "Ali", "/groupsettings", 0))
-	panel := lastOf(h, "sendMessage")
+	var panel tgCall
+	for _, candidate := range h.tg.of("sendMessage") {
+		if chat, ok := candidate.body["chat_id"].(float64); ok && int64(chat) == logChat && hasButton(buttons(candidate), fmt.Sprintf("gl:%d:on:48", logChat)) {
+			panel = candidate
+			break
+		}
+	}
+	if panel.body == nil {
+		t.Fatal("group settings panel was not sent to its chat")
+	}
 	if !strings.Contains(panel.body["text"].(string), "Privacy") || !hasButton(buttons(panel), fmt.Sprintf("gl:%d:on:48", logChat)) {
 		t.Errorf("panel (with the privacy warning): %s %v", panel.body["text"], buttons(panel))
 	}

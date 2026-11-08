@@ -14,7 +14,7 @@ release:
 		os=$${p%/*}; arch=$${p#*/}; name=macron-$(VERSION)-$$os-$$arch; \
 		mkdir -p dist/$$name; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(GOFLAGS_REL) -o dist/$$name/macron ./cmd/macron || exit 1; \
-		cp README.md README.en.md config.env.example requirements-tools.txt requirements-browser-agent.txt requirements-tools.lock requirements-browser-agent.lock dist/$$name/; \
+		cp README.md README.en.md LICENSE config.env.example requirements-tools.txt requirements-browser-agent.txt requirements-tools.lock requirements-browser-agent.lock dist/$$name/; \
 		cp -R assets dist/$$name/; \
 		tar -C dist -czf dist/$$name.tar.gz $$name; \
 	done

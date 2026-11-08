@@ -10,6 +10,7 @@
 
 [![Release](https://img.shields.io/github/v/release/Metixpro/Macron-Agent?color=55c9a5)](https://github.com/Metixpro/Macron-Agent/releases/latest)
 [![CI](https://github.com/Metixpro/Macron-Agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Metixpro/Macron-Agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-55c9a5)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](go.mod)
 
 [English](README.en.md) · [راهنمای سرور](SERVER.md) · [دریافت نسخه](https://github.com/Metixpro/Macron-Agent/releases/latest)
@@ -130,3 +131,7 @@ make build
 ```
 
 مکرون با دسترسی حساب اجرایی خودش کار می‌کند. توکن، کلید، کوکی و فایل پشتیبان را در مخزن عمومی قرار نده. جزئیات نصب، سرویس، وابستگی‌ها و بازیابی در [راهنمای سرور](SERVER.md) آمده است.
+
+## لایسنس
+
+[MIT](LICENSE) — استفاده، تغییر و توزیع آزاد با حفظ اعلان لایسنس.

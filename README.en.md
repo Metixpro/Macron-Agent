@@ -10,6 +10,7 @@ Write code · Automate work · Create files · Keep the conversation going
 
 [![Release](https://img.shields.io/github/v/release/Metixpro/Macron-Agent?color=55c9a5)](https://github.com/Metixpro/Macron-Agent/releases/latest)
 [![CI](https://github.com/Metixpro/Macron-Agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Metixpro/Macron-Agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-55c9a5)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](go.mod)
 
 [فارسی](README.md) · [Server guide](SERVER.md) · [Downloads](https://github.com/Metixpro/Macron-Agent/releases/latest)
@@ -118,3 +119,7 @@ make build
 ```
 
 The agent runs with its account's permissions. Keep tokens, keys, cookies and backups out of public repositories. See the [server guide](SERVER.md) for installation, services, dependencies and recovery.
+
+## License
+
+[MIT](LICENSE). Free to use, modify and distribute with the license notice retained.
