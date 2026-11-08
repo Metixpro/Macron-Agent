@@ -10,12 +10,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// A provider's effort (how hard its model thinks), chosen on a card of its
-// own in the admin panel and in a user's own providers: each level with
-// what it is for, and what it becomes for this very model.
-
 type effortLevel struct {
-	key   string // llm.Effort* ("" = the model's own default)
+	key   string
 	icon  string
 	name  string
 	meter string
@@ -30,7 +26,6 @@ var effortLevels = []effortLevel{
 	{llm.EffortUltra, "🚀", "Ultracode", "▰▰▰▰", "نهایت توان مدل برای پروژه‌های بزرگ کد و مسئله‌های سخت؛ هر کار دو برابر قدم و ۱٫۵ برابر وقت می‌گیره"},
 }
 
-// effortOf is a level's card ("" and unknown values: the model's default).
 func effortOf(key string) effortLevel {
 	for _, e := range effortLevels {
 		if e.key == key {
@@ -40,7 +35,6 @@ func effortOf(key string) effortLevel {
 	return effortLevels[0]
 }
 
-// effortCode is a level in a button's data.
 func effortCode(key string) string {
 	if key == "" {
 		return "auto"
@@ -48,7 +42,6 @@ func effortCode(key string) string {
 	return key
 }
 
-// effortFromCode reads a level from a button's data.
 func effortFromCode(code string) (string, bool) {
 	if code == "auto" {
 		return "", true
@@ -56,13 +49,11 @@ func effortFromCode(code string) (string, bool) {
 	return code, code != "" && llm.ValidEffort(code)
 }
 
-// effortName is a level as a provider's card shows it.
 func effortName(l lang, key string) string {
 	e := effortOf(key)
 	return e.icon + " " + l.t(e.name)
 }
 
-// effortBadge is the mark of a provider's effort in a list ("" for the default).
 func effortBadge(key string) string {
 	if key == "" {
 		return ""
@@ -70,8 +61,6 @@ func effortBadge(key string) string {
 	return " · " + effortOf(key).icon
 }
 
-// viewEffort is the effort card of a provider; pick is a level's button
-// data, back the way out.
 func (b *Bot) viewEffort(l lang, p store.Provider, pick func(code string) string, back telegram.InlineKeyboardButton) panelView {
 	var sb strings.Builder
 	api := providers.API(p)
@@ -107,7 +96,7 @@ func (b *Bot) viewEffort(l lang, p store.Provider, pick func(code string) string
 			label, style = "✅ "+label, telegram.StyleSuccess
 		}
 		btn := b.button(label, pick(effortCode(e.key)), style)
-		if e.key == llm.EffortUltra { // the top level gets a row of its own
+		if e.key == llm.EffortUltra {
 			rows = append(rows, row(btn))
 			continue
 		}

@@ -17,7 +17,7 @@ func TestUnitVerifierDoesNotApproveUnclassifiedFailure(t *testing.T) {
 		{"unclassified verifier failure", true},
 		{"Failed to create directory '/run/systemd/': Read-only file system", false},
 	} {
-		// The verifier is an external executable; preserve its failed status.
+
 		script := "#!/bin/sh\nprintf '%s\\n' \"" + tc.output + "\"\nexit 1\n"
 		if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
 			t.Fatal(err)

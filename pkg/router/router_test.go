@@ -33,8 +33,8 @@ func TestClassify(t *testing.T) {
 		{Input{Text: "این چیه؟", Images: 1}, Vision, false},
 		{Input{Text: "اینو درست کن", Files: []string{"main.go"}}, Code, false},
 		{Input{Text: "سلام", Deep: true}, Chat, true},
-		{Input{Text: "آیفون یا سامسونگ، کدوم بهتره؟"}, Research, false}, // «کدوم» is not «کد»
-		{Input{Text: "پسته‌ها رو کجا بذارم؟"}, Quick, false},            // nor «پسته» a «پست»
+		{Input{Text: "آیفون یا سامسونگ، کدوم بهتره؟"}, Research, false},
+		{Input{Text: "پسته‌ها رو کجا بذارم؟"}, Quick, false},
 		{Input{Text: "هواپیمای تهران مشهد کی می‌رسه؟"}, Quick, false},
 		{Input{Text: "یه ایمیل بنویس:\n- تشکر\n- قیمت\n- زمان تحویل\n- شرایط پرداخت"}, Writing, true},
 		{Input{Text: strings.Repeat("یه داستان بلند ", 200)}, Writing, true},
@@ -70,15 +70,12 @@ func TestDecide(t *testing.T) {
 	}
 }
 
-// More words of a kind are more evidence: a Python function that reads a
-// CSV file is code, not a document.
 func TestMoreWordsWeighMore(t *testing.T) {
 	if v := Classify(Input{Text: "یه تابع پایتون بنویس که یه فایل csv رو بخونه و جمع ستون دوم رو برگردونه"}); v.Kind != Code {
 		t.Errorf("%s %v", v.Kind, v.Signals)
 	}
 }
 
-// The replied message decides only when the message's own words say nothing.
 func TestTheRepliedMessageFillsIn(t *testing.T) {
 	answer := "```go\nfunc main() { fmt.Println(\"hi\") }\n```\nThis python script fails with a traceback"
 	if v := Classify(Input{Text: "اینو درست کن", Hint: answer}); v.Kind != Code || !v.Signals[0].Hint {

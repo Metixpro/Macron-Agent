@@ -1,6 +1,3 @@
-// Package store persists everything the agent needs in one SQLite file:
-// users, conversation memory, LLM providers, settings, schedules, the
-// searchable conversation archive and usage statistics.
 package store
 
 import (
@@ -20,20 +17,16 @@ import (
 	"time"
 )
 
-// ErrNotFound is returned when a row does not exist.
 var ErrNotFound = errors.New("not found")
 
-// Options configures a Store.
 type Options struct {
-	// Location defines where a "day" starts for daily limits and statistics.
 	Location *time.Location
-	// SecretKey, when set, encrypts provider API keys at rest (AES-256-GCM).
+
 	SecretKey string
-	// Now is replaced in tests.
+
 	Now func() time.Time
 }
 
-// Store is safe for concurrent use.
 type Store struct {
 	db   *sql.DB
 	loc  *time.Location
@@ -45,8 +38,6 @@ type Store struct {
 	admins   map[int64]bool
 }
 
-// Open opens (creating it if needed) the SQLite database at path, applies the
-// migrations and loads the cached settings. path may be "sqlite:/file.db".
 func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 	db, err := openDB(DBPath(path))
 	if err != nil {
@@ -82,29 +73,21 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 	return s, nil
 }
 
-// DB exposes the pool (for health checks).
 func (s *Store) DB() *sql.DB { return s.db }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// Location is the time zone used for days.
 func (s *Store) Location() *time.Location { return s.loc }
 
-// Now returns the current time in UTC.
 func (s *Store) Now() time.Time { return s.now().UTC() }
 
-// Today returns the current local day as YYYY-MM-DD.
 func (s *Store) Today() string { return s.now().In(s.loc).Format(time.DateOnly) }
 
-// DayStart returns the UTC instant at which the local day containing t begins.
 func (s *Store) DayStart(t time.Time) time.Time {
 	l := t.In(s.loc)
 	return time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, s.loc).UTC()
 }
 
-// ---------------------------------------------------------------- migrations
-
-// migrate brings the database up to the last version in migrations (schema.go).
 func (s *Store) migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER NOT NULL PRIMARY KEY, applied_at DATETIME NOT NULL)`); err != nil {
@@ -167,30 +150,26 @@ func (s *Store) reloadCaches(ctx context.Context) error {
 	return rows.Err()
 }
 
-// ---------------------------------------------------------------- settings
-
-// Setting keys used by the bot.
 const (
-	SettingHistoryTokens = "history_tokens" // the latest turns a request carries word for word (older ones are summarized)
-	// The server monitor's alerts (on by default) and the percentages that raise them.
+	SettingHistoryTokens = "history_tokens"
+
 	SettingSysAlerts      = "sys_alerts"
 	SettingSysCPU         = "sys_cpu_limit"
 	SettingSysRAM         = "sys_ram_limit"
 	SettingSysDisk        = "sys_disk_limit"
 	SettingPremiumEmoji   = "premium_emoji"
 	SettingReactions      = "reactions"
-	SettingReactionEmoji  = "reaction_emoji" // the reaction a message gets when it is read (default 👀)
+	SettingReactionEmoji  = "reaction_emoji"
 	SettingActiveProvider = "active_provider"
 	SettingFailover       = "provider_failover"
-	SettingLiveTrace      = "live_trace"     // show the live terminal while working
-	SettingAgentSteps     = "agent_steps"    // tool rounds per request (0 = the server's default)
-	SettingAgentMinutes   = "agent_minutes"  // minutes per request (0 = the server's default)
-	SettingAutoContinue   = "auto_continue"  // extra rounds a job gets by itself when its budget runs out
-	SettingLogChat        = "log_chat"       // where group join/leave notices go (empty = owners)
-	SettingGroupApproval  = "group_approval" // new groups wait for an admin's approval
+	SettingLiveTrace      = "live_trace"
+	SettingAgentSteps     = "agent_steps"
+	SettingAgentMinutes   = "agent_minutes"
+	SettingAutoContinue   = "auto_continue"
+	SettingLogChat        = "log_chat"
+	SettingGroupApproval  = "group_approval"
 )
 
-// Setting returns a cached setting.
 func (s *Store) Setting(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -198,7 +177,6 @@ func (s *Store) Setting(key string) (string, bool) {
 	return v, ok
 }
 
-// SettingInt returns an integer setting or def.
 func (s *Store) SettingInt(key string, def int) int {
 	if v, ok := s.Setting(key); ok {
 		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
@@ -208,7 +186,6 @@ func (s *Store) SettingInt(key string, def int) int {
 	return def
 }
 
-// SettingBool returns a boolean setting or def.
 func (s *Store) SettingBool(key string, def bool) bool {
 	if v, ok := s.Setting(key); ok {
 		if b, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
@@ -218,7 +195,6 @@ func (s *Store) SettingBool(key string, def bool) bool {
 	return def
 }
 
-// SetSetting stores a setting and updates the cache.
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (k, v, updated_at) VALUES (?, ?, ?)
 		ON CONFLICT DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at`, key, value, s.Now())
@@ -231,7 +207,6 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	return nil
 }
 
-// DeleteSetting removes a setting.
 func (s *Store) DeleteSetting(ctx context.Context, key string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM settings WHERE k = ?`, key); err != nil {
 		return err
@@ -242,9 +217,6 @@ func (s *Store) DeleteSetting(ctx context.Context, key string) error {
 	return nil
 }
 
-// ---------------------------------------------------------------- admins
-
-// IsAdmin reports whether the user was added as an admin in the database.
 func (s *Store) IsAdmin(id int64) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -273,7 +245,6 @@ func (s *Store) RemoveAdmin(ctx context.Context, id int64) error {
 	return nil
 }
 
-// Admins lists database admins (owners from the environment are not included).
 func (s *Store) Admins(ctx context.Context) ([]int64, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT user_id FROM admins ORDER BY created_at`)
 	if err != nil {
@@ -291,11 +262,8 @@ func (s *Store) Admins(ctx context.Context) ([]int64, error) {
 	return out, rows.Err()
 }
 
-// ---------------------------------------------------------------- secrets
-
 const encPrefix = "enc:v1:"
 
-// Sealing reports whether secrets (keys, cookies) are stored encrypted.
 func (s *Store) Sealing() bool { return s.aead != nil }
 
 func (s *Store) seal(plain string) string {
@@ -325,8 +293,6 @@ func (s *Store) open(stored string) (string, error) {
 	return string(plain), nil
 }
 
-// helpers
-
 func nullTime(t sql.NullTime) *time.Time {
 	if !t.Valid {
 		return nil
@@ -343,7 +309,6 @@ func truncate(s string, n int) string {
 	return string(r[:n])
 }
 
-// SetSecretSetting stores a setting encrypted with WAZE_SECRET_KEY (when set).
 func (s *Store) SetSecretSetting(ctx context.Context, key, value string) error {
 	if value == "" {
 		return s.DeleteSetting(ctx, key)
@@ -351,7 +316,6 @@ func (s *Store) SetSecretSetting(ctx context.Context, key, value string) error {
 	return s.SetSetting(ctx, key, s.seal(value))
 }
 
-// SecretSetting reads a setting stored with SetSecretSetting.
 func (s *Store) SecretSetting(key string) (string, error) {
 	v, ok := s.Setting(key)
 	if !ok {
@@ -360,8 +324,6 @@ func (s *Store) SecretSetting(key string) (string, error) {
 	return s.open(v)
 }
 
-// EnsureSecretSetting atomically initializes a secret and returns the stored
-// winner, including when another process initialized the same key first.
 func (s *Store) EnsureSecretSetting(ctx context.Context, key, candidate string) (string, error) {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (k,v,updated_at) VALUES (?,?,?)
  ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated_at=excluded.updated_at WHERE settings.v=''`, key, s.seal(candidate), s.Now())

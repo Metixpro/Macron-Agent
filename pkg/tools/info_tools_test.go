@@ -44,9 +44,9 @@ func TestCryptoPriceFallsBack(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	out := call(t, r, "s", "crypto_currency_price", map[string]any{"symbols": "BTC, NOT, ZZZ"})
 	for _, want := range []string{
-		"USDT/Toman: 102,345 Toman (Nobitex)",                  // Ramzinex refused; Nobitex comes before Wallex
-		"BTC: $83,780.12 (+0.92% / 24h) ≈ 8,574,476,381 Toman", // Binance refused this country: its mirror answered
-		"NOT: $0.0021 (+5.00% / 24h)",                          // only OKX lists it
+		"USDT/Toman: 102,345 Toman (Nobitex)",
+		"BTC: $83,780.12 (+0.92% / 24h) ≈ 8,574,476,381 Toman",
+		"NOT: $0.0021 (+5.00% / 24h)",
 		"Not found: ZZZ",
 		"Source: Binance, OKX",
 	} {

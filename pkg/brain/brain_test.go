@@ -34,7 +34,7 @@ func TestOpenWritesTheThreeFilesPrivately(t *testing.T) {
 
 func TestSoulFollowsTheFileAndKeepsABackup(t *testing.T) {
 	b := open(t)
-	// The owner edits the file by hand.
+
 	if err := os.WriteFile(filepath.Join(b.Dir, SoulFile), []byte("A pirate.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestNotesAddReplaceDeleteAndHandEdits(t *testing.T) {
 		t.Errorf("the same fact is not added twice: %d %v", id, existed)
 	}
 	n.Add("Prefers short answers")
-	// The owner adds a line, a comment and a fact by hand.
+
 	raw := n.Raw() + "\nMy own comment.\n* Works nights\n"
 	if err := n.SetRaw(raw); err != nil {
 		t.Fatal(err)

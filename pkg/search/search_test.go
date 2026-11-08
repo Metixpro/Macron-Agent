@@ -15,8 +15,8 @@ import (
 
 func testEngine() *Engine {
 	e := NewEngine(netclient.NewClient(netclient.Options{}))
-	e.ReaderURL = ""                 // tests never reach the real reader service
-	e.SetEngines("", "", "", "", "") // nor the real search engines
+	e.ReaderURL = ""
+	e.SetEngines("", "", "", "", "")
 	return e
 }
 
@@ -117,7 +117,7 @@ func TestFetchHTMLStructureAndMedia(t *testing.T) {
 }
 
 func TestFetchDecodesLegacyPersianCharset(t *testing.T) {
-	text := "سلام دنيا" // Arabic yeh: the only form windows-1256 has
+	text := "سلام دنيا"
 	enc, err := charmap.Windows1256.NewEncoder().String(text)
 	if err != nil {
 		t.Fatal(err)

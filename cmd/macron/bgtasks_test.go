@@ -10,9 +10,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
-// bgModel plays a model that sends a build to the background: the task's own
-// run waits until the test lets it go; the user's other messages are answered
-// meanwhile.
 func bgModel(t *testing.T, h *harness) (started <-chan struct{}, release func()) {
 	t.Helper()
 	old := stopButtonAfter
@@ -21,7 +18,7 @@ func bgModel(t *testing.T, h *harness) (started <-chan struct{}, release func())
 	st, rel := make(chan struct{}), make(chan struct{})
 	var once, first sync.Once
 	release = func() { once.Do(func() { close(rel) }) }
-	t.Cleanup(release) // before the fake model's server closes
+	t.Cleanup(release)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		msgs, _ := req["messages"].([]any)
 		last := fmt.Sprint(msgs[len(msgs)-1])
@@ -62,7 +59,6 @@ func waitChan(t *testing.T, what string, c <-chan struct{}) {
 	}
 }
 
-// callsWith are the bot's calls whose text has sub.
 func callsWith(h *harness, sub string) []tgCall {
 	var out []tgCall
 	for _, method := range []string{"sendMessage", "sendRichMessage", "editMessageText", "editRichMessage"} {
@@ -97,12 +93,10 @@ func TestABackgroundTaskRunsWhileTheUserChats(t *testing.T) {
 		t.Fatalf("task: %+v", task)
 	}
 
-	// The user goes on chatting: answered right away, never "busy".
 	h.bot.handleMessage(followUpMsg(request, 78, "پایتخت فرانسه کجاست؟"))
 	waitUntil(t, "the chat answer", func() bool { return strings.Contains(h.tg.allText(), "پاریسه") })
 	h.noText(textBusy)
 
-	// /tasks lists it, with its stop button.
 	h.bot.handleMessage(followUpMsg(request, 79, "/tasks"))
 	waitUntil(t, "/tasks", func() bool { return len(callsWith(h, "کارهای پس‌زمینه</b>")) > 0 })
 	list := callsWith(h, "کارهای پس‌زمینه</b>")
@@ -110,7 +104,6 @@ func TestABackgroundTaskRunsWhileTheUserChats(t *testing.T) {
 		t.Fatalf("no ⏹ for the running task: %v", buttons(list[len(list)-1]))
 	}
 
-	// Its card is a live message of its own, with its own stop button.
 	waitUntil(t, "the task's card", func() bool { return len(callsWith(h, fmt.Sprintf("bg:stop:%d:%d", uid, task.ID))) > 1 })
 	if len(callsWith(h, "کار پس‌زمینه: بیلد APK")) == 0 {
 		t.Fatalf("the card does not name the task:\n%s", h.tg.allText())
@@ -134,7 +127,7 @@ func TestABackgroundTaskRunsWhileTheUserChats(t *testing.T) {
 	if got := onlyTask(t, h, uid); got.Status != store.BgDone || got.FinishedAt == nil {
 		t.Fatalf("task after the end: %+v", got)
 	}
-	// The conversation keeps what the task did.
+
 	mc, err := h.bot.mem.Load(bg, uid)
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +150,6 @@ func TestABackgroundTaskStopsAndStartsAgain(t *testing.T) {
 	task := onlyTask(t, h, uid)
 	stop := fmt.Sprintf("bg:stop:%d:%d", uid, task.ID)
 
-	// Someone else's press does nothing.
 	h.clickAsync(uid+1, uid, 900, stop)
 	if _, ok := h.bot.bgRuns.Load(task.ID); !ok {
 		t.Fatal("another user stopped the task")
@@ -169,7 +161,6 @@ func TestABackgroundTaskStopsAndStartsAgain(t *testing.T) {
 	})
 	waitUntil(t, "the stop notice", func() bool { return len(callsWith(h, "⚠️ <b>کار پس‌زمینه:</b>")) > 0 })
 
-	// /tasks offers it again; 🔁 runs it with the same goal.
 	release()
 	h.bot.handleMessage(private(uid, "/tasks"))
 	h.bot.wg.Wait()
@@ -178,7 +169,7 @@ func TestABackgroundTaskStopsAndStartsAgain(t *testing.T) {
 	if len(list) == 0 || !hasButton(buttons(list[len(list)-1]), retry) {
 		t.Fatalf("no 🔁 for the stopped task:\n%s", h.tg.allText())
 	}
-	h.click(uid+1, uid, 901, retry) // only its user
+	h.click(uid+1, uid, 901, retry)
 	if tasks, _ := h.st.UserBgTasks(bg, uid, 10); len(tasks) != 1 {
 		t.Fatal("another user restarted the task")
 	}
@@ -217,7 +208,7 @@ func TestARestartTellsAboutTheBackgroundTask(t *testing.T) {
 	if got, _ := h.st.BgTaskByID(bg, id); got.Status != store.BgInterrupted {
 		t.Fatalf("status %s", got.Status)
 	}
-	// A second start finds nothing to tell.
+
 	if again := h.bot.orphanedBgTasks(bg); len(again) != 0 {
 		t.Fatalf("told twice: %+v", again)
 	}
@@ -249,7 +240,6 @@ func TestTooManyBackgroundTasksAreRefused(t *testing.T) {
 	}
 }
 
-// A background task never offers background_task, a poll or a schedule.
 func TestABackgroundTaskHasNoBackgroundTool(t *testing.T) {
 	h := newHarness(t)
 	u := &store.User{ID: 75}

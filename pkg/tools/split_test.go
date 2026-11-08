@@ -50,13 +50,13 @@ func TestSplitVideoByMinutes(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ws, "clip.mp4")); err != nil {
 		t.Error("the tool keeps the original")
 	}
-	// Parts last at least 5 s.
+
 	for args, want := range map[string]string{`{"filename":"nope.mp4"}`: "not found", `{"filename":"clip.mp4","minutes":0.01}`: "into 3 parts"} {
 		if out, _ := r.Execute(t.Context(), "v", ToolSplitVideo, args); !strings.Contains(out, want) {
 			t.Errorf("%s: %s", args, out)
 		}
 	}
-	// Split again into fewer parts: the third part of the split before is not counted.
+
 	out = call(t, r, "v", ToolSplitVideo, map[string]any{"filename": "clip.mp4", "minutes": 0.1})
 	if !strings.Contains(out, "into 2 parts") || strings.Contains(out, "part 03") {
 		t.Errorf("only this split's parts: %s", out)

@@ -26,7 +26,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Bot ties Telegram, the agent, the database and the admin panel together.
 type Bot struct {
 	api   *telegram.Bot
 	app   *app.App
@@ -41,72 +40,68 @@ type Bot struct {
 	gate          *guard.Gate
 	flood         *guard.RateLimiter
 	runTimeout    time.Duration
-	envWindow     int // WAZE_CONTEXT_WINDOW (0: unset)
+	envWindow     int
 	langs         langs
 	emojis        atomic.Pointer[emoji.Set]
-	richOff       atomic.Bool  // the Bot API server does not support rich messages
-	stopRowOff    atomic.Bool  // nor buttons inside them (the live message's stop button)
-	mediaStrikes  atomic.Int32 // rich messages with files that failed in a row
-	mediaFailedAt atomic.Int64 // unix time of the last failure
+	richOff       atomic.Bool
+	stopRowOff    atomic.Bool
+	mediaStrikes  atomic.Int32
+	mediaFailedAt atomic.Int64
 
-	inputs      sync.Map        // adminID → *adminInput (multi-step admin dialogs)
-	runs        sync.Map        // userID → *activeRun
-	bgRuns      sync.Map        // background task id → *activeRun (see bgtasks.go)
-	resumes     sync.Map        // userID → time of a ▶️ press (see openjob.go)
-	drafts      sync.Map        // draftID → draftOwner (the job a draft's stop button stops)
-	fileJobs    sync.Map        // userID → a /files upload in progress
-	cookieWaits sync.Map        // userID → time.Time until which their next message is a cookies.txt (/cookies)
-	groupLogs   sync.Map        // chatID → groupLogState
-	approvals   sync.Map        // chatID → approvalState
-	panels      sync.Map        // "chat:message" → panelOwner (group panels answer only their owner)
-	fb          feedbackState   // reactions, complaints and repeats (feedback.go)
-	evalBusy    atomic.Bool     // an exam is running (evals.go)
-	taught      teachCache      // the always-rules the admins taught, for every prompt (teach.go)
-	usage       usageCache      // what the workspaces take (diskusage.go)
-	sys         *sysmon.Sampler // the server's CPU, memory and disk (sysmon_panel.go)
+	inputs      sync.Map
+	runs        sync.Map
+	bgRuns      sync.Map
+	resumes     sync.Map
+	drafts      sync.Map
+	fileJobs    sync.Map
+	cookieWaits sync.Map
+	groupLogs   sync.Map
+	approvals   sync.Map
+	panels      sync.Map
+	fb          feedbackState
+	evalBusy    atomic.Bool
+	taught      teachCache
+	usage       usageCache
+	sys         *sysmon.Sampler
 	sysOnce     sync.Once
 
-	cookies *cookiePool      // the downloaders' cookies (admin panel)
-	plugins *plugins.Manager // the admins' plugins and MCP servers (plugins_admin.go)
+	cookies *cookiePool
+	plugins *plugins.Manager
 
-	guestAnswered sync.Map    // guest_query_id → answered (one reply per query)
-	guestReplies  sync.Map    // guest_query_id → *guestReply (its «thinking» placeholder)
-	guestStubOff  atomic.Bool // the server gives no inline_message_id: no placeholder
-	skillMu       sync.Mutex  // learnToolSkill's read and write of a provider's counts
-	routes        sync.Map    // user id → routeMemo (their last routed request, modelroute.go)
-	triage        triageState // what a request needs, decided before the model works (triage.go)
-	// toldGroupSettings: the groups already told that /settings is not their settings
+	guestAnswered sync.Map
+	guestReplies  sync.Map
+	guestStubOff  atomic.Bool
+	skillMu       sync.Mutex
+	routes        sync.Map
+	triage        triageState
+
 	toldGroupSettings sync.Map
-	hookSeen          sync.Map    // webhook signatures already taken (web.go)
-	updating          atomic.Bool // an /update is in flight (update.go)
-	moaStrictBy       sync.Map    // user → *moa.Strict: destinations that need alternating roles (moa.go)
-	gateAsks          sync.Map    // id → *gateAsk: the command gate's questions waiting for the owner (cmdgate.go)
-	suspended         sync.Map    // poll ID → suspension: jobs waiting for a poll's answer (polls.go)
-	readsAll          atomic.Bool // privacy mode is off: every group message reaches the bot (groupsight.go)
-	sights            sync.Map    // chatID → sight (whether the bot sees all of a group)
-	sightHints        sync.Map    // chatID → when its admins were last told the bot misses messages
+	hookSeen          sync.Map
+	updating          atomic.Bool
+	moaStrictBy       sync.Map
+	gateAsks          sync.Map
+	suspended         sync.Map
+	readsAll          atomic.Bool
+	sights            sync.Map
+	sightHints        sync.Map
 
 	ffmpegOnce sync.Once
-	ffmpeg     bool // ffmpeg runs here (frame previews)
+	ffmpeg     bool
 
-	jobCtx  context.Context // cancelled only when shutdown is forced
+	jobCtx  context.Context
 	wg      sync.WaitGroup
 	started time.Time
 
-	brain *brain.Brain // SOUL.md, USER.md and MEMORY.md (the agent's home folder)
-	// The personal edition (personal.go): it answers its owners and nobody else.
+	brain *brain.Brain
+
 	personal  bool
-	workFiles time.Duration // how long the files in the workspaces are kept (0: forever)
-	strangers sync.Map      // user id → time.Time of the last note in the log
+	workFiles time.Duration
+	strangers sync.Map
 }
 
 func (b *Bot) isOwner(id int64) bool { return b.owner[id] }
 func (b *Bot) isAdmin(id int64) bool { return b.owner[id] || b.st.IsAdmin(id) }
 
-// reloadEmoji refreshes the premium emoji set from the database.
-// reloadEmoji loads the premium emoji mappings and deletes extra ones: a
-// second mapping of the same emoji ("❤" next to "❤️") or of the same premium
-// emoji. The oldest one stays.
 func (b *Bot) reloadEmoji(ctx context.Context) {
 	rows, err := b.st.PremiumEmojiInOrder(ctx)
 	if err != nil {
@@ -134,7 +129,6 @@ func (b *Bot) reloadEmoji(ctx context.Context) {
 	b.emojis.Store(emoji.New(m))
 }
 
-// premium returns the active premium emoji set (nil when disabled).
 func (b *Bot) premium() *emoji.Set {
 	if !b.st.SettingBool(store.SettingPremiumEmoji, false) {
 		return nil
@@ -146,7 +140,6 @@ func (b *Bot) ctx(d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(b.jobCtx, d)
 }
 
-// dispatch handles one update on its own goroutine; a panic never takes the bot down.
 func (b *Bot) dispatch(u telegram.Update) {
 	if b.personal && !b.allowedUpdate(u) {
 		return
@@ -185,7 +178,6 @@ func (b *Bot) dispatch(u telegram.Update) {
 	}()
 }
 
-// reply sends HTML (with premium emoji) as a reply.
 func (b *Bot) reply(m *telegram.Message, html string) *telegram.Message {
 	ctx, cancel := b.ctx(30 * time.Second)
 	defer cancel()
@@ -201,7 +193,7 @@ func (b *Bot) sendHTML(ctx context.Context, chatID int64, html string, opts tele
 		if sent, err := b.api.SendHTML(ctx, chatID, set.HTML(html), opts); err == nil {
 			return sent
 		}
-		// Custom emoji may be refused (owner without Premium): fall back to plain emoji.
+
 	}
 	sent, err := b.api.SendHTML(ctx, chatID, html, opts)
 	if err != nil && !telegram.IsUnreachable(err) {
@@ -220,7 +212,6 @@ func (b *Bot) editHTML(ctx context.Context, chatID, msgID int64, html string, kb
 	return b.api.EditMessageText(ctx, chatID, msgID, html, kb)
 }
 
-// button builds an inline button; a leading premium-mapped emoji becomes its icon.
 func (b *Bot) button(label, data, style string) telegram.InlineKeyboardButton {
 	btn := telegram.InlineKeyboardButton{Text: label, CallbackData: data, Style: style}
 	if set := b.premium(); set != nil {
@@ -239,9 +230,6 @@ func (b *Bot) urlButton(label, url string) telegram.InlineKeyboardButton {
 	return btn
 }
 
-// bidi lays a Persian message out right to left (telegram.MarkRTL): in a
-// private chat when its user reads Persian, elsewhere (groups, the log
-// channel) when most of its letters are Persian.
 func (b *Bot) bidi(chatID int64, html string) string {
 	if !hasPersian(html) {
 		return html
@@ -252,7 +240,6 @@ func (b *Bot) bidi(chatID int64, html string) string {
 	return telegram.MarkRTL(html)
 }
 
-// bidiLabel lays a mostly Persian button label out right to left.
 func bidiLabel(s string) string {
 	if telegram.IsMostlyRTL(s) {
 		return telegram.MarkRTL(s)
@@ -272,8 +259,6 @@ func keyboard(rows ...[]telegram.InlineKeyboardButton) *telegram.InlineKeyboardM
 
 func row(btns ...telegram.InlineKeyboardButton) []telegram.InlineKeyboardButton { return btns }
 
-// parseCommand splits "/cmd@botname args". named: it names this bot
-// (/start@ThisBot); ignore: it names another bot.
 func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 	if !strings.HasPrefix(text, "/") {
 		return "", "", false, false
@@ -286,9 +271,6 @@ func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 	return strings.ToLower(name), strings.TrimSpace(rest), false, hasTarget
 }
 
-// botCommands are the commands this bot knows. In a group, another command
-// without @ThisBot is for another bot there (/warn, /ban…): it is ignored,
-// not answered with "unknown command".
 var botCommands = map[string]bool{}
 
 func init() {
@@ -298,19 +280,13 @@ func init() {
 	}
 }
 
-// wakeRe matches the name the bot is called by at the start of a group
-// message: "مکرون …", "ماکرون، …", "Macron …", "Macron Ai …". "مکرونی" does not match.
 var wakeRe = regexp.MustCompile(`^(?i)\s*(?:م(?:ا)?[کك]رون|macron)(?:\s*(?:ai|ای[\s\x{200c}]?آی))?(?:$|[\s\p{P}]+)`)
 
-// textOnlyName is the prompt when someone only calls the bot by its name;
-// textCalledOnReply when they do it on a reply to a message (anyone's).
 const (
 	textOnlyName      = "(فقط اسمم رو صدا زد)"
 	textCalledOnReply = "(روی یه پیام ریپلای کرد و صدام زد: یعنی درباره همون پیام کمکش کنم؛ بسته به پیام، جوابش رو بدم، توضیحش بدم، ترجمه‌اش کنم، خلاصه‌اش کنم یا نظرم رو بگم)"
 )
 
-// calledOnly is the prompt when a message only calls the bot (its name or
-// @mention, nothing else): about the message it replies to, if any.
 func (b *Bot) calledOnly(m *telegram.Message) string {
 	if m.Replied() != nil {
 		return b.langOf(m.From).t(textCalledOnReply)
@@ -318,9 +294,6 @@ func (b *Bot) calledOnly(m *telegram.Message) string {
 	return b.langOf(m.From).t(textOnlyName)
 }
 
-// addressed reports whether a group message is meant for the bot (it starts
-// with "مکرون", mentions the bot or replies to it) and returns the text without
-// the name or the mention.
 func (b *Bot) addressed(m *telegram.Message) (bool, string) {
 	text := m.Body()
 	if loc := wakeRe.FindStringIndex(text); loc != nil {
@@ -336,7 +309,7 @@ func (b *Bot) addressed(m *telegram.Message) (bool, string) {
 	if b.me.Username != "" && strings.Contains(strings.ToLower(text), "@"+strings.ToLower(b.me.Username)) {
 		rest := stripMention(text, b.me.Username)
 		if rest == "" && !m.HasMedia() {
-			rest = b.calledOnly(m) // "@bot" alone on someone's message: that message is the request
+			rest = b.calledOnly(m)
 		}
 		return true, rest
 	}
@@ -352,8 +325,7 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	if m.From == nil || m.From.IsBot || m.Chat.Type == "channel" || (b.personal && !m.Chat.Private()) {
 		return
 	}
-	// A group waits for an admin's approval before the bot works there; groups
-	// that turned on catch-up summaries keep their messages for a while.
+
 	if !m.Chat.Private() {
 		actx, acancel := b.ctx(5 * time.Second)
 		active := b.groupActive(actx, m.Chat.ID)
@@ -362,19 +334,18 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 			return
 		}
 		if !m.AlbumDone {
-			b.logGroupMessage(m) // an album's items were logged one by one already
+			b.logGroupMessage(m)
 		}
 		if m.FromChannel() {
-			return // a channel's post is read for catch-up summaries, never answered as a person's
+			return
 		}
 	}
-	// The items of an album are handled together, as one message (album.go).
+
 	if m.MediaGroupID != "" && !m.AlbumDone {
 		b.albums.add(m, &b.wg, func(items []*telegram.Message) { b.handleMessage(mergeAlbum(items)) })
 		return
 	}
-	// In groups only messages meant for the bot count; members who never
-	// talked to it are not users.
+
 	cmd, args, ignore, named := b.parseCommand(m.Text)
 	if ignore || (cmd != "" && !m.Chat.Private() && !named && !botCommands[cmd]) {
 		return
@@ -388,7 +359,7 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		text = stripped
 	}
 	if !m.Chat.Private() {
-		go b.checkSight(m) // a group where the bot misses «مکرون …» is told how to fix it
+		go b.checkSight(m)
 	}
 
 	ctx, cancel := b.ctx(20 * time.Second)
@@ -408,7 +379,7 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	admin := b.isAdmin(uid)
 
 	if admin && m.Chat.Private() {
-		// Dialog steps may test a provider connection (up to 45 s).
+
 		actx, acancel := b.ctx(90 * time.Second)
 		handled := b.handleAdminInput(actx, m)
 		acancel()
@@ -497,9 +468,9 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 		b.reply(m, l.t(textNothingToCancel))
 		return
-	case "/settings", "/panel", "/admin": // /admin: the old name, kept for scripts, not in the menu
+	case "/settings", "/panel", "/admin":
 		if !m.Chat.Private() {
-			// A group's settings are /groupsettings: said once per group, then quiet.
+
 			if _, told := b.toldGroupSettings.LoadOrStore(m.Chat.ID, true); !told {
 				b.reply(m, l.t("⚙️ تنظیمات گروه با /groupsettings باز می‌شه؛ /settings پنل مدیریت ربات توی پیویه."))
 			}
@@ -567,7 +538,7 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		if !b.moaCommand(m, l, args) {
 			return
 		}
-		text, opt.moa = strings.TrimSpace(args), moaDefaultName // this request only
+		text, opt.moa = strings.TrimSpace(args), moaDefaultName
 	case "/learn":
 		if admin && m.Chat.Private() {
 			b.learnCommand(ctx, m, l, args)
@@ -579,7 +550,7 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		b.reply(m, l.t(textUnknownCommand))
 		return
 	}
-	// A message sent while the user's job runs joins that job (or stops it).
+
 	if cmd == "" && b.interject(user, m, text) {
 		return
 	}
@@ -598,8 +569,6 @@ func humanInt(n int) string {
 
 func sessionFor(userID int64) string { return "tg-" + strconv.FormatInt(userID, 10) }
 
-// handleMembership tracks users who block or unblock the bot, and the
-// groups and channels it is added to or removed from.
 func (b *Bot) handleMembership(u *telegram.ChatMemberUpdated) {
 	if !u.Chat.Private() {
 		b.handleGroupMembership(u)
@@ -613,13 +582,6 @@ func (b *Bot) handleMembership(u *telegram.ChatMemberUpdated) {
 	}
 }
 
-// handleStop cancels a run when the user presses the draft's stop button.
-// Drafts only exist in private chats, so when the draft id is unknown (or
-// arrived in a shape we could not parse) the chat id is the user id.
-// handleStop stops the job whose draft the user stopped. A draft that shows
-// no job now (an old one, another job's) never stops the job running now:
-// only the job it was made for. A draft_id that did not decode (0) stands
-// for the draft this private chat shows now, if it has a stop button.
 func (b *Bot) handleStop(s *telegram.MessageGenerationStopped) {
 	var owner draftOwner
 	found := false

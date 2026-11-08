@@ -1,4 +1,3 @@
-// Package app wires the shared components used by all front-ends.
 package app
 
 import (
@@ -18,10 +17,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// Version is the release of Macron Agent.
-const Version = "1.2.3"
+const Version = "1.2.4"
 
-// App bundles the initialised components.
 type App struct {
 	Config   *config.Config
 	LLM      llm.ChatClient
@@ -29,18 +26,14 @@ type App struct {
 	Search   *search.Engine
 	Registry *tools.Registry
 	Agent    *agent.Agent
-	// Skills is the procedural knowledge on disk (nil when its folder can't be used).
+
 	Skills *skills.Store
 }
 
-// New builds everything with a single LLM endpoint taken from the configuration.
-// ctx controls background maintenance (workspace cleanup).
 func New(ctx context.Context, cfg *config.Config, channel agent.Channel) (*App, error) {
 	return NewWith(ctx, cfg, channel, llm.NewClient(cfg.APIURL, cfg.APIKey, cfg.Model), agent.Options{})
 }
 
-// NewWith builds everything around a custom LLM client (e.g. a provider pool).
-// opts.MaxSteps and opts.Channel are filled in from cfg and channel when empty.
 func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, client llm.ChatClient, opts agent.Options) (*App, error) {
 
 	sb, err := machine.New(machine.Config{
@@ -60,7 +53,7 @@ func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, cli
 	sk := openSkills(cfg.SkillsDir)
 	var skillWrite func(string) bool
 	if channel == agent.ChannelCLI || (channel == agent.ChannelAPI && cfg.SkillsWrite) {
-		skillWrite = func(string) bool { return true } // the bot lets its admins: Registry.SetSkillWriter
+		skillWrite = func(string) bool { return true }
 	}
 	reg := tools.NewRegistry(sb, engine, client, tools.Options{
 		HTTP: toolsHTTP, GitHubToken: cfg.GitHubToken,
@@ -92,8 +85,6 @@ func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, cli
 	return &App{Config: cfg, LLM: client, Machine: sb, Search: engine, Registry: reg, Agent: ag, Skills: sk}, nil
 }
 
-// openSkills loads the skills folder and adds the built-in skills never
-// offered before. A folder that can't be used turns skills off, nothing more.
 func openSkills(dir string) *skills.Store {
 	if dir == "" {
 		return nil

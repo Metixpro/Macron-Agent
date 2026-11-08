@@ -36,8 +36,8 @@ func TestClaimsSent(t *testing.T) {
 		"Here's your file, enjoy!":                    true,
 		"report.pdf ارسال شد ✅":                       true,
 		"قیمت دلار امروز ۱۰۰ هزار تومنه":              false,
-		"پیامت رو فرستادم برای ادمین":                 false, // no file in it
-		"این عکس یه غروب رو نشون می‌ده":               false, // a file word, no claim
+		"پیامت رو فرستادم برای ادمین":                 false,
+		"این عکس یه غروب رو نشون می‌ده":               false,
 		"I couldn't make the video: the site is down": false,
 	} {
 		if got := claimsSent(answer); got != want {
@@ -46,8 +46,6 @@ func TestClaimsSent(t *testing.T) {
 	}
 }
 
-// An answer that says a file was sent while nothing goes with it is sent
-// back once; the model then sends it for real (or says it could not).
 func TestAnAnswerThatClaimsAFileIsCheckedOnce(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -55,7 +53,7 @@ func TestAnAnswerThatClaimsAFileIsCheckedOnce(t *testing.T) {
 		case 0:
 			return toolCall("write_file", `{"filename":"notes.md","content":"# Go\n- goroutines"}`), 0
 		case 1:
-			return map[string]any{"role": "assistant", "content": "فایل یادداشت‌ها رو برات فرستادم 📄"}, 0 // forgot send_file
+			return map[string]any{"role": "assistant", "content": "فایل یادداشت‌ها رو برات فرستادم 📄"}, 0
 		case 2:
 			if !strings.Contains(llmText(req), "no file goes to the user") {
 				t.Errorf("the model is told what is wrong:\n%s", llmText(req))
@@ -80,7 +78,6 @@ func TestAnAnswerThatClaimsAFileIsCheckedOnce(t *testing.T) {
 		t.Errorf("the reply is remembered with its files: %q", last)
 	}
 
-	// A claim with a file that really goes along is left alone.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		switch n {
 		case 0:
@@ -102,13 +99,11 @@ func TestAnAnswerThatClaimsAFileIsCheckedOnce(t *testing.T) {
 	}
 }
 
-// A file that never arrived is not remembered as sent: the next request
-// does not think the user has it.
 func TestALostFileIsNotRememberedAsSent(t *testing.T) {
 	h := newHarness(t)
 	h.tg.mu.Lock()
-	h.tg.refuseRichFiles = true     // it cannot go with the answer…
-	h.tg.fail["sendDocument"] = 500 // …nor on its own
+	h.tg.refuseRichFiles = true
+	h.tg.fail["sendDocument"] = 500
 	h.tg.fail["sendMediaGroup"] = 500
 	h.tg.mu.Unlock()
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -130,8 +125,6 @@ func TestALostFileIsNotRememberedAsSent(t *testing.T) {
 	}
 }
 
-// A scheduled task and a live job of the same user share a workspace: a
-// picture the one makes is not sent with the other's answer.
 func TestTwoRunsInOneWorkspaceKeepTheirFiles(t *testing.T) {
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
 	if err != nil {
@@ -150,7 +143,7 @@ func TestTwoRunsInOneWorkspaceKeepTheirFiles(t *testing.T) {
 	if strings.Join(task.auto, ",") != "task-chart.png" {
 		t.Errorf("the task sends only its own: %v", task.auto)
 	}
-	// Alone again, a call owns what changed.
+
 	live.start("generate_image")
 	_ = sb.WriteFile("tg-1", "unnamed.png", []byte("png"))
 	live.end("generate_image", "done")
@@ -159,9 +152,6 @@ func TestTwoRunsInOneWorkspaceKeepTheirFiles(t *testing.T) {
 	}
 }
 
-// The memory's notes about the user's files ("[sent file: a.pdf]") and
-// unfinished jobs never reach the user, even when the model copies them; a
-// copied «sent file» claim with nothing attached is sent back to the model.
 func TestCopiedMemoryNotesNeverReachTheUser(t *testing.T) {
 	for in, want := range map[string]string{
 		"گزارش آماده شد.\n\n[sent file: report.pdf]":                                                 "گزارش آماده شد.",

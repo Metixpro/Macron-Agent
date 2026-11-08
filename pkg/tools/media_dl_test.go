@@ -12,8 +12,7 @@ import (
 
 func fakeDownloader(t *testing.T, r *Registry) {
 	t.Helper()
-	// Host fixture paths must not contain the virtual /workspace prefix,
-	// which Machine intentionally translates to the conversation directory.
+
 	dir := t.TempDir()
 	for _, name := range []string{"fake-yt-dlp", "fake-gallery-dl"} {
 		data, err := os.ReadFile(filepath.Join("testdata", name))
@@ -83,7 +82,7 @@ func TestDownloadMediaPicksFormatsAndReportsTheFile(t *testing.T) {
 }
 
 func TestDownloadMediaRetriesWhenTheSitePushesBack(t *testing.T) {
-	// Without cookies: the ladder of other clients.
+
 	r := newRegistry(t, true, nil)
 	fakeDownloader(t, r)
 	if out := call(t, r, "b", ToolDownloadMedia, map[string]any{"url": "ytsearch1:botcheck"}); !strings.Contains(out, "Test Song.mp3") {
@@ -96,7 +95,6 @@ func TestDownloadMediaRetriesWhenTheSitePushesBack(t *testing.T) {
 		t.Errorf("third attempt: %s", a)
 	}
 
-	// With a pool: a blocked account rests and the next one is used at once.
 	rp := newRegistry(t, true, nil)
 	fakeDownloader(t, rp)
 	pool := NewMemoryCookiePool(
@@ -139,7 +137,6 @@ func TestDownloadMediaRetriesWhenTheSitePushesBack(t *testing.T) {
 		t.Error("the cookies never stay in the workspace")
 	}
 
-	// A private video is not retried, and the model learns why.
 	r2 := newRegistry(t, true, nil)
 	fakeDownloader(t, r2)
 	out = call(t, r2, "c", ToolDownloadMedia, map[string]any{"url": "ytsearch1:private"})
@@ -149,10 +146,10 @@ func TestDownloadMediaRetriesWhenTheSitePushesBack(t *testing.T) {
 	if _, err := r2.Machine.Stat("c", ".args_2"); err == nil {
 		t.Error("a private video is tried once")
 	}
-	// Without cookies, a login wall tells the model the admin can add them.
+
 	r3 := newRegistry(t, true, nil)
 	fakeDownloader(t, r3)
-	_ = r3.Machine.WriteFile("d", ".attempts", []byte("-5")) // keep failing
+	_ = r3.Machine.WriteFile("d", ".attempts", []byte("-5"))
 	if out := call(t, r3, "d", ToolDownloadMedia, map[string]any{"url": "ytsearch1:botcheck"}); !strings.Contains(out, "admin can add cookies") {
 		t.Errorf("login wall: %s", out)
 	}
@@ -210,16 +207,13 @@ func TestYouTubeSongFallsBackToSoundCloud(t *testing.T) {
 	if q, _, _ := r.Machine.ReadFile("g", ".scquery", 100); strings.TrimSpace(string(q)) != "scsearch1:Hamim Khorshido Mah" {
 		t.Errorf("query: %q", q)
 	}
-	// A video cannot fall back: the model is told why and what helps.
+
 	out = call(t, r, "g", ToolDownloadMedia, map[string]any{"url": "https://www.youtube.com/watch?v=blocked", "format": "video"})
 	if !strings.Contains(out, "YouTube refused to send the media") || !strings.Contains(out, "scsearch1:") {
 		t.Errorf("video: %s", out)
 	}
 }
 
-// A cookie rests only for what is its own fault: a video kept from the
-// server's country is tried once and rests nothing; an age gate or a 403
-// tries another account without resting this one (a 403, once).
 func TestCookiesRestOnlyForTheirOwnFault(t *testing.T) {
 	pool := func() *MemoryCookiePool {
 		return NewMemoryCookiePool(
@@ -271,7 +265,6 @@ func TestCookiesRestOnlyForTheirOwnFault(t *testing.T) {
 	}
 }
 
-// yt-dlp's errors reach the model as advice, without its bug-report request.
 func TestExplainDownloadError(t *testing.T) {
 	e := "ERROR: [youtube] x: Unable to download API page: (caused by SSLError('[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U"
 	got := explainDownloadError(e, false)

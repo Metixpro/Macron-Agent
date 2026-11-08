@@ -18,8 +18,6 @@ func testTriage(kind string, tools, work float64, context string) router.Triage 
 	return router.Triage{Kind: router.Kind(kind), KindConf: 0.9, NeedsTools: tools, Work: work, Context: context, ContextConf: 0.9}
 }
 
-// ---- the agent's own model, asked to triage ---------------------------------
-
 type fakeTriage struct {
 	mu     sync.Mutex
 	answer string
@@ -27,7 +25,6 @@ type fakeTriage struct {
 	calls  int
 }
 
-// decision is a model's triage reply.
 func decision(kind string, tools, work float64, context string, groups map[string]float64) string {
 	b, _ := json.Marshal(map[string]any{"needs_tools": tools, "kind": kind, "kind_confidence": 0.93, "work": work,
 		"context": context, "context_confidence": 0.9, "groups": groups})
@@ -46,8 +43,6 @@ func (f *fakeTriage) count() int {
 	return f.calls
 }
 
-// withTriage sets the triage mode; the fake model answers a triage prompt
-// with the decision set on the returned fake.
 func withTriage(t *testing.T, h *harness, mode string) *fakeTriage {
 	t.Helper()
 	f := &fakeTriage{answer: decision("chat", 0.02, 0.2, "standalone", nil)}
@@ -66,7 +61,6 @@ func withTriage(t *testing.T, h *harness, mode string) *fakeTriage {
 	return f
 }
 
-// jobRequests are the model calls of a request (its text in them).
 func jobRequests(h *harness, marker string) []map[string]any {
 	h.llm.mu.Lock()
 	defer h.llm.mu.Unlock()
@@ -79,13 +73,10 @@ func jobRequests(h *harness, marker string) []map[string]any {
 	return out
 }
 
-// ---- the tests ------------------------------------------------------------------
-
-// Off (the default), nothing is triaged and every request goes as before.
 func TestTriageOffChangesNothing(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageOff)
-	_ = h.st.SetSetting(bg, settingTriage, "") // never set: the default
+	_ = h.st.SetSetting(bg, settingTriage, "")
 	if h.bot.triageMode() != triageOff {
 		t.Fatalf("default mode %q", h.bot.triageMode())
 	}
@@ -99,9 +90,6 @@ func TestTriageOffChangesNothing(t *testing.T) {
 	}
 }
 
-// The reply without tools is the owner's choice: by default a request read as
-// a conversation keeps every tool. Turned on, it goes with the light prompt
-// and no tools; the model triage reads the message itself.
 func TestTriageSendsAConversationWithoutTools(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageModel)
@@ -123,8 +111,6 @@ func TestTriageSendsAConversationWithoutTools(t *testing.T) {
 	}
 }
 
-// The triage routes: a job it calls a project goes to the strong model
-// although its words say little; a conversation stays with the light one.
 func TestTriageRoutesByWhatItUnderstood(t *testing.T) {
 	h := newHarness(t)
 	main, _ := h.st.Providers(bg)
@@ -137,7 +123,7 @@ func TestTriageRoutesByWhatItUnderstood(t *testing.T) {
 	f := withTriage(t, h, triageModel)
 
 	f.set(decision("project", 0.97, 2.8, "standalone", map[string]float64{"servers": 0.9}))
-	h.send(private(503, "همون کاری که گفتم رو انجام بده")) // its words show no job
+	h.send(private(503, "همون کاری که گفتم رو انجام بده"))
 	if h.lastModel() != "big" {
 		t.Fatalf("a project goes to the strong model: %q", h.lastModel())
 	}
@@ -146,8 +132,7 @@ func TestTriageRoutesByWhatItUnderstood(t *testing.T) {
 	if h.lastModel() != "m" {
 		t.Fatalf("a thank-you stays light: %q", h.lastModel())
 	}
-	// The triage never moves a request down: code the words send to the
-	// strong model stays there, whatever the triage calls it.
+
 	f.set(decision("chat", 0.02, 0.1, "standalone", nil))
 	h.send(private(505, "CODE-JOB یه تابع پایتون بنویس که یه فایل csv رو بخونه و جمع ستون دوم رو برگردونه"))
 	if h.lastModel() != "big" {
@@ -158,7 +143,6 @@ func TestTriageRoutesByWhatItUnderstood(t *testing.T) {
 	}
 }
 
-// Only a conversation thinks lightly: any job keeps its provider's effort.
 func TestTriageCapsOnlyAConversationsEffort(t *testing.T) {
 	h := newHarness(t)
 	ps, _ := h.st.Providers(bg)
@@ -182,8 +166,6 @@ func TestTriageCapsOnlyAConversationsEffort(t *testing.T) {
 	}
 }
 
-// In the middle of a job (the last turns used tools), the next message gets
-// every tool and the whole history, whatever the triage thinks of its words.
 func TestTriageLeavesAJobAlone(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageModel)
@@ -211,13 +193,10 @@ func TestTriageLeavesAJobAlone(t *testing.T) {
 	}
 }
 
-// Where the provider caches nothing, a request that stands on its own goes
-// with the last turns; recall_history brings the rest back. Until the cache
-// is measured, nothing is trimmed.
 func TestTriageTrimsWhereNothingIsCached(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageModel)
-	_ = h.st.SetSetting(bg, settingTriageTrim, triageTrimAuto) // off by default
+	_ = h.st.SetSetting(bg, settingTriageTrim, triageTrimAuto)
 	f.set(decision("research", 0.9, 1.5, "earlier", map[string]float64{"research": 0.9}))
 	long := strings.Repeat("The quick brown fox jumps over the lazy dog. ", 120)
 	h.llm.reply = say(long)
@@ -261,7 +240,6 @@ func TestTriageTrimsWhereNothingIsCached(t *testing.T) {
 		t.Fatal("the model is told what was left out")
 	}
 
-	// Off, the history and tools go in full again.
 	_ = h.st.SetSetting(bg, settingTriageTrim, triageTrimOff)
 	h.llm.reply = say("باشه")
 	h.send(private(uid, "THIRD یه متن دیگه بنویس"))
@@ -270,7 +248,6 @@ func TestTriageTrimsWhereNothingIsCached(t *testing.T) {
 	}
 }
 
-// Where the provider caches its prompts, auto trims nothing.
 func TestTriageLeavesACachingProviderAlone(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageModel)
@@ -296,8 +273,6 @@ func TestTriageLeavesACachingProviderAlone(t *testing.T) {
 	}
 }
 
-// A model triage that fails leaves the local one deciding; after a few
-// failures in a row it rests, and requests go on with their tools.
 func TestTriageModelFailingFallsBackToLocal(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageModel)
@@ -320,9 +295,6 @@ func TestTriageModelFailingFallsBackToLocal(t *testing.T) {
 	}
 }
 
-// The three kinds of request, triaged locally (no model call, nothing sent
-// out): a greeting goes light, a multi-tool job keeps every tool, and a
-// request that leans on the past keeps the whole history even with trimming.
 func TestLocalTriageRoutesTheThreeKinds(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageLocal)
@@ -347,7 +319,6 @@ func TestLocalTriageRoutesTheThreeKinds(t *testing.T) {
 	}
 }
 
-// The panel: a door from smart routing, the modes, the switches and a test.
 func TestTriagePanel(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageOff)
@@ -363,7 +334,7 @@ func TestTriagePanel(t *testing.T) {
 	h.click(ownerID, ownerID, 9, "a:tri:mode:model")
 	h.click(ownerID, ownerID, 9, "a:tri:chat")
 	h.click(ownerID, ownerID, 9, "a:tri:trim:always")
-	h.click(ownerID, ownerID, 9, "a:tri:mode:nonsense") // not offered
+	h.click(ownerID, ownerID, 9, "a:tri:mode:nonsense")
 	if h.bot.triageMode() != triageModel || !h.bot.triageChatOn() || h.bot.triageTrimMode() != triageTrimAlways {
 		t.Fatal("the settings")
 	}
@@ -382,7 +353,6 @@ func TestTriagePanel(t *testing.T) {
 	}
 }
 
-// The decisions themselves.
 func TestTriageDecisions(t *testing.T) {
 	chat := func(tools, work float64, ctx string) bool {
 		return triageChat(testTriage("chat", tools, work, ctx), "مرسی")
@@ -422,7 +392,6 @@ func TestTriageDecisions(t *testing.T) {
 		t.Error("an unknown kind does not route")
 	}
 
-	// splitHistory keeps whole turns from a user message on.
 	var h []llm.Message
 	for i := 0; i < 10; i++ {
 		h = append(h, llm.Message{Role: "user", Content: strings.Repeat("u ", 200)}, llm.Message{Role: "assistant", Content: strings.Repeat("a ", 200)})

@@ -22,7 +22,7 @@ import (
 type scriptedLLM struct {
 	mu       sync.Mutex
 	requests []map[string]any
-	replies  []any // one per request; the last one repeats
+	replies  []any
 }
 
 func (s *scriptedLLM) handler(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +40,6 @@ func (s *scriptedLLM) handler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{choice}})
 }
 
-// finished is a scripted reply with a finish reason ("length": cut by the output limit).
 type finished struct {
 	msg    any
 	reason string
@@ -76,8 +75,8 @@ func msgs(req map[string]any) []map[string]any {
 func TestRunExecutesToolsAndAnswers(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "reasoning_content": "I should save a file", "tool_calls": []llm.ToolCall{
-			toolCall("", "write_file", `{"filename":"hello.txt","content":"hi"}`), // gateway forgot the id
-			toolCall("c2", "list_files", ``),                                      // and sent empty args
+			toolCall("", "write_file", `{"filename":"hello.txt","content":"hi"}`),
+			toolCall("c2", "list_files", ``),
 		}},
 		llm.Message{Role: "assistant", Content: "  done!  "},
 	)
@@ -111,9 +110,6 @@ func TestRunExecutesToolsAndAnswers(t *testing.T) {
 		t.Errorf("events: %s", got)
 	}
 
-	// The second request must contain: our system prompt (the same at any
-	// time), the sanitized history, the clock, the user's message, the
-	// assistant's calls and their 2 results.
 	m := msgs(script.requests[1])
 	if m[0]["role"] != "system" || strings.Contains(m[0]["content"].(string), "attacker") || strings.Contains(m[0]["content"].(string), "2026-10-18") {
 		t.Errorf("system prompt: %v", m[0]["content"])
@@ -180,7 +176,7 @@ func TestRunWrapsUpAtStepLimit(t *testing.T) {
 }
 
 func TestRunErrorsAndEmptyAnswers(t *testing.T) {
-	// LLM unavailable → error that keeps the typed cause.
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "nope", 401) }))
 	defer srv.Close()
 	sb, _ := machine.New(machine.Config{BaseDir: t.TempDir()})
@@ -192,14 +188,12 @@ func TestRunErrorsAndEmptyAnswers(t *testing.T) {
 		t.Fatalf("expected wrapped *llm.APIError, got %v", err)
 	}
 
-	// Cancelled context stops before calling the model.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := a.Run(ctx, "s", "x", nil, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 
-	// Empty final content never yields an empty message.
 	a2, _ := setup(t, llm.Message{Role: "assistant", Content: "  "})
 	if ans, _ := a2.Run(context.Background(), "s", "x", nil, nil); strings.TrimSpace(ans) == "" {
 		t.Error("empty answers must be replaced")
@@ -274,7 +268,7 @@ func TestCompactToolOutputs(t *testing.T) {
 		}
 	}
 	m := mk()
-	compactToolOutputs(m, 1<<30) // under budget: untouched
+	compactToolOutputs(m, 1<<30)
 	if m[3].Content != big {
 		t.Fatal("nothing should change when the conversation fits")
 	}
@@ -328,7 +322,7 @@ func TestDoWithMemoryContextLocalToolsAndImages(t *testing.T) {
 	for _, m := range first {
 		roles = append(roles, m["role"].(string))
 	}
-	// system prompt, memory, history (2), context, user input
+
 	if strings.Join(roles, ",") != "system,system,user,assistant,system,user" {
 		t.Fatalf("roles: %v", roles)
 	}
@@ -338,7 +332,7 @@ func TestDoWithMemoryContextLocalToolsAndImages(t *testing.T) {
 	if parts, ok := first[5]["content"].([]any); !ok || len(parts) != 2 {
 		t.Errorf("multimodal input must be sent as parts: %v", first[5]["content"])
 	}
-	// The local tools are offered next to the registry tools.
+
 	var names []string
 	for _, tl := range script.requests[0]["tools"].([]any) {
 		names = append(names, tl.(map[string]any)["function"].(map[string]any)["name"].(string))
@@ -347,7 +341,6 @@ func TestDoWithMemoryContextLocalToolsAndImages(t *testing.T) {
 		t.Errorf("tools offered: %v", names)
 	}
 
-	// Second request: both tool results, then one user message carrying the image.
 	second := msgs(script.requests[1])
 	n := len(second)
 	if second[n-3]["role"] != "tool" || second[n-2]["role"] != "tool" || second[n-1]["role"] != "user" {
@@ -465,7 +458,7 @@ func TestSoul(t *testing.T) {
 	if strings.Contains(p, "{{") {
 		t.Error("placeholders are filled")
 	}
-	// A custom soul replaces the personality; the ground rules stay.
+
 	a.Soul = func() string { return "تو {{name_fa}} ({{name}}) هستی و فقط شعر می‌گی." }
 	p = a.SystemPrompt()
 	if !strings.Contains(p, "تو مکرون (Macron Ai) هستی و فقط شعر می‌گی.") || strings.Contains(p, "خط قرمزهام") {
@@ -491,9 +484,6 @@ func TestFallbackRepliesFollowTheLanguage(t *testing.T) {
 	}
 }
 
-// Providers cache the start of a request: the instructions and the tools are
-// the same at any time and for every user; the clock, the budget and who the
-// user is come right before the message.
 func TestPromptStartIsTheSameEveryTime(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: "بریم!"}, llm.Message{Role: "assistant", Content: "بریم!"})
 	_, _ = a.Do(context.Background(), Request{SessionID: "a", Input: llm.Message{Content: "یه چیزی پیدا کن"}, About: "- name: Ali"})
@@ -553,7 +543,7 @@ func TestAnnouncesWork(t *testing.T) {
 			t.Errorf("%q: %v", text, got)
 		}
 	}
-	// After a tool ran, «نتیجه رو جدا برات می‌فرستم» is a true answer (a background task), not a promise.
+
 	if announcesWork("شروع کردم؛ نتیجه رو جدا برات می‌فرستم.", false) || !announcesWork("آخرین نسخه رو برات می‌گیرم.", true) {
 		t.Error("a bare promise counts only before any tool ran")
 	}

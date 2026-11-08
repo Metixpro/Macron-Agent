@@ -10,34 +10,14 @@ import (
 	"time"
 )
 
-// The decision, in this order:
-//
-//  1. HARDLINE (and the agent's own floor): never runs, in any mode, from
-//     anywhere (the owner's chat, a schedule, a sub-agent, yolo).
-//  2. The owner's deny rules (globs, case-insensitive): never run either.
-//  3. The permanent allowlist: runs without asking.
-//  4. A command no rule flags runs.
-//  5. A dangerous one: with the gate off (or /yolo) it runs; approved for
-//     this session it runs; in a job nobody watches (a schedule, a
-//     background task, a sub-agent, a webhook) it is refused at once;
-//     otherwise the guardian model judges it (smart mode): low risk runs
-//     this once, high risk is refused, unsure goes to the owner, who
-//     chooses once, this session, always, or no.
-//  6. After a few refusals in a row the job is stopped (the denial
-//     breaker): it reports what was blocked and asks the owner to run it by
-//     hand. Any approval resets the count.
-
-// Modes.
 const (
-	ModeSmart  = "smart"  // the guardian judges; unsure goes to the owner
-	ModeManual = "manual" // the owner is asked for every dangerous command
-	ModeOff    = "off"    // dangerous commands run; the floor still holds
+	ModeSmart  = "smart"
+	ModeManual = "manual"
+	ModeOff    = "off"
 )
 
-// HardStop starts a tool result that must end the job (agent.runTool).
 const HardStop = "[hard stop] "
 
-// Origin is who a command runs for.
 type Origin string
 
 const (
@@ -48,14 +28,10 @@ const (
 	OriginWebhook    Origin = "webhook"
 )
 
-// Unattended: nobody can answer a question there.
 func (o Origin) Unattended() bool { return o != OriginUser && o != "" }
 
 type originKey struct{}
 
-// WithOrigin marks who the commands of a context run for. An origin that
-// is already unattended is never made attended again (a sub-agent of a
-// schedule is still a schedule).
 func WithOrigin(ctx context.Context, o Origin) context.Context {
 	if cur := OriginOf(ctx); cur.Unattended() {
 		return ctx
@@ -63,7 +39,6 @@ func WithOrigin(ctx context.Context, o Origin) context.Context {
 	return context.WithValue(ctx, originKey{}, o)
 }
 
-// OriginOf is who the commands of a context run for (the user by default).
 func OriginOf(ctx context.Context) Origin {
 	if o, ok := ctx.Value(originKey{}).(Origin); ok {
 		return o
@@ -71,7 +46,6 @@ func OriginOf(ctx context.Context) Origin {
 	return OriginUser
 }
 
-// Choice is the owner's answer.
 type Choice string
 
 const (
@@ -81,19 +55,16 @@ const (
 	Deny    Choice = "deny"
 )
 
-// Question is what the owner is asked.
 type Question struct {
 	Command  string
 	Findings []Finding
-	Guardian string // what the guardian said, if it was asked
+	Guardian string
 }
 
-// Asker asks the owner and waits for the answer (Deny when it times out).
 type Asker func(ctx context.Context, q Question) Choice
 
 type askerKey struct{}
 
-// WithAsker gives a context someone to ask: the owner's chat.
 func WithAsker(ctx context.Context, a Asker) context.Context {
 	return context.WithValue(ctx, askerKey{}, a)
 }
@@ -103,7 +74,6 @@ func askerOf(ctx context.Context) Asker {
 	return a
 }
 
-// Risk is the guardian's judgment.
 type Risk string
 
 const (
@@ -112,50 +82,40 @@ const (
 	RiskUnsure Risk = "unsure"
 )
 
-// Guardian judges a dangerous command with a helper model. policy is the
-// owner's own text, for the guardian's system prompt only: never beside the
-// command, which is untrusted.
 type Guardian func(ctx context.Context, policy, command string, findings []Finding) (Risk, string, error)
 
-// Policy is the owner's configuration, read at each check.
 type Policy struct {
 	Mode        string
-	Breaker     int      // refusals in a row that stop the job (0: never)
-	Deny        []string // globs that never run
+	Breaker     int
+	Deny        []string
 	SmartPolicy string
-	Checkpoints bool // snapshot what a destructive command deletes
+	Checkpoints bool
 }
 
-// Entry is one decision, for the audit log.
 type Entry struct {
 	At       time.Time
 	Session  string
 	Origin   Origin
 	Command  string
-	Decision string // allowed, denied, hardline
-	Decider  string // floor, deny-rule, allowlist, mode-off, yolo, session, unattended, guardian, owner, nobody
+	Decision string
+	Decider  string
 	Rule     string
 }
 
-// Store keeps the permanent allowlist and the audit log.
 type Store interface {
 	Allowlist() []string
 	AddAllow(pattern string) error
 	Audit(e Entry)
 }
 
-// Verdict is the gate's answer.
 type Verdict struct {
 	Allow    bool
-	Message  string   // for the model when it does not run
-	Stop     bool     // the breaker tripped: the job must stop
-	Snapshot []string // paths to keep a checkpoint of before it runs
+	Message  string
+	Stop     bool
+	Snapshot []string
 	Findings []Finding
 }
 
-// Gate decides. Its Env and its yolo are fixed when it is made: reading the
-// environment at each call would let any tool in the process turn the gate
-// off (YOLO_MODE=1) from inside a job.
 type Gate struct {
 	env      Env
 	yoloBoot bool
@@ -163,21 +123,18 @@ type Gate struct {
 	Store    Store
 	Guardian Guardian
 
-	yoloUntil atomic.Int64 // unix nano: /yolo from the owner's chat
+	yoloUntil atomic.Int64
 	mu        sync.Mutex
 	session   map[string]map[string]bool
 	denials   map[string]int
 }
 
-// New makes a gate. yolo comes from the environment at start only.
 func New(env Env, yolo bool) *Gate {
 	return &Gate{env: env, yoloBoot: yolo, session: map[string]map[string]bool{}, denials: map[string]int{}}
 }
 
-// Env is what the gate was made with.
 func (g *Gate) Env() Env { return g.env }
 
-// SetYolo turns the gate off for a while (the owner's /yolo); 0 turns it back on.
 func (g *Gate) SetYolo(d time.Duration) {
 	if d <= 0 {
 		g.yoloUntil.Store(0)
@@ -186,7 +143,6 @@ func (g *Gate) SetYolo(d time.Duration) {
 	g.yoloUntil.Store(time.Now().Add(d).UnixNano())
 }
 
-// Yolo reports whether dangerous commands run without asking (the floor holds).
 func (g *Gate) Yolo() (bool, time.Time) {
 	if g.yoloBoot {
 		return true, time.Time{}
@@ -197,10 +153,8 @@ func (g *Gate) Yolo() (bool, time.Time) {
 	return false, time.Time{}
 }
 
-// Normal is a command as the allowlist and the deny rules see it.
 func Normal(cmd string) string { return strings.Join(strings.Fields(Clean(cmd)), " ") }
 
-// Glob matches * (anything, / included) and ?, case-insensitive.
 func Glob(pattern, s string) bool {
 	p, t := []rune(strings.ToLower(pattern)), []rune(strings.ToLower(s))
 	var match func(i, j int) bool
@@ -251,7 +205,6 @@ func (g *Gate) audit(sessionID string, o Origin, cmd, decision, decider, rule st
 	log.Printf("🛡 gate: %s by %s (%s, %s): %s", decision, decider, o, rule, shorten(cmd, 160))
 }
 
-// Check decides whether a command may run.
 func (g *Gate) Check(ctx context.Context, sessionID, command string) Verdict {
 	norm := Normal(command)
 	origin := OriginOf(ctx)
@@ -304,7 +257,7 @@ func (g *Gate) Check(ctx context.Context, sessionID, command string) Verdict {
 		return g.allow(sessionID, p, findings)
 	}
 	if origin.Unattended() {
-		// Nobody can answer: refused, never «no answer means yes».
+
 		g.audit(sessionID, origin, norm, "denied", "unattended", rule)
 		return g.refuse(sessionID, p, findings, fmt.Sprintf("[!] Not run: %s, and this job runs without anyone to approve it (%s). "+
 			"Report it in your answer so the owner can run it or approve it later.", findings[0].Reason, origin))
@@ -371,7 +324,6 @@ func (g *Gate) allow(sessionID string, p Policy, f []Finding) Verdict {
 	return v
 }
 
-// refuse counts a refusal; at the breaker's threshold the job stops.
 func (g *Gate) refuse(sessionID string, p Policy, f []Finding, msg string) Verdict {
 	g.mu.Lock()
 	g.denials[sessionID]++
@@ -389,7 +341,6 @@ func (g *Gate) refuse(sessionID string, p Policy, f []Finding, msg string) Verdi
 	return v
 }
 
-// ForgetSession drops a session's approvals and refusals (a new conversation).
 func (g *Gate) ForgetSession(sessionID string) {
 	g.mu.Lock()
 	delete(g.session, sessionID)

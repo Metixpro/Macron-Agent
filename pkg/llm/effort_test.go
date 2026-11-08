@@ -15,20 +15,20 @@ func TestEffortForEachModel(t *testing.T) {
 		{APIAnthropic, "claude-opus-5-5", EffortUltra, "[max xhigh high]"},
 		{APIAnthropic, "claude-fable-5-1", EffortLow, "[low]"},
 		{APIAnthropic, "claude-opus-4-7", EffortUltra, "[max xhigh high]"},
-		{APIAnthropic, "claude-sonnet-4-6", EffortUltra, "[max high]"}, // xhigh came with Opus 4.7
+		{APIAnthropic, "claude-sonnet-4-6", EffortUltra, "[max high]"},
 		{APIAnthropic, "claude-opus-4-5-20251101", EffortUltra, "[high]"},
 		{APIAnthropic, "claude-opus-4-5", EffortMedium, "[medium]"},
-		{APIAnthropic, "claude-sonnet-4-5-20250929", EffortHigh, "[]"}, // before effort
+		{APIAnthropic, "claude-sonnet-4-5-20250929", EffortHigh, "[]"},
 		{APIAnthropic, "claude-haiku-4-5@20251001", EffortHigh, "[]"},
 		{APIAnthropic, "claude-opus-4-1-20250805", EffortHigh, "[]"},
 		{APIAnthropic, "claude-opus-4-20250514", EffortHigh, "[]"},
 		{APIAnthropic, "claude-3-7-sonnet-latest", EffortHigh, "[]"},
-		{APIAnthropic, "my-gateway-model", EffortUltra, "[max xhigh high]"}, // unknown: try
+		{APIAnthropic, "my-gateway-model", EffortUltra, "[max xhigh high]"},
 		{APIOpenAI, "gpt-5.2", EffortUltra, "[xhigh high]"},
 		{APIOpenAI, "openai/gpt-6", EffortUltra, "[xhigh high]"},
 		{APIOpenAI, "gpt-5", EffortUltra, "[high]"},
 		{APIOpenAI, "o3", EffortLow, "[low]"},
-		{APIOpenAI, "gpt-4o", EffortHigh, "[]"}, // does not reason
+		{APIOpenAI, "gpt-4o", EffortHigh, "[]"},
 		{APIOpenAI, "gpt-4.1-mini", EffortLow, "[]"},
 		{APIOpenAI, "deepseek-reasoner", EffortMedium, "[medium]"},
 		{APIOpenAI, "gpt-5", "", "[]"},
@@ -57,8 +57,6 @@ func TestEffortForEachModel(t *testing.T) {
 	}
 }
 
-// Each API gets its own parameter; a short answer thinks at low effort; a
-// refused value steps down once and is remembered.
 func TestEffortIsSentAndRefusalsAreLearned(t *testing.T) {
 	var bodies []map[string]any
 	refuse := map[string]bool{}
@@ -148,9 +146,6 @@ func TestEffortIsSentAndRefusalsAreLearned(t *testing.T) {
 	}
 }
 
-// TestAnEffortCapLowersOnlyAChosenEffort: WithEffortCap lowers the effort
-// sent for a light job; it never raises one, and a model left to its own
-// default still gets nothing.
 func TestAnEffortCapLowersOnlyAChosenEffort(t *testing.T) {
 	var sent []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -188,10 +183,6 @@ func TestAnEffortCapLowersOnlyAChosenEffort(t *testing.T) {
 	}
 }
 
-// TestAGatewaysThinkingRefusalDropsTheEffort: a gateway that turns
-// reasoning_effort into its model's own switch passes on the model's
-// refusal («property 'enable_thinking' is unsupported»). The request goes
-// again without an effort, and later ones go without one.
 func TestAGatewaysThinkingRefusalDropsTheEffort(t *testing.T) {
 	var sent []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

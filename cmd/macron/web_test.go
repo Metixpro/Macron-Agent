@@ -47,7 +47,7 @@ func TestWebhook(t *testing.T) {
 	if c := post("/hook/../etc", body, now, signHook(secret, now, []byte(body))); c != http.StatusNotFound {
 		t.Errorf("a bad name: %d", c)
 	}
-	// The task it became has nobody to approve a dangerous command.
+
 	tasks, _ := h.st.UserBgTasks(bg, ownerID, 5)
 	if len(tasks) != 1 || !strings.HasPrefix(tasks[0].Title, "webhook: ci") || !strings.Contains(tasks[0].Goal, "<event>") {
 		t.Fatalf("tasks: %+v", tasks)

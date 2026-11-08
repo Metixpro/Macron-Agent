@@ -17,14 +17,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// telegram_lookup: the stats of a Telegram account, group, channel or bot,
-// from its id, @username or t.me link, or of the replied or forwarded
-// message's author. What Telegram shows a bot (name, username, bio,
-// premium, profile photos and their data center, a chat's members), an
-// estimate of when an account was made, the person's standing and messages
-// in this group, and, for the bot's admins and for the person themself, what
-// the bot's own records hold. All calls run at once, each with a short limit.
-
 const toolLookup = "telegram_lookup"
 
 var (
@@ -32,13 +24,12 @@ var (
 	lookupNameRe = regexp.MustCompile(`^@?[A-Za-z][A-Za-z0-9_]{3,31}$`)
 )
 
-// lookupTarget is who or what to look up.
 type lookupTarget struct {
 	id       int64
 	username string
-	user     *telegram.User         // as a message showed them (bot, premium, language)
-	via      string                 // how it was found ("the replied message's author")
-	chat     *telegram.ChatFullInfo // what getChat answered for the username
+	user     *telegram.User
+	via      string
+	chat     *telegram.ChatFullInfo
 }
 
 func (b *Bot) lookupTool(u *store.User, m *telegram.Message) agent.LocalTool {
@@ -53,7 +44,7 @@ func (b *Bot) lookupTool(u *store.User, m *telegram.Message) agent.LocalTool {
 		}},
 		Handler: func(ctx context.Context, args map[string]any) (agent.ToolOutput, error) {
 			target, _ := args["target"].(string)
-			if v, ok := args["target"].(float64); ok { // a number sent as a number
+			if v, ok := args["target"].(float64); ok {
 				target = strconv.FormatInt(int64(v), 10)
 			}
 			return agent.ToolOutput{Text: b.lookup(ctx, u, m, target)}, nil
@@ -61,8 +52,6 @@ func (b *Bot) lookupTool(u *store.User, m *telegram.Message) agent.LocalTool {
 	}
 }
 
-// resolveTarget reads the target: an id, @username, link, or a message's
-// author. self is the bot: a reply to its own message names nobody by default.
 func resolveTarget(m *telegram.Message, target string, self int64) (lookupTarget, error) {
 	t := strings.TrimSpace(target)
 	low := strings.ToLower(t)
@@ -126,7 +115,7 @@ func resolveTarget(m *telegram.Message, target string, self int64) (lookupTarget
 		return fromUser(m.From, "the user themself"), nil
 	}
 	if sub := lookupLinkRe.FindStringSubmatch(t); sub != nil {
-		if strings.HasPrefix(sub[1], "c/") { // a private group or channel's message link
+		if strings.HasPrefix(sub[1], "c/") {
 			n, _ := strconv.ParseInt(strings.TrimPrefix(sub[1], "c/"), 10, 64)
 			id, _ := strconv.ParseInt("-100"+strconv.FormatInt(n, 10), 10, 64)
 			return lookupTarget{id: id, via: "the link"}, nil
@@ -152,8 +141,6 @@ func (b *Bot) lookup(ctx context.Context, asker *store.User, m *telegram.Message
 	var sb strings.Builder
 	line := func(format string, a ...any) { fmt.Fprintf(&sb, format+"\n", a...) }
 
-	// A username: a public chat Telegram knows by it, or a person this bot
-	// has seen (Telegram does not resolve people's usernames for bots).
 	if lt.id == 0 && lt.username != "" {
 		if info, err := b.api.GetChat(ctx, "@"+lt.username); err == nil {
 			lt.id, lt.chat = info.ID, info
@@ -181,7 +168,6 @@ func (b *Bot) lookup(ctx context.Context, asker *store.User, m *telegram.Message
 	return strings.TrimSpace(sb.String())
 }
 
-// lookupChat describes a group or channel.
 func (b *Bot) lookupChat(ctx context.Context, sb *strings.Builder, id int64, known *telegram.ChatFullInfo) {
 	line := func(format string, a ...any) { fmt.Fprintf(sb, format+"\n", a...) }
 	var (
@@ -232,7 +218,6 @@ func (b *Bot) lookupChat(ctx context.Context, sb *strings.Builder, id int64, kno
 	}
 }
 
-// lookupUser describes a person or a bot.
 func (b *Bot) lookupUser(ctx context.Context, sb *strings.Builder, asker *store.User, m *telegram.Message, lt lookupTarget) {
 	line := func(format string, a ...any) { fmt.Fprintf(sb, format+"\n", a...) }
 	inGroup := !m.Chat.Private() && m.GuestQueryID == ""
@@ -334,7 +319,6 @@ func (b *Bot) lookupUser(ctx context.Context, sb *strings.Builder, asker *store.
 		}
 	}
 
-	// The bot's own records: for its admins, and for the person themself.
 	if known != nil && (b.isAdmin(asker.ID) || asker.ID == lt.id) {
 		line("— this bot's records (shown because the asker is %s) —", map[bool]string{true: "the person themself", false: "an admin of the bot"}[asker.ID == lt.id])
 		line("first talked to the bot: %s", known.CreatedAt.In(b.loc).Format("2006-01-02"))
@@ -376,7 +360,6 @@ func yesOrNo(v bool) string {
 	return "no"
 }
 
-// agoText writes a duration for the model: "3 days", "5 hours", "12 minutes".
 func agoText(d time.Duration) string {
 	switch {
 	case d >= 48*time.Hour:

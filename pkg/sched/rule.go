@@ -1,14 +1,3 @@
-// Package sched computes when scheduled reminders and tasks run.
-//
-// A rule is stored as a short string:
-//
-//	""                    once
-//	"daily@11:00"         every day at 11:00
-//	"weekly:sat,mon@10:00" on those weekdays at 10:00
-//	"monthly:15@09:30"    on the 15th (the last day in shorter months)
-//	"every:90m"           every 90 minutes
-//
-// Times of day are local to the users' time zone.
 package sched
 
 import (
@@ -19,22 +8,19 @@ import (
 	"time"
 )
 
-// MinInterval is the shortest repetition allowed for "every" rules.
 const MinInterval = 30 * time.Minute
 
-// Rule describes when something repeats. The zero Rule means "once".
 type Rule struct {
-	Kind   string         // "" (once), daily, weekly, monthly, every
-	Hour   int            // daily, weekly, monthly
-	Minute int            // daily, weekly, monthly
-	Days   []time.Weekday // weekly
-	Day    int            // monthly: 1–31
-	Every  time.Duration  // every
+	Kind   string
+	Hour   int
+	Minute int
+	Days   []time.Weekday
+	Day    int
+	Every  time.Duration
 }
 
 var dayNames = []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
 
-// ParseDay reads an English or Persian weekday name.
 func ParseDay(s string) (time.Weekday, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
 	persian := map[string]time.Weekday{"یکشنبه": 0, "دوشنبه": 1, "سه‌شنبه": 2, "سهشنبه": 2, "سه شنبه": 2, "چهارشنبه": 3,
@@ -50,7 +36,6 @@ func ParseDay(s string) (time.Weekday, bool) {
 	return 0, false
 }
 
-// Parse reads a stored rule.
 func Parse(s string) (Rule, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -58,7 +43,7 @@ func Parse(s string) (Rule, error) {
 	}
 	kind, rest, _ := strings.Cut(s, ":")
 	var at string
-	if k, a, ok := strings.Cut(kind, "@"); ok { // "daily@11:00"
+	if k, a, ok := strings.Cut(kind, "@"); ok {
 		kind, at = k, a+":"+rest
 		rest = ""
 	} else if r, a, ok := strings.Cut(rest, "@"); ok {
@@ -102,7 +87,6 @@ func Parse(s string) (Rule, error) {
 	return r, nil
 }
 
-// ParseClock reads "HH:MM" (Persian digits too).
 func ParseClock(s string) (hour, minute int, err error) {
 	s = toASCIIDigits(strings.TrimSpace(s))
 	hs, ms, ok := strings.Cut(s, ":")
@@ -114,7 +98,6 @@ func ParseClock(s string) (hour, minute int, err error) {
 	return h, m, nil
 }
 
-// String is the stored form of the rule.
 func (r Rule) String() string {
 	clock := fmt.Sprintf("@%02d:%02d", r.Hour, r.Minute)
 	switch r.Kind {
@@ -134,10 +117,8 @@ func (r Rule) String() string {
 	return ""
 }
 
-// Once reports a one-time rule.
 func (r Rule) Once() bool { return r.Kind == "" }
 
-// Next is the first run strictly after t, in loc (zero for "once").
 func (r Rule) Next(t time.Time, loc *time.Location) time.Time {
 	lt := t.In(loc)
 	at := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, r.Hour, r.Minute, 0, 0, loc) }
@@ -182,7 +163,6 @@ func daysIn(y int, m time.Month) int {
 	return time.Date(y, m+1, 0, 0, 0, 0, 0, time.UTC).Day()
 }
 
-// Describe says the rule in plain Persian ("هر روز ساعت ۱۱:۰۰").
 func (r Rule) Describe() string {
 	clock := toPersianDigits(fmt.Sprintf("%02d:%02d", r.Hour, r.Minute))
 	fa := []string{"یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"}
@@ -206,7 +186,6 @@ func (r Rule) Describe() string {
 	return "یک‌بار"
 }
 
-// DescribeEnglish is Describe in English: "every day at 09:30".
 func (r Rule) DescribeEnglish() string {
 	clock := fmt.Sprintf("%02d:%02d", r.Hour, r.Minute)
 	plural := func(n int, unit string) string {
@@ -256,8 +235,6 @@ func toPersianDigits(s string) string {
 	}, s)
 }
 
-// ParseLocal reads "YYYY-MM-DD HH:MM" (or with a T, seconds or Persian
-// digits) as a time in loc.
 func ParseLocal(s string, loc *time.Location) (time.Time, error) {
 	s = strings.TrimSpace(toASCIIDigits(s))
 	for _, layout := range []string{"2006-01-02 15:04", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02T15:04:05", "2006/01/02 15:04"} {

@@ -12,10 +12,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The owner's triage panel (a:tri), under smart routing: how requests are
-// triaged (off, the words here, or the agent's own model), whether a short
-// conversation may go without its tools, history trimming, and a test.
-
 func triageModeName(l lang, mode string) string {
 	switch mode {
 	case triageLocal:
@@ -90,7 +86,6 @@ func triageTrimAbout(l lang, mode string) string {
 	return l.t("تاریخچه و ابزارها همیشه کامل می‌رن (پیش‌فرض؛ مطمئن‌ترین حالت)")
 }
 
-// triageCacheLines show how much each provider caches, as measured.
 func (b *Bot) triageCacheLines(l lang) string {
 	var lines []string
 	for _, s := range b.prov.Snapshot() {
@@ -155,8 +150,6 @@ func (b *Bot) handleTriagePanel(ctx context.Context, l lang, parts []string, ans
 	show(b.viewTriage(l))
 }
 
-// viewTriageTest shows what the triage reads in a message and what the bot
-// would do with it.
 func (b *Bot) viewTriageTest(ctx context.Context, l lang, text string) panelView {
 	back := keyboard(row(b.button(l.t("🧪 یه پیام دیگه"), "a:tri:test", telegram.StylePrimary), b.back(l, "a:tri")))
 	tri := router.Local(router.TriageInput{Input: router.Input{Text: text}})
@@ -252,7 +245,6 @@ func triageScore(l lang, f float64) string {
 	return faDecimal(s)
 }
 
-// faDecimal writes a decimal number with Persian digits.
 func faDecimal(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {

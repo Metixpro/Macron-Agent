@@ -81,9 +81,9 @@ func TestSubAgentsWorkAlongsideAndApart(t *testing.T) {
 	picture := LocalTool{Def: llm.Tool{Type: "function", Function: llm.ToolDef{Name: "make_picture",
 		Parameters: map[string]any{"type": "object", "properties": map[string]any{}}}},
 		Handler: func(ctx context.Context, args map[string]any) (ToolOutput, error) {
-			select { // listed first: one after the other, the sub-agent would not have started yet
+			select {
 			case <-subWorking:
-				_ = a.Registry.Machine.WriteFile("s", "picture.png", []byte("png")) // a file the sub-agent did not make
+				_ = a.Registry.Machine.WriteFile("s", "picture.png", []byte("png"))
 				return ToolOutput{Text: "picture made while the sub-agent worked"}, nil
 			case <-time.After(5 * time.Second):
 				return ToolOutput{Text: "the sub-agent never ran alongside"}, nil
@@ -137,9 +137,6 @@ func TestSubAgentsWorkAlongsideAndApart(t *testing.T) {
 	}
 }
 
-// Each sub-agent works in a workspace of its own: it gets copies of the files
-// its task names, nothing else, and only the files it names come back (a
-// taken name gets another); its drafts and its workspace go.
 func TestSubAgentsHaveTheirOwnWorkspaces(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("d1", ToolDelegate,
@@ -197,8 +194,6 @@ func TestSubAgentsHaveTheirOwnWorkspaces(t *testing.T) {
 	}
 }
 
-// A sub-agent that sends a file it was given, as it is, sends the parent's
-// copy (it was dropped: an unchanged copy is not handed back).
 func TestASubAgentSendsAGivenFile(t *testing.T) {
 	a, _ := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("d1", ToolDelegate,

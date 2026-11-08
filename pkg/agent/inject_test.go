@@ -42,8 +42,6 @@ func TestDefuseSpotsTextWrittenToAnAI(t *testing.T) {
 	}
 }
 
-// A page that tells the model what to do arrives as data, with a warning;
-// the skill tools' own notice is left as it is.
 func TestInjectedTextReachesTheModelAsData(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("p1", "fetch_page", `{}`)}},

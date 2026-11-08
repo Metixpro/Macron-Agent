@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	_ "image/gif" // decoders for image.Decode
+	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
 	"math"
@@ -21,16 +21,12 @@ import (
 )
 
 const (
-	visionMaxSide   = 1568 // longest side sent to the model
+	visionMaxSide   = 1568
 	visionMaxPixels = 40_000_000
 )
 
 var errNotImage = errors.New("not an image")
 
-// visionImage prepares an image file for the model: JPEG, PNG and GIF are
-// decoded, shrunk to visionMaxSide and re-encoded as JPEG; WebP is passed
-// through as is (the standard library cannot decode it). It returns the
-// data URL and a short description such as "1280×720 PNG".
 func visionImage(data []byte) (url, desc string, err error) {
 	mime := http.DetectContentType(data)
 	if !strings.HasPrefix(mime, "image/") {
@@ -62,7 +58,6 @@ func visionImage(data []byte) (url, desc string, err error) {
 	return dataURL("image/jpeg", buf.Bytes()), desc, nil
 }
 
-// shrink scales img down (box filter) so its longest side is at most maxSide.
 func shrink(img image.Image, maxSide int) image.Image {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -91,7 +86,6 @@ func shrink(img image.Image, maxSide int) image.Image {
 	return dst
 }
 
-// flatten puts transparent pixels on white, since JPEG has no alpha.
 func flatten(img image.Image) image.Image {
 	b := img.Bounds()
 	out := image.NewRGBA(b)
@@ -105,7 +99,6 @@ func flatten(img image.Image) image.Image {
 	return out
 }
 
-// viewImages is the view_image tool: it returns up to 4 workspace images.
 func (b *Bot) viewImages(session string, args map[string]any) agent.ToolOutput {
 	var names []string
 	switch v := args["filenames"].(type) {
@@ -157,20 +150,13 @@ func (b *Bot) viewImages(session string, args map[string]any) agent.ToolOutput {
 	return res
 }
 
-// ---------------------------------------------------------------- moving pictures
-
-// hasFFmpeg reports (once) whether ffmpeg is installed.
 func (b *Bot) hasFFmpeg() bool {
 	b.ffmpegOnce.Do(func() { b.ffmpeg = b.app.Machine.Available("ffmpeg")["ffmpeg"] })
 	return b.ffmpeg
 }
 
-// framePreview shows the model what a GIF, video or sticker looks like
-// without it having to cut frames itself: up to four evenly spaced moments in
-// a 2×2 grid (or one frame for a still sticker), made with ffmpeg. Without ffmpeg, Telegram's thumbnail is used. It returns a data
-// URL and a sentence describing it.
 func (b *Bot) framePreview(ctx context.Context, session, name string, seconds int, thumb *telegram.PhotoSize, still bool) (string, string) {
-	if still && name != "" { // a still image (e.g. a .webp sticker) can be shown as it is
+	if still && name != "" {
 		if data, truncated, err := b.app.Machine.ReadFile(session, name, maxVisionImage); err == nil && !truncated {
 			if url, _, err := visionImage(data); err == nil {
 				return url, "It is attached below."
@@ -178,7 +164,7 @@ func (b *Bot) framePreview(ctx context.Context, session, name string, seconds in
 		}
 	}
 	if name != "" && b.hasFFmpeg() {
-		out := ".preview_" + strings.NewReplacer("/", "_", ".", "_").Replace(name) + ".jpg" // hidden: never delivered
+		out := ".preview_" + strings.NewReplacer("/", "_", ".", "_").Replace(name) + ".jpg"
 		vf := "scale=640:-2"
 		if !still {
 			rate := "2"

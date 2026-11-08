@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// openTest opens a fresh SQLite database in a temporary folder.
 func openTest(t *testing.T, opts Options) *Store {
 	t.Helper()
 	if opts.Location == nil {
@@ -75,7 +74,7 @@ func TestUsersAndProfile(t *testing.T) {
 	}
 
 	s.SetBlockedBot(bg, 8, true)
-	// Writing again proves the user unblocked the bot.
+
 	if u, _, _ := s.TouchUser(bg, UserInfo{ID: 8, FirstName: "x"}); u.BlockedBot {
 		t.Error("blocked flag must clear when the user writes again")
 	}
@@ -86,11 +85,11 @@ func TestUsersAndProfile(t *testing.T) {
 }
 
 func TestDailyTokens(t *testing.T) {
-	now := time.Date(2026, 10, 18, 20, 0, 0, 0, time.UTC) // 23:30 in Tehran
+	now := time.Date(2026, 10, 18, 20, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }
 	s := openTest(t, Options{Now: clock})
 	s.TouchUser(bg, UserInfo{ID: 1, FirstName: "a"})
-	// Requests are counted for the statistics; tokens for the day's figures.
+
 	for range 3 {
 		_ = s.CountRequest(bg, 1)
 	}
@@ -103,7 +102,7 @@ func TestDailyTokens(t *testing.T) {
 	if n, _ := s.TokensToday(bg, 1); n != 1000 {
 		t.Errorf("today's tokens: %d", n)
 	}
-	// 30 minutes later it is a new day in Tehran.
+
 	now = now.Add(31 * time.Minute)
 	if n, _ := s.TokensToday(bg, 1); n != 0 {
 		t.Errorf("a new local day starts over: %d", n)
@@ -190,7 +189,6 @@ func TestProvidersAndEncryption(t *testing.T) {
 		t.Error("delete")
 	}
 
-	// A store opened without the secret cannot read encrypted keys and says so.
 	s2 := &Store{db: s.db, now: time.Now}
 	list, _ = s2.Providers(bg)
 	if len(list) == 0 {
@@ -213,7 +211,7 @@ func TestSettingsAdminsChannelsEmoji(t *testing.T) {
 	s.SetSetting(bg, SettingFailover, "true")
 	s.SetSetting(bg, SettingHistoryTokens, "12000")
 	s.SetSetting(bg, "unicode_test_setting", "سلام <b>دوست</b> 👋")
-	// A new Store must see the persisted values.
+
 	s2 := &Store{db: s.db, now: time.Now, settings: map[string]string{}, admins: map[int64]bool{}}
 	s2.reloadCaches(bg)
 	if !s2.SettingBool(SettingFailover, false) || s2.SettingInt(SettingHistoryTokens, 0) != 12000 {
@@ -240,7 +238,6 @@ func TestSettingsAdminsChannelsEmoji(t *testing.T) {
 		t.Error("remove admin")
 	}
 
-	// Emoji keys must be distinct even though unicode_ci treats them as equal.
 	pairs := map[string]string{"😀": "111", "🔥": "222", "❤️": "333", "👍🏽": "444", "🏳️‍🌈": "555"}
 	for e, id := range pairs {
 		if err := s.SetPremiumEmoji(bg, e, id); err != nil {
@@ -314,7 +311,7 @@ func TestChats(t *testing.T) {
 	if err := s.SaveChatJoin(ctx, BotChat{ChatID: -1001, Type: "supergroup", Title: "Go", Status: "member", Members: 30, AddedBy: 7, AddedByName: "Ali"}); err != nil {
 		t.Fatal(err)
 	}
-	// Promotion keeps who added the bot and when.
+
 	if err := s.SaveChatJoin(ctx, BotChat{ChatID: -1001, Type: "supergroup", Title: "Go!", Status: "administrator"}); err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +324,7 @@ func TestChats(t *testing.T) {
 	if c, _ := s.Chat(ctx, -1001); c.Active() || c.LeftAt == nil || c.Title != "Go!" {
 		t.Errorf("after removal: %+v", c)
 	}
-	// Re-added by someone else: a new adder and join time.
+
 	_ = s.SaveChatJoin(ctx, BotChat{ChatID: -1001, Type: "supergroup", Title: "Go", Status: "member", AddedBy: 9, AddedByName: "Sara"})
 	if c, _ := s.Chat(ctx, -1001); !c.Active() || c.AddedBy != 9 || c.LeftAt != nil {
 		t.Errorf("after re-adding: %+v", c)
@@ -385,7 +382,7 @@ func TestSchedules(t *testing.T) {
 	if len(due) != 1 || due[0].ID != id || due[0].Body != "به مهدی زنگ بزن" {
 		t.Fatalf("due: %+v", due)
 	}
-	// Two instances race for the same run: only one wins.
+
 	if ok, err := s.ClaimSchedule(ctx, due[0], time.Time{}); !ok || err != nil {
 		t.Fatalf("claim: %v %v", ok, err)
 	}
@@ -477,8 +474,7 @@ func TestFactsAndPrefs(t *testing.T) {
 func TestMigrationsFindTheirWorkDone(t *testing.T) {
 	s := openTest(t, Options{})
 	ctx := context.Background()
-	// A database that already has what the last migrations add, without
-	// their versions recorded (an older install, a manual fix).
+
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version >= 22`); err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +516,6 @@ func TestRetention(t *testing.T) {
 	}
 }
 
-// A provider's effort is kept.
 func TestProviderEffortIsKept(t *testing.T) {
 	s := openTest(t, Options{SecretKey: "unit-test-secret"})
 	id, err := s.AddProvider(bg, Provider{Name: "deep", BaseURL: "https://a/v1", Model: "m", Enabled: true, Effort: "ultracode"})

@@ -16,40 +16,27 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Reading pages that block bots. A plain request goes first; when the site
-// refuses it (403, 429, 503…), answers with a challenge page ("Just a
-// moment…") or with an almost empty page, the page is read again, quietly,
-// through a reader service (r.jina.ai), treg.to's page reader (with a token)
-// and a headless browser, in that order. Private and internal addresses are
-// refused before any of this and never reach a fallback.
-
-// DefaultReaderURL is the reader service: the page URL is appended to it.
 const DefaultReaderURL = "https://r.jina.ai/"
 
 const (
-	thinRunes       = 200 // a page with less readable text than this is "empty"
+	thinRunes       = 200
 	readerTimeout   = 30 * time.Second
 	renderTimeout   = 75 * time.Second
 	fallbackMaxText = 60000
 )
 
-// StatusError is a page that answered with an HTTP error.
 type StatusError struct{ Code int }
 
 func (e *StatusError) Error() string { return fmt.Sprintf("fetch returned status: %d", e.Code) }
 
-// errNotPage is a URL that is a file, not a page: no fallback can help.
 var errNotPage = errors.New("not a web page")
 
-// challengeMarks are the words of anti-bot pages.
 var challengeMarks = []string{
 	"just a moment", "attention required", "checking your browser", "enable javascript and cookies", "verify you are human",
 	"are you a robot", "ddos-guard", "cf-chl", "challenge-platform", "please enable javascript", "access denied", "captcha",
 	"please wait while we verify", "one more step",
 }
 
-// blockedPage reports a challenge page, or an almost empty page built by
-// scripts (it needs a browser to show its text).
 func blockedPage(p *Page) bool {
 	if p == nil || !p.HTML {
 		return false
@@ -59,7 +46,7 @@ func blockedPage(p *Page) bool {
 		return true
 	}
 	if len([]rune(text)) > 3000 {
-		return false // a real page that happens to mention a captcha
+		return false
 	}
 	head := strings.ToLower(p.Title + " " + textutil.TruncateRunes(text, 600, ""))
 	for _, m := range challengeMarks {
@@ -70,7 +57,6 @@ func blockedPage(p *Page) bool {
 	return false
 }
 
-// worthRetrying reports a failed plain request that another way may get past.
 func worthRetrying(err error) bool {
 	if err == nil || errors.Is(err, errNotPage) ||
 		errors.Is(err, context.Canceled) {
@@ -82,22 +68,20 @@ func worthRetrying(err error) bool {
 		case c == 401, c == 403, c == 406, c == 409, c == 418, c == 429, c == 451, c >= 500:
 			return true
 		}
-		return false // 404, 410…: the page is not there
+		return false
 	}
 	var ne net.Error
 	if errors.As(err, &ne) {
-		return true // timeouts, resets: often a firewall that drops bots
+		return true
 	}
 	return strings.Contains(err.Error(), "tls") || strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "reset")
 }
 
-// pageReader is one way to read a page.
 type pageReader struct {
 	name string
 	read func(ctx context.Context, url string) (*Page, error)
 }
 
-// readers are the fallbacks, in order; those not set up are left out.
 func (e *Engine) readers() []pageReader {
 	var out []pageReader
 	if e.ReaderURL != "" {
@@ -116,7 +100,6 @@ func (e *Engine) readers() []pageReader {
 	return out
 }
 
-// fetchWithFallback reads u directly, then through the readers when blocked.
 func (e *Engine) fetchWithFallback(ctx context.Context, u string, direct func() (*Page, error)) (*Page, error) {
 	page, err := direct()
 	if err == nil && !blockedPage(page) {
@@ -147,12 +130,10 @@ func (e *Engine) fetchWithFallback(ctx context.Context, u string, direct func() 
 		}
 	}
 	if page != nil {
-		return page, nil // all we have: a short page
+		return page, nil
 	}
 	return nil, err
 }
-
-// ---------------------------------------------------------------- reader service
 
 func (e *Engine) readViaReader(ctx context.Context, u string) (*Page, error) {
 	ctx, cancel := context.WithTimeout(ctx, readerTimeout)
@@ -181,8 +162,6 @@ func (e *Engine) readViaReader(ctx context.Context, u string) (*Page, error) {
 	return parseReader(string(raw)), nil
 }
 
-// parseReader reads the reader's answer: "Title: …", "URL Source: …", then
-// "Markdown Content:" and the page.
 func parseReader(s string) *Page {
 	p := &Page{}
 	head, body, found := strings.Cut(s, "Markdown Content:")
@@ -201,8 +180,6 @@ func parseReader(s string) *Page {
 	return p
 }
 
-// ---------------------------------------------------------------- treg.to
-
 func (e *Engine) readViaTreg(ctx context.Context, u string) (*Page, error) {
 	t := e.Treg
 	ctx, cancel := context.WithTimeout(ctx, readerTimeout)
@@ -214,7 +191,7 @@ func (e *Engine) readViaTreg(ctx context.Context, u string) (*Page, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Treg-Token", t.Token())
-	req.Header.Set("X-Treg-Route-Prefer", "tinyfish") // free
+	req.Header.Set("X-Treg-Route-Prefer", "tinyfish")
 	if t.MaxCost != "" {
 		req.Header.Set("X-Treg-Route-Max-Cost", t.MaxCost)
 	}
@@ -246,8 +223,6 @@ func (e *Engine) readViaTreg(ctx context.Context, u string) (*Page, error) {
 	return p, nil
 }
 
-// longestText finds the page text in a vendor's answer: its longest string
-// field (markdown, content, text…), looking a few levels deep.
 func longestText(v any, depth int) string {
 	best := ""
 	switch x := v.(type) {

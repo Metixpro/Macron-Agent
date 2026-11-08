@@ -1,5 +1,3 @@
-// Package search provides web search (treg.to when a token is set, then
-// DuckDuckGo), page fetching and the music-link finder used by the agent tools.
 package search
 
 import (
@@ -31,9 +29,9 @@ type SearchResult struct {
 	Title    string   `json:"title"`
 	URL      string   `json:"url"`
 	Snippet  string   `json:"snippet"`
-	Date     string   `json:"date,omitempty"`     // RFC 3339, when the engine gives one (news)
-	Source   string   `json:"source,omitempty"`   // the outlet (news)
-	Passages []string `json:"passages,omitempty"` // the page's paragraphs that match the query (see passages.go)
+	Date     string   `json:"date,omitempty"`
+	Source   string   `json:"source,omitempty"`
+	Passages []string `json:"passages,omitempty"`
 }
 
 type MusicResult struct {
@@ -42,28 +40,25 @@ type MusicResult struct {
 	MP3Urls []string `json:"mp3_urls"`
 }
 
-// Page is a fetched and cleaned web page.
 type Page struct {
 	URL     string
 	Title   string
 	Text    string
-	Media   []string // absolute URLs of audio/video/archive/pdf links found on the page
-	HTML    bool     // read from HTML (an empty one may be a bot block)
-	Scripts int      // <script> tags: an almost empty page with scripts needs a browser
-	Via     string   // "" when read directly; else the fallback that read it (reader, treg, browser)
+	Media   []string
+	HTML    bool
+	Scripts int
+	Via     string
 }
 
-// Engine performs searches and fetches. Its client brings its own timeouts (see netclient).
 type Engine struct {
 	HTTPClient *http.Client
-	Treg       *Treg // first engine when it has a token (nil: off)
+	Treg       *Treg
 
-	// Fallbacks for pages that block plain requests (see fallback.go).
-	ReaderURL string                                               // reader service, the page URL appended ("" = off)
-	ReaderKey string                                               // its API key (optional)
-	Render    func(ctx context.Context, url string) (*Page, error) // a headless browser (nil = none)
+	ReaderURL string
+	ReaderKey string
+	Render    func(ctx context.Context, url string) (*Page, error)
 
-	liteURL     string // the engines' addresses ("" = off; tests point them at a fake)
+	liteURL     string
 	htmlURL     string
 	bingURL     string
 	bingNewsURL string
@@ -75,7 +70,6 @@ type Engine struct {
 	cache  searchCache
 }
 
-// NewEngine returns an Engine. A nil client gets a default with sane timeouts.
 func NewEngine(client *http.Client) *Engine {
 	if client == nil {
 		client = netclient.NewClient(netclient.Options{Timeout: 25 * time.Second})
@@ -93,9 +87,6 @@ func NewEngine(client *http.Client) *Engine {
 	}
 }
 
-// ---------------------------------------------------------------- web search
-
-// Search runs a web search on every engine at once (see multi.go).
 func (e *Engine) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
 	rep, err := e.SearchWith(ctx, query, SearchOptions{Limit: limit})
 	if rep == nil {
@@ -122,14 +113,12 @@ func hasClass(n *html.Node, class string) bool {
 	return false
 }
 
-// parseLite reads DuckDuckGo Lite: each result is an <a class="result-link">
-// followed (in document order) by a <td class="result-snippet">.
 func parseLite(doc *html.Node, limit int) []SearchResult {
 	var results []SearchResult
 	seen := map[string]bool{}
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
-		if len(results) >= limit+1 { // +1: a trailing snippet may still arrive
+		if len(results) >= limit+1 {
 			return
 		}
 		if n.Type == html.ElementNode {
@@ -162,7 +151,6 @@ func parseLite(doc *html.Node, limit int) []SearchResult {
 	return results
 }
 
-// parseHTMLResults reads html.duckduckgo.com result blocks.
 func parseHTMLResults(doc *html.Node, limit int) []SearchResult {
 	var results []SearchResult
 	var walk func(*html.Node)
@@ -239,8 +227,6 @@ func extractText(n *html.Node) string {
 	return textutil.CollapseSpace(sb.String())
 }
 
-// ---------------------------------------------------------------- page fetch
-
 var mediaExts = map[string]bool{
 	".mp3": true, ".m4a": true, ".wav": true, ".flac": true, ".ogg": true, ".aac": true,
 	".mp4": true, ".mkv": true, ".webm": true, ".mov": true,
@@ -249,9 +235,6 @@ var mediaExts = map[string]bool{
 
 var audioExts = map[string]bool{".mp3": true, ".m4a": true, ".wav": true, ".flac": true, ".ogg": true, ".aac": true}
 
-// Fetch downloads a page and returns cleaned text plus the media links it
-// contains. A site that blocks the plain request is read through the
-// fallbacks (see fallback.go).
 func (e *Engine) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	u, err := netclient.ValidateURL(rawURL)
 	if err != nil {
@@ -260,7 +243,6 @@ func (e *Engine) Fetch(ctx context.Context, rawURL string) (*Page, error) {
 	return e.fetchWithFallback(ctx, u.String(), func() (*Page, error) { return e.fetchDirect(ctx, u) })
 }
 
-// fetchDirect is the plain request, dressed like a browser.
 func (e *Engine) fetchDirect(ctx context.Context, u *url.URL) (*Page, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
@@ -326,7 +308,6 @@ func (e *Engine) fetchDirect(ctx context.Context, u *url.URL) (*Page, error) {
 	return page, nil
 }
 
-// FetchPage returns the page as one text block, at most maxChars characters.
 func (e *Engine) FetchPage(ctx context.Context, rawURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 8000
@@ -427,12 +408,8 @@ var (
 	blankLinesRe = regexp.MustCompile(`\n{3,}`)
 )
 
-// renderReadable converts the DOM to text, keeping paragraph/list structure.
 func renderReadable(doc *html.Node) string { return render(doc, false) }
 
-// ---------------------------------------------------------------- music
-
-// SearchPersianMusic searches music sites and extracts direct audio URLs.
 func (e *Engine) SearchPersianMusic(ctx context.Context, query string) ([]MusicResult, error) {
 	results, err := e.Search(ctx, "دانلود آهنگ "+query, 5)
 	if err != nil {
@@ -474,14 +451,11 @@ func (e *Engine) SearchPersianMusic(ctx context.Context, query string) ([]MusicR
 	return list, nil
 }
 
-// SetEndpoints overrides the DuckDuckGo URLs (used by tests and self-hosted mirrors).
 func (e *Engine) SetEndpoints(lite, html string) {
 	e.liteURL, e.htmlURL = lite, html
 	e.bingURL, e.bingNewsURL, e.gnewsURL, e.iaURL, e.wikiURL = "", "", "", "", nil
 }
 
-// SetEngines points the other engines at fakes (tests): Bing, Bing News,
-// Google News, the instant answer and Wikipedia ("" = off).
 func (e *Engine) SetEngines(bing, bingNews, googleNews, instant, wiki string) {
 	e.bingURL, e.bingNewsURL, e.gnewsURL, e.iaURL = bing, bingNews, googleNews, instant
 	e.wikiURL = nil
@@ -490,7 +464,6 @@ func (e *Engine) SetEngines(bing, bingNews, googleNews, instant, wiki string) {
 	}
 }
 
-// HTMLText returns the title and the readable text of an HTML document.
 func HTMLText(src string) (title, text string) {
 	doc, err := html.Parse(strings.NewReader(src))
 	if err != nil {

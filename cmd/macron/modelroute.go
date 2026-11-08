@@ -17,31 +17,19 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Smart model routing. A light request (a chat, a quick question, a
-// download, a letter) goes to its tier's model; a hard one (code, research,
-// math, a long document, a whole project) to the strong model the admins
-// chose for the tier. pkg/router reads the message, free and in microseconds
-// (no model is asked). The admins choose each tier's two models, which kinds
-// of task go to the strong one and how readily, and can test any message in
-// the panel. A light model that struggles mid-job (steps failing, calls
-// slipping, giving up) hands the rest to the strong one (agent
-// Request.Escalate), and a short follow-up to a strong job («ادامه بده»,
-// «آره همینو») stays with it.
-
 const (
 	settingRouterOn     = "router_on"
-	settingRouterStrong = "router_strong:" // + the tier
-	settingRouterKinds  = "router_kinds"   // JSON: the kinds the strong model takes
+	settingRouterStrong = "router_strong:"
+	settingRouterKinds  = "router_kinds"
 	settingRouterSens   = "router_sensitivity"
 	settingRouterEsc    = "router_escalate"
-	routeSticky         = 30 * time.Minute // a follow-up within it stays with the strong model
+	routeSticky         = 30 * time.Minute
 )
 
-// routerConf is how a tier's requests are routed.
 type routerConf struct {
-	on       bool  // the tier routes: a strong model is set, on, and not its light one
-	light    int64 // the provider its requests go to (the tier's)
-	strong   int64 // the provider its hard requests go to
+	on       bool
+	light    int64
+	strong   int64
 	kinds    map[router.Kind]bool
 	sens     router.Sensitivity
 	escalate bool
@@ -79,7 +67,6 @@ func (b *Bot) routerConf(t tierID) routerConf {
 	return rc
 }
 
-// providerOn says whether a provider of the bot's exists and is on.
 func (b *Bot) providerOn(id int64) bool {
 	for _, s := range b.prov.Snapshot() {
 		if s.ID == id {
@@ -89,8 +76,6 @@ func (b *Bot) providerOn(id int64) bool {
 	return false
 }
 
-// routeInput is a message as the router sees it: its words, the message it
-// replies to, and the names of what came with them.
 func routeInput(m *telegram.Message, text string) router.Input {
 	in := router.Input{Text: text}
 	look := func(m *telegram.Message) {
@@ -113,38 +98,32 @@ func routeInput(m *telegram.Message, text string) router.Input {
 	return in
 }
 
-// modelRoute is the routing of one request.
 type modelRoute struct {
 	conf    routerConf
 	verdict router.Verdict
-	strong  bool   // it goes to the strong model
-	why     string // "kind", "follow-up" or "continuation"
+	strong  bool
+	why     string
 	uid     int64
 	b       *Bot
 }
 
-// routeMemo is a user's last routed request: a follow-up stays with it.
 type routeMemo struct {
 	strong bool
 	at     time.Time
 }
 
-// chooseModel routes a request of a tier (nil: the tier does not route).
-// continuation: an automatic continuation round, which goes on where the
-// first round went. triaged: the triage's verdict, when it has one
-// (triage.go); a nil one waits for nothing and the words decide.
 func (b *Bot) chooseModel(uid int64, t tierID, in router.Input, continuation bool, triaged func() (*router.Verdict, bool)) *modelRoute {
 	rc := b.routerConf(t)
 	if !rc.on {
 		return nil
 	}
 	r := &modelRoute{conf: rc, verdict: router.Classify(in), uid: uid, b: b, why: "kind"}
-	followUp := r.verdict.Signals[0].Why == "none" // «آره»، «ادامه بده»، «اینم همینطور»
+	followUp := r.verdict.Signals[0].Why == "none"
 	r.strong = router.Decide(r.verdict, rc.kinds, rc.sens)
-	if triaged != nil { // the triage only ever moves a request up: what the words send to the strong model stays there
+	if triaged != nil {
 		if v, leans := triaged(); v != nil {
 			if !r.strong && router.Decide(*v, rc.kinds, rc.sens) {
-				r.verdict, r.strong = *v, true // a hard job the words did not show
+				r.verdict, r.strong = *v, true
 			}
 			followUp = followUp || leans
 		}
@@ -166,7 +145,6 @@ func (r *modelRoute) remember(strong bool) {
 	r.b.routes.Store(r.uid, routeMemo{strong: strong, at: time.Now()})
 }
 
-// prefer sends the request's model calls to the model it was routed to.
 func (r *modelRoute) prefer(ctx context.Context) context.Context {
 	if r == nil || !r.strong {
 		return ctx
@@ -174,8 +152,6 @@ func (r *modelRoute) prefer(ctx context.Context) context.Context {
 	return providers.Prefer(ctx, r.conf.strong)
 }
 
-// upgrade routes a request again with what its first look could not see (a
-// voice message's words): it only ever goes up to the strong model.
 func (r *modelRoute) upgrade(in router.Input) bool {
 	if r == nil || r.strong {
 		return false
@@ -189,20 +165,16 @@ func (r *modelRoute) upgrade(in router.Input) bool {
 	return true
 }
 
-// escalation is the agent's way to the strong model, for a light request
-// whose model struggles (nil: it has none).
 func (r *modelRoute) escalation() func(context.Context) context.Context {
 	if r == nil || r.strong || !r.conf.escalate {
 		return nil
 	}
 	return func(ctx context.Context) context.Context {
-		r.remember(true) // the follow-up stays with the model that finished the job
+		r.remember(true)
 		return providers.Prefer(ctx, r.conf.strong)
 	}
 }
 
-// window is the context a routed request may fill: the smaller of its two
-// models' (it may move from one to the other).
 func (r *modelRoute) window(b *Bot, conf tierConf, window int) int {
 	if r == nil || (!r.strong && !r.conf.escalate) {
 		return window
@@ -210,7 +182,6 @@ func (r *modelRoute) window(b *Bot, conf tierConf, window int) int {
 	return min(window, b.tierWindow(tierConf{provider: r.conf.strong, context: conf.context}))
 }
 
-// record counts the request in the statistics, with the tokens it used.
 func (r *modelRoute) record(escalated bool, acc *providers.Account) {
 	if r == nil {
 		return
@@ -236,8 +207,6 @@ func signalsLine(v router.Verdict) string {
 	}
 	return strings.Join(parts, ", ")
 }
-
-// ---------------------------------------------------------------- words
 
 func kindName(l lang, k router.Kind) string {
 	switch k {
@@ -311,7 +280,6 @@ func sensAbout(l lang, s router.Sensitivity) string {
 	return l.t("نوع‌های تیک‌خورده، به‌علاوه کار سنگین از نوع‌های سبک (پیام خیلی بلند، فهرست چندتایی خواسته‌ها، «کامل و حرفه‌ای»).")
 }
 
-// signalText is a reason of the router in the admin's words.
 func signalText(l lang, s router.Signal) string {
 	var out string
 	switch s.Why {
@@ -369,16 +337,6 @@ func signalText(l lang, s router.Signal) string {
 	}
 	return out
 }
-
-// ---------------------------------------------------------------- the panel
-//
-//	a:rt                       the routing: both tiers, the kinds, how readily, help mid-job, the week
-//	a:rt:on                    on / off (each tier keeps its models)
-//	a:rt:pick:W:T              the W (light or strong) model of tier T (a list) · a:rt:set:W:T:ID
-//	a:rt:kinds                 which kinds the strong model takes · a:rt:kind:K toggles one · a:rt:kreset
-//	a:rt:sens:S                how readily (cheap, balanced, quality)
-//	a:rt:esc                   help mid-job on / off
-//	a:rt:test                  route a message the admin sends (dialog)
 
 func (b *Bot) providerLabel(id int64) string {
 	for _, s := range b.prov.Snapshot() {
@@ -453,7 +411,6 @@ func (b *Bot) viewRouter(ctx context.Context, l lang) panelView {
 	)}
 }
 
-// routerWeek is the last seven days of routing, for the panel.
 func (b *Bot) routerWeek(ctx context.Context, l lang) string {
 	rows, err := b.st.TopStats(ctx, store.StatRoute, 7, 100)
 	if err != nil || len(rows) == 0 {
@@ -510,7 +467,6 @@ func (b *Bot) viewRouterKinds(l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// viewRouterPick lists the providers for a tier's light or strong model.
 func (b *Bot) viewRouterPick(l lang, which string, t tierID) panelView {
 	rc := b.routerConf(t)
 	current := rc.strong
@@ -539,7 +495,6 @@ func (b *Bot) viewRouterPick(l lang, which string, t tierID) panelView {
 	return panelView{html: html + l.t("\n\nℹ️ فقط پروایدرهای روشن اینجان."), kb: keyboard(rows...)}
 }
 
-// viewRouterTest shows where a message the admin sent would go.
 func (b *Bot) viewRouterTest(l lang, text string) panelView {
 	v := router.Classify(router.Input{Text: text})
 	kinds, sens := b.routerKinds(), b.routerSens()

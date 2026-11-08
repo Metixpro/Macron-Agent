@@ -11,21 +11,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// Picture making in the admin panel (under ⚙️ settings): the key of the
-// picture studio, generate_image's first engine (76 styles, ten shapes).
-//
-//	a:ig         status
-//	a:ig:key     set the key (dialog; the message is deleted, the key stored encrypted)
-//	a:ig:test    check the key in use
-//	a:ig:styles  the styles the studio draws in
-//	a:ig:del     remove the panel's key (the environment's, if any, is used again)
-//
-// Without a key the pictures are made by the fallbacks (the Nano Banana task
-// service, then Flux): nothing breaks, they just have no styles.
-
 const settingImageKey = "image_key"
 
-// imageGenKey reads the studio's key from the panel (encrypted), else from the environment.
 func imageGenKey(st *store.Store, env string) func() string {
 	return func() string {
 		if k, err := st.SecretSetting(settingImageKey); err == nil && strings.TrimSpace(k) != "" {
@@ -62,7 +49,6 @@ func (b *Bot) viewImageGen(l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// testImageGen checks a key with the service and says what happened.
 func (b *Bot) testImageGen(ctx context.Context, l lang, key string) string {
 	if strings.TrimSpace(key) == "" {
 		return l.t("❌ کلیدی تنظیم نشده.")
@@ -77,7 +63,6 @@ func (b *Bot) testImageGen(ctx context.Context, l lang, key string) string {
 	return l.f("✅ کلید معتبره؛ ساخت عکس آماده است (%s استایل).", l.num(n))
 }
 
-// styleList is the studio's styles for an admin: id and name, in a message.
 func (b *Bot) styleList(ctx context.Context, l lang) string {
 	styles := b.app.Registry.StudioStyles(ctx)
 	var sb strings.Builder
@@ -121,10 +106,9 @@ func (b *Bot) handleImageGenPanel(ctx context.Context, q *telegram.CallbackQuery
 	show(b.viewImageGen(l))
 }
 
-// handleImageGenInput saves a key the admin sent, once the service accepts it.
 func (b *Bot) handleImageGenInput(ctx context.Context, m *telegram.Message, done func(panelView)) bool {
 	l := b.langOf(m.From)
-	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // a key is a password: never leave it in the chat
+	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 	key := strings.TrimSpace(m.Text)
 	if key == "" || strings.ContainsAny(key, " \n\t") || len(key) > 300 {
 		b.reply(m, l.t("این شبیه کلید نیست؛ دوباره بفرست."))

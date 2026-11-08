@@ -10,14 +10,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Background jobs: bash_execute with background=true starts a command in the
-// session's shell (see machine/shell.go), where it keeps running while the
-// agent goes on; later commands and run_code reach it on localhost.
-
 const ToolShellJobs = "shell_jobs"
 
-// jobFirstLook is how long a new job is watched for its first output (or an
-// early crash) before the call returns.
 var jobFirstLook = 3 * time.Second
 
 func (r *Registry) startBackground(ctx context.Context, sessionID, cmd string) string {
@@ -46,7 +40,7 @@ func (r *Registry) shellJobs(ctx context.Context, sessionID string, args map[str
 	jobs := r.Machine.Jobs(sessionID)
 	n := intArg(args, "job", 0, 0, 1<<20)
 	if n == 0 && len(jobs) > 0 {
-		n = jobs[len(jobs)-1].ID // the latest
+		n = jobs[len(jobs)-1].ID
 	}
 	switch strArg(args, "action") {
 	case "output":
@@ -102,7 +96,6 @@ func jobList(jobs []machine.Job, ended string) string {
 	return s
 }
 
-// jobTail is the end of a job's output: its last lines, at most maxShownOutput.
 func (r *Registry) jobTail(sessionID string, j machine.Job, lines int) string {
 	data, cut, err := r.Machine.ReadTail(sessionID, j.Log, maxShownOutput)
 	if err != nil {

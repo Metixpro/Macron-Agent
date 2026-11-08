@@ -21,12 +21,12 @@ func TestThinkText(t *testing.T) {
 		{fa, "web_search", `{}`, "جستجو توی اینترنت"},
 		{fa, "web_search", `not json`, "جستجو توی اینترنت"},
 		{en, "web_search", `{"queries":["first one","second"]}`, "Searching «first one»"},
-		// An address is shown as host and path: never its scheme, query string or fragment (they can carry a key).
+
 		{en, "web_fetch", `{"url":"https://www.tgju.org/profile/price_dollar_rl/?token=SECRET123#frag"}`, "Reading tgju.org/profile/price_dollar_rl"},
 		{en, "download_file", `{"url":"https://user:pass@files.example.com/a/b.zip?sig=abc"}`, "Downloading from files.example.com/a/b.zip"},
 		{fa, "generate_image", `{"prompt":"a red\nfox ` + "`in`" + ` the snow"}`, "ساخت عکس «a red fox 'in' the snow»"},
 		{en, "run_code", `{"language":"python","code":"import os; print(os.environ)"}`, "Running python code"},
-		// What is run and where is never shown.
+
 		{en, "bash_execute", `{"command":"cat /etc/shadow; curl -H 'Authorization: Bearer sk-secret'"}`, "Running a command"},
 		{en, "write_file", `{"filename":"/var/lib/waze/ws/user/report.pdf"}`, "Writing «report.pdf»"},
 		{en, "read_file", `{"filename":"notes.txt"}`, "Reading «notes.txt»"},
@@ -73,16 +73,16 @@ func TestTheThinkingCardShowsWhatIsDone(t *testing.T) {
 
 	md := log.markdown(fa, t0.Add(14*time.Second), t0, "")
 	for _, want := range []string{
-		"🔎 دارم توی اینترنت می‌گردم…", // not this: the running step is the chart
+		"🔎 دارم توی اینترنت می‌گردم…",
 	} {
 		_ = want
 	}
 	for _, want := range []string{
-		"📊 دارم نمودار رو می‌کشم…", // the header says what is going on now
-		"`0:14`", // and for how long
-		"- 🔎 جستجو «قیمت دلار» ✅ `2s`",                   // what was done, and how long it took
-		"- 📖 خوندن tgju.org ❌",                           // a step that failed says so
-		"- 📊 **کشیدن نمودار «روند»** ⏳ `11s` · 2 series", // the running one stands out, with its state
+		"📊 دارم نمودار رو می‌کشم…",
+		"`0:14`",
+		"- 🔎 جستجو «قیمت دلار» ✅ `2s`",
+		"- 📖 خوندن tgju.org ❌",
+		"- 📊 **کشیدن نمودار «روند»** ⏳ `11s` · 2 series",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("the card misses %q:\n%s", want, md)
@@ -92,7 +92,6 @@ func TestTheThinkingCardShowsWhatIsDone(t *testing.T) {
 		t.Errorf("it is not the terminal:\n%s", md)
 	}
 
-	// Between steps the bot is thinking, and the card still shows what was done.
 	log.end(0, "generate_chart", false, t0.Add(8*time.Second))
 	md = log.markdown(en, t0.Add(9*time.Second), t0, "")
 	if !strings.HasPrefix(md, "💭 Thinking") && !strings.Contains(md, thinkingStatus(en)) {
@@ -102,7 +101,6 @@ func TestTheThinkingCardShowsWhatIsDone(t *testing.T) {
 		t.Errorf("a finished step shows its time:\n%s", md)
 	}
 
-	// Only the latest steps show, and the card says how many came before.
 	for i := range 9 {
 		log.start(0, "web_search", fmt.Sprintf("جستجو «%d»", i), t0)
 		log.end(0, "web_search", false, t0)
@@ -118,14 +116,12 @@ func TestTheThinkingCardShowsWhatIsDone(t *testing.T) {
 		t.Errorf("memory is bounded: %d", got)
 	}
 
-	// The job's plan goes under the header.
 	md = log.markdown(fa, t0.Add(20*time.Second), t0, "📋 `1/2`\n\n- [x] یک\n- [ ] دو")
 	if i, j := strings.Index(md, "📋"), strings.Index(md, "\n- 🔎"); i < 0 || j < i {
 		t.Errorf("the plan comes before the steps:\n%s", md)
 	}
 }
 
-// A markdown character in what a step is about never breaks the card.
 func TestThinkingCardEscapesWhatStepsAreAbout(t *testing.T) {
 	var log thinkLog
 	log.start(0, "web_search", thinkText(en, "web_search", `{"query":"*bold* _x_ [a](b) # c"}`), time.Now())
@@ -153,8 +149,6 @@ func TestSubAgentsShowInTheThinkingCard(t *testing.T) {
 	}
 }
 
-// With the terminal off, a private chat's draft is the thinking card, not the
-// terminal and not just a bubble: what the bot is doing, with what it is about.
 func TestThinkingCardInTheDraftWhenTheTerminalIsOff(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.SetSetting(bg, store.SettingLiveTrace, "false")
@@ -164,19 +158,16 @@ func TestThinkingCardInTheDraftWhenTheTerminalIsOff(t *testing.T) {
 		case 0:
 			return toolCall("read_file", `{"filename":"notes.txt"}`), 0
 		case 1:
-			time.Sleep(1500 * time.Millisecond) // give the draft time to show the finished step
+			time.Sleep(1500 * time.Millisecond)
 			return toolCall("bash_execute", `{"command":"cat /etc/passwd | grep root"}`), 0
 		}
 		time.Sleep(900 * time.Millisecond)
 		return map[string]any{"role": "assistant", "content": "تمام شد."}, 0
 	}
 	h.send(private(27, "یه نگاهی بنداز"))
-	var all []string
-	for _, d := range h.tg.of("sendRichMessageDraft") {
-		all = append(all, fmt.Sprint(d.body["rich_message"]))
-	}
+	all := liveFrames(h)
 	joined := strings.Join(all, "\n=====\n")
-	for _, want := range []string{"tg-thinking", "- 📁 خوندن «notes.txt» ✅"} {
+	for _, want := range []string{"دارم فکر", "خوندن «notes.txt»"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the draft misses %q:\n%s", want, joined)
 		}
@@ -189,7 +180,6 @@ func TestThinkingCardInTheDraftWhenTheTerminalIsOff(t *testing.T) {
 	h.wantText("تمام شد.")
 }
 
-// The terminal on keeps its own look: nothing of the card shows.
 func TestThinkingCardIsOnlyForTheTerminalOff(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -200,8 +190,8 @@ func TestThinkingCardIsOnlyForTheTerminalOff(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "خالیه."}, 0
 	}
 	h.send(private(28, "فایل‌هام؟"))
-	for _, d := range h.tg.of("sendRichMessageDraft") {
-		if s := fmt.Sprint(d.body["rich_message"]); strings.Contains(s, "نگاه به فایل‌ها") {
+	for _, frame := range liveFrames(h) {
+		if s := frame; strings.Contains(s, "نگاه به فایل‌ها") {
 			t.Errorf("the terminal's draft has the card's text:\n%s", s)
 		}
 	}

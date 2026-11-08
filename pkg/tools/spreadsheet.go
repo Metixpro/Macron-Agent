@@ -19,27 +19,19 @@ import (
 	"unicode/utf8"
 )
 
-// create_spreadsheet writes a real Excel workbook (.xlsx): several sheets, a
-// bold frozen header row with filters, numbers as numbers, formulas that
-// Excel computes on opening, column widths that fit, and right-to-left
-// sheets for Persian. Rows come from the call itself or from a CSV, TSV or
-// JSON file of the workspace.
-
 const (
 	ToolCreateSpreadsheet = "create_spreadsheet"
 
 	maxXLSXSheets = 50
 	maxXLSXCells  = 1_000_000
-	maxTableBytes = 25 << 20 // read into the bot's own memory
+	maxTableBytes = 25 << 20
 )
 
-// xlsxSheet is one sheet to write. Cells are float64, bool, nil or string
-// (a string starting with "=" is a formula).
 type xlsxSheet struct {
 	Name   string
 	Rows   [][]any
-	Header bool  // the first row is a header: bold, frozen, with filters
-	RTL    *bool // nil: right-to-left when most of its letters are Persian or Arabic
+	Header bool
+	RTL    *bool
 }
 
 func (r *Registry) registerSpreadsheetTools() {
@@ -116,7 +108,6 @@ func (r *Registry) createSpreadsheet(_ context.Context, sessionID string, args m
 	return fmt.Sprintf("Created %s (%s): %s.", name, humanSize(int64(buf.Len())), strings.Join(parts, "; ")), nil
 }
 
-// tableFile reads the rows of a CSV, TSV or JSON file; numbers become numbers.
 func (r *Registry) tableFile(sessionID, name string) ([][]any, error) {
 	data, truncated, err := r.Machine.ReadFile(sessionID, name, maxTableBytes)
 	switch {
@@ -165,14 +156,12 @@ func firstLineBytes(b []byte) []byte {
 	return b
 }
 
-// jsonTable reads an array of objects (keys become the header, in the order
-// the file has them) or of arrays.
 func jsonTable(data []byte) ([][]any, error) {
 	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		return nil, fmt.Errorf("not valid JSON: %v", err)
 	}
-	if m, ok := v.(map[string]any); ok { // {"items": [...]}: the first list in it
+	if m, ok := v.(map[string]any); ok {
 		for _, k := range jsonRecordKeys(data, 1) {
 			if list, ok := m[k].([]any); ok {
 				v = list
@@ -184,7 +173,7 @@ func jsonTable(data []byte) ([][]any, error) {
 	if !ok {
 		return nil, errors.New("the JSON must be a list of objects or of lists")
 	}
-	depth := 2 // objects in the top list, or in the list of a wrapper object
+	depth := 2
 	if t := bytes.TrimSpace(data); len(t) > 0 && t[0] == '{' {
 		depth = 3
 	}
@@ -214,8 +203,6 @@ func jsonTable(data []byte) ([][]any, error) {
 	return rows, nil
 }
 
-// jsonRecordKeys lists, in the order they first appear, the keys of the
-// objects at the given depth (1: the top object; 2: objects in the top list).
 func jsonRecordKeys(data []byte, depth int) []string {
 	type frame struct{ obj, wantKey bool }
 	var (
@@ -246,7 +233,7 @@ func jsonRecordKeys(data []byte, depth int) []string {
 			continue
 		}
 		if !stack[n-1].wantKey {
-			stack[n-1].wantKey = true // a value
+			stack[n-1].wantKey = true
 			continue
 		}
 		stack[n-1].wantKey = false
@@ -259,8 +246,6 @@ func jsonRecordKeys(data []byte, depth int) []string {
 
 var plainNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,14})(\.[0-9]+)?$`)
 
-// numberOrText turns "1234", "-4.5" or «۱۲۳» into numbers; "0912…" (a phone
-// number, an id) and anything longer than 15 digits stay text.
 func numberOrText(s string) any {
 	t := strings.TrimSpace(strings.Map(func(r rune) rune {
 		switch {
@@ -281,7 +266,6 @@ func numberOrText(s string) any {
 	return s
 }
 
-// writeXLSX writes a workbook.
 func writeXLSX(w io.Writer, sheets []xlsxSheet) error {
 	if len(sheets) > maxXLSXSheets {
 		return fmt.Errorf("at most %d sheets", maxXLSXSheets)
@@ -358,7 +342,6 @@ func writeXLSX(w io.Writer, sheets []xlsxSheet) error {
 	return zw.Close()
 }
 
-// xlsxStyles: 0 plain, 1 the header (bold on light grey, a line under it).
 const xlsxStyles = `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
 	`<fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font>` +
 	`<font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
@@ -371,7 +354,6 @@ const xlsxStyles = `<styleSheet xmlns="http://schemas.openxmlformats.org/spreads
 	`<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs>` +
 	`<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`
 
-// sheetXML is a worksheet part, and the range of its filters ("" without).
 func sheetXML(s xlsxSheet) (string, string) {
 	cols := 0
 	for _, row := range s.Rows {
@@ -419,7 +401,7 @@ func sheetXML(s xlsxSheet) (string, string) {
 					str = string(b)
 				}
 				if len(str) > 1 && str[0] == '=' && !(s.Header && i == 0) {
-					if v, ok := calc.formulaValue(i, j); ok { // stored, for viewers that do not calculate
+					if v, ok := calc.formulaValue(i, j); ok {
 						fmt.Fprintf(&data, `<c r="%s"%s><f>%s</f><v>%s</v></c>`, ref, style, xmlEscape(str[1:]), strconv.FormatFloat(v, 'g', -1, 64))
 						text = excelNumber(v)
 						break
@@ -496,7 +478,6 @@ func toFloat(v any) float64 {
 	return 0
 }
 
-// colName turns 0 into "A" and 27 into "AB".
 func colName(i int) string {
 	name := ""
 	for i++; i > 0; i = (i - 1) / 26 {
@@ -505,7 +486,6 @@ func colName(i int) string {
 	return name
 }
 
-// absRef turns "A1:C9" into "$A$1:$C$9".
 func absRef(ref string) string {
 	parts := strings.Split(ref, ":")
 	for i, p := range parts {
@@ -517,7 +497,6 @@ func absRef(ref string) string {
 	return strings.Join(parts, ":")
 }
 
-// sheetName makes a valid, unique sheet name (31 characters, none of []:*?/\).
 func sheetName(name string, used map[string]bool) string {
 	name = strings.Map(func(r rune) rune {
 		if strings.ContainsRune(`[]:*?/\`, r) || r < 0x20 {
@@ -544,7 +523,6 @@ func sheetName(name string, used map[string]bool) string {
 	return name
 }
 
-// displayWidth counts wide (East Asian) characters twice.
 func displayWidth(s string) int {
 	w := 0
 	for _, r := range s {
@@ -560,7 +538,6 @@ func displayWidth(s string) int {
 	return w
 }
 
-// xmlEscape escapes text and drops the characters XML cannot hold.
 func xmlEscape(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if r == '\t' || r == '\n' || r == '\r' || (r >= 0x20 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || r >= 0x10000 {

@@ -15,14 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// group_admin: the agent moderates a group in plain words ("mute him for an
-// hour", "ban everyone who posted that link", "lock the group until
-// morning"). It is offered only to the bot's admins and the group's own
-// admins, and every action also needs the matching admin right, of the
-// person asking (unless they are a bot admin or the group's creator) and of
-// the bot. Admins, the group's creator, bot admins and the bot itself are
-// never targets.
-
 const (
 	toolGroupAdmin = "group_admin"
 	warnLimit      = 3
@@ -33,7 +25,6 @@ const (
 	prefLockPerms  = "lockperms"
 )
 
-// modRight is the admin right an action needs ("" = any admin).
 var modRight = map[string]string{
 	"ban": "restrict", "unban": "restrict", "kick": "restrict", "mute": "restrict", "unmute": "restrict", "restrict": "restrict",
 	"warn": "restrict", "unwarn": "restrict", "delete": "delete", "purge": "delete", "pin": "pin", "unpin": "pin", "lock": "info",
@@ -44,14 +35,11 @@ var modRight = map[string]string{
 var modActions = []string{"ban", "unban", "kick", "mute", "unmute", "restrict", "warn", "unwarn", "warnings", "info", "delete", "purge",
 	"pin", "unpin", "lock", "unlock", "promote", "demote", "title", "set_rights", "invite_link", "set_title", "set_description"}
 
-// targetActions act on members.
 var targetActions = map[string]bool{"ban": true, "unban": true, "kick": true, "mute": true, "unmute": true, "restrict": true, "warn": true,
 	"unwarn": true, "warnings": true, "info": true, "promote": true, "demote": true, "title": true, "set_rights": true}
 
-// punishing actions never touch admins.
 var punishing = map[string]bool{"ban": true, "kick": true, "mute": true, "warn": true, "restrict": true}
 
-// adminChanges change who is an admin and what they may do.
 var adminChanges = map[string]bool{"promote": true, "demote": true, "title": true, "set_rights": true}
 
 func hasRight(cm *telegram.ChatMember, right string) bool {
@@ -86,7 +74,6 @@ func hasRight(cm *telegram.ChatMember, right string) bool {
 var rightNames = map[string]string{"restrict": "ban users", "delete": "delete messages", "pin": "pin messages", "info": "change group info",
 	"promote": "add new admins", "invite": "invite users via link"}
 
-// moderator is who may use group_admin in this chat: a bot admin or an admin of the group.
 func (b *Bot) moderator(ctx context.Context, m *telegram.Message) bool {
 	if m.Chat.Private() || m.GuestQueryID != "" || m.From == nil {
 		return false
@@ -234,7 +221,6 @@ func (b *Bot) moderate(ctx context.Context, m *telegram.Message, args map[string
 		return "✅ invite link" + note + ": " + link
 	}
 
-	// The rest act on members.
 	targets, problems := b.modTargets(ctx, m, args)
 	if len(targets) == 0 {
 		if len(problems) == 0 {
@@ -263,7 +249,6 @@ func textOr(s, def string) string {
 	return s
 }
 
-// modTarget is a member to act on.
 type modTarget struct {
 	id   int64
 	name string
@@ -278,8 +263,6 @@ func (t modTarget) label() string {
 
 var modIDRe = regexp.MustCompile(`^-?\d{1,15}$`)
 
-// modTargets resolves users: the replied message's author, @usernames (people
-// the bot has seen), numeric ids and members mentioned by name in the message.
 func (b *Bot) modTargets(ctx context.Context, m *telegram.Message, args map[string]any) ([]modTarget, []string) {
 	var raw []string
 	if list, ok := args["users"].([]any); ok {
@@ -292,7 +275,7 @@ func (b *Bot) modTargets(ctx context.Context, m *telegram.Message, args map[stri
 	if len(raw) == 0 {
 		raw = []string{"reply"}
 	}
-	mentions := map[string]telegram.User{} // text mentions of people without a username
+	mentions := map[string]telegram.User{}
 	for _, e := range m.BodyEntities() {
 		if e.Type == "text_mention" && e.User != nil {
 			mentions[strings.ToLower(utf16Slice(m.Body(), e.Offset, e.Length))] = *e.User
@@ -316,7 +299,7 @@ func (b *Bot) modTargets(ctx context.Context, m *telegram.Message, args map[stri
 				continue
 			}
 			from := m.RepliedInChat().From
-			if m.RepliedInChat().SenderChat != nil && from.ID == 1087968824 { // an anonymous admin
+			if m.RepliedInChat().SenderChat != nil && from.ID == 1087968824 {
 				problems = append(problems, "⚠️ the replied message was sent anonymously by an admin")
 				continue
 			}
@@ -352,7 +335,6 @@ func (b *Bot) userByUsername(ctx context.Context, chatID int64, username string)
 	return modTarget{}, false
 }
 
-// utf16Slice cuts text by the UTF-16 offsets Telegram uses.
 func utf16Slice(s string, offset, length int) string {
 	u := utf16.Encode([]rune(s))
 	if offset < 0 || offset+length > len(u) {
@@ -371,7 +353,7 @@ func (b *Bot) moderateOne(ctx context.Context, m *telegram.Message, asker, me *t
 		return "⚠️ " + t.label() + ": not on yourself"
 	case b.isAdmin(t.id) && punishing[action]:
 		return "⚠️ " + t.label() + ": a bot admin, protected"
-	case b.isAdmin(t.id) && action != "info" && action != "warnings" && !b.isAdmin(m.From.ID): // only a bot admin changes another's role
+	case b.isAdmin(t.id) && action != "info" && action != "warnings" && !b.isAdmin(m.From.ID):
 		return "⚠️ " + t.label() + ": a bot admin, protected"
 	}
 	member, err := b.api.GetChatMember(ctx, chatID, t.id)
@@ -521,8 +503,6 @@ func forText(d time.Duration) string {
 
 var modDurationRe = regexp.MustCompile(`^(\d+)\s*(s|sec|m|min|minutes?|h|hours?|d|days?|w|weeks?|ثانیه|دقیقه|ساعت|روز|هفته|ماه|mo|months?)$`)
 
-// parseModDuration reads '30m', '2h', '1d', '1w', «۲ ساعت»; "" or 'forever' is 0.
-// Telegram treats less than 30 seconds and more than 366 days as for ever.
 func parseModDuration(s string) (time.Duration, error) {
 	s = strings.ToLower(strings.TrimSpace(persianDigits(s)))
 	switch s {
@@ -566,7 +546,6 @@ func persianDigits(s string) string {
 	}, s)
 }
 
-// modError turns Telegram's refusals into plain words.
 func modError(err error) string {
 	msg := err.Error()
 	switch {
@@ -582,8 +561,6 @@ func modError(err error) string {
 	}
 	return msg
 }
-
-// ---------------------------------------------------------------- warnings
 
 func (b *Bot) warnings(ctx context.Context, chatID, userID int64) (int, []string) {
 	v, err := b.st.ChatPref(ctx, chatID, prefWarnPrefix+strconv.FormatInt(userID, 10))
@@ -609,8 +586,6 @@ func (b *Bot) setWarnings(ctx context.Context, chatID, userID int64, n int, reas
 	}
 	return b.st.SetChatPref(ctx, chatID, name, strconv.Itoa(n)+"|"+strings.Join(reasons, "\x1f"))
 }
-
-// ---------------------------------------------------------------- locking
 
 var permOrder = []func(*telegram.ChatPermissions) *bool{
 	func(p *telegram.ChatPermissions) *bool { return &p.CanSendMessages },
@@ -652,8 +627,6 @@ func decodePerms(s string) (telegram.ChatPermissions, bool) {
 	return p, true
 }
 
-// groupPermissions are the group's usual member rights: the ones saved when
-// it was locked, else its current ones, else the usual set.
 func (b *Bot) groupPermissions(ctx context.Context, chatID int64) telegram.ChatPermissions {
 	if v, err := b.st.ChatPref(ctx, chatID, prefLockPerms); err == nil {
 		if p, ok := decodePerms(v); ok {
@@ -666,8 +639,6 @@ func (b *Bot) groupPermissions(ctx context.Context, chatID int64) telegram.ChatP
 	return telegram.MemberPermissions()
 }
 
-// lockGroup stops everyone but admins from writing, remembering what members
-// could do; unlocking gives that back.
 func (b *Bot) lockGroup(ctx context.Context, chatID int64, lock bool) string {
 	if lock {
 		if info, err := b.api.GetChat(ctx, chatID); err == nil && info.Permissions != nil && info.Permissions.CanSendMessages {
@@ -686,10 +657,6 @@ func (b *Bot) lockGroup(ctx context.Context, chatID int64, lock bool) string {
 	return "🔓 the group is open again"
 }
 
-// ---------------------------------------------------------------- purge
-
-// purge deletes many messages: those of the users given (from the group's
-// log), or everything from the replied message on, or the last count.
 func (b *Bot) purge(ctx context.Context, m *telegram.Message, args map[string]any, count int) string {
 	chatID := m.Chat.ID
 	var ids []int64
@@ -739,12 +706,6 @@ func (b *Bot) purge(ctx context.Context, m *telegram.Message, args map[string]an
 	return fmt.Sprintf("🧹 deleted up to %d messages (Telegram keeps those older than 48 hours)", deleted)
 }
 
-// ---------------------------------------------------------------- admins
-
-// changeAdmin promotes, demotes, titles or changes the rights of a member.
-// Rights are capped by the asker's own and the bot's own (capRights); an
-// admin with rights the asker lacks is changed only by the group's owner or
-// a bot admin; Telegram lets the bot change only admins it promoted.
 func (b *Bot) changeAdmin(ctx context.Context, chatID int64, asker, me *telegram.ChatMember, action string, t modTarget,
 	member *telegram.ChatMember, items []string, text string) string {
 	if member.Status == "creator" {
@@ -774,7 +735,7 @@ func (b *Bot) changeAdmin(ctx context.Context, chatID int64, asker, me *telegram
 	}
 
 	title := strings.TrimSpace(text)
-	if action == "promote" && strings.EqualFold(title, "full") && len(items) == 0 { // the older way to ask for every right
+	if action == "promote" && strings.EqualFold(title, "full") && len(items) == 0 {
 		items, title = []string{"full"}, ""
 	}
 	var want telegram.AdminRights
@@ -783,7 +744,7 @@ func (b *Bot) changeAdmin(ctx context.Context, chatID int64, asker, me *telegram
 	case action == "set_rights" && len(items) == 0:
 		return "error: rights says what to change, e.g. ['+pin', '-delete']"
 	case action == "title" && isAdmin, action == "promote" && isAdmin && len(items) == 0:
-		want = current // already an admin: the rights stay as they are
+		want = current
 	default:
 		if len(items) == 0 {
 			items = []string{"moderator"}
@@ -825,8 +786,6 @@ func (b *Bot) changeAdmin(ctx context.Context, chatID int64, asker, me *telegram
 	return out
 }
 
-// memberInfo says what a member is in the group: status, title, admin
-// rights or what they may still send, and warnings.
 func (b *Bot) memberInfo(ctx context.Context, chatID int64, t modTarget, member *telegram.ChatMember) string {
 	n, _ := b.warnings(ctx, chatID, t.id)
 	parts := []string{t.label() + ": " + member.Status}
@@ -864,7 +823,6 @@ func (b *Bot) memberInfo(ctx context.Context, chatID int64, t modTarget, member 
 	return strings.Join(parts, ", ") + fmt.Sprintf(", warnings %d/%d", n, warnLimit)
 }
 
-// strList reads a list argument (a lone string counts as one item).
 func strList(v any) []string {
 	var out []string
 	switch x := v.(type) {

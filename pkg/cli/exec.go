@@ -23,8 +23,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// execTask runs the shared agent core directly on the server, without Telegram.
-// Each invocation owns a workspace so concurrent cron/SSH jobs do not collide.
 func execTask(term *IO, args []string) int {
 	fs := flag.NewFlagSet("exec", flag.ContinueOnError)
 	fs.SetOutput(term.Err)
@@ -45,7 +43,7 @@ func execTask(term *IO, args []string) int {
 		fmt.Fprintln(term.Err, err)
 		return 1
 	}
-	// Read settings without changing the parent process environment.
+
 	value := func(key string) string {
 		if v, ok := os.LookupEnv(key); ok {
 			return v

@@ -11,14 +11,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Group approval: when someone adds the bot to a group, the log notice asks
-// the bot's admins to approve it. Until then the bot stays silent there; a
-// rejection, or no decision within approvalWait, makes it leave. Groups the
-// bot's own admins add are approved at once.
-//
-//	ga:CHAT:ok   approve
-//	ga:CHAT:no   reject and leave
-
 const (
 	approvalWait     = 24 * time.Hour
 	approvalCacheTTL = time.Minute
@@ -30,7 +22,6 @@ type approvalState struct {
 	at    time.Time
 }
 
-// groupActive reports whether the bot may work in a group.
 func (b *Bot) groupActive(ctx context.Context, chatID int64) bool {
 	if v, ok := b.approvals.Load(chatID); ok {
 		if s := v.(approvalState); time.Since(s.at) < approvalCacheTTL {
@@ -40,7 +31,7 @@ func (b *Bot) groupActive(ctx context.Context, chatID int64) bool {
 	state, _, err := b.st.GroupApproval(ctx, chatID)
 	if err != nil {
 		log.Printf("[chat %d] approval: %v", chatID, err)
-		return true // a database hiccup must not silence every group
+		return true
 	}
 	b.approvals.Store(chatID, approvalState{state: state, at: time.Now()})
 	return state == store.ApprovalApproved
@@ -51,7 +42,6 @@ func approvalKeyboard(l lang, b *Bot, chatID int64) *telegram.InlineKeyboardMark
 	return keyboard(row(b.button(l.t("✅ فعال بشه"), "ga:"+id+":ok", telegram.StyleSuccess), b.button(l.t("❌ رد و خروج"), "ga:"+id+":no", telegram.StyleDanger)))
 }
 
-// askApproval puts a new group on hold and asks the admins.
 func (b *Bot) askApproval(ctx context.Context, chat telegram.Chat, notice string, group lang) {
 	l := b.logLang()
 	if err := b.st.SetGroupApproval(ctx, chat.ID, store.ApprovalPending); err != nil {
@@ -84,7 +74,7 @@ func (b *Bot) handleApprovalCallback(ctx context.Context, q *telegram.CallbackQu
 	}
 	verdict, ok := b.decideGroup(ctx, l, chatID, parts[2] == "ok", q.From.FullName())
 	answer(verdict, !ok)
-	// The notice shows the decision instead of the buttons.
+
 	if q.Message != nil {
 		_ = b.api.EditMarkup(ctx, q.Message.Chat.ID, q.Message.MessageID, nil)
 		if ok && q.Message.Text != "" {
@@ -93,8 +83,6 @@ func (b *Bot) handleApprovalCallback(ctx context.Context, q *telegram.CallbackQu
 	}
 }
 
-// decideGroup approves or rejects a pending group; the verdict is a short
-// line for the admin, ok false when nothing changed.
 func (b *Bot) decideGroup(ctx context.Context, l lang, chatID int64, approve bool, by string) (string, bool) {
 	state := store.ApprovalRejected
 	if approve {

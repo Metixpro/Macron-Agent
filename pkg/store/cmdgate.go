@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// The command gate's allowlist and audit log (see pkg/cmdgate).
-
-// CmdAudit is one decision of the gate.
 type CmdAudit struct {
 	ID       int64
 	At       time.Time
@@ -19,7 +16,6 @@ type CmdAudit struct {
 	Rule     string
 }
 
-// CmdAllowlist is what the owner allowed for good, oldest first.
 func (s *Store) CmdAllowlist(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT pattern FROM cmd_allow ORDER BY created_at, pattern`)
 	if err != nil {
@@ -37,19 +33,16 @@ func (s *Store) CmdAllowlist(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// AddCmdAllow allows a command for good.
 func (s *Store) AddCmdAllow(ctx context.Context, pattern string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO cmd_allow (pattern, created_at) VALUES (?, ?)`, truncate(pattern, 4000), s.Now())
 	return err
 }
 
-// RemoveCmdAllow takes an allowance back.
 func (s *Store) RemoveCmdAllow(ctx context.Context, pattern string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM cmd_allow WHERE pattern = ?`, pattern)
 	return err
 }
 
-// AddCmdAudit records a decision.
 func (s *Store) AddCmdAudit(ctx context.Context, a CmdAudit) error {
 	at := a.At
 	if at.IsZero() {
@@ -60,7 +53,6 @@ func (s *Store) AddCmdAudit(ctx context.Context, a CmdAudit) error {
 	return err
 }
 
-// CmdAudits are the latest decisions, newest first.
 func (s *Store) CmdAudits(ctx context.Context, limit int) ([]CmdAudit, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, at, session, origin, command, decision, decider, rule FROM cmd_audit ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {

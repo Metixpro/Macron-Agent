@@ -13,45 +13,25 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// The thinking card: what the live view shows when the live terminal is off.
-// Without the terminal the user used to see one line, «🔎 دارم توی اینترنت
-// می‌گردم…», and nothing of what was behind it. Now the line says what the bot
-// is doing at this moment, and under it comes what it has done so far, each
-// step with what it was about (the search, the page, the file) and how long it
-// took:
-//
-//	🔎 دارم توی اینترنت می‌گردم… `0:14`
-//
-//	- 🔎 جستجو «قیمت دلار امروز» ✅ `2s`
-//	- 🌐 خوندن tgju.org ✅ `1s`
-//	- 📊 **کشیدن نمودار «روند ۳۰ روز»** ⏳ `5s`
-//
-// What a step is about is the request's own words (a query, an address
-// without its query string, a file's name), never a command, a path, a
-// server or an output: those are not shown. The steps are Markdown list
-// items, which a rich message draws as a list.
-
 const (
-	thinkShown = 6  // the latest steps that show
-	thinkKept  = 40 // the steps kept in memory
-	thinkWidth = 56 // what a step is about is cut to this many characters
+	thinkShown = 6
+	thinkKept  = 40
+	thinkWidth = 56
 )
 
-// thinkStep is one thing the bot did.
 type thinkStep struct {
 	id     int
-	sub    int // the sub-agent's id the call belongs to (0: the agent itself)
+	sub    int
 	name   string
-	text   string // what it is, in the user's language, with what it is about
-	detail string // live progress of the running call ("45% · 12/27 MB")
+	text   string
+	detail string
 	since  time.Time
 	took   time.Duration
 	active bool
 	failed bool
-	agent  bool // a sub-agent
+	agent  bool
 }
 
-// thinkLog is the steps of one request.
 type thinkLog struct {
 	steps []thinkStep
 	next  int
@@ -76,17 +56,14 @@ func (t *thinkLog) add(s thinkStep) *thinkStep {
 	return &t.steps[len(t.steps)-1]
 }
 
-// start records a call that begins.
 func (t *thinkLog) start(sub int, name, text string, now time.Time) {
 	t.add(thinkStep{sub: sub, name: name, text: text, since: now, active: true})
 }
 
-// subStart records a sub-agent that begins; it returns the id its calls carry.
 func (t *thinkLog) subStart(text string, now time.Time) int {
 	return t.add(thinkStep{name: agent.ToolDelegate, text: text, since: now, active: true, agent: true}).id
 }
 
-// end records the end of the oldest running call of a tool in a branch.
 func (t *thinkLog) end(sub int, name string, failed bool, now time.Time) {
 	for i := range t.steps {
 		if s := &t.steps[i]; s.active && !s.agent && s.sub == sub && s.name == name {
@@ -105,7 +82,6 @@ func (t *thinkLog) subEnd(id int, failed bool, now time.Time) {
 	}
 }
 
-// progress records how far a running call is.
 func (t *thinkLog) progress(sub int, name, text string) {
 	for i := len(t.steps) - 1; i >= 0; i-- {
 		if s := &t.steps[i]; s.active && !s.agent && s.sub == sub && s.name == name {
@@ -124,7 +100,6 @@ func (t *thinkLog) busy() bool {
 	return false
 }
 
-// current is the call that began last and still runs.
 func (t *thinkLog) current() (thinkStep, bool) {
 	for i := len(t.steps) - 1; i >= 0; i-- {
 		if t.steps[i].active && !t.steps[i].agent {
@@ -134,7 +109,6 @@ func (t *thinkLog) current() (thinkStep, bool) {
 	return thinkStep{}, false
 }
 
-// markdown draws the card; plan is the job's checklist (already Markdown, or "").
 func (t *thinkLog) markdown(l lang, now, started time.Time, plan string) string {
 	var sb strings.Builder
 	head := thinkingStatus(l)
@@ -165,7 +139,6 @@ func (t *thinkLog) markdown(l lang, now, started time.Time, plan string) string 
 	return sb.String()
 }
 
-// line is one step as a list item: its icon, what it is, how it stands.
 func (t *thinkLog) line(l lang, s thinkStep, now time.Time) string {
 	icon := statusIcon(s.name)
 	if s.agent {
@@ -192,9 +165,6 @@ func (t *thinkLog) line(l lang, s thinkStep, now time.Time) string {
 	return out
 }
 
-// thinkKind says how a tool shows in the thinking card: with what it is about
-// («جستجو «قیمت دلار»»), without it, which of its arguments say what it is
-// about, and whether that is an address (shown as host and path only).
 type thinkKind struct {
 	about string
 	plain string
@@ -228,7 +198,7 @@ var thinkKinds = map[string]thinkKind{
 	tools.ToolSong:              {"ساخت آهنگ «%s»", "ساخت آهنگ", []string{"title"}, false},
 	tools.ToolDocumentReader:    {"خوندن سند «%s»", "خوندن سند", []string{"filename", "file"}, true},
 	tools.ToolRunCode:           {"اجرای کد %s", "اجرای کد", []string{"language"}, false},
-	"bash_execute":              {"", "اجرای دستور", nil, false}, // never the command itself
+	"bash_execute":              {"", "اجرای دستور", nil, false},
 	"pdf_tool":                  {"کار روی PDF (%s)", "کار روی PDF", []string{"action"}, false},
 	tools.ToolQueryData:         {"", "کار روی داده‌ها", nil, false},
 	tools.ToolCreateSpreadsheet: {"", "کار روی داده‌ها", nil, false},
@@ -241,12 +211,10 @@ var thinkKinds = map[string]thinkKind{
 	toolAskUser:                 {"", "پرسیدن یه سؤال", nil, false},
 }
 
-// thinkText says in a few words what a call is, and what it is about (from its
-// arguments): «جستجو «قیمت دلار»». It never shows a command, a path or a server.
 func thinkText(l lang, name, argsJSON string) string {
 	kind, ok := thinkKinds[name]
 	if !ok {
-		return toolLabel(name) // a plugin's or MCP tool: its own name ("" = hidden)
+		return toolLabel(name)
 	}
 	if kind.about != "" {
 		var a map[string]any
@@ -265,7 +233,6 @@ func thinkText(l lang, name, argsJSON string) string {
 	return l.t(kind.plain)
 }
 
-// firstText is a string argument, or the first of a list of them.
 func firstText(v any) string {
 	switch x := v.(type) {
 	case string:
@@ -280,16 +247,12 @@ func firstText(v any) string {
 	return ""
 }
 
-// cleanAbout makes what a call is about fit a line: one line, cut, no markup.
 func cleanAbout(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.NewReplacer("`", "'", "«", "", "»", "").Replace(s)
 	return textutil.TruncateRunes(strings.TrimSpace(s), thinkWidth, "…")
 }
 
-// addressAbout is a link as it is read: the host and a short path, without
-// the scheme, the query string or what follows it (which can carry a key).
-// Something that is not a link (a file name) is kept as it is.
 func addressAbout(raw string) string {
 	if raw == "" {
 		return ""
@@ -297,7 +260,7 @@ func addressAbout(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		if strings.ContainsAny(raw, "/\\") {
-			return path.Base(strings.ReplaceAll(raw, "\\", "/")) // a path: only the file's name
+			return path.Base(strings.ReplaceAll(raw, "\\", "/"))
 		}
 		return raw
 	}

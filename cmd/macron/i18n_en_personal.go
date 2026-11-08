@@ -1,7 +1,5 @@
 package main
 
-// English for the personal edition's own texts (the memory files).
-
 func init() {
 	for fa, en := range map[string]string{
 		"\n\nℹ️ مدل معمولی همون پروایدر فعاله (⭐ توی 🤖 پروایدرها).": "\n\nℹ️ The regular model is the active provider (⭐ in 🤖 Providers).",

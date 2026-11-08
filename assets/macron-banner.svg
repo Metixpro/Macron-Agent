@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="Macron Agent">
+<defs>
+<linearGradient id="bg" x2="1" y2="1"><stop stop-color="#07121f"/><stop offset="1" stop-color="#122d43"/></linearGradient>
+<linearGradient id="accent" x2="1" y2="1"><stop stop-color="#64f4c5"/><stop offset="1" stop-color="#5caaff"/></linearGradient>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#83b7dd" stroke-opacity=".07"/></pattern>
+</defs>
+<rect width="1280" height="360" rx="24" fill="url(#bg)"/>
+<rect width="1280" height="360" rx="24" fill="url(#grid)"/>
+<circle cx="1100" cy="180" r="210" fill="none" stroke="#65eec2" stroke-opacity=".1"/>
+<circle cx="1100" cy="180" r="160" fill="none" stroke="#65eec2" stroke-opacity=".1"/>
+<rect x="76" y="94" width="172" height="172" rx="44" fill="#0b2030" stroke="#75d9d0" stroke-opacity=".25"/>
+<path d="M112 225V135L162 190 212 135V225" fill="none" stroke="url(#accent)" stroke-width="15" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="292" y="153" fill="#82dbc5" font-family="Arial,sans-serif" font-size="16" letter-spacing="5">YOUR SERVER. YOUR AGENT.</text>
+<text x="286" y="220" fill="#f2f7fc" font-family="Arial,sans-serif" font-size="64" font-weight="700" letter-spacing="-2">MACRON AGENT</text>
+<text x="292" y="257" fill="#aac2d5" font-family="Arial,sans-serif" font-size="19" letter-spacing="2">LOCAL EXECUTION / REAL TOOLS / LASTING MEMORY</text>
+<circle cx="1170" cy="72" r="5" fill="#73efbd"/>
+<path d="M1040 145l35 35-35 35m57 0h56" fill="none" stroke="#a6f0e5" stroke-opacity=".35" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

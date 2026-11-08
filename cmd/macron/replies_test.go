@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Calling the bot on someone's message (its name or @mention alone) asks
-// about that message; its text, a rich answer's blocks and media reach the model.
 func TestGroupCallOnAReplyIsAboutThatMessage(t *testing.T) {
 	h := newHarness(t)
 	sara := &telegram.User{ID: 77, FirstName: "Sara"}
@@ -35,7 +33,6 @@ func TestGroupCallOnAReplyIsAboutThatMessage(t *testing.T) {
 		t.Errorf("a call on a reply is not an empty message:\n%s", req)
 	}
 
-	// Someone replies to the bot's rich answer (given to another member).
 	var rich json.RawMessage = []byte(`{"blocks":[{"type":"paragraph","text":["قیمت طلا امروز ",{"type":"bold","text":"۵ میلیون"}]}]}`)
 	m2 := group(41, "مکرون این قیمت مال کی بود؟")
 	m2.ReplyToMessage = &telegram.Message{MessageID: 12, From: &telegram.User{ID: 42, IsBot: true, FirstName: "Macron"}, Chat: m2.Chat, RichMessage: rich}
@@ -45,8 +42,6 @@ func TestGroupCallOnAReplyIsAboutThatMessage(t *testing.T) {
 	}
 }
 
-// In guest mode the replied message may come as external_reply: its author,
-// its photo and the quoted part reach the model.
 func TestGuestExternalReply(t *testing.T) {
 	h := newHarness(t)
 	h.tg.files["ext"] = testJPEG(40, 40)
@@ -63,9 +58,6 @@ func TestGuestExternalReply(t *testing.T) {
 	}
 }
 
-// In a group the bot answers Sara; Reza replies to that answer. The model
-// hears that the answer was for Sara and what she asked, and that Reza is
-// someone else joining in. Sara's own follow-up is a follow-up.
 func TestGroupReplyToAnAnswerForSomeoneElse(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = say("طلا امروز حدود ۵ میلیونه")
@@ -113,16 +105,13 @@ func TestGroupReplyToAnAnswerForSomeoneElse(t *testing.T) {
 
 	old := group(41, "این چی بود؟")
 	old.From = &telegram.User{ID: 41, FirstName: "Reza"}
-	answer(old, 3) // sent before a restart: not known
+	answer(old, 3)
 	h.send(old)
 	if req := llmText(h.llm.last()); !strings.Contains(req, "may have been an answer to someone else") {
 		t.Errorf("an unknown answer of the bot's:\n%s", req)
 	}
 }
 
-// «مکرون …» on someone else's message is a request to the bot, in all the
-// ways people write the name (it reaches the bot when the group lets it see
-// all messages: groupsight_test.go covers the groups that do not).
 func TestWakeWordOnSomeoneElsesMessage(t *testing.T) {
 	h := newHarness(t)
 	sara := &telegram.User{ID: 77, FirstName: "Sara"}

@@ -35,7 +35,7 @@ func (g *groupChat) say(user int64, name, text string, replyTo int64) int64 {
 
 func TestGroupCatchUp(t *testing.T) {
 	h := newHarness(t)
-	h.bot.readsAll.Store(false) // privacy mode on: the panel warns while the bot is no admin
+	h.bot.readsAll.Store(false)
 	ctx := context.Background()
 	g := &groupChat{h: h, id: 1000}
 	const ali, sara, reza = 91, 92, 93
@@ -43,7 +43,6 @@ func TestGroupCatchUp(t *testing.T) {
 	h.tg.members[fmt.Sprintf("%d:%d", logChat, ali)] = "administrator"
 	h.tg.mu.Unlock()
 
-	// Off by default: nothing is kept, /recap explains how to turn it on.
 	g.say(sara, "Sara", "سلام بچه‌ها", 0)
 	if n, _, _ := h.st.GroupLogStats(ctx, logChat); n != 0 {
 		t.Fatal("nothing is kept before an admin turns it on")
@@ -52,7 +51,6 @@ func TestGroupCatchUp(t *testing.T) {
 	h.send(g.msg(sara, "Sara", "/recap", 0))
 	h.wantText("/groupsettings")
 
-	// Only group admins open and use the settings.
 	h.send(g.msg(sara, "Sara", "/groupsettings", 0))
 	h.wantText("فقط ادمین‌های گروه")
 	h.tg.reset()
@@ -72,7 +70,6 @@ func TestGroupCatchUp(t *testing.T) {
 	}
 	h.wantText("روشن شد")
 
-	// Messages are kept from now on; /nolog keeps someone out.
 	mine := g.say(ali, "Ali", "من میرم ناهار، جلسه رو بندازید عصر", 0)
 	g.say(sara, "Sara", "باشه، جلسه ساعت ۵", mine)
 	g.say(reza, "Reza", "/nolog", 0)
@@ -88,7 +85,6 @@ func TestGroupCatchUp(t *testing.T) {
 		t.Fatalf("kept: %+v", before)
 	}
 
-	// "مکرون چی از دستم رفت؟" reads what came after Ali's last message.
 	var toolResult string
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if lastRole(req) == "user" {
@@ -111,7 +107,6 @@ func TestGroupCatchUp(t *testing.T) {
 		t.Error("the asker's own earlier message is not news")
 	}
 
-	// An edit is reflected; leaving the group forgets everything.
 	edit := g.msg(sara, "Sara", "@ali بودجه هم تایید شد: ۵۰ میلیون", 0)
 	edit.MessageID = budget
 	h.bot.handleEdit(edit)

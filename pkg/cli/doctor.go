@@ -50,7 +50,6 @@ func (r *report) line(l level, what, hint string) {
 	}
 }
 
-// tools the agent's work leans on: name, why, how to get it.
 var doctorTools = []struct {
 	name, why, apt string
 	need           bool
@@ -88,7 +87,6 @@ func doctor(io *IO, args []string) int {
 	home := config.Home()
 	io.printf("Macron Agent %s · %s/%s · home %s\n\n", app.Version, runtime.GOOS, runtime.GOARCH, home)
 
-	// ---- files
 	if fi, err := os.Stat(home); err != nil || !fi.IsDir() {
 		r.line(fail, "the home folder does not exist", "run: macron setup")
 		return 1
@@ -116,7 +114,6 @@ func doctor(io *IO, args []string) int {
 		}
 	}
 
-	// ---- Telegram
 	token := getEnv(env, keyToken)
 	owners := getEnv(env, keyOwners)
 	if token == "" {
@@ -137,7 +134,6 @@ func doctor(io *IO, args []string) int {
 		r.line(ok, "owner(s): "+owners, "")
 	}
 
-	// ---- database
 	dbPath := getEnvDefault(env, "MACRON_DB", filepath.Join(home, config.FileDB))
 	if _, err := os.Stat(dbPath); err != nil {
 		r.line(warn, "no database yet ("+dbPath+")", "it is created the first time the agent starts")
@@ -145,7 +141,6 @@ func doctor(io *IO, args []string) int {
 		reportDatabase(ctx, r, dbPath, env)
 	}
 
-	// ---- the model
 	url, key, model := getEnv(env, keyAPIURL), getEnv(env, keyAPIKey), getEnv(env, keyModel)
 	switch {
 	case url == "":
@@ -166,7 +161,6 @@ func doctor(io *IO, args []string) int {
 		}
 	}
 
-	// ---- this machine
 	who := currentUser()
 	if os.Geteuid() == 0 {
 		r.line(warn, "the agent runs as root: it can do anything on this machine", "that is what a personal server is for; to limit it, run it as a normal user")
@@ -181,7 +175,6 @@ func doctor(io *IO, args []string) int {
 		}
 	}
 
-	// ---- the service
 	if serviceSupported() {
 		u, _ := currentUnit()
 		ctl := systemctl(u)
@@ -201,7 +194,7 @@ func doctor(io *IO, args []string) int {
 			}
 		}
 	}
-	// ---- a newer release
+
 	if !*offline {
 		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		rel, err := updater.Latest(cctx, "")
@@ -261,8 +254,6 @@ func reportDatabase(ctx context.Context, r *report, dbPath string, env *envFile)
 	reportMoA(ctx, r, st)
 }
 
-// reportMoA checks the multi-model presets: each slot's provider resolves,
-// the aggregator has a key, and no aggregator is itself a mixture.
 func reportMoA(ctx context.Context, r *report, st *store.Store) {
 	raw, _ := st.Setting("moa.presets")
 	list, err := moa.ParsePresets(raw)
@@ -321,7 +312,6 @@ func currentUser() string {
 	return "this user"
 }
 
-// checkToolDependencies reports package imports, not merely an installed Python.
 func checkToolDependencies(r *report) {
 	checkPython(r)
 	for _, t := range doctorTools {
@@ -351,8 +341,6 @@ func checkToolDependencies(r *report) {
 	}
 }
 
-// checkPython reports the Python the tools run with: 3.12 or newer, from the
-// private venv install.sh makes.
 func checkPython(r *report) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -12,7 +12,6 @@ import (
 
 var longText = strings.Repeat("Waze reads blocked pages through a reader. ", 20)
 
-// site answers each path its own way.
 func site(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -35,7 +34,6 @@ func site(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// reader answers like r.jina.ai and counts its calls.
 func reader(t *testing.T, ok bool) (*httptest.Server, *atomic.Int32) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +107,7 @@ func TestTheBrowserIsTheLastResort(t *testing.T) {
 	if err != nil || p.Via != "browser" || rendered != s.URL+"/spa" {
 		t.Fatalf("%+v %v", p, err)
 	}
-	// Nothing works: the plain error stays.
+
 	e.Render = func(ctx context.Context, url string) (*Page, error) { return nil, errors.New("no") }
 	if _, err := e.Fetch(context.Background(), s.URL+"/blocked"); err == nil || !strings.Contains(err.Error(), "403") {
 		t.Errorf("the original error: %v", err)

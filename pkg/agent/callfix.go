@@ -13,22 +13,10 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// Call repair: what a weaker model gets wrong in a call is put right before
-// the call runs, when the fix is unambiguous: a tool named almost right
-// ("functions.web_search", "WebSearch", "google_search"), parameters named
-// another way ("q" for "query", "filePath" for "filename"), a number or a
-// yes/no sent as text, Persian digits, one item where a list goes, a list
-// where one text goes, an enum written in other letters, a null for an
-// optional parameter. The repaired call is what the transcript keeps, so the
-// model sees the right form and copies it next time. Anything that is still
-// wrong goes back to the model as an error to correct (args.go).
-
-// callFix says what was repaired in a call.
 type callFix struct {
-	from  string   // the name the model used, when it was not the tool's
-	notes []string // what changed in the arguments
-	// confused: the model got a name wrong (the tool's or a parameter's);
-	// only types were fixed otherwise.
+	from  string
+	notes []string
+
 	confused bool
 }
 
@@ -42,7 +30,6 @@ func (f callFix) String() string {
 	return strings.Join(append(parts, f.notes...), "; ")
 }
 
-// fixCall repairs a call in place against the tools' definitions.
 func fixCall(tc *llm.ToolCall, defs map[string]llm.ToolDef) callFix {
 	var fx callFix
 	if name, ok := resolveTool(tc.Function.Name, defs); ok && name != tc.Function.Name {
@@ -55,7 +42,7 @@ func fixCall(tc *llm.ToolCall, defs map[string]llm.ToolDef) callFix {
 	}
 	raw, err := repairArgs(tc.Function.Arguments)
 	if err != nil {
-		return fx // prepareCall tells the model
+		return fx
 	}
 	var args map[string]any
 	if json.Unmarshal([]byte(raw), &args) != nil {
@@ -69,17 +56,13 @@ func fixCall(tc *llm.ToolCall, defs map[string]llm.ToolDef) callFix {
 	}
 	var asSent map[string]any
 	if changed || json.Unmarshal([]byte(tc.Function.Arguments), &asSent) != nil {
-		tc.Function.Arguments = raw // a call that was right stays as it was written
+		tc.Function.Arguments = raw
 	}
 	return fx
 }
 
-// ---------------------------------------------------------------- tool names
-
 var toolPrefixRe = regexp.MustCompile(`(?i)^(?:functions?|tools?|default_api|api|mcp|tool_call)[.:/]+`)
 
-// toolAliases are names models give common tools (normalized: lower case,
-// letters and digits only), each with the tools it may mean, in order.
 var toolAliases = map[string][]string{
 	"search": {"web_search"}, "googlesearch": {"web_search"}, "google": {"web_search"}, "bingsearch": {"web_search"},
 	"internetsearch": {"web_search"}, "searchweb": {"web_search"}, "searchinternet": {"web_search"}, "searchonline": {"web_search"},
@@ -121,7 +104,6 @@ func normName(s string) string {
 	return b.String()
 }
 
-// resolveTool finds the tool a call means.
 func resolveTool(name string, defs map[string]llm.ToolDef) (string, bool) {
 	known := make(map[string]bool, len(defs))
 	for d := range defs {
@@ -130,7 +112,6 @@ func resolveTool(name string, defs map[string]llm.ToolDef) (string, bool) {
 	return resolveName(name, known)
 }
 
-// resolveName is resolveTool over a set of names.
 func resolveName(name string, defs map[string]bool) (string, bool) {
 	if defs[name] {
 		return name, true
@@ -170,7 +151,7 @@ func resolveName(name string, defs map[string]bool) (string, bool) {
 			return t, true
 		}
 	}
-	// One letter or two off ("web_serach", "generat_image"), when only one is that close.
+
 	if len(key) < 5 {
 		return "", false
 	}
@@ -216,10 +197,6 @@ func editDistance(a, b string) int {
 	return prev[len(b)]
 }
 
-// ---------------------------------------------------------------- arguments
-
-// paramAliases are names models give common parameters (normalized), each
-// with the parameters it may mean, in order.
 var paramAliases = map[string][]string{
 	"q": {"query"}, "search": {"query"}, "searchquery": {"query"}, "searchterm": {"query"}, "term": {"query"}, "keyword": {"query"},
 	"keywords": {"query"}, "question": {"query"}, "searchtext": {"query"},
@@ -236,8 +213,6 @@ var paramAliases = map[string][]string{
 	"desc": {"description", "prompt"}, "imageprompt": {"prompt"}, "instruction": {"prompt", "instruction"}, "instructions": {"prompt", "instruction"},
 }
 
-// fitArgs repairs args against a JSON schema object in place and
-// reports whether it changed anything.
 func fitArgs(args map[string]any, schema map[string]any, path string, fx *callFix) bool {
 	props, _ := schema["properties"].(map[string]any)
 	if len(props) == 0 {
@@ -265,7 +240,6 @@ func fitArgs(args map[string]any, schema map[string]any, path string, fx *callFi
 		return out
 	}
 
-	// Names: the same name written another way, then a common other name.
 	for _, k := range unknown() {
 		key := normName(k)
 		var same []string
@@ -289,8 +263,7 @@ func fitArgs(args map[string]any, schema map[string]any, path string, fx *callFi
 			}
 		}
 	}
-	// One unknown name and one required parameter missing: it is that one
-	// (unless the tool takes parameters of any name).
+
 	_, open := schema["additionalProperties"].(map[string]any)
 	open = open || schema["additionalProperties"] == true
 	if left := unknown(); len(left) == 1 && !open {
@@ -311,7 +284,6 @@ func fitArgs(args map[string]any, schema map[string]any, path string, fx *callFi
 		}
 	}
 
-	// Values.
 	for k, v := range args {
 		p, ok := props[k].(map[string]any)
 		if !ok {
@@ -333,7 +305,6 @@ func fitArgs(args map[string]any, schema map[string]any, path string, fx *callFi
 	return changed
 }
 
-// schemaType is a property's type ("" when it has none or many).
 func schemaType(p map[string]any) string {
 	switch t := p["type"].(type) {
 	case string:
@@ -369,8 +340,6 @@ func enumOf(p map[string]any) []string {
 	return out
 }
 
-// coerce turns v into the type p asks for, when that is unambiguous; the
-// note says what changed ("" for nothing).
 func coerce(v any, p map[string]any, path string, fx *callFix) (any, string) {
 	note := func(nv any) (any, string) {
 		return nv, fmt.Sprintf("%s: %s → %s", path, short(v), short(nv))
@@ -483,7 +452,6 @@ func coerce(v any, p map[string]any, path string, fx *callFix) (any, string) {
 	return v, ""
 }
 
-// fixEnum matches a value to an enum written in other letters or cut short.
 func fixEnum(s string, p map[string]any, path string, note func(any) (any, string)) (any, string) {
 	enum := enumOf(p)
 	if len(enum) == 0 {
@@ -523,8 +491,6 @@ func fixEnum(s string, p map[string]any, path string, note func(any) (any, strin
 	return s, ""
 }
 
-// parseNumber reads a number written as text, in any digits, with
-// thousands separators: "۱۲", "1,500", " 7 ".
 func parseNumber(s string) (float64, bool) {
 	var b strings.Builder
 	for _, r := range strings.TrimSpace(s) {

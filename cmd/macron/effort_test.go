@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// The admin picks a provider's effort on its card; the requests go with it,
-// and ultracode gives the job its bigger budget and standard.
 func TestAdminChoosesAProvidersEffort(t *testing.T) {
 	h := newHarness(t)
 	ps, _ := h.st.Providers(bg)
@@ -28,7 +26,7 @@ func TestAdminChoosesAProvidersEffort(t *testing.T) {
 	if !hasButton(buttons(v), fmt.Sprintf("a:pv:%d", id)) || !strings.Contains(v.body["text"].(string), "Ultracode") {
 		t.Fatalf("the levels and the way back: %v", v.body["text"])
 	}
-	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:pv:%d:eff:max", id)) // not a level
+	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:pv:%d:eff:max", id))
 	if p, _ := h.st.Provider(bg, id); p.Effort != "" {
 		t.Fatalf("only the levels: %q", p.Effort)
 	}

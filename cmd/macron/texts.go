@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// All user-facing wording lives here, written to sound like a person, not a system.
-
 func greeting(l lang, t time.Time) string {
 	switch h := t.Hour(); {
 	case h >= 5 && h < 11:
@@ -87,9 +85,6 @@ const (
 	textGroupLogOff = "📝 این گروه پیام‌ها رو برای خلاصه نگه نمی‌داره. یکی از ادمین‌ها می‌تونه با /groupsettings روشنش کنه."
 )
 
-// statusFor describes what is happening, in plain words, for the live draft.
-// statusFor is what the bot shows it is doing: an icon and a short line
-// («🔎 دارم توی اینترنت می‌گردم…»); "" for tools that show nothing.
 func statusFor(l lang, tool string) string {
 	text := toolStatus(tool)
 	if text == "" {
@@ -98,10 +93,8 @@ func statusFor(l lang, tool string) string {
 	return statusIcon(tool) + " " + l.t(text)
 }
 
-// thinkingStatus is the status while the model thinks.
 func thinkingStatus(l lang) string { return "💭 " + l.t(thinkingText) }
 
-// statusIcon is the icon in front of a tool's status line.
 func statusIcon(tool string) string {
 	switch tool {
 	case "web_search":
@@ -292,7 +285,6 @@ func toolStatus(tool string) string {
 	return "دارم روش کار می‌کنم…"
 }
 
-// actionFor is the chat action that matches a tool.
 func actionFor(tool string) string {
 	switch tool {
 	case "generate_image", tools.ToolEditImage, "search_image", "generate_chart", "generate_qr", toolProfilePhoto:

@@ -16,29 +16,22 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// treg.to is a gateway to many web search vendors behind one token. With a
-// token set it is the first engine; DuckDuckGo answers when it fails or finds
-// nothing. Each search tries the free vendor (TinyFish) first and may fall
-// back to paid ones only within a small cost cap.
-
 const (
-	// TregBaseURL is the treg gateway.
 	TregBaseURL = "https://treg.to"
-	// TregMaxCost caps what one search may cost in USD (the free vendor first).
+
 	TregMaxCost = "0.01"
 	tregTimeout = 20 * time.Second
 )
 
-// Treg is the treg.to web search.
 type Treg struct {
 	BaseURL string
-	MaxCost string // X-Treg-Route-Max-Cost, in USD
+	MaxCost string
 
 	mu    sync.RWMutex
 	token func() string
 
 	hits, misses, fails atomic.Int64
-	last                atomic.Value // tregEvent
+	last                atomic.Value
 }
 
 type tregEvent struct {
@@ -47,7 +40,6 @@ type tregEvent struct {
 	Err      string
 }
 
-// TregStatus is what the admin panel shows.
 type TregStatus struct {
 	On                  bool
 	Hits, Misses, Fails int64
@@ -56,19 +48,16 @@ type TregStatus struct {
 	LastErr             string
 }
 
-// NewTreg returns a treg search that reads its token from token ("" = off).
 func NewTreg(token func() string) *Treg {
 	return &Treg{BaseURL: TregBaseURL, MaxCost: TregMaxCost, token: token}
 }
 
-// SetTokenSource changes where the token comes from (e.g. the admin panel).
 func (t *Treg) SetTokenSource(token func() string) {
 	t.mu.Lock()
 	t.token = token
 	t.mu.Unlock()
 }
 
-// Token is the current token ("" when treg is off).
 func (t *Treg) Token() string {
 	if t == nil {
 		return ""
@@ -82,7 +71,6 @@ func (t *Treg) Token() string {
 	return strings.TrimSpace(f())
 }
 
-// Status reports how treg has been doing since the start.
 func (t *Treg) Status() TregStatus {
 	s := TregStatus{On: t.Token() != "", Hits: t.hits.Load(), Misses: t.misses.Load(), Fails: t.fails.Load()}
 	if e, ok := t.last.Load().(tregEvent); ok {
@@ -91,7 +79,6 @@ func (t *Treg) Status() TregStatus {
 	return s
 }
 
-// TregError is a refusal from treg (bad token, no balance, cost cap…).
 type TregError struct {
 	Status int
 	Detail string
@@ -101,12 +88,10 @@ func (e *TregError) Error() string {
 	return fmt.Sprintf("treg: HTTP %d: %s", e.Status, e.Detail)
 }
 
-// Unauthorized reports a wrong or missing token.
 func (e *TregError) Unauthorized() bool {
 	return e.Status == http.StatusUnauthorized || e.Status == http.StatusForbidden
 }
 
-// Search asks treg's routed web search with the given token.
 func (t *Treg) Search(ctx context.Context, client *http.Client, token, query string, limit int) ([]SearchResult, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, tregTimeout)
 	defer cancel()
@@ -118,7 +103,7 @@ func (t *Treg) Search(ctx context.Context, client *http.Client, token, query str
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Treg-Token", token)
-	req.Header.Set("X-Treg-Route-Prefer", "tinyfish") // free
+	req.Header.Set("X-Treg-Route-Prefer", "tinyfish")
 	if t.MaxCost != "" {
 		req.Header.Set("X-Treg-Route-Max-Cost", t.MaxCost)
 	}
@@ -134,7 +119,7 @@ func (t *Treg) Search(ctx context.Context, client *http.Client, token, query str
 	served := resp.Header.Get("X-Treg-Served-By")
 	switch {
 	case resp.StatusCode == http.StatusAccepted:
-		return nil, served, nil // still running at a slow vendor: nothing to wait for
+		return nil, served, nil
 	case resp.StatusCode != http.StatusOK:
 		return nil, served, &TregError{Status: resp.StatusCode, Detail: tregDetail(raw)}
 	}
@@ -153,7 +138,6 @@ func (t *Treg) Search(ctx context.Context, client *http.Client, token, query str
 	return tregRows(env.Output, limit), served, nil
 }
 
-// tregDetail is the reason in a refusal ({"detail": …} or {"error": …}).
 func tregDetail(raw []byte) string {
 	var e map[string]any
 	if json.Unmarshal(raw, &e) == nil {
@@ -170,8 +154,6 @@ func tregDetail(raw []byte) string {
 	return textutil.TruncateRunes(strings.TrimSpace(string(raw)), 200, "…")
 }
 
-// tregRows reads the result rows. Each vendor names its fields its own way
-// (url or link, snippet or description or content…).
 func tregRows(output json.RawMessage, limit int) []SearchResult {
 	var rows []map[string]any
 	var obj struct {
@@ -227,9 +209,8 @@ func firstString(m map[string]any, keys ...string) string {
 	return ""
 }
 
-var tregLogged atomic.Int64 // unix time of the last logged failure
+var tregLogged atomic.Int64
 
-// logTregFailure logs a failed treg search, at most once a minute.
 func logTregFailure(err error) {
 	now := time.Now().Unix()
 	if last := tregLogged.Load(); now-last >= 60 && tregLogged.CompareAndSwap(last, now) {
@@ -237,7 +218,6 @@ func logTregFailure(err error) {
 	}
 }
 
-// record keeps the outcome of a search for the admin panel.
 func (t *Treg) record(served string, n int, err error) {
 	e := tregEvent{At: time.Now(), ServedBy: served}
 	switch {

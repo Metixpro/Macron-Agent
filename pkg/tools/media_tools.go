@@ -114,8 +114,6 @@ func (r *Registry) registerMediaTools() {
 		}, []string{"action", "filename"}, r.pdfTool)
 }
 
-// imageTool runs generate_image within the request's picture allowance: the
-// pictures asked for are taken first and what a call did not make is given back.
 func (r *Registry) imageTool(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 	want := intArg(args, "count", 1, 1, 2)
 	got, note := take(ctx, kindImages, want)
@@ -127,9 +125,6 @@ func (r *Registry) imageTool(ctx context.Context, sessionID string, args map[str
 	return out, nil
 }
 
-// generateImage makes up to n pictures. Engines, in order: the studio (with
-// its key), the Nano Banana task service, Flux. It returns the result for the
-// model and how many pictures it made.
 func (r *Registry) generateImage(ctx context.Context, sessionID string, args map[string]any, n int) (string, int) {
 	prompt := strArg(args, "prompt")
 	switch {
@@ -159,7 +154,7 @@ func (r *Registry) generateImage(ctx context.Context, sessionID string, args map
 	taskEngine := r.imageEditAPI != "" && r.editKey() != ""
 	budget := 150 * time.Second
 	if taskEngine {
-		budget = 330 * time.Second // the task service takes a minute or two
+		budget = 330 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -204,7 +199,7 @@ func (r *Registry) generateImage(ctx context.Context, sessionID string, args map
 			lastErr = err.Error()
 			if errors.Is(err, ErrImageKey) {
 				lastErr = "the service did not accept its key"
-				break // the admin has to fix it; trying again changes nothing
+				break
 			}
 			if errors.Is(err, errStudioRefused) {
 				break
@@ -219,11 +214,11 @@ func (r *Registry) generateImage(ctx context.Context, sessionID string, args map
 		}
 		log.Printf("generate_image: the image service failed (%s), %s", lastErr, next)
 	}
-	// The fallbacks have no styles of their own: the style goes into the words.
+
 	fallbackPrompt := styledPrompt(prompt, style)
 	if taskEngine {
 		ReportStatus(ctx, "Nano Banana · queue")
-		tctx, tcancel := context.WithTimeout(ctx, 200*time.Second) // leaves time for Flux
+		tctx, tcancel := context.WithTimeout(ctx, 200*time.Second)
 		size, err := r.nanoTaskImage(tctx, sessionID, fallbackPrompt, nil, taskAspect(ratio), name)
 		tcancel()
 		if err == nil {
@@ -246,7 +241,7 @@ func (r *Registry) generateImage(ctx context.Context, sessionID string, args map
 
 	ReportStatus(ctx, "Flux")
 	if strArg(args, "filename") == "" {
-		name = strings.TrimSuffix(name, path.Ext(name)) + ".jpg" // Flux answers JPEG
+		name = strings.TrimSuffix(name, path.Ext(name)) + ".jpg"
 	}
 	size, err := r.imageViaFlux(ctx, sessionID, fallbackPrompt, ratio, name)
 	if err != nil {
@@ -258,8 +253,6 @@ func (r *Registry) generateImage(ctx context.Context, sessionID string, args map
 	return fmt.Sprintf("Image created and queued for delivery.\n- File: %s (%s)\n- Prompt: %s", name, humanSize(size), prompt), 1
 }
 
-// taskAspect is the shape the Nano Banana task service takes; a ratio it
-// does not know is cut afterwards.
 func taskAspect(ratio string) string {
 	switch ratio {
 	case "1:1", "16:9", "9:16", "4:3", "3:4":
@@ -271,9 +264,8 @@ func taskAspect(ratio string) string {
 var noImageKeyOnce sync.Once
 
 const (
-	imageAttempts = 2 // the service times out now and then: one more try before the fallbacks
-	// nestCallTimeout bounds one request to the image service, so a hung call
-	// leaves time for the fallbacks.
+	imageAttempts = 2
+
 	nestCallTimeout = 45 * time.Second
 )
 
@@ -282,9 +274,6 @@ var (
 	fluxEndpoint   = "https://image.pollinations.ai/prompt/"
 )
 
-// cropToRatio cuts a centred frame of the ratio (16:9, 9:16, 21:9…) out of the image (a third
-// from the top: subjects sit high in a picture). Any failure keeps the image
-// as it is: the whole square is still a good answer.
 func (r *Registry) cropToRatio(sessionID, name, ratio string) {
 	wantW, wantH, ok := normShape(ratio)
 	if !ok || wantW == wantH {
@@ -301,7 +290,7 @@ func (r *Registry) cropToRatio(sessionID, name, ratio string) {
 	}
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	// Already the shape (a picture drawn at 21:9 is 1024×438, a hair off): leave it be.
+
 	if w <= 0 || h <= 0 || math.Abs(float64(w*wantH-h*wantW)) <= 0.015*float64(h*wantW) {
 		return
 	}
@@ -341,8 +330,6 @@ func (r *Registry) cropToRatio(sessionID, name, ratio string) {
 	}
 }
 
-// fluxSize is the size Flux draws a ratio at: 768 square, else the long side
-// 1024 (sides in multiples of 8).
 func fluxSize(ratio string) (int, int) {
 	w, h, ok := normShape(ratio)
 	if !ok || w == h {
@@ -354,7 +341,6 @@ func fluxSize(ratio string) (int, int) {
 	return max(64, int(math.Round(1024*float64(w)/float64(h)/8))*8), 1024
 }
 
-// imageViaFlux draws the picture with Flux (Pollinations), already in the ratio.
 func (r *Registry) imageViaFlux(ctx context.Context, sessionID, prompt, ratio, name string) (int64, error) {
 	width, height := fluxSize(ratio)
 	endpoint := fmt.Sprintf("%s%s?nologo=true&width=%d&height=%d&model=flux", fluxEndpoint, url.PathEscape(prompt), width, height)
@@ -381,7 +367,6 @@ func (r *Registry) imageViaFlux(ctx context.Context, sessionID, prompt, ratio, n
 	return n, nil
 }
 
-// saveStream writes src to a new workspace file with a size cap, removing partial files.
 func (r *Registry) saveStream(sessionID, name string, src io.Reader, max int64) (int64, error) {
 	if rem := r.Machine.FreeSpace(); rem < max {
 		max = rem
@@ -516,7 +501,6 @@ func (r *Registry) generateQR(ctx context.Context, sessionID string, args map[st
 	return fmt.Sprintf("QR code created and queued for delivery.\n- File: %s\n- Encoded: %s", name, textutil.TruncateRunes(textutil.OneLine(data), 120, "…")), nil
 }
 
-// convertAliases are the names models give the actions.
 var convertAliases = map[string]string{"gif": "video_to_gif", "to_gif": "video_to_gif", "audio": "extract_audio", "mp3": "extract_audio",
 	"to_mp3": "extract_audio", "voice": "to_voice", "voice_message": "to_voice", "cut": "trim", "clip": "trim", "round": "to_video_note",
 	"video_note": "to_video_note", "compress": "compress_video"}
@@ -539,7 +523,7 @@ func (r *Registry) mediaConvert(ctx context.Context, sessionID string, args map[
 	}
 	stem := strings.TrimSuffix(in, path.Ext(in))
 	output := strArg(args, "output_file")
-	if output == "" { // named after the input
+	if output == "" {
 		output = map[string]string{"video_to_gif": stem + ".gif", "extract_audio": stem + ".mp3", "convert_audio": stem + ".mp3",
 			"trim": stem + "_cut" + path.Ext(in)}[action]
 		if output == in {
@@ -570,7 +554,7 @@ func (r *Registry) mediaConvert(ctx context.Context, sessionID string, args map[
 
 	argv := []string{"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y"}
 	switch action {
-	case "video_to_gif": // its own palette of 256 colours: no banding
+	case "video_to_gif":
 		argv = append(argv, "-i", "./"+in, "-t", "30", "-filter_complex",
 			"fps=12,scale='min(480,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4", "-loop", "0")
 	case "extract_audio":
@@ -631,9 +615,7 @@ func (r *Registry) pdfTool(ctx context.Context, sessionID string, args map[strin
 		if strings.TrimSpace(content) == "" {
 			return "error: text_content is required for the create action", nil
 		}
-		// A real browser prints Markdown as a document (headings, tables,
-		// code, pictures, Persian and English together); ReportLab, plain
-		// lines, when there is no browser.
+
 		if r.browser != nil {
 			if err := r.htmlPDF(ctx, sessionID, content, strArg(args, "title"), name); err == nil {
 				return fmt.Sprintf("PDF created and queued for delivery.\n- File: %s", name), nil

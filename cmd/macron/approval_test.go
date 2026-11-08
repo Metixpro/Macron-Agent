@@ -28,7 +28,6 @@ func TestGroupsWaitForApproval(t *testing.T) {
 	ctx := context.Background()
 	const g1, g2, g3, g4 = -100801, -100802, -100803, -100804
 
-	// Someone adds the bot: the owners are asked, the group is told to wait.
 	addedBy(h, g1, 55)
 	if state, _, _ := h.st.GroupApproval(ctx, g1); state != store.ApprovalPending {
 		t.Fatalf("state: %s", state)
@@ -45,7 +44,6 @@ func TestGroupsWaitForApproval(t *testing.T) {
 	}
 	h.wantText("مدیر ربات باید تأیید کنه")
 
-	// Silent until approved.
 	before := len(h.llm.requests)
 	h.send(groupMsgIn(g1, 55, "مکرون سلام"))
 	if len(h.llm.requests) != before {
@@ -60,7 +58,7 @@ func TestGroupsWaitForApproval(t *testing.T) {
 	if state, _, _ := h.st.GroupApproval(ctx, g1); state != store.ApprovalApproved {
 		t.Fatal("approved")
 	}
-	h.wantText("سلام به همگی") // the usual introduction
+	h.wantText("سلام به همگی")
 	h.send(groupMsgIn(g1, 55, "مکرون سلام"))
 	if len(h.llm.requests) == before {
 		t.Error("an approved group gets answers")
@@ -71,7 +69,6 @@ func TestGroupsWaitForApproval(t *testing.T) {
 		t.Error("a decision is final")
 	}
 
-	// Rejected: the bot says goodbye and leaves.
 	addedBy(h, g2, 56)
 	h.tg.reset()
 	h.click(ownerID, ownerID, 900, fmt.Sprintf("ga:%d:no", g2))
@@ -80,7 +77,6 @@ func TestGroupsWaitForApproval(t *testing.T) {
 	}
 	h.wantText("خداحافظ")
 
-	// The bot's own admins need no approval; neither does anyone when it is off.
 	addedBy(h, g4, ownerID)
 	if state, _, _ := h.st.GroupApproval(ctx, g4); state != store.ApprovalApproved {
 		t.Error("an admin's group is approved at once")

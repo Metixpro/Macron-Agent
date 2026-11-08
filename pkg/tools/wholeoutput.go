@@ -12,21 +12,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// A tool's output longer than the model may read in one go loses its middle
-// (head and tail stay). The whole of it is kept in a file of the workspace
-// first, and the model is told where: read_file reads any part of it. The
-// folder is hidden: never offered to the user as a file the job made.
-
 const (
 	WholeOutputDir  = ".tool-output"
-	wholeOutputKeep = 20      // files kept per workspace (the oldest go)
-	wholeOutputMax  = 4 << 20 // bytes kept of one output
+	wholeOutputKeep = 20
+	wholeOutputMax  = 4 << 20
 )
 
 var wholeSeq atomic.Int64
 
-// KeepWhole caps a tool's output for the model (MaxToolOutput); a longer one
-// is saved whole first and the capped text says where.
 func (r *Registry) KeepWhole(sessionID, tool, out string) string {
 	if utf8.RuneCountInString(out) <= MaxToolOutput || r.Machine == nil || sessionID == "" {
 		return textutil.HeadTail(out, MaxToolOutput)
@@ -37,7 +30,7 @@ func (r *Registry) KeepWhole(sessionID, tool, out string) string {
 		data = data[:wholeOutputMax] + "\n[cut at 4 MB]"
 	}
 	if err := r.Machine.WriteFile(sessionID, name, []byte(data)); err != nil {
-		return textutil.HeadTail(out, MaxToolOutput) // a full workspace: as before
+		return textutil.HeadTail(out, MaxToolOutput)
 	}
 	r.pruneWhole(sessionID)
 	note := fmt.Sprintf("\n[The whole output (%d lines) is saved in %s: read_file it with start_line to see the part cut out above.]",
@@ -45,7 +38,6 @@ func (r *Registry) KeepWhole(sessionID, tool, out string) string {
 	return textutil.HeadTail(out, MaxToolOutput-utf8.RuneCountInString(note)) + note
 }
 
-// pruneWhole keeps the newest saved outputs of a workspace.
 func (r *Registry) pruneWhole(sessionID string) {
 	ws, err := r.Machine.Workspace(sessionID)
 	if err != nil {

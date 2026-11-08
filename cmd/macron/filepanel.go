@@ -20,25 +20,9 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// The /files panel: the workspace by category, a page at a time. Tapping a
-// file sends just that file; a category can be sent at once, everything can
-// be downloaded as one zip, and files can be deleted.
-//
-// Callback data (at most 64 bytes):
-//
-//	f:h:UID                 categories
-//	f:c:UID:CAT:PAGE        a page of a category
-//	f:d:UID:CAT:PAGE        the same page in delete mode
-//	f:s:UID:HASH:CAT:PAGE   send one file
-//	f:r:UID:HASH:CAT:PAGE   delete one file
-//	f:a:UID:CAT             send the whole category
-//	f:z:UID                 everything as a zip
-//	f:w:UID / f:W:UID       empty the workspace (ask / do it)
-//	f:x:UID                 close the panel
-
 const (
 	filesPerPage = 8
-	maxSendAll   = 60 // files sent by "send all"; more → the zip
+	maxSendAll   = 60
 	maxZipFiles  = 2000
 )
 
@@ -58,7 +42,6 @@ var fileCategories = []fileCategory{
 	{"etc", "🗂", "سایر", nil},
 }
 
-// categoryAll is the newest files of every kind.
 var categoryAll = fileCategory{"all", "🕘", "همه (جدیدترین اول)", nil}
 
 func categoryOf(name string) fileCategory {
@@ -90,8 +73,6 @@ func fileHash(name string) string {
 	return hex.EncodeToString(sum[:4])
 }
 
-// panelFiles lists the files at the top of the workspace, newest first, and
-// counts those inside folders (they are in the zip).
 func (b *Bot) panelFiles(session string) (files []machine.FileEntry, nested int) {
 	all, _ := b.app.Machine.List(session, 8, 20000)
 	for _, f := range all {
@@ -108,7 +89,6 @@ func (b *Bot) panelFiles(session string) (files []machine.FileEntry, nested int)
 	return files, nested
 }
 
-// hiddenPath reports dot files and anything inside a dot folder (.pkgs…).
 func hiddenPath(name string) bool {
 	for _, part := range strings.Split(name, "/") {
 		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, "~") {
@@ -139,8 +119,6 @@ func faNum(n int) string {
 		return r
 	}, strconv.Itoa(n))
 }
-
-// ---------------------------------------------------------------- screens
 
 func (b *Bot) openFilePanel(ctx context.Context, m *telegram.Message) {
 	v := b.viewFilesHome(m.From.ID)
@@ -259,7 +237,6 @@ func (b *Bot) viewFilesPage(uid int64, cat fileCategory, page int, deleting bool
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// ago says how long ago a file changed, in Persian.
 func (b *Bot) ago(l lang, t time.Time) string {
 	d := b.st.Now().Sub(t)
 	switch {
@@ -273,8 +250,6 @@ func (b *Bot) ago(l lang, t time.Time) string {
 	return t.In(b.loc).Format("01-02 15:04")
 }
 
-// ---------------------------------------------------------------- actions
-
 func (b *Bot) handleFilesCallback(ctx context.Context, q *telegram.CallbackQuery, answer func(string, bool)) {
 	l := b.langOf(&q.From)
 	parts := strings.Split(q.Data, ":")
@@ -283,7 +258,7 @@ func (b *Bot) handleFilesCallback(ctx context.Context, q *telegram.CallbackQuery
 		return
 	}
 	uid, err := strconv.ParseInt(parts[2], 10, 64)
-	if err != nil || (uid != q.From.ID && !b.isAdmin(q.From.ID)) { // admins may open anyone's files
+	if err != nil || (uid != q.From.ID && !b.isAdmin(q.From.ID)) {
 		answer(l.t("این پنل مال کس دیگه‌ای است؛ برای فایل‌های خودت /files رو بزن."), true)
 		return
 	}
@@ -360,11 +335,11 @@ func (b *Bot) handleFilesCallback(ctx context.Context, q *telegram.CallbackQuery
 		b.withFileJob(uid, answer, func(jctx context.Context) {
 			names := make([]string, len(list))
 			for i, f := range list {
-				names[len(list)-1-i] = f.Name // oldest first, like a timeline
+				names[len(list)-1-i] = f.Name
 			}
 			for start := 0; start < len(names); start += 10 {
 				if start > 0 {
-					time.Sleep(time.Second) // stay under Telegram's flood limits
+					time.Sleep(time.Second)
 				}
 				if _, ok := b.sendBatch(jctx, chatID, session, names[start:min(start+10, len(names))], nil, telegram.SendOptions{}); !ok {
 					return
@@ -395,8 +370,6 @@ func (b *Bot) handleFilesCallback(ctx context.Context, q *telegram.CallbackQuery
 	}
 }
 
-// emptyWorkspace deletes the user's files and folders; installed packages
-// (hidden folders) stay.
 func (b *Bot) emptyWorkspace(session string) error {
 	entries, err := b.app.Machine.List(session, 1, 100000)
 	if err != nil {
@@ -423,8 +396,6 @@ func (b *Bot) fileByHash(session, hash string) (string, bool) {
 	return "", false
 }
 
-// withFileJob runs one upload job per user in the background (the callback
-// is answered right away); a second tap while it runs is refused.
 func (b *Bot) withFileJob(uid int64, answer func(string, bool), job func(ctx context.Context)) {
 	l := b.lang(uid)
 	if _, busy := b.fileJobs.LoadOrStore(uid, true); busy {
@@ -441,8 +412,6 @@ func (b *Bot) withFileJob(uid int64, answer func(string, bool), job func(ctx con
 	}()
 }
 
-// sendZip packs files (all of the workspace when list is nil) into one zip
-// and sends it.
 func (b *Bot) sendZip(ctx context.Context, l lang, chatID int64, session string, list []machine.FileEntry) {
 	if list == nil {
 		all, _ := b.app.Machine.List(session, 32, maxZipFiles)
@@ -487,12 +456,10 @@ func (b *Bot) sendZip(ctx context.Context, l lang, chatID int64, session string,
 	}
 }
 
-// stored lists formats that are already compressed (no point deflating them).
 var stored = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true, ".mp4": true, ".mov": true, ".mkv": true,
 	".webm": true, ".mp3": true, ".m4a": true, ".ogg": true, ".opus": true, ".zip": true, ".gz": true, ".tgz": true, ".rar": true, ".7z": true,
 	".xz": true, ".bz2": true, ".docx": true, ".xlsx": true, ".pptx": true, ".pdf": true}
 
-// writeZip writes the files into w; errTooBig when the zip would exceed Telegram's upload limit.
 func (b *Bot) writeZip(w io.Writer, session string, list []machine.FileEntry) (int, error) {
 	cw := &countingWriter{w: w}
 	zw := zip.NewWriter(cw)
@@ -500,7 +467,7 @@ func (b *Bot) writeZip(w io.Writer, session string, list []machine.FileEntry) (i
 	for _, f := range list {
 		r, info, err := b.app.Machine.Open(session, f.Name)
 		if err != nil {
-			continue // vanished, or not a regular file any more
+			continue
 		}
 		h, err := zip.FileInfoHeader(info)
 		if err != nil {

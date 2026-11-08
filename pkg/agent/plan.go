@@ -12,22 +12,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// The plan is the agent's checklist for a job of several steps, the way a
-// careful person keeps a to-do list: the user watches it fill in live, it
-// keeps a long job on track, and a job that stops (its budget, or the user)
-// knows what is done and what is left, so «continue» picks up the rest.
-
-// ToolPlan writes the plan of the current job.
 const ToolPlan = "update_plan"
 
-// Plan item states.
 const (
 	PlanPending    = "pending"
 	PlanInProgress = "in_progress"
 	PlanDone       = "done"
 )
 
-// PlanItem is one step of the plan.
 type PlanItem struct {
 	Text   string `json:"text"`
 	Status string `json:"status"`
@@ -38,7 +30,6 @@ const (
 	maxPlanRunes = 100
 )
 
-// planState is the plan of one request.
 type planState struct {
 	mu    sync.Mutex
 	items []PlanItem
@@ -56,7 +47,6 @@ func (p *planState) get() []PlanItem {
 	return append([]PlanItem(nil), p.items...)
 }
 
-// String is the plan as the work log keeps it ("" without one).
 func (p *planState) String() string {
 	items := p.get()
 	if len(items) == 0 {
@@ -74,7 +64,6 @@ func (p *planState) String() string {
 	return sb.String()
 }
 
-// progress counts the plan: steps done, steps in all, and the one in progress.
 func (p *planState) progress() (done, total int, current string) {
 	for _, it := range p.get() {
 		switch it.Status {
@@ -88,22 +77,16 @@ func (p *planState) progress() (done, total int, current string) {
 	return done, total, current
 }
 
-// Keeping the plan moving, the way a careful worker ticks off a checklist:
-// after a few turns of work without an update while steps remain, a short
-// reminder rides along with the tool results; a long job without a plan is
-// reminded once to make one.
 const (
-	planNudgeAfter = 3 // turns of tool calls without update_plan
-	planStartAfter = 4 // turns of tool calls before a job without a plan is reminded
+	planNudgeAfter = 3
+	planStartAfter = 4
 )
 
-// planPace counts the turns since the plan was last written.
 type planPace struct {
 	since, turns int
 	askedForPlan bool
 }
 
-// after notes a turn of calls and returns a reminder to add to its results ("" none).
 func (pp *planPace) after(calls []llm.ToolCall, plan *planState) string {
 	pp.turns++
 	for _, c := range calls {
@@ -134,7 +117,6 @@ func (pp *planPace) after(calls []llm.ToolCall, plan *planState) string {
 	return ""
 }
 
-// planStatus reads the states models write.
 func planStatus(s string) string {
 	switch strings.ToLower(strings.TrimSpace(strings.NewReplacer("-", "_", " ", "_").Replace(s))) {
 	case "done", "completed", "complete", "finished", "x", "true", "ok", "success", "succeeded", "checked", "✅", "✓", "✔",
@@ -147,9 +129,6 @@ func planStatus(s string) string {
 	return PlanPending
 }
 
-// Weak models write the state into the step itself: «1. Read bot.py [done]»,
-// «✅ دانلود», «- [x] Build». The marks are read as the state and taken off
-// the text, and so are the list numbers and bullets (the card draws its own).
 var (
 	planLead  = regexp.MustCompile(`^(?:(?:\d{1,2}|[۰-۹]{1,2})\s*[.)\-:]\s+|\(\d{1,2}\)\s+|[-*•·]\s+)`)
 	planBox   = regexp.MustCompile(`^\[( |x|X|✓|✔|\*|-|>|~|/)\]\s*`)
@@ -160,11 +139,9 @@ var (
 		"⚪": PlanPending, "🔲": PlanPending}
 )
 
-// planMarks takes the state marks off a step's text: the cleaned text, and
-// the state they gave ("" none).
 func planMarks(text string) (string, string) {
 	status := ""
-	for range 4 { // a mark may sit behind a number: «1. ✅ …», «- [x] …»
+	for range 4 {
 		text = strings.TrimSpace(text)
 		before := text
 		text = planLead.ReplaceAllString(text, "")
@@ -219,8 +196,6 @@ func planMarks(text string) (string, string) {
 	return strings.TrimSpace(text), status
 }
 
-// planRaw finds the steps however a model sends them: an array of objects or
-// strings, under items (or plan, steps, todos, tasks), or one text of lines.
 func planRaw(args map[string]any) []any {
 	for _, key := range []string{"items", "plan", "steps", "todos", "tasks", "todo"} {
 		switch v := args[key].(type) {
@@ -257,8 +232,6 @@ func firstString(m map[string]any, keys ...string) string {
 	return ""
 }
 
-// parsePlan reads the items of an update_plan call. It also says whether a
-// step's state came from marks in its text (the model is told to use status).
 func parsePlan(args map[string]any) ([]PlanItem, error) {
 	items, _, err := parsePlanMarks(args)
 	return items, err
@@ -301,8 +274,7 @@ func parsePlanMarks(args map[string]any) (items []PlanItem, marked bool, _ error
 	if len(items) == 0 {
 		return nil, false, fmt.Errorf("items is required: the whole plan, 2-%d short steps", maxPlanItems)
 	}
-	// One step at a time, and a plan read in order: the steps before the one
-	// in progress are finished (a model that moved on without ticking them).
+
 	current := -1
 	for i, it := range items {
 		if it.Status == PlanInProgress {
@@ -321,7 +293,6 @@ func parsePlanMarks(args map[string]any) (items []PlanItem, marked bool, _ error
 	return items, marked, nil
 }
 
-// planTool lets the model keep its plan; OnPlan shows it.
 func (a *Agent) planTool(state *planState, l *EventListener) LocalTool {
 	def := llm.Tool{Type: "function", Function: llm.ToolDef{
 		Name: ToolPlan,

@@ -7,13 +7,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Admin rights and member permissions in words: presets ("moderator"),
-// names ("pin_messages", "pin") and changes ("+pin", "-delete"). A right is
-// given only when the person asking has it too (the group's owner and the
-// bot's admins have them all) and the bot has it: nobody gets through the
-// bot more than they could give in Telegram themselves.
-
-// adminRight is one right of a group admin.
 type adminRight struct {
 	name  string
 	field func(*telegram.AdminRights) *bool
@@ -34,7 +27,6 @@ var adminRightList = []adminRight{
 	{"delete_stories", func(r *telegram.AdminRights) *bool { return &r.CanDeleteStories }},
 }
 
-// rightPresets are named sets of rights.
 var rightPresets = map[string][]string{
 	"moderator": {"delete_messages", "restrict_members", "pin_messages", "invite_users", "manage_video_chats"},
 	"full": {"change_info", "delete_messages", "restrict_members", "invite_users", "pin_messages", "manage_topics", "manage_video_chats",
@@ -46,7 +38,6 @@ var rightPresets = map[string][]string{
 var presetAliases = map[string]string{"mod": "moderator", "moderator": "moderator", "admin": "moderator", "full": "full", "all": "full",
 	"everything": "full", "helper": "helper", "assistant": "helper", "cleaner": "cleaner", "janitor": "cleaner"}
 
-// rightAliases are the words a right goes by.
 var rightAliases = map[string][]string{
 	"info": {"change_info"}, "change_info": {"change_info"}, "edit_info": {"change_info"},
 	"delete": {"delete_messages"}, "delete_messages": {"delete_messages"}, "del": {"delete_messages"}, "clean": {"delete_messages"},
@@ -64,14 +55,12 @@ var rightAliases = map[string][]string{
 	"post_stories": {"post_stories"}, "edit_stories": {"edit_stories"}, "delete_stories": {"delete_stories"},
 }
 
-// normWord reads "can_pin_messages", "Pin Messages", "pin-messages" alike.
 func normWord(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = strings.NewReplacer(" ", "_", "-", "_").Replace(s)
 	return strings.TrimPrefix(s, "can_")
 }
 
-// signed splits "+pin" / "-pin" / "pin"; absolute: no sign.
 func signed(item string) (word string, on, absolute bool) {
 	item = strings.TrimSpace(item)
 	switch {
@@ -91,7 +80,6 @@ func setRight(r *telegram.AdminRights, name string, on bool) {
 	}
 }
 
-// rightNamesOf lists the rights that are on, in a fixed order.
 func rightNamesOf(r telegram.AdminRights) []string {
 	var out []string
 	for _, ar := range adminRightList {
@@ -102,8 +90,6 @@ func rightNamesOf(r telegram.AdminRights) []string {
 	return out
 }
 
-// parseRights applies the items to base: presets and plain names start from
-// nothing and add up; "+x" and "-x" change what is there.
 func parseRights(items []string, base telegram.AdminRights) (telegram.AdminRights, error) {
 	r := base
 	for _, it := range items {
@@ -131,7 +117,7 @@ func parseRights(items []string, base telegram.AdminRights) (telegram.AdminRight
 			setRight(&r, name, on)
 		}
 	}
-	r.CanManageChat = true // every admin: what is left of the rights decides the rest
+	r.CanManageChat = true
 	return r, nil
 }
 
@@ -143,8 +129,6 @@ func allRightNames() []string {
 	return out
 }
 
-// capRights keeps the rights both limits have (nil: no limit), saying why
-// each of the others was left out.
 func capRights(want telegram.AdminRights, asker, me *telegram.ChatMember) (telegram.AdminRights, []string) {
 	got := want
 	var dropped []string
@@ -166,7 +150,6 @@ func capRights(want telegram.AdminRights, asker, me *telegram.ChatMember) (teleg
 
 func ptr[T any](v T) *T { return &v }
 
-// beyond lists the rights of r that limit does not have (nil limit: none).
 func beyond(r telegram.AdminRights, limit *telegram.ChatMember) []string {
 	if limit == nil {
 		return nil
@@ -189,9 +172,6 @@ func rightsText(r telegram.AdminRights) string {
 	return strings.Join(names, ", ")
 }
 
-// ---------------------------------------------------------------- member permissions
-
-// memberPerm is one thing members may send or do.
 type memberPerm struct {
 	name  string
 	field func(*telegram.ChatPermissions) *bool
@@ -243,14 +223,12 @@ func setPerm(p *telegram.ChatPermissions, name string, on bool) {
 	}
 }
 
-// parsePerms applies restrict's items to what the member may do now: a
-// name alone or "-x" takes it away, "+x" gives it back; "all" is everything.
 func parsePerms(items []string, base telegram.ChatPermissions) (telegram.ChatPermissions, error) {
 	p := base
 	for _, it := range items {
 		word, on, abs := signed(it)
 		if abs {
-			on = false // restrict: a name alone takes it away
+			on = false
 		}
 		var names []string
 		switch word {
@@ -274,7 +252,6 @@ func parsePerms(items []string, base telegram.ChatPermissions) (telegram.ChatPer
 	return p, nil
 }
 
-// permsText lists what is allowed and what is blocked.
 func permsText(p telegram.ChatPermissions) (allowed, blocked []string) {
 	for _, mp := range memberPermList {
 		if *mp.field(&p) {

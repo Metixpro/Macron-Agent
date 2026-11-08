@@ -15,17 +15,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Multi-model voting (pkg/moa): presets of advisors and an aggregator, kept
-// in moa.presets (JSON, also «macron config set moa.presets …»). /moa runs
-// one request with the default preset and goes back to the usual model;
-// moa.active sends every request of the owner through a preset (the panel's
-// «⭐ every request»). The whole run is billed to the aggregator's provider.
-
 const (
 	settingMoaPresets = "moa.presets"
-	settingMoaPrivacy = "moa.privacy_filter" // the default of the presets that set none
-	settingMoaActive  = "moa.active"         // a preset every owner request goes through ("" none)
-	settingMoaDefault = "moa.default"        // the preset of /moa ("" the first)
+	settingMoaPrivacy = "moa.privacy_filter"
+	settingMoaActive  = "moa.active"
+	settingMoaDefault = "moa.default"
 )
 
 func (b *Bot) moaPresets() []moa.Preset {
@@ -42,7 +36,6 @@ func (b *Bot) saveMoaPresets(ctx context.Context, list []moa.Preset) error {
 	return b.st.SetSetting(ctx, settingMoaPresets, string(raw))
 }
 
-// moaProvider resolves a slot's provider by its name or id.
 func (b *Bot) moaProvider(name string) (providers.Snapshot, bool) {
 	id, _ := strconv.ParseInt(name, 10, 64)
 	for _, p := range b.prov.Snapshot() {
@@ -53,7 +46,6 @@ func (b *Bot) moaProvider(name string) (providers.Snapshot, bool) {
 	return providers.Snapshot{}, false
 }
 
-// moaProblems checks a preset against the providers (macron doctor and the panel).
 func (b *Bot) moaProblems(p moa.Preset) []string {
 	return moa.Problems(p, func(name string) (bool, bool, bool) {
 		if strings.EqualFold(name, "moa") {
@@ -64,14 +56,11 @@ func (b *Bot) moaProblems(p moa.Preset) []string {
 	})
 }
 
-// moaStrict is a user's session memory of the destinations that need
-// alternating roles.
 func (b *Bot) moaStrict(uid int64) *moa.Strict {
 	v, _ := b.moaStrictBy.LoadOrStore(uid, &moa.Strict{})
 	return v.(*moa.Strict)
 }
 
-// moaFor is the preset a request goes through (nil: the usual model).
 func (b *Bot) moaFor(uid int64, opt promptOptions) *moa.Preset {
 	name := opt.moa
 	if name == "" && b.isOwner(uid) {
@@ -96,10 +85,8 @@ func (b *Bot) moaFor(uid int64, opt promptOptions) *moa.Preset {
 	return &p
 }
 
-// moaDefaultName asks for the default preset (/moa).
 const moaDefaultName = "\x00default"
 
-// moaClient is a preset as the request's client, with its trace in the chat.
 func (b *Bot) moaClient(uid int64, p moa.Preset, chatID int64, l lang) (*moa.Client, func()) {
 	tr := &moaTrace{b: b, chatID: chatID, l: l, preset: p}
 	c := &moa.Client{Preset: p, Strict: b.moaStrict(uid), OnAdvice: tr.advice,
@@ -123,8 +110,6 @@ func (b *Bot) moaClient(uid int64, p moa.Preset, chatID int64, l lang) (*moa.Cli
 	return c, tr.done
 }
 
-// moaTrace shows the advisors and the aggregation as one temporary message,
-// removed once the answer is out.
 type moaTrace struct {
 	b      *Bot
 	chatID int64
@@ -173,8 +158,6 @@ func (t *moaTrace) done() {
 	t.msgID = 0
 }
 
-// moaCommand: «/moa TASK» runs one request through the default preset; it
-// reports whether the request goes on.
 func (b *Bot) moaCommand(m *telegram.Message, l lang, args string) bool {
 	if strings.TrimSpace(args) == "" {
 		b.reply(m, l.t("⚖️ <b>رأی‌گیری چندمدلی</b>\n<code>/moa کار سخت</code> این یه درخواست رو با پریست پیش‌فرض انجام می‌ده: چند مدل نظر می‌دن و مدل عامل جمع‌بندی و کار رو انجام می‌ده؛ بعدش همون مدل همیشگی برمی‌گرده. پریست‌ها توی /settings ← 🦾 ← ⚖️ ساخته می‌شن."))
@@ -186,8 +169,6 @@ func (b *Bot) moaCommand(m *telegram.Message, l lang, args string) bool {
 	}
 	return true
 }
-
-// ---------------------------------------------------------------- the panel (a:moa)
 
 var moaFanouts = []string{moa.FanoutUserTurn, moa.FanoutPerIteration, "every_n:3"}
 var moaPrivacies = []string{moa.PrivacyNone, moa.PrivacyDisplay, moa.PrivacyFull}
@@ -402,7 +383,6 @@ func (b *Bot) handleMoaPanel(ctx context.Context, l lang, parts []string, answer
 	show(b.viewMoaPreset(l, i))
 }
 
-// moaNameInput makes a preset of the name the owner sent.
 func (b *Bot) moaNameInput(ctx context.Context, l lang, m *telegram.Message, done func(panelView)) {
 	name := strings.TrimSpace(m.Text)
 	if name == "" || len([]rune(name)) > 40 || strings.ContainsAny(name, "\n:") || strings.EqualFold(name, "moa") {

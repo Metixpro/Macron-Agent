@@ -85,7 +85,7 @@ func TestDocumentReaderOnText(t *testing.T) {
 	if _, err := r.Machine.Stat("d", docIndexName("notes.txt")); err != nil {
 		t.Error("the extracted text is kept next to the file")
 	}
-	// A changed file is indexed again.
+
 	_ = r.Machine.WriteFile("d", "notes.txt", []byte("کاملاً متن تازه درباره ستاره‌ها"))
 	if out := call(t, r, "d", ToolDocumentReader, map[string]any{"action": "search", "filename": "notes.txt", "query": "ستاره‌ها"}); !strings.Contains(out, "indexed now") || !strings.Contains(out, "ستاره") {
 		t.Errorf("reindex: %s", out)
@@ -167,7 +167,7 @@ func TestDocumentReaderOnALongPDF(t *testing.T) {
 		t.Skip("pypdf and reportlab are needed")
 	}
 	r := newRegistry(t, true, nil)
-	// A 60-page PDF with a bookmark per chapter; the answer hides on page 43.
+
 	script := `python3 - <<'EOF'
 from reportlab.pdfgen import canvas
 c = canvas.Canvas("big.pdf")

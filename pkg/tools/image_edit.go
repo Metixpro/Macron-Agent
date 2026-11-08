@@ -17,27 +17,18 @@ import (
 	"time"
 )
 
-// AI image editing through the Nano Banana task service (nanobanana.irjh.top/v2),
-// which is also generate_image's second engine. A task is created with the
-// instruction and the links of the source pictures, then its status page is
-// polled until the picture is ready (it takes a minute or two). The service
-// only takes links, so a workspace picture is first put on a short-lived file
-// host. The service's links never reach the model or the user.
-
-// ToolEditImage edits pictures with AI.
 const ToolEditImage = "edit_image"
 
 const (
 	maxEditSources = 4
 	maxEditUpload  = 20 << 20
-	// editPlaceholderCallback fills the service's required callback_url: the
-	// bot reads the result from the status page instead (it has no public address).
+
 	editPlaceholderCallback = "https://example.com/waze-image-callback"
 )
 
 var (
 	editPollEvery = 4 * time.Second
-	// uploadHosts take a picture and give back a public link that expires on its own.
+
 	uploadHosts = []uploadHost{
 		{name: "uguu", url: "https://uguu.se/upload", field: "files[]", parse: parseUguu},
 		{name: "litterbox", url: "https://litterbox.catbox.moe/resources/internals/api.php", field: "fileToUpload",
@@ -46,11 +37,8 @@ var (
 	}
 )
 
-// SetImageEditKey gives the key of the editing service (read on every call,
-// so a key set in the admin panel works at once). Call it before serving.
 func (r *Registry) SetImageEditKey(key func() string) { r.imageEditKey = key }
 
-// ImageEditKey is the key in use ("" = none).
 func (r *Registry) ImageEditKey() string { return r.editKey() }
 
 func (r *Registry) editKey() string {
@@ -60,9 +48,6 @@ func (r *Registry) editKey() string {
 	return strings.TrimSpace(r.imageEditKey())
 }
 
-// Usable reports whether a registered tool can work for this chat right now:
-// save_skill needs the right to write skills, edit_image a key. The agent
-// offers only usable tools.
 func (r *Registry) Usable(name, sessionID string) bool {
 	switch name {
 	case ToolSaveSkill:
@@ -76,7 +61,7 @@ func (r *Registry) Usable(name, sessionID string) bool {
 		return true
 	}
 	p := r.pluginTools()
-	return p != nil && p.Has(name) && p.Allowed(name, sessionID) // an admins-only plugin's tools reach admins only
+	return p != nil && p.Has(name) && p.Allowed(name, sessionID)
 }
 
 func (r *Registry) registerImageEditTool() {
@@ -121,7 +106,7 @@ func (r *Registry) editImage(ctx context.Context, sessionID string, args map[str
 	case len(sources) > maxEditSources:
 		return fmt.Sprintf("error: at most %d pictures can be edited together", maxEditSources), nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Minute) // the service queues; 2–5 minutes is normal
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Minute)
 	defer cancel()
 
 	links := make([]string, 0, len(sources))
@@ -147,14 +132,11 @@ func (r *Registry) editImage(ctx context.Context, sessionID string, args map[str
 	return fmt.Sprintf("Image edited and queued for delivery.\n- File: %s (%s)\n- Edit: %s\n- Engine: Nano Banana", name, humanSize(n), prompt), nil
 }
 
-// editUserID names the chat to the service without giving its id away.
 func editUserID(sessionID string) string {
 	h := sha256.Sum256([]byte("waze:" + sessionID))
 	return "waze-" + hex.EncodeToString(h[:6])
 }
 
-// nanoTaskImage runs one task (an edit when sources are given, else a new
-// picture) and saves the result as name.
 func (r *Registry) nanoTaskImage(ctx context.Context, sessionID, prompt string, sources []string, aspect, name string) (int64, error) {
 	if r.imageEditAPI == "" || r.editKey() == "" {
 		return 0, errors.New("the Nano Banana task service is not set up")
@@ -245,7 +227,6 @@ func sameHost(a, b string) bool {
 	return err1 == nil && err2 == nil && strings.EqualFold(ua.Host, ub.Host) && (ua.Scheme == "https" || ua.Scheme == ub.Scheme)
 }
 
-// waitNanoTask polls the status page until the picture is ready and returns its link.
 func (r *Registry) waitNanoTask(ctx context.Context, statusURL string) (string, error) {
 	start := time.Now()
 	missing := 0
@@ -255,7 +236,7 @@ func (r *Registry) waitNanoTask(ctx context.Context, statusURL string) (string, 
 		case err != nil && ctx.Err() != nil:
 			return "", fmt.Errorf("the picture was not ready in time (%s)", time.Since(start).Round(time.Second))
 		case err != nil:
-			missing++ // a network hiccup or "task not found" right after creation
+			missing++
 			if missing > 3 {
 				return "", err
 			}
@@ -275,8 +256,6 @@ func (r *Registry) waitNanoTask(ctx context.Context, statusURL string) (string, 
 	}
 }
 
-// nanoTaskStatus reads the status page once: the state, the picture's link
-// when it is done, or the reason when it failed.
 func (r *Registry) nanoTaskStatus(ctx context.Context, statusURL string) (state, link, problem string, err error) {
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -322,7 +301,6 @@ func (r *Registry) nanoTaskStatus(ctx context.Context, statusURL string) (state,
 	return state, "", "", nil
 }
 
-// serviceError is the service's own explanation of a failure.
 func serviceError(out map[string]any, status int) string {
 	for _, k := range []string{"error_message", "error", "message"} {
 		if s, _ := out[k].(string); strings.TrimSpace(s) != "" {
@@ -339,15 +317,12 @@ func serviceError(out map[string]any, status int) string {
 	return fmt.Sprintf("HTTP %d", status)
 }
 
-// ---------------------------------------------------------------- public links
-
 type uploadHost struct {
 	name, url, field string
 	extra            map[string]string
 	parse            func([]byte) (string, error)
 }
 
-// publishImage puts a workspace picture on a short-lived file host.
 func (r *Registry) publishImage(ctx context.Context, sessionID, name string) (string, error) {
 	f, fi, err := r.Machine.Open(sessionID, name)
 	if err != nil {
@@ -449,13 +424,11 @@ func parseTmpfiles(b []byte) (string, error) {
 		return "", errors.New("unexpected answer")
 	}
 	link := strings.Replace(out.Data.URL, "http://", "https://", 1)
-	return strings.Replace(link, "tmpfiles.org/", "tmpfiles.org/dl/", 1), nil // the direct link
+	return strings.Replace(link, "tmpfiles.org/", "tmpfiles.org/dl/", 1), nil
 }
 
-// ErrImageEditKey is a key the editing service refuses.
 var ErrImageEditKey = errors.New("the image editing service refused the key")
 
-// CheckImageEditKey asks the service whether key is valid, without creating a task.
 func (r *Registry) CheckImageEditKey(ctx context.Context, key string) error {
 	if r.imageEditAPI == "" {
 		return errors.New("image editing is turned off (WAZE_IMAGE_EDIT_URL=off)")
@@ -483,5 +456,5 @@ func (r *Registry) CheckImageEditKey(ctx context.Context, key string) error {
 	if strings.Contains(strings.ToLower(serviceError(out, resp.StatusCode)), "api key") {
 		return ErrImageEditKey
 	}
-	return nil // "Missing user_id…": the key passed
+	return nil
 }

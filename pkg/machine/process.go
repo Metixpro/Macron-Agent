@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Process is a long-running program spoken to through its stdin and stdout
-// (an MCP server). It runs on the machine like any command.
 type Process struct {
 	Stdin  io.WriteCloser
 	Stdout io.ReadCloser
@@ -23,9 +21,6 @@ type Process struct {
 	err    error
 }
 
-// Start launches a program that keeps running until Close (or ctx ends).
-// opts.Timeout is ignored; the slots are not held, since such a program waits
-// most of the time.
 func (s *Machine) Start(ctx context.Context, sessionID string, opts RunOptions) (*Process, error) {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -57,7 +52,7 @@ func (s *Machine) Start(ctx context.Context, sessionID string, opts RunOptions) 
 		return nil, err
 	}
 	top := s.topWorkspace(sessionID)
-	s.begin(top) // the janitor leaves a running program's files alone (an npm cache)
+	s.begin(top)
 	go func() {
 		p.err = cmd.Wait()
 		s.end(top)
@@ -66,15 +61,12 @@ func (s *Machine) Start(ctx context.Context, sessionID string, opts RunOptions) 
 	return p, nil
 }
 
-// Done is closed when the program has ended.
 func (p *Process) Done() <-chan struct{} { return p.done }
 
-// Stderr is the end of what the program wrote to stderr.
 func (p *Process) Stderr() string {
 	return strings.TrimSpace(strings.ToValidUTF8(p.stderr.String(), ""))
 }
 
-// syncWriter is a capWriter read while the program still writes to it.
 type syncWriter struct {
 	mu sync.Mutex
 	w  *capWriter
@@ -92,7 +84,6 @@ func (s *syncWriter) String() string {
 	return s.w.String()
 }
 
-// Close ends the program.
 func (p *Process) Close() {
 	p.once.Do(func() {
 		_ = p.Stdin.Close()

@@ -10,11 +10,11 @@ func TestFormulaValues(t *testing.T) {
 		{"item", "price", "qty", "total"},
 		{"a", 120.0, 2.0, "=B2*C2"},
 		{"b", 80.5, 3.0, "=B3*C3"},
-		{"c", "n/a", 1.0, "=B4*C4"},                // text in arithmetic: left to the program
-		{"sum", "=SUM(B2:B4)", nil, "=SUM(D2:D3)"}, // text in a range is skipped
+		{"c", "n/a", 1.0, "=B4*C4"},
+		{"sum", "=SUM(B2:B4)", nil, "=SUM(D2:D3)"},
 		{"x", "=AVERAGE(B2:B3)", "=COUNT(B2:B4)", "=ROUND(D5*9%,1)"},
-		{"y", "=MAX(B2:B3)-MIN(B2,B3)", "=-(2+3)^2", "=$D$2/0"}, // as in Excel, - binds before ^
-		{"z", "=A1+1", "=VLOOKUP(1,A1:B2,2)", "=D8"},            // a cycle
+		{"y", "=MAX(B2:B3)-MIN(B2,B3)", "=-(2+3)^2", "=$D$2/0"},
+		{"z", "=A1+1", "=VLOOKUP(1,A1:B2,2)", "=D8"},
 		{"w", "=SUM(D4,1)", "=ABS(-4)+PRODUCT(2,3)", "=B5+D5"},
 	}
 	c := newSheetCalc(rows)

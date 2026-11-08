@@ -14,11 +14,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Motion graphics are written as a web page and filmed frame by frame: the
-// page runs on a virtual clock (requestAnimationFrame, timers, CSS and Web
-// Animations all follow it), each frame is captured exactly at its time and
-// piped into ffmpeg, so the video is smooth whatever the server's speed.
-
 const (
 	ToolMotion       = "create_motion_graphic"
 	motionMaxSeconds = 60
@@ -114,12 +109,12 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 		"preview": "work/" + stem + "_preview.jpg"}
 	var notes []string
 	var (
-		ai     <-chan motionMusic // the song service's music, still being made
-		silent bool               // the render goes to a silent file and the music is put under it after
+		ai     <-chan motionMusic
+		silent bool
 		aiTags string
 		aiOpts map[string]any
 	)
-	mctx, mcancel := context.WithCancel(ctx) // an early return stops the music still being made
+	mctx, mcancel := context.WithCancel(ctx)
 	defer mcancel()
 	if a := strArg(args, "audio"); a != "" {
 		if info, err := r.Machine.Stat(sessionID, a); err != nil || !info.Mode().IsRegular() {
@@ -129,8 +124,7 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 	} else if m, ok := args["music"].(map[string]any); ok {
 		music := "work/" + stem + "_music.mp3"
 		if tags := cleanStyleText(strArg(m, "ai")); tags != "" {
-			// Real instrumental music from the song service: it takes minutes, so it
-			// is made while the page renders and put under the silent video after.
+
 			if ai = r.startMotionMusic(mctx, sessionID, tags, stem); ai == nil {
 				notes = append(notes, "the song service is not available here (or this request's downloads are used up), so the music is a synthesizer's")
 			} else {
@@ -204,15 +198,12 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// motionMusic is the music made for a motion graphic by the song service.
 type motionMusic struct {
 	file    string
 	seconds float64
 	err     error
 }
 
-// startMotionMusic begins making an instrumental (nil when the service is not
-// set up or the request's downloads are used up: the synthesizer takes over).
 func (r *Registry) startMotionMusic(ctx context.Context, sessionID, tags, stem string) <-chan motionMusic {
 	if !r.SongReady() {
 		return nil
@@ -224,7 +215,7 @@ func (r *Registry) startMotionMusic(ctx context.Context, sessionID, tags, stem s
 	go func() {
 		files, seconds, err := r.makeSong(ctx, sessionID, instrumentalLyrics, styleTitle(tags), instrumentalStyle(tags), "", "work/"+stem+"_ai_music", 1, false)
 		if err != nil || len(files) == 0 {
-			giveBack(ctx, kindDownloads, 1) // nothing was downloaded
+			giveBack(ctx, kindDownloads, 1)
 			if err == nil {
 				err = errors.New("no music came")
 			}
@@ -236,10 +227,6 @@ func (r *Registry) startMotionMusic(ctx context.Context, sessionID, tags, stem s
 	return ch
 }
 
-// addMotionMusic waits for the music, puts it under the silent render as out
-// (cut to the video's length, faded in and out) and says what it did. When the
-// service gave nothing the synthesizer makes the music; when nothing works the
-// video stays silent. It never loses the video.
 func (r *Registry) addMotionMusic(ctx context.Context, sessionID string, ai <-chan motionMusic, tags string, opts map[string]any, silent, out, stem string, dur float64) string {
 	ReportStatus(ctx, "motion · music")
 	audio, said := "", ""
@@ -282,8 +269,6 @@ func (r *Registry) addMotionMusic(ctx context.Context, sessionID string, ai <-ch
 	return said + "; the video is silent"
 }
 
-// muxAudio puts audio under the video, without re-encoding the picture: faded
-// in and out and cut at dur seconds.
 func (r *Registry) muxAudio(ctx context.Context, sessionID, video, audio, out string, dur float64) error {
 	fade := min(1.5, dur/4)
 	in := min(0.5, dur/8)
@@ -303,8 +288,6 @@ func (r *Registry) muxAudio(ctx context.Context, sessionID, video, audio, out st
 	return nil
 }
 
-// synthStyleFor picks the synthesizer style closest to AI music style tags,
-// for when the service cannot make the music.
 func synthStyleFor(tags string) string {
 	low := strings.ToLower(tags)
 	for _, c := range []struct{ style, words string }{
@@ -328,7 +311,6 @@ func synthStyleFor(tags string) string {
 	return "lofi"
 }
 
-// libNames lists the offline libraries briefly: "gsap (+8 plugins), three, p5…".
 func libNames(files []string) string {
 	var names []string
 	plugins := 0

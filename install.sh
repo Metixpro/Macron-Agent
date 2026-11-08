@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Macron Agent installer (Linux and macOS). One line, everything:
-#
-#   curl -fsSL https://raw.githubusercontent.com/Metixpro/macron-agent/main/install.sh | bash
-#
-# It installs the system tools the agent uses (python3, git, ffmpeg, poppler…),
-# the newest release for this machine (checking its SHA-256 sum), the pinned
-# Python tools in a private venv, and the background service; then it starts
-# `macron setup`, which asks for the bot token, your Telegram id, your time zone
-# and a model. Running it again updates the program, keeps ~/.macron and
-# restarts the service.
 set -Eeuo pipefail
 
 usage() {
@@ -83,7 +73,6 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-# ---- where
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$OS" in linux|darwin) ;; *) die "Linux and macOS only (this is $OS). On Windows, use WSL2." ;; esac
 case "$(uname -m)" in
@@ -97,7 +86,6 @@ fi
 HOME_DIR="${MACRON_HOME:-$HOME/.macron}"
 TARGET="$PREFIX/macron"
 
-# ---- uninstall
 if [ "$UNINSTALL" = 1 ]; then
 	if [ -x "$TARGET" ]; then "$TARGET" service uninstall || true; fi
 	rm -f "$TARGET" "$TARGET.old"
@@ -112,11 +100,10 @@ if [ "$UNINSTALL" = 1 ]; then
 	exit 0
 fi
 
-# ---- download or build
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
-fetch() { # url file
+fetch() {
 	if have curl; then curl -fsSL --retry 3 -o "$2" "$1"; elif have wget; then wget -q -O "$2" "$1"; else die "curl or wget is needed"; fi
 }
 sha256_of() {
@@ -138,7 +125,7 @@ build_from_source() {
  (cd "$src" && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-s -w" -o "$TMP/macron" ./cmd/macron) || die "the build failed"
 }
 
-fetch_release_asset() { # browser-url asset-name output api-base tag
+fetch_release_asset() {
     fetch "$1" "$3" 2>/dev/null && return 0
     have python3 || return 1
     [ -f "$TMP/release.json" ] || fetch "$4/tags/$5" "$TMP/release.json" 2>/dev/null || return 1
@@ -196,10 +183,7 @@ elif ! download_release; then
 	build_from_source
 fi
 
-# ---- install
 mkdir -p "$PREFIX"
-# Validate before replacing the working program; private staging also avoids
-# following a pre-existing macron.new symlink in the installation directory.
 STAGE="$(mktemp -d "$PREFIX/.macron-install.XXXXXX")"
 trap 'rm -rf -- "$TMP" "${STAGE:-}"' EXIT
 install -m 0755 "$TMP/macron" "$STAGE/macron"
@@ -219,7 +203,6 @@ else
 fi
 case ":$PATH:" in *":$PREFIX:"*) ;; *) warn "$PREFIX is not on your PATH. Add it:  echo 'export PATH=\"$PREFIX:\$PATH\"' >> ~/.bashrc" ;; esac
 
-# ---- the tools the agent likes to have (default; --no-tools skips them)
 SUDO=""
 if [ "$(id -u)" != 0 ]; then
 	if have sudo && { sudo -n true 2>/dev/null || [ -r /dev/tty ]; }; then SUDO="sudo"; else SUDO="none"; fi
@@ -232,7 +215,7 @@ python_hint() {
 	say "     macOS:          brew install python@3.12"
 	say "   Then run this installer again."
 }
-tools_failed() { # explicit --tools: stop; default: warn and go on without the Python tools
+tools_failed() {
 	if [ "$TOOLS_ASKED" = 1 ]; then die "$1"; fi
 	warn "$1 — continuing without the Python tools"
 }
@@ -243,7 +226,7 @@ install_tools() {
 	elif have apt-get; then
 		say "Installing: $pkgs"
 		{ $SUDO apt-get update -qq && DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq $pkgs; } </dev/null || warn "some packages did not install"
-		DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq gh </dev/null >/dev/null 2>&1 || true   # GitHub's CLI: not in every release
+		DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq gh </dev/null >/dev/null 2>&1 || true
 	elif have dnf; then
 		$SUDO dnf install -y -q python3 python3-pip git curl ffmpeg jq unzip poppler-utils openssh-clients sshpass rsync gh </dev/null || warn "some packages did not install"
 	elif have brew; then
@@ -252,7 +235,6 @@ install_tools() {
 	else
 		warn "only apt, dnf and Homebrew are known; install python3, git, curl, ffmpeg, ssh and sshpass yourself"
 	fi
-	# Keep Python packages out of the system interpreter (PEP 668), in a private venv.
 	PY=""
 	for c in python3 python3.13 python3.12; do
 		if have "$c" && python_ok "$c"; then PY="$c"; break; fi
@@ -287,7 +269,6 @@ install_tools() {
 }
 if [ "$TOOLS" = 1 ]; then install_tools; fi
 
-# ---- setup and the service
 INTERACTIVE=0
 if [ "$ASSUME_YES" = 0 ] && [ -r /dev/tty ] && { : </dev/tty; } 2>/dev/null; then INTERACTIVE=1; fi
 
@@ -298,7 +279,6 @@ start_service() {
 	can_service || return 0
 	if "$TARGET" service install; then
 		if [ "$OS" = linux ] && [ "$(id -u)" != 0 ]; then
-			# A user service stops with the last SSH session unless it lingers.
 			loginctl show-user "$ME" -p Linger 2>/dev/null | grep -q yes \
 				|| loginctl enable-linger "$ME" 2>/dev/null \
 				|| { [ "$SUDO" = sudo ] && sudo loginctl enable-linger "$ME"; } \

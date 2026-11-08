@@ -18,7 +18,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// manyTools are plugin-like tools, enough to pass any provider's limit.
 func manyTools(n int) []LocalTool {
 	var out []LocalTool
 	for i := 0; i < n; i++ {
@@ -29,8 +28,6 @@ func manyTools(n int) []LocalTool {
 	return out
 }
 
-// limitedProvider refuses a call with more tools than limit, as a strict
-// gateway does; reply answers the others.
 func limitedProvider(t *testing.T, limit int, reply func(n int) map[string]any) (*Agent, *[][]string) {
 	t.Helper()
 	var mu sync.Mutex
@@ -61,9 +58,6 @@ func limitedProvider(t *testing.T, limit int, reply func(n int) map[string]any) 
 	return NewAgent(client, reg, Options{MaxSteps: 4, Channel: ChannelTelegram, Now: func() time.Time { return fixed }}), &seen
 }
 
-// More tools than a call may carry (plugins and MCP servers add up): the
-// request starts with its own and more_tools, and after more_tools gets at
-// most MaxTools, its own ahead.
 func TestMoreToolsThanACallCarries(t *testing.T) {
 	a, seen := limitedProvider(t, MaxTools, func(n int) map[string]any {
 		if n == 1 {
@@ -87,8 +81,6 @@ func TestMoreToolsThanACallCarries(t *testing.T) {
 	}
 }
 
-// A provider that takes fewer tools says so in its refusal: the agent learns
-// the number and goes again at once.
 func TestAProvidersSmallerToolLimitIsLearned(t *testing.T) {
 	a, seen := limitedProvider(t, 20, func(int) map[string]any { return map[string]any{"role": "assistant", "content": "باشه"} })
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Role: "user", Content: "سلام، یه فایل بساز"}})
@@ -98,7 +90,7 @@ func TestAProvidersSmallerToolLimitIsLearned(t *testing.T) {
 	if res.Answer != "باشه" || len(*seen) != 2 || len((*seen)[1]) > 20 || a.toolLimit() != 20 {
 		t.Fatalf("answer %q, calls %d, last %d tools, limit %d", res.Answer, len(*seen), len((*seen)[len(*seen)-1]), a.toolLimit())
 	}
-	// From then on every call fits.
+
 	if _, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Role: "user", Content: "دوباره"}}); err != nil || len((*seen)[2]) > 20 {
 		t.Fatalf("next request: %v, %d tools", err, len((*seen)[2]))
 	}
@@ -110,7 +102,7 @@ func TestToolLimitFrom(t *testing.T) {
 		want int
 	}{
 		{`'tools' : maximum number of items is 128`, 128},
-		{`Invalid 'tools': array too long. Expected an array with maximum length 128`, 0}, // no number we read: MaxTools covers it
+		{`Invalid 'tools': array too long. Expected an array with maximum length 128`, 0},
 		{`at most 64 tools are allowed`, 64},
 		{`property 'enable_thinking' is unsupported`, 0},
 	} {

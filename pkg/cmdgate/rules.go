@@ -6,40 +6,34 @@ import (
 	"strings"
 )
 
-// Level is how bad a command is.
 type Level int
 
 const (
-	Safe      Level = iota
-	Dangerous       // asked: the owner (or the guardian) decides
-	Hardline        // never runs, whatever the mode
+	Safe Level = iota
+	Dangerous
+	Hardline
 )
 
-// Finding is one rule a command trips.
 type Finding struct {
 	Level  Level
-	Rule   string // a stable name: rm-root, pipe-to-shell…
-	Reason string // for people
+	Rule   string
+	Reason string
 	Paths  []string
 }
 
-// Env is what the rules need to know about the machine, fixed at start.
 type Env struct {
-	SudoPassword bool     // SUDO_PASSWORD was set when the agent started
-	SelfNames    []string // the agent's own service and program names (macron)
-	SelfDB       []string // its database files
+	SudoPassword bool
+	SelfNames    []string
+	SelfDB       []string
 	SelfPID      int
 }
 
-// maxDepth bounds how deep sh -c and $(…) are followed.
 const maxDepth = 6
 
-// Analyze lists what a command trips, worst first.
 func Analyze(command string, env Env) []Finding {
 	var out []Finding
 	analyze(command, env, 0, &out)
-	// Rules that have no command position are read on the text with what is
-	// quoted masked out, so a message about them stays harmless.
+
 	masked := maskQuotes(Clean(command))
 	if forkBombRe.MatchString(strings.Join(strings.Fields(masked), "")) || forkBombRe.MatchString(masked) {
 		out = append(out, Finding{Level: Hardline, Rule: "fork-bomb", Reason: "a fork bomb"})
@@ -59,7 +53,6 @@ func sortFindings(f []Finding) {
 	}
 }
 
-// Worst is the level of the worst finding.
 func Worst(f []Finding) Level {
 	if len(f) == 0 {
 		return Safe
@@ -76,8 +69,6 @@ var (
 	gateTablesRe    = regexp.MustCompile(`(?i)\b(?:settings|cmd_allow|cmd_audit)\b`)
 )
 
-// maskQuotes blanks what is inside quotes (keeping the quotes and line
-// breaks), for the rules read on raw text.
 func maskQuotes(s string) string {
 	r := []rune(s)
 	var quote rune
@@ -108,18 +99,13 @@ func maskQuotes(s string) string {
 
 var shells = map[string]bool{"sh": true, "bash": true, "zsh": true, "ksh": true, "dash": true, "ash": true, "fish": true, "busybox-sh": true}
 
-// wrappers run the command after them (with their own flags first).
 var wrappers = map[string]bool{"sudo": true, "doas": true, "env": true, "nohup": true, "nice": true, "ionice": true, "time": true,
 	"timeout": true, "stdbuf": true, "command": true, "builtin": true, "exec": true, "setsid": true, "chrt": true, "taskset": true,
 	"busybox": true, "unbuffer": true, "flock": true, "watch": true}
 
-// keywords may stand before a command.
 var keywords = map[string]bool{"if": true, "then": true, "else": true, "elif": true, "fi": true, "do": true, "done": true, "while": true,
 	"until": true, "for": true, "case": true, "esac": true, "in": true, "!": true, "function": true, "select": true, "{": true, "}": true}
 
-// unwrap finds the command in command position: it skips assignments,
-// keywords and wrappers (sudo -u x, env A=b, timeout 10…). sudoS reports a
-// sudo that reads its password from stdin.
 func unwrap(words []string) (name string, args []string, sudoS bool) {
 	i := 0
 	for i < len(words) {
@@ -140,7 +126,7 @@ func unwrap(words []string) (name string, args []string, sudoS bool) {
 				switch {
 				case strings.HasPrefix(a, "-"):
 					i++
-					// The flags that take a value.
+
 					if (wr == "sudo" || wr == "doas") && (a == "-u" || a == "-g" || a == "-C" || a == "-p" || a == "-U" || a == "-h" || a == "-D") ||
 						wr == "nice" && a == "-n" || wr == "ionice" && (a == "-c" || a == "-n") || wr == "timeout" && (a == "-s" || a == "-k") ||
 						wr == "chrt" && a == "-p" || wr == "taskset" && a == "-c" || wr == "watch" && (a == "-n" || a == "-d") {
@@ -180,7 +166,6 @@ func looksDuration(s string) bool {
 	return s != "" && strings.Trim(strings.TrimRight(s, "smhd"), "0123456789.") == ""
 }
 
-// base is a command's name without its folder (/bin/rm → rm).
 func base(w string) string {
 	if i := strings.LastIndexByte(w, '/'); i >= 0 && i < len(w)-1 {
 		return w[i+1:]
@@ -188,8 +173,6 @@ func base(w string) string {
 	return w
 }
 
-// splitFlags parses arguments the GNU way: flags may come after operands
-// (rm build/ -rf), up to a "--".
 func splitFlags(args []string) (flags, operands []string) {
 	done := false
 	for _, a := range args {
@@ -227,7 +210,6 @@ func hasShort(flags []string, letters string, long ...string) bool {
 var systemRoots = map[string]bool{"/home": true, "/root": true, "/etc": true, "/usr": true, "/var": true, "/bin": true, "/sbin": true,
 	"/boot": true, "/lib": true, "/lib64": true, "/lib32": true, "/opt": true, "/srv": true, "/dev": true, "/proc": true, "/sys": true}
 
-// target classifies an rm target: "root", "system", "home" or "".
 func target(t string) string {
 	t = strings.TrimSpace(t)
 	if t == "" {
@@ -258,12 +240,10 @@ func target(t string) string {
 	return ""
 }
 
-// topLevel is an absolute path right under / (/tmp, /data).
 func topLevel(t string) bool {
 	return strings.HasPrefix(t, "/") && strings.Count(path.Clean(t), "/") == 1
 }
 
-// systemConfig is a path whose change can break the machine.
 func systemConfig(t string) bool {
 	if !strings.HasPrefix(t, "/") {
 		return strings.HasPrefix(t, "~/.ssh/") || strings.HasPrefix(t, "$HOME/.ssh/")
@@ -314,7 +294,7 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 				add(Hardline, "sudo-stdin", "sudo -S with no SUDO_PASSWORD: guessing the password from stdin")
 			}
 			low := strings.ToLower(name)
-			// Redirections: onto a disk, onto the system's config, onto the agent's own database.
+
 			for _, r := range c.Redirs {
 				if !strings.Contains(r.Op, ">") {
 					continue
@@ -488,7 +468,7 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 				}
 				switch {
 				case script != "":
-					analyze(script, env, depth+1, out) // what sh -c runs, read as it is
+					analyze(script, env, depth+1, out)
 				case c.Heredoc:
 					add(Dangerous, "shell-heredoc", "a script fed to a shell from a heredoc")
 				case ci > 0 && !hasFileArg(ops):
@@ -520,7 +500,7 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					sub := append([]string{inner}, iargs...)
 					analyze(strings.Join(quoteAll(sub), " "), env, depth+1, out)
 				}
-			// Windows, should the agent ever drive one.
+
 			case low == "remove-item" || low == "rm.exe":
 				if containsFold(args, "-recurse") && containsFold(args, "-force") {
 					add(Dangerous, "win-remove", "Remove-Item -Recurse -Force")
@@ -542,7 +522,6 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 	}
 }
 
-// gateKey is a setting of the gate itself.
 func gateKey(k string) bool {
 	k = strings.ToLower(k)
 	return strings.HasPrefix(k, "approvals") || strings.HasPrefix(k, "cmdgate") || strings.Contains(k, "yolo")
@@ -557,7 +536,6 @@ func hasFileArg(ops []string) bool {
 	return false
 }
 
-// pipeSource names what feeds a shell (curl, base64 -d…).
 func pipeSource(stages []Cmd) string {
 	var names []string
 	for _, c := range stages {

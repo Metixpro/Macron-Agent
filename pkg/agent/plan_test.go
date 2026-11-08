@@ -45,8 +45,6 @@ func TestParsePlan(t *testing.T) {
 	}
 }
 
-// TestThePlanIsShownAndKept: the plan reaches the listener, the result, and
-// the log of a job that stops early (so «continue» knows what is left).
 func TestThePlanIsShownAndKept(t *testing.T) {
 	plan := `{"items":[{"text":"Write the file","status":"in_progress"},{"text":"Check it","status":"pending"}]}`
 	a, script := setup(t,
@@ -78,8 +76,6 @@ func TestThePlanIsShownAndKept(t *testing.T) {
 	}
 }
 
-// TestAStoppedJobReturnsItsWork: cancelled after a step, the job still
-// reports what it did.
 func TestAStoppedJobReturnsItsWork(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a, _ := setup(t,
@@ -93,8 +89,6 @@ func TestAStoppedJobReturnsItsWork(t *testing.T) {
 	}
 }
 
-// lateReply hands over its second reply as the job is stopped: the HTTP
-// client may still return a reply that arrives with the stop.
 type lateReply struct {
 	inner  llm.ChatClient
 	cancel context.CancelFunc
@@ -110,8 +104,6 @@ func (l *lateReply) Complete(ctx context.Context, req llm.Request) (*llm.Respons
 	return resp, err
 }
 
-// TestAReplyThatArrivesWithTheStopIsNotUsed: a stop is a stop, even when the
-// model's reply comes in at the same moment.
 func TestAReplyThatArrivesWithTheStopIsNotUsed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a, _ := setup(t,
@@ -149,9 +141,6 @@ func TestShortRepliesAboutTheWorkAreNotSmallTalk(t *testing.T) {
 	}
 }
 
-// TestThePlanKeepsMoving: after a few turns of work without an update, the
-// model is reminded to tick off what is done; a long job without a plan is
-// reminded once to make one.
 func TestThePlanKeepsMoving(t *testing.T) {
 	plan, pp := &planState{}, &planPace{}
 	work := []llm.ToolCall{toolCall("c", "list_files", `{}`)}
@@ -185,8 +174,6 @@ func TestThePlanKeepsMoving(t *testing.T) {
 	}
 }
 
-// TestThePlanReminderReachesTheModel: the reminder rides along with the
-// tool results of the turn.
 func TestThePlanReminderReachesTheModel(t *testing.T) {
 	steps := []any{map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{
 		toolCall("p1", ToolPlan, `{"items":[{"text":"one","status":"in_progress"},{"text":"two","status":"pending"}]}`),
@@ -206,9 +193,6 @@ func TestThePlanReminderReachesTheModel(t *testing.T) {
 	}
 }
 
-// TestAWeakModelsPlanIsRead: the states written into the step texts, list
-// numbers, other key names and a plan sent as one text are all understood
-// (the plan of the screenshot: «1. Locate … [done]» counted 0/4).
 func TestAWeakModelsPlanIsRead(t *testing.T) {
 	cases := []struct {
 		args map[string]any
@@ -241,7 +225,7 @@ func TestAWeakModelsPlanIsRead(t *testing.T) {
 			t.Errorf("case %d:\n got %v\nwant %v", i, items, c.want)
 		}
 	}
-	// The model hears that it wrote the states in the texts.
+
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("p1", ToolPlan, `{"items":["1. Read [done]","2. Write"]}`)}},
 		map[string]any{"role": "assistant", "content": "ok"},

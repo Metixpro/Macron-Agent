@@ -12,20 +12,13 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The personal edition answers its owners and nobody else. Every update is
-// looked at here first: one from a stranger is dropped without a word (a bot
-// that answers "not for you" tells a stranger that it exists, and who runs
-// it), and it leaves any group it is added to, including by its owner.
-
-// senderOf is the user an update comes from (false: it has none, e.g. a
-// press of the stop button of a draft, which only a job of the owner has).
 func senderOf(u telegram.Update) (int64, bool) {
 	switch {
 	case u.Message != nil:
 		if u.Message.From != nil {
 			return u.Message.From.ID, true
 		}
-		return 0, true // sent by a channel or an anonymous admin: nobody we know
+		return 0, true
 	case u.CallbackQuery != nil:
 		return u.CallbackQuery.From.ID, true
 	case u.MyChatMember != nil:
@@ -56,7 +49,6 @@ func senderOf(u telegram.Update) (int64, bool) {
 	return 0, false
 }
 
-// allowedUpdate says whether an update may be handled.
 func (b *Bot) allowedUpdate(u telegram.Update) bool {
 	if mc := u.MyChatMember; mc != nil && !mc.Chat.Private() {
 		switch mc.NewChatMember.Status {
@@ -99,8 +91,6 @@ func (b *Bot) allowedUpdate(u telegram.Update) bool {
 	return false
 }
 
-// noteStranger logs a stranger now and then, so an owner who typed their id
-// wrong finds out why the bot is silent.
 func (b *Bot) noteStranger(id int64) {
 	if last, ok := b.strangers.Load(id); ok && time.Since(last.(time.Time)) < time.Hour {
 		return
@@ -115,8 +105,6 @@ func envOrDefault(key, def string) string {
 	}
 	return def
 }
-
-// ---------------------------------------------------------------- the personal edition's wording
 
 const personalWelcome = `سلام %s، %s
 
@@ -169,7 +157,6 @@ const personalHomeFmt = `
 📁 پوشه خونه: <code>%s</code>
 ⏱ آنلاین از %s پیش`
 
-// personalCommands is the command menu of the personal edition.
 func personalCommands(l lang) []telegram.BotCommand {
 	return []telegram.BotCommand{
 		{Command: "start", Description: l.t("شروع و معرفی")},
@@ -185,8 +172,6 @@ func personalCommands(l lang) []telegram.BotCommand {
 	}
 }
 
-// viewHome is the admin panel's first screen: one owner, so nothing about
-// users, sales or groups.
 func (b *Bot) viewHome(ctx context.Context, admin int64) panelView {
 	l := b.lang(admin)
 	reminders, tasks, _ := b.st.ScheduleCounts(ctx)
@@ -206,7 +191,6 @@ func (b *Bot) viewHome(ctx context.Context, admin int64) panelView {
 	return panelView{html: html, kb: keyboard(rows...)}
 }
 
-// firstOwner is the owner whose language the log messages are in.
 func (b *Bot) firstOwner() int64 {
 	var first int64
 	for id := range b.owner {

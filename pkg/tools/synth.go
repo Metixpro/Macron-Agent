@@ -10,11 +10,6 @@ import (
 	"time"
 )
 
-// Music and sound effects are synthesized from code (numpy): oscillators,
-// plucked strings, FM bells, a piano model and drum synthesis, arranged
-// from a style, a key or Persian dastgah scale, chords and a melody that is
-// written or generated, then mixed with reverb, echo and sidechain.
-
 const ToolMusic = "generate_music_synth"
 
 var (
@@ -68,8 +63,8 @@ func (r *Registry) musicSynth(ctx context.Context, sessionID string, args map[st
 	}
 	stem := strings.TrimSuffix(sanitizeBase(strArg(args, "filename")), path.Ext(strArg(args, "filename")))
 	if stem == "" {
-		// "Artist - Title": the audio message in Telegram shows both.
-		name := strings.Title(style) //nolint:staticcheck // ASCII style names only
+
+		name := strings.Title(style)
 		if t := cleanTitle(strArg(args, "title")); t != "" {
 			name = t
 		}
@@ -87,7 +82,6 @@ func (r *Registry) musicSynth(ctx context.Context, sessionID string, args map[st
 	return fmt.Sprintf("Made %q (%s): %s. %s.", out, humanSize(info.Size()), summary, SendNote), nil
 }
 
-// synthesize renders music into out and describes it.
 func (r *Registry) synthesize(ctx context.Context, sessionID string, opts map[string]any, duration float64, out string) (string, error) {
 	cfg := map[string]any{"duration": duration, "out": out}
 	for _, k := range musicKeys {

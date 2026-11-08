@@ -11,19 +11,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// Songs in the admin panel (under ⚙️ settings): the key of the song service,
-// which makes generate_song's songs with a singer from lyrics.
-//
-//	a:mu         status
-//	a:mu:key     set the key (dialog; the message is deleted, the key stored encrypted)
-//	a:mu:test    check the key in use (it makes no song)
-//	a:mu:del     remove the panel's key (the environment's, if any, is used again)
-//
-// Without a key the tool is not offered: nothing promises a song that cannot be made.
-
 const settingMusicKey = "music_key"
 
-// musicKey reads the key from the panel (encrypted), else from the environment.
 func musicKey(st *store.Store, env string) func() string {
 	return func() string {
 		if k, err := st.SecretSetting(settingMusicKey); err == nil && strings.TrimSpace(k) != "" {
@@ -58,7 +47,6 @@ func (b *Bot) viewMusic(l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// testMusic checks a key with the service and says what happened (no song is made).
 func (b *Bot) testMusic(ctx context.Context, l lang, key string) string {
 	if strings.TrimSpace(key) == "" {
 		return l.t("❌ کلیدی تنظیم نشده.")
@@ -96,10 +84,9 @@ func (b *Bot) handleMusicPanel(ctx context.Context, q *telegram.CallbackQuery, p
 	show(b.viewMusic(l))
 }
 
-// handleMusicInput saves a key the admin sent, once the service accepts it.
 func (b *Bot) handleMusicInput(ctx context.Context, m *telegram.Message, done func(panelView)) bool {
 	l := b.langOf(m.From)
-	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // a key is a password: never leave it in the chat
+	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 	key := strings.TrimSpace(m.Text)
 	if key == "" || strings.ContainsAny(key, " \n\t") || len(key) > 300 {
 		b.reply(m, l.t("این شبیه کلید نیست؛ دوباره بفرست."))

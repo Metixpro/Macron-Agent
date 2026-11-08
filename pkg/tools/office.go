@@ -16,23 +16,16 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Excel (.xlsx) and PowerPoint (.pptx) files are zip archives of XML parts.
-// They are read here directly, with the same limits as Word files: every
-// part is read through a size limit, so a small archive cannot unpack into
-// gigabytes.
-
 const (
-	maxSheetCells = 2_000_000 // all sheets together
+	maxSheetCells = 2_000_000
 	maxSheetCols  = 1000
 )
 
-// sheet is one worksheet: its name and its rows (cells as shown by Excel).
 type sheet struct {
 	Name string
 	Rows [][]string
 }
 
-// ooxml gives access to the parts of an Office archive.
 type ooxml map[string]*zip.File
 
 func openOOXML(r io.ReaderAt, size int64) (ooxml, error) {
@@ -47,7 +40,6 @@ func openOOXML(r io.ReaderAt, size int64) (ooxml, error) {
 	return parts, nil
 }
 
-// decoder reads one part, or nil when it is missing.
 func (o ooxml) decoder(name string) (*xml.Decoder, func(), error) {
 	f, ok := o[name]
 	if !ok {
@@ -60,7 +52,6 @@ func (o ooxml) decoder(name string) (*xml.Decoder, func(), error) {
 	return xml.NewDecoder(io.LimitReader(rc, docTextMaxBytes)), func() { rc.Close() }, nil
 }
 
-// rels maps the relationship ids of a part to the parts they point at.
 func (o ooxml) rels(part string) map[string]string {
 	dir, base := path.Split(part)
 	dec, done, err := o.decoder(dir + "_rels/" + base + ".rels")
@@ -88,7 +79,6 @@ func (o ooxml) rels(part string) map[string]string {
 	}
 }
 
-// relID is an element's r:id (sldId also has a plain id).
 func relID(t xml.StartElement) string {
 	for _, a := range t.Attr {
 		if a.Name.Local == "id" && a.Name.Space != "" {
@@ -107,10 +97,6 @@ func attr(t xml.StartElement, local string) string {
 	return ""
 }
 
-// ---------------------------------------------------------------- Excel
-
-// readXLSX returns the sheets of a workbook in their order, with numbers,
-// dates and booleans written the way Excel shows them.
 func readXLSX(r io.ReaderAt, size int64) ([]sheet, error) {
 	o, err := openOOXML(r, size)
 	if err != nil {
@@ -187,7 +173,7 @@ func (o ooxml) sharedStrings() ([]string, error) {
 				cur.Reset()
 			case "t":
 				inT = true
-			case "rPh": // phonetic hints: not part of the text
+			case "rPh":
 				inP = true
 			}
 		case xml.EndElement:
@@ -207,7 +193,6 @@ func (o ooxml) sharedStrings() ([]string, error) {
 	}
 }
 
-// dateStyles are the cell styles whose number format shows a date or a time.
 func (o ooxml) dateStyles() map[int]bool {
 	dec, done, err := o.decoder("xl/styles.xml")
 	defer done()
@@ -247,7 +232,6 @@ func (o ooxml) dateStyles() map[int]bool {
 	}
 }
 
-// dateFormat tells whether a format code shows a date or time ("yyyy-mm-dd", "h:mm").
 func dateFormat(code string) bool {
 	var plain strings.Builder
 	quoted, bracket := false, false
@@ -298,7 +282,7 @@ func (o ooxml) sheetRows(part string, shared []string, dates map[int]bool, date1
 					nextRow = n
 				}
 				if gap := nextRow - 1 - len(rows); gap > 0 && gap <= 10000 {
-					rows = append(rows, make([][]string, gap)...) // empty rows keep their place
+					rows = append(rows, make([][]string, gap)...)
 				}
 				row = nil
 			case "c":
@@ -350,7 +334,6 @@ func (o ooxml) sheetRows(part string, shared []string, dates map[int]bool, date1
 	}
 }
 
-// cellColumn turns "C12" into 2.
 func cellColumn(ref string) int {
 	n := 0
 	i := 0
@@ -389,7 +372,6 @@ func cellText(kind, value string, style int, shared []string, dates map[int]bool
 	return excelNumber(f)
 }
 
-// excelNumber writes a number with Excel's 15 significant digits.
 func excelNumber(f float64) string {
 	if f == math.Trunc(f) && math.Abs(f) < 1e15 {
 		return strconv.FormatInt(int64(f), 10)
@@ -408,7 +390,7 @@ func excelDate(serial float64, date1904 bool) string {
 	}
 	t := base.Add(time.Duration(math.Round(serial*86400)) * time.Second)
 	switch {
-	case serial < 1: // a time of day
+	case serial < 1:
 		return t.Format("15:04:05")
 	case serial == math.Trunc(serial):
 		return t.Format("2006-01-02")
@@ -416,7 +398,6 @@ func excelDate(serial float64, date1904 bool) string {
 	return t.Format("2006-01-02 15:04:05")
 }
 
-// trimRows drops the empty rows at the end and the empty cells after the last value.
 func trimRows(rows [][]string) [][]string {
 	for i, r := range rows {
 		for len(r) > 0 && r[len(r)-1] == "" {
@@ -430,8 +411,6 @@ func trimRows(rows [][]string) [][]string {
 	return rows
 }
 
-// xlsxPages lays the sheets out as text for document_reader: each sheet is a
-// table under its name, cut into parts that each repeat the header row.
 func xlsxPages(sheets []sheet) ([]string, []docOutlineItem) {
 	var pages []string
 	var outline []docOutlineItem
@@ -476,10 +455,6 @@ func xlsxPages(sheets []sheet) ([]string, []docOutlineItem) {
 	return pages, outline
 }
 
-// ---------------------------------------------------------------- PowerPoint
-
-// pptxPages returns one page per slide, in order: its title, its text
-// (tables as rows) and the speaker notes.
 func pptxPages(r io.ReaderAt, size int64) ([]string, []docOutlineItem, error) {
 	o, err := openOOXML(r, size)
 	if err != nil {
@@ -506,7 +481,7 @@ func pptxPages(r io.ReaderAt, size int64) ([]string, []docOutlineItem, error) {
 		}
 	}
 	done()
-	if len(slides) == 0 { // no list: the slide files in their number order
+	if len(slides) == 0 {
 		for name := range o {
 			if strings.HasPrefix(name, "ppt/slides/slide") && strings.HasSuffix(name, ".xml") {
 				slides = append(slides, name)
@@ -557,8 +532,6 @@ func slideNumber(name string) int {
 	return n
 }
 
-// slideText reads a slide (or its notes): the title placeholder apart, the
-// other text paragraph by paragraph, table cells joined into rows.
 func (o ooxml) slideText(part string, notes bool) (title, body string, err error) {
 	dec, done, err := o.decoder(part)
 	defer done()

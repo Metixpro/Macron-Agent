@@ -23,7 +23,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/updater"
 )
 
-// testIO is a terminal nobody sits at.
 func testIO(input string) (*IO, *bytes.Buffer) {
 	var out bytes.Buffer
 	return &IO{In: bufio.NewReader(strings.NewReader(input)), Out: &out, Err: &out,
@@ -84,7 +83,6 @@ func TestSetupWritesPrivateSettingsAndTestsTheModel(t *testing.T) {
 		t.Errorf("the wizard says what it checked:\n%s", out)
 	}
 
-	// Run again: what is saved is kept, nothing needs to be typed.
 	io, out = testIO("")
 	if _, code := Run([]string{"setup", "--yes", "--no-service"}, io); code != 0 {
 		t.Fatalf("second setup: %d\n%s", code, out)
@@ -214,7 +212,6 @@ func TestVersionsAndChecksums(t *testing.T) {
 	}
 }
 
-// release builds a fake GitHub release with a program that says its version.
 func fakeRelease(t *testing.T, version string, tamper bool) *httptest.Server {
 	t.Helper()
 	script := "#!/bin/sh\n[ \"$1\" = version ] && echo 'macron " + version + "'\n"
@@ -287,7 +284,6 @@ func TestUpdateReplacesTheProgramAfterVerifyingIt(t *testing.T) {
 		t.Error("the new program is executable")
 	}
 
-	// Already on the newest release.
 	srv2 := fakeRelease(t, app.Version, false)
 	updater.ReleaseAPI = srv2.URL + "/releases"
 	io, out = testIO("")
@@ -388,8 +384,6 @@ func TestUnknownCommandsAndFlagsPassThrough(t *testing.T) {
 	}
 }
 
-// The wizard asks in this order: bot, owner, time zone, model; a UTC server is
-// offered Asia/Tehran.
 func TestSetupAsksInOrder(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("MACRON_HOME", home)
@@ -400,7 +394,6 @@ func TestSetupAsksInOrder(t *testing.T) {
 	telegramAPI = tg.URL
 	defer func() { telegramAPI = old }()
 
-	// Time zone: Enter (the default); model choice 1, its address, then the model name.
 	io, out := testIO("\n1\n" + llm.URL + "/v1\nmy-model\n")
 	io.Interactive = true
 	io.Secret = func(string) (string, error) { return "sk-test", nil }
@@ -421,8 +414,6 @@ func TestSetupAsksInOrder(t *testing.T) {
 	}
 }
 
-// A lower_case key is one of the agent's own settings: it goes to the
-// database, where the panel reads it, not to config.env.
 func TestConfigSetsADatabaseSetting(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("MACRON_HOME", home)
@@ -448,7 +439,6 @@ func TestConfigSetsADatabaseSetting(t *testing.T) {
 	}
 }
 
-// macron doctor checks the multi-model presets against the providers.
 func TestDoctorChecksMoaPresets(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "m.db"), store.Options{SecretKey: "t"})

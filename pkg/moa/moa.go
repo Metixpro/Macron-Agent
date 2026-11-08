@@ -1,29 +1,3 @@
-// Package moa is Mixture-of-Agents: several models give their view of a
-// request and one model, the aggregator, does the work with their views in
-// front of it.
-//
-//   - A preset is reference models (the advisors) and an aggregator.
-//   - The aggregator is the real model: it writes the answer and calls the
-//     tools; the tool loop, the transcript and the session are as with any
-//     model, and the whole run is billed to its provider.
-//   - The advisors get no tools and no system prompt: only the conversation's
-//     text (user and assistant turns). What they say reaches the aggregator as
-//     private context, in a user message of its own at the end, never mixed
-//     into the user's message.
-//   - Fanout says when the advisors are asked: once per user message
-//     (user_turn, the cheapest), at every tool round (per_iteration), or at the
-//     first round and every N after (every_n:N; the rounds between reuse what
-//     they said).
-//   - An advisor that fails does not fail the turn: its error is in the
-//     reference block and the others go on.
-//
-// The prompt caches are kept: the advisors' block is a separate last message
-// (the prefix before it is untouched), and their view is a pure function of
-// the stable history (its own prefix caches too). A provider whose chat
-// template insists on alternating roles («Conversation roles must
-// alternate», llama.cpp and vLLM templates, some OpenRouter routes) gets the
-// two user messages merged: the failed request once, and from then on, from
-// the start, for that destination only.
 package moa
 
 import (
@@ -39,41 +13,34 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// Fanouts.
 const (
 	FanoutUserTurn     = "user_turn"
 	FanoutPerIteration = "per_iteration"
 	fanoutEveryN       = "every_n:"
 )
 
-// Privacy filters.
 const (
 	PrivacyNone    = ""
-	PrivacyDisplay = "display" // the user's surfaces and the trace are cleaned
-	PrivacyFull    = "full"    // the advisors' text in the aggregator's prompt too
+	PrivacyDisplay = "display"
+	PrivacyFull    = "full"
 )
 
-// Slot is one model of a preset: a provider by its name (or id), and how
-// hard it thinks ("" its provider's own; none, low, medium, high, ultracode).
 type Slot struct {
 	Provider string `json:"provider"`
 	Effort   string `json:"reasoning_effort,omitempty"`
 }
 
-// Preset is a named mixture.
 type Preset struct {
 	Name          string `json:"name"`
 	References    []Slot `json:"reference_models"`
 	Aggregator    Slot   `json:"aggregator"`
 	Fanout        string `json:"fanout,omitempty"`
 	PrivacyFilter string `json:"privacy_filter,omitempty"`
-	Enabled       *bool  `json:"enabled,omitempty"` // false: the aggregator alone
+	Enabled       *bool  `json:"enabled,omitempty"`
 }
 
-// On reports whether the advisors are asked (enabled is on unless set false).
 func (p Preset) On() bool { return p.Enabled == nil || *p.Enabled }
 
-// Every is how many tool rounds go between two fanouts.
 func (p Preset) Every() int {
 	switch {
 	case p.Fanout == FanoutPerIteration:
@@ -83,10 +50,9 @@ func (p Preset) Every() int {
 			return n
 		}
 	}
-	return 0 // user_turn (and anything unknown): once per user message
+	return 0
 }
 
-// FanoutName is the fanout as it is kept (an invalid one reads as user_turn).
 func (p Preset) FanoutName() string {
 	switch n := p.Every(); {
 	case n == 0:
@@ -98,7 +64,6 @@ func (p Preset) FanoutName() string {
 	}
 }
 
-// ParsePresets reads the presets (a JSON list).
 func ParsePresets(raw string) ([]Preset, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -111,7 +76,6 @@ func ParsePresets(raw string) ([]Preset, error) {
 	return out, nil
 }
 
-// Find is the preset of a name ("" the first).
 func Find(list []Preset, name string) (Preset, bool) {
 	for _, p := range list {
 		if name == "" || strings.EqualFold(p.Name, name) {
@@ -121,8 +85,6 @@ func Find(list []Preset, name string) (Preset, bool) {
 	return Preset{}, false
 }
 
-// Problems lists what is wrong with a preset: a slot whose provider does not
-// resolve or has no key, an aggregator that is itself a mixture.
 func Problems(p Preset, resolve func(provider string) (ok, hasKey, isMoA bool)) []string {
 	var out []string
 	if strings.TrimSpace(p.Name) == "" {
@@ -150,37 +112,30 @@ func Problems(p Preset, resolve func(provider string) (ok, hasKey, isMoA bool)) 
 	return out
 }
 
-// Caller sends one request to one slot's model (no failover: a slot that
-// fails says so).
 type Caller func(ctx context.Context, slot Slot, req llm.Request) (*llm.Response, error)
 
-// Advice is what one advisor said.
 type Advice struct {
 	Slot Slot
 	Text string
 	Err  error
 }
 
-// Client is a preset as a chat client, for one request: each Complete is one
-// round of the agent's loop.
 type Client struct {
 	Preset Preset
 	Call   Caller
-	// Strict is shared by the requests of a session: the destinations
-	// (base_url + model) that insist on alternating roles.
+
 	Strict *Strict
-	// Dest names a slot's destination (base_url + model).
+
 	Dest func(Slot) string
-	// OnAdvice reports the advisors' views each time they are asked (the trace).
+
 	OnAdvice func(advice []Advice)
 
 	mu      sync.Mutex
 	round   int
 	cached  []Advice
-	Fanouts int // how many times the advisors were asked (for tests and the log)
+	Fanouts int
 }
 
-// Strict remembers the destinations that need merged user messages.
 type Strict struct {
 	mu   sync.Mutex
 	dest map[string]bool
@@ -207,7 +162,6 @@ func (s *Strict) mark(d string) {
 	s.dest[d] = true
 }
 
-// fanNow reports whether this round asks the advisors.
 func (c *Client) fanNow() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -223,8 +177,6 @@ func (c *Client) fanNow() bool {
 	return n > 0 && r%n == 0
 }
 
-// Complete is one round: the advisors when the fanout says so (or what they
-// said last), then the aggregator.
 func (c *Client) Complete(ctx context.Context, req llm.Request) (*llm.Response, error) {
 	if c.fanNow() {
 		advice := c.advise(ctx, req.Messages)
@@ -253,9 +205,7 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (*llm.Response, 
 	agg.Messages = msgs
 	resp, err := c.Call(ctx, c.Preset.Aggregator, agg)
 	if err != nil && Alternation(err) && !c.Strict.is(dest) {
-		// The template wants user and assistant in turn: this request once
-		// more with the two user messages merged, and that shape from now on
-		// for this destination only.
+
 		c.Strict.mark(dest)
 		agg.Messages = MergeUsers(msgs)
 		resp, err = c.Call(ctx, c.Preset.Aggregator, agg)
@@ -263,8 +213,6 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (*llm.Response, 
 	return resp, err
 }
 
-// View is what an advisor sees: the conversation's text only, no system
-// prompt, no tools, no tool results; the same history gives the same view.
 func View(msgs []llm.Message) []llm.Message {
 	var out []llm.Message
 	for _, m := range msgs {
@@ -286,14 +234,13 @@ func View(msgs []llm.Message) []llm.Message {
 		}
 		out = append(out, llm.Message{Role: m.Role, Content: text})
 	}
-	// A view ends with the user's turn: what follows is the agent's own work.
+
 	for len(out) > 0 && out[len(out)-1].Role == "assistant" {
 		out = out[:len(out)-1]
 	}
 	return MergeUsers(out)
 }
 
-// advise asks every advisor at once.
 func (c *Client) advise(ctx context.Context, msgs []llm.Message) []Advice {
 	view := View(msgs)
 	out := make([]Advice, len(c.Preset.References))
@@ -321,7 +268,6 @@ func (c *Client) advise(ctx context.Context, msgs []llm.Message) []Advice {
 	return out
 }
 
-// block is the advisors' views as the aggregator reads them ("" none).
 func (c *Client) block(advice []Advice) string {
 	if len(advice) == 0 {
 		return ""
@@ -353,8 +299,6 @@ func shortErr(err error) string {
 	return s
 }
 
-// MergeUsers joins adjacent user messages (for templates that insist on
-// alternating roles).
 func MergeUsers(msgs []llm.Message) []llm.Message {
 	out := make([]llm.Message, 0, len(msgs))
 	for _, m := range msgs {
@@ -369,7 +313,6 @@ func MergeUsers(msgs []llm.Message) []llm.Message {
 
 var alternationRe = regexp.MustCompile(`(?i)roles must alternate|must alternate between|alternating user/assistant|expected (?:an? )?(?:user|assistant) message`)
 
-// Alternation reports a provider refusing two user messages in a row.
 func Alternation(err error) bool {
 	var api *llm.APIError
 	if errors.As(err, &api) && api.Status != 400 && api.Status != 422 {
@@ -378,15 +321,11 @@ func Alternation(err error) bool {
 	return err != nil && alternationRe.MatchString(err.Error())
 }
 
-// What Scrub takes out: emails, and phone numbers written as phone numbers
-// (an international prefix, or an Iranian mobile). Line numbers, hashes,
-// dates, addresses and versions stay.
 var (
 	emailRe = regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b`)
 	phoneRe = regexp.MustCompile(`(?:^|[^\w.:/-])((?:\+|00)[1-9]\d{0,2}[ -]?\(?\d{2,4}\)?[ -]?\d{3,4}[ -]?\d{3,4}|09\d{2}[ -]?\d{3}[ -]?\d{4})(?:$|[^\w.:/-])`)
 )
 
-// Scrub hides emails and phone numbers.
 func Scrub(s string) string {
 	s = emailRe.ReplaceAllString(s, "[email]")
 	return phoneRe.ReplaceAllStringFunc(s, func(m string) string {

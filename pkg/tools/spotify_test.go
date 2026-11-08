@@ -116,7 +116,7 @@ func TestSpotifyMatching(t *testing.T) {
 	}{
 		{songCandidate{title: "Singer - Song Name (Official Audio)", channel: "Singer", duration: 201}, true},
 		{songCandidate{title: "Song Name", channel: "Singer - Topic", duration: 200}, true},
-		{songCandidate{title: "Singer - Song Name", channel: "x", duration: 0}, true}, // length unknown
+		{songCandidate{title: "Singer - Song Name", channel: "x", duration: 0}, true},
 		{songCandidate{title: "Singer - Song Name (Official Video)", channel: "Singer", duration: 209}, false},
 		{songCandidate{title: "Singer - Song Name (Slowed + Reverb)", channel: "Singer", duration: 200}, false},
 		{songCandidate{title: "Singer - Song Name Live in Tehran", channel: "Singer", duration: 200}, false},

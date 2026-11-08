@@ -7,16 +7,13 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------- the downloaders' cookie pool
-
-// DLCookie is one cookies.txt of the pool; Data is stored encrypted.
 type DLCookie struct {
 	ID        int64
 	Label     string
 	Domains   []string
 	Data      string
-	SourceURL string     // the link it is fetched from ("" = added by hand)
-	FetchedAt *time.Time // when it was last fetched from SourceURL
+	SourceURL string
+	FetchedAt *time.Time
 	RestUntil *time.Time
 	LastUsed  *time.Time
 	Uses      int
@@ -25,16 +22,12 @@ type DLCookie struct {
 	CreatedAt time.Time
 }
 
-// Resting reports a cookie that a site blocked recently.
 func (c DLCookie) Resting(now time.Time) bool { return c.RestUntil != nil && c.RestUntil.After(now) }
 
-// AddCookie adds a cookies.txt to the pool.
 func (s *Store) AddCookie(ctx context.Context, label string, domains []string, data string) (int64, error) {
 	return s.AddCookieFrom(ctx, label, domains, data, "")
 }
 
-// AddCookieFrom adds a cookies.txt fetched from a link, which is fetched
-// again when the cookie stops working.
 func (s *Store) AddCookieFrom(ctx context.Context, label string, domains []string, data, sourceURL string) (int64, error) {
 	var fetched any
 	if sourceURL != "" {
@@ -48,8 +41,6 @@ func (s *Store) AddCookieFrom(ctx context.Context, label string, domains []strin
 	return res.LastInsertId()
 }
 
-// RefreshCookie stores what a cookie's link gave this time; new cookies
-// are ready at once (the rest of the old ones is lifted).
 func (s *Store) RefreshCookie(ctx context.Context, id int64, domains []string, data string, changed bool) error {
 	if !changed {
 		_, err := s.db.ExecContext(ctx, `UPDATE dl_cookies SET fetched_at = ? WHERE id = ?`, s.Now(), id)
@@ -60,7 +51,6 @@ func (s *Store) RefreshCookie(ctx context.Context, id int64, domains []string, d
 	return err
 }
 
-// Cookies lists the pool, least recently used first.
 func (s *Store) Cookies(ctx context.Context) ([]DLCookie, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, label, domains, data, source_url, fetched_at, rest_until, last_used, uses, blocks, last_error, created_at
 		FROM dl_cookies ORDER BY COALESCE(last_used, '1970-01-01'), id`)
@@ -78,7 +68,7 @@ func (s *Store) Cookies(ctx context.Context) ([]DLCookie, error) {
 			return nil, err
 		}
 		if c.Data, err = s.open(c.Data); err != nil {
-			continue // encrypted with another key: unusable
+			continue
 		}
 		if domains != "" {
 			c.Domains = strings.Split(domains, ",")
@@ -88,7 +78,6 @@ func (s *Store) Cookies(ctx context.Context) ([]DLCookie, error) {
 	return out, rows.Err()
 }
 
-// Cookie reads one cookie of the pool.
 func (s *Store) Cookie(ctx context.Context, id int64) (DLCookie, error) {
 	var (
 		c       DLCookie
@@ -109,32 +98,24 @@ func (s *Store) Cookie(ctx context.Context, id int64) (DLCookie, error) {
 	return c, nil
 }
 
-// DeleteCookie removes a cookies.txt from the pool.
 func (s *Store) DeleteCookie(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM dl_cookies WHERE id = ?`, id)
 	return err
 }
 
-// RestCookie takes a cookie out of use until a time, after a site blocked it.
 func (s *Store) RestCookie(ctx context.Context, id int64, until time.Time, reason string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE dl_cookies SET rest_until = ?, blocks = blocks + 1, last_error = ? WHERE id = ?`,
 		until.UTC(), truncate(reason, 300), id)
 	return err
 }
 
-// CookieUsed records a use (successful downloads move it to the back of the line).
 func (s *Store) CookieUsed(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE dl_cookies SET last_used = ?, uses = uses + 1 WHERE id = ?`, s.Now(), id)
 	return err
 }
 
-// ---------------------------------------------------------------- each user's own cookies
-
-// MaxUserCookies bounds the cookies one user keeps.
 const MaxUserCookies = 5
 
-// AddUserCookie keeps a cookies.txt for one user's downloads. It replaces
-// the user's cookies of the same sites (replace lists their ids).
 func (s *Store) AddUserCookie(ctx context.Context, userID int64, label string, domains []string, data string, replace []int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -165,10 +146,8 @@ func (s *Store) AddUserCookie(ctx context.Context, userID int64, label string, d
 	return id, tx.Commit()
 }
 
-// ErrTooManyCookies is returned when a user already keeps MaxUserCookies.
 var ErrTooManyCookies = errors.New("too many cookies")
 
-// UserCookies lists one user's cookies, oldest first.
 func (s *Store) UserCookies(ctx context.Context, userID int64) ([]DLCookie, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, label, domains, data, created_at FROM user_cookies WHERE user_id = ? ORDER BY id`, userID)
 	if err != nil {
@@ -195,7 +174,6 @@ func (s *Store) UserCookies(ctx context.Context, userID int64) ([]DLCookie, erro
 	return out, rows.Err()
 }
 
-// DeleteUserCookie removes one of a user's cookies.
 func (s *Store) DeleteUserCookie(ctx context.Context, userID, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM user_cookies WHERE id = ? AND user_id = ?`, id, userID)
 	return err

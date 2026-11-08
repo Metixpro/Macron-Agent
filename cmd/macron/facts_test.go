@@ -36,14 +36,12 @@ func TestLongTermMemory(t *testing.T) {
 		t.Error("a card number is never saved")
 	}
 
-	// /new starts a new conversation, the fact stays and comes with the next request.
 	h.send(private(uid, "/new"))
 	h.send(private(uid, "یه غذا برای شام پیشنهاد بده"))
 	if req := llmText(h.llm.last()); !strings.Contains(req, fmt.Sprintf("[user #%d] Vegetarian", facts[0].ID)) {
 		t.Errorf("the model knows what it remembers: %s", req[:min(len(req), 400)])
 	}
 
-	// The panel lists the fact with a delete button.
 	h.tg.reset()
 	h.send(private(uid, "/memory"))
 	panel := lastOf(h, "sendMessage")
@@ -63,7 +61,6 @@ func TestLongTermMemory(t *testing.T) {
 		t.Error("the fact is deleted")
 	}
 
-	// Turned off: no tools, nothing injected.
 	_, _, _ = h.bot.brain.User.Add("Likes jazz")
 	h.click(uid, uid, 900, fmt.Sprintf("m:t:%d:0", uid))
 	if v, _ := h.st.UserPref(ctx, uid, store.PrefFactsOff); v == "" {
@@ -78,7 +75,7 @@ func TestLongTermMemory(t *testing.T) {
 	if req := h.llm.last(); !strings.Contains(llmText(req), "Likes jazz") || !strings.Contains(toolNames(req), ","+toolRemember+",") {
 		t.Error("turned back on")
 	}
-	// In a group the model is told to keep private facts private.
+
 	h.send(group(uid, "مکرون سلام"))
 	if !strings.Contains(llmText(h.llm.last()), "never reveal private ones") {
 		t.Error("group note")
@@ -96,8 +93,6 @@ func TestLooksSecret(t *testing.T) {
 	}
 }
 
-// The owner edits USER.md and MEMORY.md by hand and the agent sees it at once;
-// what it learned about the work is a second file with its own numbers.
 func TestMemoryFilesAreEditedByHandAndByTheAgent(t *testing.T) {
 	h := newHarness(t)
 	const uid = 82
@@ -138,7 +133,7 @@ func TestMemoryFilesAreEditedByHandAndByTheAgent(t *testing.T) {
 	if w, _ := h.bot.brain.Memory.List(); len(w) != 0 {
 		t.Error("a note about work is deleted from the panel")
 	}
-	// The three files go to the chat.
+
 	h.tg.reset()
 	h.click(uid, uid, 901, fmt.Sprintf("m:f:%d", uid))
 	docs := h.tg.of("sendDocument")
@@ -151,7 +146,6 @@ func TestMemoryFilesAreEditedByHandAndByTheAgent(t *testing.T) {
 	}
 }
 
-// Everything said is kept for good and found again by words.
 func TestPastChatsAreSearchable(t *testing.T) {
 	h := newHarness(t)
 	const uid = 83

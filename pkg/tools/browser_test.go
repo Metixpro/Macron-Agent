@@ -15,7 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/search"
 )
 
-// browserRegistry builds a registry on this machine, which has the installed browsers.
 func browserRegistry(t *testing.T) *Registry {
 	t.Helper()
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
@@ -29,7 +28,6 @@ func browserRegistry(t *testing.T) *Registry {
 	return r
 }
 
-// shopSite serves a small shop whose port the proxy lets through.
 func shopSite(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -171,12 +169,12 @@ func TestMusicSynth(t *testing.T) {
 	if a := probeDuration(t, filepath.Join(ws, "dastgah.mp3"), "a:0"); !strings.Contains(a, "codec_name=mp3") || !strings.Contains(a, "duration=4.0") {
 		t.Errorf("mp3: %s", a)
 	}
-	// Its tags carry the bot's name and a title, never a name from an earlier life.
+
 	if tags, _ := exec.Command("ffprobe", "-v", "error", "-show_entries", "format_tags=title,artist", "-of", "default=nw=1", filepath.Join(ws, "dastgah.mp3")).Output(); !strings.Contains(string(tags), "TAG:artist=Macron AI") ||
 		!strings.Contains(string(tags), "TAG:title=Persian 96 BPM") || strings.Contains(strings.ToLower(string(tags)), "waze") {
 		t.Errorf("tags: %s", tags)
 	}
-	// With no file name, the track is named for Telegram's player: artist and title.
+
 	out = call(t, r, "s", ToolMusic, map[string]any{"style": "lofi", "duration": 2, "title": "Rainy Night"})
 	if !strings.Contains(out, `Made "Macron_AI_-_Rainy_Night.mp3"`) {
 		t.Errorf("a named track: %s", out)
@@ -196,8 +194,6 @@ func TestMusicSynth(t *testing.T) {
 	}
 }
 
-// TestDebiansChromiumIsFound: without Playwright's browsers, the distribution's
-// chromium (install.sh's fallback on Debian) is used.
 func TestDebiansChromiumIsFound(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "chromium")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
@@ -212,8 +208,6 @@ func TestDebiansChromiumIsFound(t *testing.T) {
 	}
 }
 
-// TestBrowserReadsTheShapesModelsWriteActionsIn: a weaker model's
-// {"goto": url}, {"url": url} and "goto url" are the actions it meant.
 func TestBrowserReadsTheShapesModelsWriteActionsIn(t *testing.T) {
 	got := normalizeActions([]any{
 		map[string]any{"goto": "https://a.com"},

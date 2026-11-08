@@ -11,14 +11,9 @@ import (
 	"strings"
 )
 
-// The built-in skills, so a new server starts with some.
-//
 //go:embed seed
 var seedFS embed.FS
 
-// Seed copies the built-in skills that were never offered before. A list of
-// the ones already offered is kept in the folder, so a built-in skill an admin
-// deleted stays deleted, and one added by a newer version still arrives.
 func (s *Store) Seed() ([]string, error) {
 	marker := filepath.Join(s.dir, seededFile)
 	data, err := os.ReadFile(marker)

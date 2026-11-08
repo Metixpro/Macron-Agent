@@ -15,8 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// translatedTexts finds every Persian text the bot shows through l.t or l.f
-// (literals and constants), in toolStatus and in the name tables.
 func translatedTexts(t *testing.T) map[string]string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -48,7 +46,7 @@ func translatedTexts(t *testing.T) map[string]string {
 			}
 		}
 	}
-	found := map[string]string{} // text → where
+	found := map[string]string{}
 	add := func(pos token.Pos, s string) {
 		if hasPersian(s) {
 			if _, ok := found[s]; !ok {
@@ -130,7 +128,6 @@ func edgeSpace(s string) string {
 	return fmt.Sprintf("%q|%q", s[:len(s)-len(strings.TrimLeft(s, " \n\t"))], s[len(strings.TrimRight(s, " \n\t")):])
 }
 
-// persianLeft drops what may stay Persian in English (the language's own name).
 func persianLeft(s string) bool { return hasPersian(strings.ReplaceAll(s, "فارسی", "")) }
 
 func TestEnglishCatalog(t *testing.T) {
@@ -187,10 +184,8 @@ func englishMsg(userID int64, text string) *telegram.Message {
 	return m
 }
 
-// userData is Persian the fake Telegram returns as a user's own profile.
 const userData = "عاشق Go و قهوه"
 
-// noPersian fails when anything the bot sent since the last reset is still Persian.
 func (h *harness) noPersian(step string) {
 	h.t.Helper()
 	for _, s := range h.tg.texts() {
@@ -229,14 +224,12 @@ func TestEnglishUser(t *testing.T) {
 	h.wantText("Hi John")
 	h.wantText("/language")
 
-	// The thinking bubble reads left to right in English.
 	h.tg.reset()
 	h.send(englishMsg(uid, "hi there"))
-	if d := h.tg.of("sendRichMessageDraft"); len(d) == 0 || fmt.Sprint(d[0].body["rich_message"].(map[string]any)["is_rtl"]) == "true" {
-		t.Errorf("English thinking bubble: %v", d)
+	if frames := liveFrames(h); len(frames) == 0 || strings.Contains(strings.Join(frames, ""), "دارم") {
+		t.Fatalf("English live status missing: %v", frames)
 	}
 
-	// An answer from the agent carries the language hint.
 	h.tg.reset()
 	h.llm.reply = say("Hello John!")
 	h.send(englishMsg(uid, "hello"))
@@ -245,7 +238,6 @@ func TestEnglishUser(t *testing.T) {
 	}
 	h.noPersian("chat")
 
-	// /language switches to Persian, whatever the app says.
 	h.tg.reset()
 	h.send(englishMsg(uid, "/language"))
 	h.wantText("Which language")
@@ -261,7 +253,6 @@ func TestEnglishUser(t *testing.T) {
 	h.send(englishMsg(uid, "/help"))
 	h.wantText("چطوری باهام کار کنی؟")
 
-	// …and back; the choice survives a restart (a fresh cache).
 	h.click(uid, uid, 5, "lang:en")
 	h.wantText("we'll talk in English")
 	h.bot.langs = langs{}
@@ -269,7 +260,6 @@ func TestEnglishUser(t *testing.T) {
 		t.Error("the choice was not reloaded from the database")
 	}
 
-	// A Persian app user is untouched.
 	h.tg.reset()
 	h.send(private(7002, "/help"))
 	h.wantText("چطوری باهام کار کنی؟")

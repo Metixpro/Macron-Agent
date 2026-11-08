@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// cliPrompt keeps stable execution rules separate from task/history data. Tool
-// schemas already describe arguments; repeating every recipe here costs each call.
 func (a *Agent) cliPrompt(offers func(string) bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are %s, a local server agent.\n\n%s\n", a.Persona.fullName(), a.soulText())

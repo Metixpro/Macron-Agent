@@ -10,12 +10,10 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The fixes made by hand on the server, kept by these tests.
-
 func TestRemindersCostNoTokens(t *testing.T) {
 	h := newHarness(t)
 	u := newUser(h, 80)
-	_ = h.st.AddTokens(bg, 80, 500) // the day's tokens are spent
+	_ = h.st.AddTokens(bg, 80, 500)
 	m := private(80, "")
 	now := time.Now()
 	for _, text := range []string{"اولی", "دومی"} {
@@ -25,7 +23,7 @@ func TestRemindersCostNoTokens(t *testing.T) {
 	}
 	h.bot.runDueSchedules(bg, now.Add(2*time.Minute))
 	h.bot.wg.Wait()
-	// A reminder uses no model: both come, with no tokens left.
+
 	if all := h.tg.allText(); strings.Count(all, "یادآوری") != 2 {
 		t.Errorf("both reminders are delivered:\n%s", all)
 	}

@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// EscapeHTML escapes text for Telegram's HTML parse mode.
 func EscapeHTML(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }
@@ -29,11 +28,9 @@ var (
 	htmlTagRe    = regexp.MustCompile(`</?([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?>`)
 )
 
-// MarkdownToHTML converts the Markdown LLMs usually produce into Telegram HTML.
-// All text is escaped first, so stray <, > or & can never break the message.
 func MarkdownToHTML(md string) string {
 	md = strings.ReplaceAll(md, "\r\n", "\n")
-	md = classicDetails(md) // collapsible blocks: a title and an expandable quotation
+	md = classicDetails(md)
 	var stash []string
 	hold := func(html string) string {
 		stash = append(stash, html)
@@ -76,7 +73,6 @@ func MarkdownToHTML(md string) string {
 	return strings.TrimSpace(manyNLRe.ReplaceAllString(md, "\n\n"))
 }
 
-// replaceTables turns Markdown tables into monospaced <pre> blocks.
 func replaceTables(md string, hold func(string) string) string {
 	lines := strings.Split(md, "\n")
 	var out []string
@@ -107,7 +103,6 @@ func replaceTables(md string, hold func(string) string) string {
 	return strings.Join(out, "\n")
 }
 
-// quoteBlocks wraps consecutive "> quote" lines (already escaped) in <blockquote>.
 func quoteBlocks(md string) string {
 	lines := strings.Split(md, "\n")
 	var out []string
@@ -127,7 +122,6 @@ func quoteBlocks(md string) string {
 	return strings.Join(out, "\n")
 }
 
-// ValidHTML reports whether every tag is a known Telegram tag and properly nested.
 func ValidHTML(s string) bool {
 	allowed := map[string]bool{"b": true, "i": true, "u": true, "s": true, "code": true, "pre": true,
 		"a": true, "blockquote": true, "tg-spoiler": true, "strong": true, "em": true, "ins": true, "del": true, "strike": true}
@@ -151,10 +145,6 @@ func ValidHTML(s string) bool {
 
 type openTag struct{ name, full string }
 
-// SplitHTML splits Telegram HTML into chunks of at most limit visible
-// characters. Splits prefer paragraph, line and word boundaries, never cut an
-// entity such as &amp;, and every chunk is closed and re-opened so it is valid
-// HTML on its own.
 func SplitHTML(s string, limit int) []string {
 	if limit <= 0 {
 		limit = 3800
@@ -201,7 +191,7 @@ func SplitHTML(s string, limit int) []string {
 				cut = i + 1
 			}
 			if i := strings.LastIndexByte(t[:cut], '&'); i >= 0 && !strings.Contains(t[i:cut], ";") {
-				cut = i // do not split inside an entity
+				cut = i
 			}
 			if cut <= 0 {
 				_, size := utf8.DecodeRuneInString(t)
@@ -250,23 +240,14 @@ func byteOffsetOfRune(s string, n int) int {
 	return len(s)
 }
 
-// ---------------------------------------------------------------- trace / progress
-
-// ---------------------------------------------------------------- Markdown for rich messages
-
 var fenceLineRe = regexp.MustCompile("^\\s*(```|~~~)")
 
-// SplitMarkdown cuts a long Markdown answer into parts of at most limit runes,
-// preferring blank lines between blocks. Code blocks are never cut in the
-// middle; a code block that is itself too long is split by lines, and each
-// piece is closed and re-opened with the same fence, so every part renders.
 func SplitMarkdown(md string, limit int) []string {
 	md = strings.TrimSpace(strings.ReplaceAll(md, "\r\n", "\n"))
 	if limit <= 0 || utf8.RuneCountInString(md) <= limit {
 		return []string{md}
 	}
 
-	// 1. Cut into blocks: paragraphs separated by blank lines, and whole code blocks.
 	var blocks []string
 	var cur []string
 	inFence, fence := false, ""
@@ -298,7 +279,6 @@ func SplitMarkdown(md string, limit int) []string {
 	flush()
 	_ = fence
 
-	// 2. Pack blocks into parts.
 	var parts []string
 	var b strings.Builder
 	size := 0
@@ -332,7 +312,6 @@ func SplitMarkdown(md string, limit int) []string {
 	return parts
 }
 
-// splitBigBlock splits one oversized block by lines (or runes for one huge line).
 func splitBigBlock(blk string, limit int) []string {
 	lines := strings.Split(blk, "\n")
 	open, closeFence := "", ""
@@ -361,7 +340,7 @@ func splitBigBlock(blk string, limit int) []string {
 		size = 0
 	}
 	for _, line := range lines {
-		for utf8.RuneCountInString(line) > limit { // a single giant line
+		for utf8.RuneCountInString(line) > limit {
 			r := []rune(line)
 			emit()
 			b.WriteString(string(r[:limit]))
@@ -379,8 +358,6 @@ func splitBigBlock(blk string, limit int) []string {
 	return parts
 }
 
-// CloseOpenMarkdown makes a partial (still streaming) Markdown text safe to
-// render: an unterminated code fence is closed.
 func CloseOpenMarkdown(md string) string {
 	open := false
 	for _, line := range strings.Split(md, "\n") {
@@ -395,26 +372,18 @@ func CloseOpenMarkdown(md string) string {
 }
 
 var (
-	// setextRe is a line that underlines the one above it into a heading.
 	setextRe = regexp.MustCompile(`^[ \t]{0,3}(?:=+|-+)[ \t]*$`)
-	// mediaLineRe is a picture, video, song or file of its own: a media block.
+
 	mediaLineRe = regexp.MustCompile(`^!\[[^\]\n]*\]\((?:tg://(?:photo|video|audio|document)|https?://)[^)\n]*\)[ \t]*$`)
 )
 
-// HardBreaks keeps the lines of rich Markdown apart. Rich Markdown follows
-// GitHub's, where a single line break inside a paragraph is only a space: a
-// card's lines, a list of «🎵 …» / «👤 …» lines in an answer, ran together into
-// one paragraph. Two trailing spaces make each a hard break, as the writer
-// meant; at the end of a block they change nothing. Code blocks, tables,
-// headings, HTML lines, media and what a slideshow or collage holds are left
-// as they are.
 func HardBreaks(md string) string {
 	if !strings.Contains(md, "\n") {
 		return md
 	}
 	lines := strings.Split(md, "\n")
-	fence := ""   // the open code fence's marker
-	gallery := "" // the closing tag of an open <tg-slideshow> or <tg-collage>
+	fence := ""
+	gallery := ""
 	for i, line := range lines {
 		trim := strings.TrimLeft(line, " \t")
 		if gallery != "" {
@@ -447,18 +416,17 @@ func HardBreaks(md string) string {
 		next := strings.TrimLeft(lines[i+1], " \t")
 		switch {
 		case strings.TrimSpace(next) == "", fenceOpen(next) != "", setextRe.MatchString(lines[i+1]):
-			continue // the block ends here anyway, or the next line makes this one a heading
+			continue
 		case strings.HasPrefix(trim, "|"), strings.HasPrefix(trim, "#"), strings.HasPrefix(trim, "<"):
-			continue // a table row, a heading, an HTML line
+			continue
 		case mediaLineRe.MatchString(trim), mediaLineRe.MatchString(next):
-			continue // a media block stays a block of its own
+			continue
 		}
 		lines[i] = line + "  "
 	}
 	return strings.Join(lines, "\n")
 }
 
-// fenceOpen is the marker of a line that opens a code block ("" if it does not).
 func fenceOpen(trim string) string {
 	for _, c := range []string{"`", "~"} {
 		n := len(trim) - len(strings.TrimLeft(trim, c))
@@ -469,7 +437,6 @@ func fenceOpen(trim string) string {
 	return ""
 }
 
-// IsMostlyRTL reports whether most letters are from right-to-left scripts.
 func IsMostlyRTL(s string) bool {
 	rtl, ltr := 0, 0
 	for _, r := range s {

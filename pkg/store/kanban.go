@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// Card statuses.
 const (
 	CardTodo    = "todo"
 	CardDoing   = "doing"
@@ -15,19 +14,17 @@ const (
 	CardDone    = "done"
 )
 
-// ValidCardStatus reports one of the statuses.
 func ValidCardStatus(s string) bool {
 	return s == CardTodo || s == CardDoing || s == CardBlocked || s == CardDone
 }
 
-// Card is one job on the owner's board.
 type Card struct {
 	ID        int64
 	UserID    int64
 	Title     string
 	Notes     string
 	Status    string
-	BgTask    int64 // the background task that runs it (0: none)
+	BgTask    int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -40,7 +37,6 @@ func scanCard(row interface{ Scan(...any) error }) (*Card, error) {
 	return &c, err
 }
 
-// AddCard puts a card in to do.
 func (s *Store) AddCard(ctx context.Context, userID int64, title, notes string) (int64, error) {
 	now := s.Now()
 	r, err := s.db.ExecContext(ctx, `INSERT INTO kanban (user_id, title, notes, status, created_at, updated_at) VALUES (?, ?, ?, 'todo', ?, ?)`,
@@ -51,7 +47,6 @@ func (s *Store) AddCard(ctx context.Context, userID int64, title, notes string) 
 	return r.LastInsertId()
 }
 
-// Card is one card of a user (ErrNotFound: none).
 func (s *Store) Card(ctx context.Context, userID, id int64) (*Card, error) {
 	c, err := scanCard(s.db.QueryRowContext(ctx, `SELECT `+cardColumns+` FROM kanban WHERE id = ? AND user_id = ?`, id, userID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -60,7 +55,6 @@ func (s *Store) Card(ctx context.Context, userID, id int64) (*Card, error) {
 	return c, err
 }
 
-// Cards are a user's cards, oldest first; done ones only from the last days.
 func (s *Store) Cards(ctx context.Context, userID int64, doneDays int) ([]Card, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+cardColumns+` FROM kanban WHERE user_id = ? AND (status <> 'done' OR updated_at >= ?)
 		ORDER BY id`, userID, s.Now().AddDate(0, 0, -doneDays))
@@ -79,7 +73,6 @@ func (s *Store) Cards(ctx context.Context, userID int64, doneDays int) ([]Card, 
 	return out, rows.Err()
 }
 
-// MoveCard changes a card's status, and adds to its notes ("" adds nothing).
 func (s *Store) MoveCard(ctx context.Context, userID, id int64, status, note string) error {
 	if !ValidCardStatus(status) {
 		return errors.New("unknown status " + status)
@@ -95,13 +88,11 @@ func (s *Store) MoveCard(ctx context.Context, userID, id int64, status, note str
 	return nil
 }
 
-// SetCardTask links a card to the background task that runs it.
 func (s *Store) SetCardTask(ctx context.Context, userID, id, task int64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE kanban SET bg_task = ?, status = 'doing', updated_at = ? WHERE id = ? AND user_id = ?`, task, s.Now(), id, userID)
 	return err
 }
 
-// DeleteCard removes a card.
 func (s *Store) DeleteCard(ctx context.Context, userID, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM kanban WHERE id = ? AND user_id = ?`, id, userID)
 	return err

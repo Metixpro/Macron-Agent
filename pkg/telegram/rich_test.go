@@ -218,9 +218,6 @@ func TestCloseOpenMarkdownAndRTL(t *testing.T) {
 	}
 }
 
-// TestHardBreaksKeepTheLines: lines that only follow each other become hard
-// breaks (rich Markdown would run them into one paragraph); code, tables,
-// headings, block ends and setext headings are left as they are.
 func TestHardBreaksKeepTheLines(t *testing.T) {
 	in := "🎵 آهنگ: X\n👤 خواننده: Y\n\n" +
 		"```bash\nls -la\ncd /tmp\n```\n" +
@@ -236,7 +233,7 @@ func TestHardBreaksKeepTheLines(t *testing.T) {
 		"| a | b |\n|---|---|\n| 1 | 2 |\n" +
 		"# Title\ntext under it  \n" +
 		"Heading\n---  \n" +
-		"- item one  \n- item two\n" + // a code block follows: the block ends anyway
+		"- item one  \n- item two\n" +
 		"~~~\nraw\nraw2\n~~~\n" +
 		">quote one  \n>quote two  \n" +
 		"already  \nbroken\\\nlast"
@@ -246,20 +243,18 @@ func TestHardBreaksKeepTheLines(t *testing.T) {
 	if HardBreaks("one line") != "one line" || HardBreaks("") != "" {
 		t.Fatal("nothing to break")
 	}
-	// Media and galleries are blocks of their own.
+
 	gallery := "<tg-slideshow>\n![](tg://photo?id=m0)\n![](tg://photo?id=m1)\n</tg-slideshow>\n\nمتن\n![](tg://document?id=m3)\nپایان\nخط ✅ ![✅](tg://emoji?id=5)\nبعدی"
 	want = strings.NewReplacer("پایان\n", "پایان  \n", "خط ✅ ![✅](tg://emoji?id=5)\n", "خط ✅ ![✅](tg://emoji?id=5)  \n").Replace(gallery)
-	if got := HardBreaks(gallery); got != want { // text lines (a custom emoji in one) still break
+	if got := HardBreaks(gallery); got != want {
 		t.Fatalf("media: %q", got)
 	}
-	// An unclosed fence (a streaming draft) keeps the rest as code.
+
 	if got := HardBreaks("a\nb\n```\nc\nd"); got != "a  \nb\n```\nc\nd" {
 		t.Fatalf("open fence: %q", got)
 	}
 }
 
-// TestRichMessagesGoWithHardBreaks: every way a rich message is sent keeps
-// its lines.
 func TestRichMessagesGoWithHardBreaks(t *testing.T) {
 	rm := RichMessage{Markdown: "a\nb"}
 	if w := rm.wire(); w.Markdown != "a  \nb" || rm.Markdown != "a\nb" {

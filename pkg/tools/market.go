@@ -16,13 +16,6 @@ import (
 	"time"
 )
 
-// currency_gold_price: the free-market rates of Tehran in Toman (the dollar,
-// euro, dirham, pound…), 18 and 24 karat gold, the mithqal, the world ounce
-// and every coin. tgju.org answers first (two mirrors, with the day's
-// change); bonbast.com, a separate source, fills in when it does not. Rates
-// are kept for a minute, so a busy group does not ask the sources again and
-// again.
-
 const (
 	ToolMarketPrice = "currency_gold_price"
 	marketTTL       = time.Minute
@@ -37,7 +30,7 @@ var (
 type marketItem struct {
 	key, fa, code, emoji string
 	tgju, bonbast        string
-	usd                  bool // priced in dollars, not Toman
+	usd                  bool
 }
 
 var marketItems = []marketItem{
@@ -68,16 +61,15 @@ var marketGroups = map[string][]string{
 	"coins":      {"emami", "bahar", "nim", "rob", "gerami"},
 }
 
-// quote is one rate: Toman (or dollars for the ounce) and the day's change.
 type quote struct {
 	value, change float64
 	hasChange     bool
 }
 
 type marketSnapshot struct {
-	quotes  map[string]quote // by item key
+	quotes  map[string]quote
 	source  string
-	updated string // the source's own time, when it gives one
+	updated string
 	at      time.Time
 }
 
@@ -107,7 +99,6 @@ func (r *Registry) marketPrice(ctx context.Context, _ string, args map[string]an
 	return formatMarket(board, keys, unknown), nil
 }
 
-// marketKeys reads the requested items, groups and Persian names included.
 func marketKeys(raw string) (keys, unknown []string) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	if raw == "" {
@@ -155,8 +146,6 @@ func marketItemByKey(key string) *marketItem {
 	return nil
 }
 
-// marketSnapshot returns fresh rates: from the cache when they are less than
-// a minute old and hold every item asked for, otherwise from the sources.
 func (r *Registry) marketSnapshot(ctx context.Context, keys []string) (*marketSnapshot, error) {
 	r.market.mu.Lock()
 	defer r.market.mu.Unlock()
@@ -166,7 +155,7 @@ func (r *Registry) marketSnapshot(ctx context.Context, keys []string) (*marketSn
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	bonbast := make(chan *marketSnapshot, 1)
-	go func() { bonbast <- r.bonbastRates(ctx) }() // asked at once: it is slower, and tgju may not answer
+	go func() { bonbast <- r.bonbastRates(ctx) }()
 	board := r.tgjuRates(ctx)
 	if board == nil || !board.has(keys) {
 		if b := <-bonbast; b != nil {
@@ -222,7 +211,7 @@ func (r *Registry) tgjuRates(ctx context.Context) *marketSnapshot {
 				continue
 			}
 			if !it.usd {
-				v /= 10 // rial → Toman
+				v /= 10
 			}
 			q := quote{value: v}
 			if dp := marketNumber(c.DP); c.DT == "high" || c.DT == "low" {
@@ -243,7 +232,6 @@ func (r *Registry) tgjuRates(ctx context.Context) *marketSnapshot {
 	return nil
 }
 
-// bonbastRates reads bonbast.com, whose page carries the token its JSON asks for.
 func (r *Registry) bonbastRates(ctx context.Context) *marketSnapshot {
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
@@ -283,7 +271,7 @@ func (r *Registry) bonbastRates(ctx context.Context) *marketSnapshot {
 			continue
 		}
 		if v := marketNumber(data[it.bonbast]); v > 0 {
-			board.quotes[it.key] = quote{value: v} // already Toman
+			board.quotes[it.key] = quote{value: v}
 		}
 	}
 	if h, mi := marketNumber(data["hour"]), marketNumber(data["minute"]); h > 0 || mi > 0 {
@@ -295,7 +283,6 @@ func (r *Registry) bonbastRates(ctx context.Context) *marketSnapshot {
 	return board
 }
 
-// marketNumber reads "2,722,000", "4,091.38", 1.04 or "1.04".
 func marketNumber(v any) float64 {
 	switch x := v.(type) {
 	case float64:
@@ -363,7 +350,6 @@ func formatMarket(s *marketSnapshot, keys, unknown []string) string {
 	return sb.String()
 }
 
-// faNumber writes a number with Persian digits, ٬ between thousands and ٫ before decimals.
 func faNumber(v float64, decimals int) string {
 	s := strconv.FormatFloat(v, 'f', decimals, 64)
 	if decimals > 0 {

@@ -14,14 +14,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// The song tool in the bot: offered only with a key, made through the service,
-// and delivered as an audio message with its title and singer.
 func TestASongIsMadeAndDeliveredAsAudio(t *testing.T) {
 	h := newHarness(t)
 	var created atomic.Int32
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if strings.HasSuffix(r.URL.Path, ".mp3") { // the files are public: the key is never sent to them
+		if strings.HasSuffix(r.URL.Path, ".mp3") {
 			if r.Header.Get("X-API-Key") != "" {
 				t.Error("the key went to the file host")
 			}
@@ -54,18 +52,16 @@ func TestASongIsMadeAndDeliveredAsAudio(t *testing.T) {
 	}))
 	defer svc.Close()
 	reg := h.bot.app.Registry
-	reg.HTTP = &http.Client{} // a plain client
+	reg.HTTP = &http.Client{}
 	reg.SetMusicAPI(svc.URL + "/music/index.php")
 	h.bot.app.Config.MusicAPI = svc.URL + "/music/index.php"
 
-	// Without a key the model is not offered the tool, and the panel says so.
 	h.llm.reply = say("سلام")
 	h.send(private(61, "یه آهنگ با صدای خواننده برام بساز"))
 	if names := toolNamesOf(h.llm.last()); strings.Contains(names, "generate_song") {
 		t.Fatalf("a tool that cannot work is not offered: %s", names)
 	}
 
-	// The admin sets the key in the panel: it is checked without making a song.
 	h.click(ownerID, ownerID, 900, "a:mu")
 	if p := lastOf(h, "editMessageText"); !strings.Contains(fmt.Sprint(p.body["text"]), "تنظیم نشده") || !hasButton(buttons(p), "a:mu:key") {
 		t.Fatalf("the panel without a key: %v", p.body["text"])
@@ -85,7 +81,6 @@ func TestASongIsMadeAndDeliveredAsAudio(t *testing.T) {
 		t.Fatalf("checking a key makes no song (%d made); the key works at once: %v", created.Load(), reg.SongReady())
 	}
 
-	// Now the model has it, makes the song, and the user gets an audio message.
 	h.tg.reset()
 	h.llm.mu.Lock()
 	h.llm.requests = nil
@@ -94,7 +89,7 @@ func TestASongIsMadeAndDeliveredAsAudio(t *testing.T) {
 		if n == 0 {
 			return toolCall("generate_song", `{"lyrics":"[verse]\nباران می‌زنه روی شیشه شهر\nدلم می‌خواد برگردی دوباره\n\n[chorus]\nبمون کنارم تا صبح بشه\nشب تموم می‌شه و عشق می‌مونه","title":"باران","style":"Persian pop ballad, piano","gender":"female"}`), 0
 		}
-		if n == 1 { // the model chooses what is sent, as it always does
+		if n == 1 {
 			return toolCall("send_file", `{"filename":"Macron_AI_-_باران.mp3","caption":"🎤 **باران**"}`), 0
 		}
 		return map[string]any{"role": "assistant", "content": "آهنگ آماده شد 🎤"}, 0
@@ -116,8 +111,6 @@ func TestASongIsMadeAndDeliveredAsAudio(t *testing.T) {
 		}
 	}
 
-	// The words were kept: the lyrics file is beside the song but never sent by
-	// itself, and the next request names it, so «متنش رو بده» needs no transcribing.
 	if docs := h.tg.of("sendDocument"); len(docs) != 0 {
 		t.Errorf("the lyrics file is not sent unasked: %d documents", len(docs))
 	}
@@ -150,8 +143,6 @@ func toolNamesOf(req map[string]any) string {
 	return strings.Join(names, ",")
 }
 
-// A song's lyrics file is made by the song tool but is never offered as a
-// result to send: the song is.
 func TestASongsLyricsFileIsNotAnAutoDeliverable(t *testing.T) {
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
 	if err != nil {
@@ -165,7 +156,7 @@ func TestASongsLyricsFileIsNotAnAutoDeliverable(t *testing.T) {
 	if got := ft.made(); len(got) != 1 || got[0] != "Macron_AI_-_باران.mp3" {
 		t.Errorf("only the song is a result: %v", got)
 	}
-	// another tool's text file is still a result
+
 	ft2 := newFileTracker(sb, "s2")
 	ft2.start("download_file")
 	_ = sb.WriteFile("s2", "notes.txt", []byte("text"))

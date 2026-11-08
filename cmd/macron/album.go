@@ -13,21 +13,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Albums. Telegram sends each item of an album (a media group: several photos
-// or files picked together, with one caption) as its own message, all with the
-// same media_group_id, and the caption sits on only one of them. Handled one
-// by one, the first photo gets «what shall I do with it?» (no caption) and the
-// captioned one is refused as «busy». So the items are collected for a moment
-// and handled as ONE message: the captioned item, carrying the others.
-
 var (
-	albumQuiet = 1200 * time.Millisecond // an album is whole when no item came for this long…
-	albumMax   = 6 * time.Second         // …or after this long, whatever comes
+	albumQuiet = 1200 * time.Millisecond
+	albumMax   = 6 * time.Second
 )
 
 const (
-	albumItems    = 10 // Telegram's limit for an album
-	albumImagesIn = 8  // pictures shown to the model; the rest are in the workspace by name
+	albumItems    = 10
+	albumImagesIn = 8
 )
 
 type albumKey struct {
@@ -41,14 +34,11 @@ type albumBuf struct {
 	timer *time.Timer
 }
 
-// albumCollector gathers the items of albums still arriving.
 type albumCollector struct {
 	mu   sync.Mutex
 	bufs map[albumKey]*albumBuf
 }
 
-// add takes one item; fire gets the whole album once it is complete.
-// wg counts the pending timers, so a shutdown waits for them.
 func (c *albumCollector) add(m *telegram.Message, wg *sync.WaitGroup, fire func([]*telegram.Message)) {
 	key := albumKey{m.Chat.ID, m.MediaGroupID}
 	c.mu.Lock()
@@ -70,13 +60,13 @@ func (c *albumCollector) add(m *telegram.Message, wg *sync.WaitGroup, fire func(
 		wait = 0
 	}
 	if buf.timer != nil && buf.timer.Stop() {
-		wg.Done() // the timer it replaces never fires
+		wg.Done()
 	}
 	wg.Add(1)
 	buf.timer = time.AfterFunc(wait, func() {
 		defer wg.Done()
 		c.mu.Lock()
-		if c.bufs[key] != buf { // an earlier timer already took the album
+		if c.bufs[key] != buf {
 			c.mu.Unlock()
 			return
 		}
@@ -92,8 +82,6 @@ func (c *albumCollector) add(m *telegram.Message, wg *sync.WaitGroup, fire func(
 	})
 }
 
-// mergeAlbum is the one message an album becomes: the item with the caption
-// (else the first), with the other items in Album, in the order they were sent.
 func mergeAlbum(items []*telegram.Message) *telegram.Message {
 	items = append([]*telegram.Message(nil), items...)
 	sort.SliceStable(items, func(i, j int) bool { return items[i].MessageID < items[j].MessageID })
@@ -117,8 +105,6 @@ func mergeAlbum(items []*telegram.Message) *telegram.Message {
 	return &merged
 }
 
-// attachAll is attach for a message and the rest of its album: every item is
-// saved in the workspace and the model gets one description of them all.
 func (b *Bot) attachAll(ctx context.Context, session string, m *telegram.Message, vision bool, lead string, fresh bool) (*attachment, error) {
 	if len(m.Album) == 0 {
 		return b.attach(ctx, session, m, vision, lead, fresh)

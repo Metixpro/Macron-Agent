@@ -8,16 +8,12 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------- polls
-
-// Poll is a question the assistant asked a user with a Telegram poll; the
-// vote continues the conversation.
 type Poll struct {
 	PollID     string
 	UserID     int64
 	ChatID     int64
 	ChatType   string
-	MessageID  int64 // the poll message
+	MessageID  int64
 	Question   string
 	Options    []string
 	Multiple   bool
@@ -51,7 +47,6 @@ func (s *Store) Poll(ctx context.Context, pollID string) (*Poll, error) {
 	return &p, nil
 }
 
-// MarkPollAnswered records the answer once; false means it was already answered.
 func (s *Store) MarkPollAnswered(ctx context.Context, pollID string) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE polls SET answered_at = ? WHERE poll_id = ? AND answered_at IS NULL`, s.Now(), pollID)
 	if err != nil {
@@ -61,7 +56,6 @@ func (s *Store) MarkPollAnswered(ctx context.Context, pollID string) (bool, erro
 	return n == 1, err
 }
 
-// DeleteOldPolls removes polls older than the given age.
 func (s *Store) DeleteOldPolls(ctx context.Context, age time.Duration) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM polls WHERE created_at < ?`, s.Now().Add(-age))
 	if err != nil {

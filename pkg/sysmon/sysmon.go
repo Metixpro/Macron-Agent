@@ -1,7 +1,3 @@
-// Package sysmon watches the server the bot runs on: CPU, memory, disk and
-// network from /proc, the bot's own service (its cgroup, so the programs it started
-// it starts count), the busiest processes, a day of history and alerts
-// when a limit is crossed. Linux only: elsewhere every reading is empty.
 package sysmon
 
 import (
@@ -19,19 +15,16 @@ import (
 )
 
 const (
-	// DefaultInterval is how often the server is read.
 	DefaultInterval = 15 * time.Second
-	// Keep is how much history is kept.
+
 	Keep = 24 * time.Hour
 )
 
-// Disk is one filesystem.
 type Disk struct {
 	Path        string
 	Total, Free uint64
 }
 
-// UsedPct is how full the disk is.
 func (d Disk) UsedPct() float64 {
 	if d.Total == 0 {
 		return 0
@@ -39,38 +32,35 @@ func (d Disk) UsedPct() float64 {
 	return 100 * float64(d.Total-d.Free) / float64(d.Total)
 }
 
-// Service is the bot's own service.
 type Service struct {
-	Cores      float64 // CPU in use, in cores (all its processes)
-	Mem        uint64  // memory in use (bytes)
-	MemHigh    uint64  // the service's soft memory limit (0: none)
-	MemMax     uint64  // its hard limit (0: none)
-	Threads    int     // threads of the bot process
-	FDs        int     // open files of the bot process
-	ProcessRSS uint64  // the bot process alone
-	Cgroup     bool    // Mem and Cores are of its cgroup (else of its process tree)
+	Cores      float64
+	Mem        uint64
+	MemHigh    uint64
+	MemMax     uint64
+	Threads    int
+	FDs        int
+	ProcessRSS uint64
+	Cgroup     bool
 }
 
-// Snapshot is the server at one moment.
 type Snapshot struct {
 	At        time.Time
-	CPU       float64   // % of the whole machine since the last reading
-	Cores     []float64 // % of each core
+	CPU       float64
+	Cores     []float64
 	CoreCount int
 	Load      [3]float64
 	MemTotal  uint64
-	MemUsed   uint64 // total less what can be given back (available)
+	MemUsed   uint64
 	SwapTotal uint64
 	SwapUsed  uint64
-	NetRx     float64 // bytes per second, all real interfaces
+	NetRx     float64
 	NetTx     float64
 	Uptime    time.Duration
 	Disks     []Disk
 	Service   Service
-	Ready     bool // two readings were made: the rates are real
+	Ready     bool
 }
 
-// MemPct is the memory in use, in percent.
 func (s Snapshot) MemPct() float64 {
 	if s.MemTotal == 0 {
 		return 0
@@ -78,18 +68,16 @@ func (s Snapshot) MemPct() float64 {
 	return 100 * float64(s.MemUsed) / float64(s.MemTotal)
 }
 
-// Point is one reading kept in the history.
 type Point struct {
 	At      time.Time
 	CPU     float32
-	Mem     float32 // %
+	Mem     float32
 	Load1   float32
 	NetRx   float32
 	NetTx   float32
-	DiskPct float32 // the fullest watched disk
+	DiskPct float32
 }
 
-// Bucket is a stretch of the history: averages and peaks.
 type Bucket struct {
 	At           time.Time
 	CPU, CPUMax  float64
@@ -100,29 +88,25 @@ type Bucket struct {
 	Samples      int
 }
 
-// Proc is a process.
 type Proc struct {
 	PID     int
 	Name    string
 	Cmd     string
-	CPU     float64 // % of one core over the last interval
+	CPU     float64
 	RSS     uint64
 	Threads int
 }
 
-// Options configure a Sampler.
 type Options struct {
 	Interval time.Duration
-	// Disks are the paths whose filesystems are watched.
+
 	Disks []string
-	// ProcRoot and CgroupRoot are the places /proc and /sys/fs/cgroup are
-	// read from (tests).
+
 	ProcRoot, CgroupRoot string
-	// Alerts, when set, are checked after every reading.
+
 	Alerts *Watch
 }
 
-// Sampler reads the server and keeps its history. Safe for concurrent use.
 type Sampler struct {
 	opt Options
 
@@ -133,13 +117,12 @@ type Sampler struct {
 	n      int
 	prev   raw
 	procs  map[int]procTick
-	procs2 map[int]procTick // the readings before procs, for rates
+	procs2 map[int]procTick
 	tops   []Proc
-	clk    float64 // clock ticks a second
+	clk    float64
 	now    func() time.Time
 }
 
-// New returns a sampler; Run it, or call Sample yourself.
 func New(opt Options) *Sampler {
 	if opt.Interval <= 0 {
 		opt.Interval = DefaultInterval
@@ -154,7 +137,6 @@ func New(opt Options) *Sampler {
 	return &Sampler{opt: opt, ring: make([]Point, size), clk: 100, now: time.Now}
 }
 
-// Run samples until ctx ends.
 func (s *Sampler) Run(ctx context.Context) {
 	s.Sample()
 	t := time.NewTicker(s.opt.Interval)
@@ -169,7 +151,6 @@ func (s *Sampler) Run(ctx context.Context) {
 	}
 }
 
-// Latest is the last reading (zero before the first).
 func (s *Sampler) Latest() Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -184,18 +165,16 @@ func (s *Sampler) read(name string) string {
 	return string(b)
 }
 
-// raw is what the rates are computed from.
 type raw struct {
 	at      time.Time
 	cpu     cpuTimes
 	cores   []cpuTimes
 	rx, tx  uint64
-	svcUsec uint64 // the cgroup's cpu usage, microseconds
-	svcTick uint64 // the process tree's, in clock ticks
+	svcUsec uint64
+	svcTick uint64
 	ok      bool
 }
 
-// Sample reads the server now.
 func (s *Sampler) Sample() Snapshot {
 	now := s.now()
 	sample := Snapshot{At: now}
@@ -252,7 +231,7 @@ func (s *Sampler) Sample() Snapshot {
 		s.n = min(s.n+1, len(s.ring))
 	}
 	s.mu.Unlock()
-	if w := s.opt.Alerts; w != nil && sample.Ready { // outside the lock: it asks the sampler for the history
+	if w := s.opt.Alerts; w != nil && sample.Ready {
 		w.check(s, sample)
 	}
 	return sample
@@ -265,7 +244,6 @@ func rate(cur, prev uint64, dt float64) float64 {
 	return float64(cur-prev) / dt
 }
 
-// points returns the readings of the last d, oldest first.
 func (s *Sampler) points(d time.Duration) []Point {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -280,8 +258,6 @@ func (s *Sampler) points(d time.Duration) []Point {
 	return out
 }
 
-// History is the last d in n buckets, oldest first; a bucket with no
-// readings is left out.
 func (s *Sampler) History(d time.Duration, n int) []Bucket {
 	pts := s.points(d)
 	if len(pts) == 0 || n <= 0 {
@@ -317,8 +293,6 @@ func (s *Sampler) History(d time.Duration, n int) []Bucket {
 	return kept
 }
 
-// Average is the mean of what f reads from the readings of the last d
-// (ok false: none yet).
 func (s *Sampler) average(d time.Duration, f func(Point) float64) (float64, bool) {
 	pts := s.points(d)
 	if len(pts) == 0 {
@@ -331,8 +305,6 @@ func (s *Sampler) average(d time.Duration, f func(Point) float64) (float64, bool
 	return sum / float64(len(pts)), true
 }
 
-// ---------------------------------------------------------------- processes
-
 type procTick struct {
 	ticks   uint64
 	name    string
@@ -341,7 +313,6 @@ type procTick struct {
 	at      time.Time
 }
 
-// scanProcs reads every process (caller holds mu).
 func (s *Sampler) scanProcs(now time.Time) {
 	entries, err := os.ReadDir(s.opt.ProcRoot)
 	if err != nil {
@@ -375,8 +346,6 @@ func (s *Sampler) scanProcs(now time.Time) {
 	}
 }
 
-// treeCores is the CPU of the bot process and its children, in cores, from
-// the process table (when no cgroup says better).
 func (s *Sampler) treeCores() float64 {
 	own := os.Getpid()
 	var sum float64
@@ -388,7 +357,6 @@ func (s *Sampler) treeCores() float64 {
 	return sum
 }
 
-// Top is the n busiest processes by CPU ("cpu") or memory ("mem").
 func (s *Sampler) Top(n int, by string) []Proc {
 	s.mu.RLock()
 	list := append([]Proc(nil), s.tops...)
@@ -428,10 +396,6 @@ func (s *Sampler) cmdline(pid int) string {
 	return strings.ToValidUTF8(out, "")
 }
 
-// ---------------------------------------------------------------- the bot's service
-
-// service reads the bot's own service: its cgroup when there is one (it
-// holds the programs the bot started), else its process alone.
 func (s *Sampler) service() (Service, uint64) {
 	var svc Service
 	if b, err := os.ReadFile(filepath.Join(s.opt.ProcRoot, "self", "status")); err == nil {
@@ -459,7 +423,7 @@ func (s *Sampler) service() (Service, uint64) {
 		}
 	}
 	if path == "" || path == "/" {
-		return svc, 0 // the root cgroup is the whole machine: not the service's
+		return svc, 0
 	}
 	dir := filepath.Join(s.opt.CgroupRoot, path)
 	cur, ok := readUint(filepath.Join(dir, "memory.current"))
@@ -480,7 +444,6 @@ func (s *Sampler) service() (Service, uint64) {
 	return svc, usec
 }
 
-// readUint reads a number from a file ("max" and unreadable: ok false, 0).
 func readUint(path string) (uint64, bool) {
 	b, err := os.ReadFile(path)
 	if err != nil {

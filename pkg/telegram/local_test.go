@@ -19,10 +19,10 @@ func TestLocalServerGuess(t *testing.T) {
 		"http://127.0.0.1:8081":           true,
 		"http://localhost:8081/":          true,
 		"http://10.0.0.5:8081":            true,
-		"http://telegram-bot-api:8081":    true, // a container
+		"http://telegram-bot-api:8081":    true,
 		"http://[::1]:8081":               true,
 		"https://api.telegram.org":        false,
-		"https://tg.my-proxy.workers.dev": false, // a proxy of api.telegram.org keeps its limits
+		"https://tg.my-proxy.workers.dev": false,
 		"https://8.8.8.8":                 false,
 		"":                                false,
 	} {
@@ -32,8 +32,6 @@ func TestLocalServerGuess(t *testing.T) {
 	}
 }
 
-// Through a local server the limits are 2000 MB, and a received file is read
-// from the server's disk (getFile names it there) instead of over HTTP.
 func TestLocalModeReadsFilesFromDisk(t *testing.T) {
 	dir := t.TempDir()
 	onDisk := filepath.Join(dir, "123:SECRET", "videos", "file_7.mp4")
@@ -45,7 +43,7 @@ func TestLocalModeReadsFilesFromDisk(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/getFile"):
 			path := onDisk
 			if strings.Contains(r.FormValue("file_id")+readBody(r), "remote") {
-				path = "/elsewhere/file_8.mp4" // another machine's disk
+				path = "/elsewhere/file_8.mp4"
 			}
 			fmt.Fprintf(w, `{"ok":true,"result":{"file_id":"x","file_size":15,"file_path":%q}}`, path)
 		default:

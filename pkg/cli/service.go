@@ -15,41 +15,22 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
-// unitName and launchLabel are the profile's service (config.Profile).
 var (
 	unitName    = config.ServiceName() + ".service"
 	launchLabel = "app.macron.agent" + strings.TrimPrefix(config.ServiceName(), "macron")
 )
 
-// unit describes how the agent runs as a service.
 type unit struct {
 	Binary string
 	Home   string
-	User   string // "" for a user-level service
-	System bool   // a system service (root) rather than a user one
+	User   string
+	System bool
 }
 
-// renderSystemd writes the unit file. It sets no restricting options on
-// purpose: the personal agent runs with the full rights of its user. Only the
-// agent itself is stopped with the service (KillMode=process): a server or a
-// bot it started on its own (nohup setsid, a unit of its own) keeps running
-// through a restart or an update.
-//
-// systemd reads each setting differently, so each value is written the way its
-// own setting reads it:
-//   - WorkingDirectory= takes the raw rest of the line: no quotes (a quoted
-//     value is "not absolute" and the unit is refused) and no C escapes, so a
-//     space stays a plain space. Only specifiers (%) are escaped.
-//   - Environment= splits on spaces and honours "quotes" with C escapes.
-//   - ExecStart= is the same, and also expands $VAR, so $ is doubled.
-//
-// A line break would start a new setting, so it is always dropped.
 func systemdPath(p string) string {
 	return strings.NewReplacer("%", "%%", "\n", "", "\r", "").Replace(p)
 }
 
-// systemdWord writes one word for Environment= or ExecStart=: bare when it is
-// plain, otherwise in quotes with \ and " escaped.
 func systemdWord(s string, execValue bool) string {
 	s = systemdPath(s)
 	if execValue {
@@ -79,9 +60,6 @@ func renderSystemd(u unit) string {
 	return sb.String()
 }
 
-// verifyUnit asks systemd itself whether the unit file is valid, before it is
-// enabled. ok=false with a nil error means systemd-analyze could not run here
-// (missing, or no user manager to ask, as under sudo or cron): not a bad unit.
 func verifyUnit(u unit, path string) (out string, checked bool, err error) {
 	if _, lerr := exec.LookPath("systemd-analyze"); lerr != nil {
 		return "", false, nil
@@ -93,7 +71,7 @@ func verifyUnit(u unit, path string) (out string, checked bool, err error) {
 	b, err := exec.Command("systemd-analyze", args...).CombinedOutput()
 	out = string(b)
 	if err != nil && strings.Contains(out, "Failed to initialize manager") {
-		// The user manager is out of reach; the plain check still reads the file.
+
 		b, err = exec.Command("systemd-analyze", "verify", path).CombinedOutput()
 		out = string(b)
 		if err != nil && strings.Contains(out, "Failed to initialize manager") {
@@ -106,8 +84,7 @@ func verifyUnit(u unit, path string) (out string, checked bool, err error) {
 	if err == nil {
 		return out, true, nil
 	}
-	// Only lines about this file count: a broken unrelated unit on the host is
-	// not this install's fault.
+
 	base := filepath.Base(path)
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, base) {
@@ -117,7 +94,6 @@ func verifyUnit(u unit, path string) (out string, checked bool, err error) {
 	return out, true, err
 }
 
-// renderLaunchd writes the launchd property list (macOS).
 func renderLaunchd(u unit) string {
 	escape := func(s string) string {
 		var b bytes.Buffer
@@ -192,7 +168,7 @@ func currentUnit() (unit, error) {
 		u.User = cu.Username
 	}
 	if u.System {
-		// Under sudo the service belongs to the person who typed it, not to root.
+
 		if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
 			if tu, err := user.Lookup(su); err == nil {
 				u.User = tu.Username
@@ -248,7 +224,7 @@ func serviceInstall(io *IO) int {
 	} else if !checked {
 		io.println("⚠️  systemd-analyze could not check the unit here; enabling it anyway.")
 	}
-	if u.System && u.User != "" && u.User != "root" { // the service runs as that user: its files must be its own
+	if u.System && u.User != "" && u.User != "root" {
 		if tu, err := user.Lookup(u.User); err == nil {
 			uid, _ := strconv.Atoi(tu.Uid)
 			gid, _ := strconv.Atoi(tu.Gid)
@@ -261,15 +237,14 @@ func serviceInstall(io *IO) int {
 		}
 	}
 	ctl := systemctl(u)
-	// enable + restart (not enable --now): a second install must also replace a
-	// running agent with the current binary and unit.
+
 	for _, a := range [][]string{{"daemon-reload"}, {"enable", unitName}, {"restart", unitName}} {
 		if err := run(io, ctl[0], append(ctl[1:], a...)...); err != nil {
 			io.printf("❌ systemctl %s: %v\n", strings.Join(a, " "), err)
 			return 1
 		}
 	}
-	if !u.System { // a user service stops with the last login unless it lingers
+	if !u.System {
 		if cu, err := user.Current(); err == nil {
 			if err := exec.Command("loginctl", "enable-linger", cu.Username).Run(); err != nil {
 				io.println("⚠️  could not enable lingering: the agent will stop when you log out. Fix: sudo loginctl enable-linger " + cu.Username)
@@ -280,7 +255,6 @@ func serviceInstall(io *IO) int {
 	return 0
 }
 
-// systemctl is the command prefix for the unit's manager.
 func systemctl(u unit) []string {
 	if u.System {
 		return []string{"systemctl"}
@@ -324,7 +298,7 @@ func serviceControl(io *IO, action string) int {
 		args = append(args, "--no-pager")
 	}
 	if err := run(io, ctl[0], args...); err != nil {
-		if action == "status" { // systemctl status exits non-zero for a stopped service
+		if action == "status" {
 			return 3
 		}
 		io.printf("❌ systemctl %s: %v\n", action, err)
@@ -387,7 +361,6 @@ func exitCode(err error) int {
 	return 0
 }
 
-// logs shows the agent's log: the journal on Linux, the log file on macOS.
 func logs(io *IO, args []string) int {
 	follow := false
 	lines := "100"

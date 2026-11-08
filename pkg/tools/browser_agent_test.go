@@ -18,8 +18,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/search"
 )
 
-// scriptedModel answers the browser agent's calls with a function of the
-// call, and keeps every request.
 type scriptedModel struct {
 	mu    sync.Mutex
 	reqs  []llm.Request
@@ -77,7 +75,6 @@ func TestAgentJSONReadsWhatWeakModelsWrite(t *testing.T) {
 	}
 }
 
-// bridgeCall posts one chat to a bridge over its socket.
 func bridgeCall(t *testing.T, sock, token, path string, body any) (int, map[string]any) {
 	t.Helper()
 	cl := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -128,7 +125,7 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 			return `{"evaluation_previous_goal":"ok","memory":"","next_goal":"Open the cart","action":[{"click":{"index":2}}]}`, nil
 		}
 		if n%2 == 1 {
-			return "I think I should click the cart.", nil // prose: the bridge asks once more
+			return "I think I should click the cart.", nil
 		}
 		return `{"evaluation_previous_goal":"","memory":"","next_goal":"Read","action":[{"extract":{"query":"price"}}]}`, nil
 	}}
@@ -161,7 +158,6 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 		t.Fatalf("refused calls never reach the model")
 	}
 
-	// Prose, then the corrected object: the agent gets only the object.
 	st, out := bridgeCall(t, sock, b.token, "/v1/chat/completions", agentChat(shot))
 	if st != http.StatusOK || !strings.Contains(content(out), `"click":{"index":2}`) {
 		t.Fatalf("corrected: %d %v", st, out)
@@ -175,7 +171,6 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 		t.Errorf("the screenshot reaches the model: %+v", reqs)
 	}
 
-	// A link instead of an inline picture is never passed on (the provider would fetch it).
 	_, _ = bridgeCall(t, sock, b.token, "/v1/chat/completions", agentChat("http://10.0.0.1/admin.png"))
 	for _, r := range m.requests()[2:] {
 		for _, msg := range r.Messages {
@@ -187,7 +182,6 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 		}
 	}
 
-	// A model that cannot see: the rest of the run goes without screenshots.
 	refuseImages = true
 	before := len(m.requests())
 	st, out = bridgeCall(t, sock, b.token, "/v1/chat/completions", agentChat(shot))
@@ -198,7 +192,6 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 		t.Errorf("the call is tried again without the screenshot: %d calls", got)
 	}
 
-	// The run's budget (2 steps: 16 calls) runs out; then nothing reaches the model.
 	for i := 0; i < 20; i++ {
 		st, out = bridgeCall(t, sock, b.token, "/v1/chat/completions", agentChat(shot))
 	}
@@ -209,7 +202,6 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 		t.Errorf("calls %d, model saw %d, cap %d", calls, len(m.requests()), b.maxCalls)
 	}
 
-	// A provider's failure says nothing of the provider.
 	b2, _ := newLLMBridge(context.Background(), &scriptedModel{reply: func(int, llm.Request) (string, error) {
 		return "", &llm.APIError{Status: 500, Body: "upstream https://10.1.2.3:8443 secret-provider failed"}
 	}}, 2)
@@ -222,7 +214,6 @@ func TestBridgeKeepsTheModelBehindItsGuards(t *testing.T) {
 	}
 }
 
-// agentRegistry is a registry with browser-use and a scripted model.
 func agentRegistry(t *testing.T, model llm.ChatClient) *Registry {
 	t.Helper()
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
@@ -246,7 +237,7 @@ func TestBrowserAgentWorksASiteOnItsOwn(t *testing.T) {
 				return "plain answer", nil
 			case strings.Contains(state, "waze phone"):
 				return `{"evaluation_previous_goal":"Results are shown","memory":"","next_goal":"Report","action":[{"done":{"text":"Found 2 results: waze phone, waze case","success":true}}]}`, nil
-			default: // a weak model's tool call: the bridge turns it into the action
+			default:
 				return "Now I search.\n<tool_call>\n{\"name\": \"navigate\", \"arguments\": {\"url\": \"" + site.URL + "/search?q=waze\"}}\n</tool_call>", nil
 			}
 		}}
@@ -276,7 +267,7 @@ func TestBrowserAgentWorksASiteOnItsOwn(t *testing.T) {
 		if !seen {
 			t.Errorf("the model never saw a screenshot")
 		}
-		// The cookies it got are the browser tool's too.
+
 		if r.browser.agentPython != "" && r.browser.chrome != "" {
 			if out := call(t, r, "u", ToolBrowser, map[string]any{"url": site.URL, "screenshot": false}); !strings.Contains(out, "welcome back") {
 				t.Errorf("cookies are shared with browser:\n%s", out)
@@ -300,8 +291,6 @@ func TestBrowserAgentRefusesBadInput(t *testing.T) {
 	}
 }
 
-// TestLiveBrowserAgent runs browser_agent on a real model (WAZE_TEST_LLM_URL,
-// WAZE_TEST_LLM_KEY, WAZE_TEST_LLM_MODEL) against a small local shop.
 func TestLiveBrowserAgent(t *testing.T) {
 	url, key, model := os.Getenv("WAZE_TEST_LLM_URL"), os.Getenv("WAZE_TEST_LLM_KEY"), os.Getenv("WAZE_TEST_LLM_MODEL")
 	if url == "" || key == "" || model == "" {

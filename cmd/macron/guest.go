@@ -13,13 +13,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Guest mode (Bot API 10.0): with "Guest Mode" on in BotFather's Mini App,
-// anyone can write "@WazeAiChatBot 25 * 40" in any private chat or group,
-// even one the bot is not in, or reply to the bot's guest answer. The bot
-// receives Update.guest_message (the summoning message and the one it
-// replies to) and sends exactly one reply with answerGuestQuery.
-
-// handleGuest answers a guest message.
 func (b *Bot) handleGuest(m *telegram.Message) {
 	if b.personal && !m.Chat.Private() {
 		return
@@ -42,7 +35,7 @@ func (b *Bot) handleGuest(m *telegram.Message) {
 		return
 	}
 	about := fmt.Sprintf(guestAbout, chatKindEn(m.Chat.Type))
-	// The one reply goes out now, as «thinking»; it becomes the answer.
+
 	g := b.guestThinking(ctx, m.GuestQueryID, l)
 	_ = b.handlePrompt(user, m, text, promptOptions{noReact: true, about: about})
 	if g != nil {
@@ -50,7 +43,6 @@ func (b *Bot) handleGuest(m *telegram.Message) {
 	}
 }
 
-// finishGuest ends a placeholder the run left alone: never «thinking» for good.
 func (b *Bot) finishGuest(g *guestReply, l lang) {
 	if g.isFinal() {
 		return
@@ -74,7 +66,6 @@ func chatKindEn(t string) string {
 
 var mentionSep = regexp.MustCompile(`^[\s,:،\-]+`)
 
-// stripMention removes "@botname" from the text.
 func stripMention(text, username string) string {
 	if username != "" {
 		re := regexp.MustCompile(`(?i)@` + regexp.QuoteMeta(username) + `\b`)
@@ -83,24 +74,18 @@ func stripMention(text, username string) string {
 	return strings.TrimSpace(mentionSep.ReplaceAllString(strings.TrimSpace(text), ""))
 }
 
-// guestReply is the one message a guest query gets when the work takes a
-// while: a «thinking» placeholder sent right away, edited with what the bot
-// is doing, and finally with the answer (or a notice). After that it does
-// not change any more.
 type guestReply struct {
 	b        *Bot
 	queryID  string
-	inlineID string // the placeholder, edited by its inline_message_id
+	inlineID string
 	lng      lang
 
-	mu    sync.Mutex // one edit at a time: a late status never lands on the answer
-	rich  bool       // the placeholder is a rich message (edits stay rich)
-	final bool       // the answer is in
-	shown string     // what a status edit shows now
+	mu    sync.Mutex
+	rich  bool
+	final bool
+	shown string
 }
 
-// guestThinking sends the placeholder. nil when it could not be sent, or
-// the server gave no id to edit it with: the answer then goes the old way.
 func (b *Bot) guestThinking(ctx context.Context, queryID string, l lang) *guestReply {
 	if b.guestStubOff.Load() || b.guestReply(queryID) != nil {
 		return nil
@@ -136,16 +121,15 @@ func (b *Bot) guestThinking(ctx context.Context, queryID string, l lang) *guestR
 				log.Printf("guest query %s: placeholder: %v", queryID, err)
 				return nil
 			}
-			continue // a plainer look
+			continue
 		}
 		if id == "" {
-			// An older server: nothing to edit. The answer tries the old way
-			// (one answerGuestQuery), and later queries skip the placeholder.
+
 			log.Printf("guest query %s: no inline_message_id: guest answers go without a «thinking» placeholder", queryID)
 			b.guestStubOff.Store(true)
 			return nil
 		}
-		b.guestAnswered.Store(queryID, true) // the one answerGuestQuery is spent
+		b.guestAnswered.Store(queryID, true)
 		time.AfterFunc(10*time.Minute, func() { b.guestAnswered.Delete(queryID) })
 		g.inlineID = id
 		_, g.rich = try.(map[string]any)["input_message_content"].(map[string]any)["rich_message"]
@@ -163,7 +147,6 @@ func (g *guestReply) isFinal() bool {
 	return g.final
 }
 
-// guestReply is the placeholder of a guest query, if it has one.
 func (b *Bot) guestReply(queryID string) *guestReply {
 	if v, ok := b.guestReplies.Load(queryID); ok {
 		return v.(*guestReply)
@@ -171,8 +154,6 @@ func (b *Bot) guestReply(queryID string) *guestReply {
 	return nil
 }
 
-// progress shows what the bot is doing (a status line), or the answer as it
-// is written, until the answer is in.
 func (g *guestReply) progress(ctx context.Context, md string, rtl, status bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -186,8 +167,6 @@ func (g *guestReply) progress(ctx context.Context, md string, rtl, status bool) 
 	}
 }
 
-// finishHTML puts a notice in place of the placeholder; false when it is
-// already final.
 func (g *guestReply) finishHTML(ctx context.Context, html string, kb *telegram.InlineKeyboardMarkup) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -208,8 +187,6 @@ func (g *guestReply) finishHTML(ctx context.Context, html string, kb *telegram.I
 	return true
 }
 
-// finishMarkdown puts the answer in place of the placeholder: rich when the
-// placeholder is rich, otherwise HTML (cut to fit one message).
 func (g *guestReply) finishMarkdown(ctx context.Context, md string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -220,7 +197,7 @@ func (g *guestReply) finishMarkdown(ctx context.Context, md string) {
 	g.final = true
 	more := g.lng.f(textGuestMore, g.b.me.Username)
 	if g.rich {
-		body := telegram.FoldLong(md, foldOptions(g.lng)) // one reply: a long one folds
+		body := telegram.FoldLong(md, foldOptions(g.lng))
 		if len([]rune(body)) > telegram.MaxRichChars-400 {
 			body = telegram.CloseOpenMarkdown(textutil.TruncateRunes(md, telegram.MaxRichChars-400, "…")) + "\n\n" + more
 		}
@@ -244,8 +221,6 @@ func (g *guestReply) finishMarkdown(ctx context.Context, md string) {
 	}
 }
 
-// edit replaces the placeholder with md (g.mu held), premium emoji first; a
-// status line also gets its own icon.
 func (g *guestReply) edit(ctx context.Context, md string, rtl, status bool) error {
 	if !g.rich {
 		html := telegram.MarkdownToHTML(md)
@@ -266,7 +241,6 @@ func (g *guestReply) edit(ctx context.Context, md string, rtl, status bool) erro
 	return g.b.api.EditInlineRich(ctx, g.inlineID, telegram.RichMessage{Markdown: md, IsRTL: rtl}, nil)
 }
 
-// guestOnce makes sure a guest query is answered once (Telegram allows one reply).
 func (b *Bot) guestOnce(queryID string) bool {
 	if _, dup := b.guestAnswered.LoadOrStore(queryID, true); dup {
 		log.Printf("guest query %s: already answered", queryID)
@@ -276,7 +250,6 @@ func (b *Bot) guestOnce(queryID string) bool {
 	return true
 }
 
-// answerGuestHTML sends a short HTML reply (premium emoji when possible).
 func (b *Bot) answerGuestHTML(ctx context.Context, queryID, html string, kb *telegram.InlineKeyboardMarkup) {
 	if g := b.guestReply(queryID); g != nil {
 		g.finishHTML(ctx, html, kb)
@@ -296,8 +269,6 @@ func (b *Bot) answerGuestHTML(ctx context.Context, queryID, html string, kb *tel
 	}
 }
 
-// answerGuestMarkdown sends the assistant's answer: a rich message when the
-// server supports it, otherwise classic HTML (cut to fit one message).
 func (b *Bot) answerGuestMarkdown(ctx context.Context, queryID, md string, l lang) {
 	if g := b.guestReply(queryID); g != nil {
 		g.finishMarkdown(ctx, md)
@@ -308,9 +279,9 @@ func (b *Bot) answerGuestMarkdown(ctx context.Context, queryID, md string, l lan
 	}
 	more := l.f(textGuestMore, b.me.Username)
 	if !b.richOff.Load() {
-		body := telegram.FoldLong(md, foldOptions(l)) // one reply: a long one folds
+		body := telegram.FoldLong(md, foldOptions(l))
 		if len([]rune(body)) > telegram.MaxRichChars-400 {
-			body = md // too long even folded: cut, never inside a folded block
+			body = md
 			body = telegram.CloseOpenMarkdown(textutil.TruncateRunes(body, telegram.MaxRichChars-400, "…")) + "\n\n" + more
 		}
 		rtl := telegram.IsMostlyRTL(body)
@@ -334,7 +305,6 @@ func (b *Bot) answerGuestMarkdown(ctx context.Context, queryID, md string, l lan
 	}
 }
 
-// firstHTMLPart keeps what fits in one message, cutting at a safe place.
 func firstHTMLPart(html string, max int) string {
 	if parts := telegram.SplitHTML(html, max-10); len(parts) > 1 {
 		return parts[0] + "…"

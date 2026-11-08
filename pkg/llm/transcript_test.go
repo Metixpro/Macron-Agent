@@ -20,24 +20,24 @@ func TestNormalizeTranscript(t *testing.T) {
 	in := []Message{
 		{Role: "system", Content: "s"},
 		{Role: "user", Content: "do it"},
-		// A gateway that gives no ids: the calls and their results are paired in order.
+
 		{Role: "assistant", ToolCalls: []ToolCall{call("", "web_search"), call("", "run_code")}},
 		{Role: "tool", Content: "found"},
 		{Role: "user", Content: "(a message that came meanwhile)"},
 		{Role: "tool", Content: "ran"},
-		// One answered, one never: it gets a result of its own.
+
 		{Role: "assistant", ToolCalls: []ToolCall{call("a1", "x"), call("a2", "y")}},
 		{Role: "tool", ToolCallID: "a2", Content: "y done"},
-		// A result whose call is gone.
+
 		{Role: "tool", ToolCallID: "zz", Name: "z", Content: "lost"},
-		// The same id twice.
+
 		{Role: "assistant", ToolCalls: []ToolCall{call("d", "p"), call("d", "q")}},
 		{Role: "tool", ToolCallID: "d", Content: "p out"},
 		{Role: "tool", ToolCallID: "d", Content: "q out"},
 		{Role: "assistant", Content: "done"},
 	}
 	out := normalizeTranscript(in, true)
-	// Every call is answered right after it, by its own id.
+
 	for i, m := range out {
 		if m.Role != "assistant" || len(m.ToolCalls) == 0 {
 			continue
@@ -73,7 +73,6 @@ func TestNormalizeTranscript(t *testing.T) {
 		t.Error("the caller's messages are not changed")
 	}
 
-	// Without tools offered, no tool turn is left.
 	flat := normalizeTranscript(in, false)
 	for _, m := range flat {
 		if m.Role == "tool" || len(m.ToolCalls) > 0 || m.ToolCallID != "" {
@@ -105,7 +104,6 @@ func TestGatewayErrorsAndToolPairing(t *testing.T) {
 		}
 	}
 
-	// A gateway that refuses tool turns at all, and one that answers with an error as text.
 	var mu sync.Mutex
 	var bodies []string
 	mode := "strict"

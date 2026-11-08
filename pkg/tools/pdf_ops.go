@@ -9,14 +9,8 @@ import (
 	"time"
 )
 
-// The office jobs of pdf_tool: merging, extracting, deleting and rotating
-// pages, pages to pictures, pictures (scans, phone photos) to one PDF, and
-// making a PDF smaller. They run here (pdf_ops.py: pypdf, and
-// PyMuPDF or pdftoppm for pictures).
-
 const maxPDFImages = 20
 
-// pageSpec reads page lists as people write them: «۱ تا ۵، ۸» is "1-5, 8".
 func pageSpec(s string) string {
 	s = strings.NewReplacer("،", ",", "؛", ",", " تا ", "-", "تا", "-", "–", "-", "—", "-").Replace(s)
 	return strings.TrimSpace(strings.Map(func(r rune) rune {

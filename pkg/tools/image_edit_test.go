@@ -16,13 +16,12 @@ import (
 	"testing"
 )
 
-// fakeEditService plays the Nano Banana task service and a file host.
 type fakeEditService struct {
 	*httptest.Server
 	mu         sync.Mutex
 	created    []map[string][]string
 	polls      atomic.Int32
-	failWith   string // the task ends with this error
+	failWith   string
 	uploads    atomic.Int32
 	readyAfter int32
 }
@@ -66,7 +65,7 @@ func newFakeEditService(t *testing.T) *fakeEditService {
 		n := f.polls.Add(1)
 		switch {
 		case n == 1:
-			w.WriteHeader(http.StatusNotFound) // not visible yet, right after creation
+			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprint(w, `{"status":"error","error":"Task not found"}`)
 		case n <= f.readyAfter:
 			fmt.Fprint(w, `{"status":"processing","processed_image_url":null}`)

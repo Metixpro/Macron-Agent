@@ -6,15 +6,8 @@ import (
 	"testing"
 )
 
-// The tool-call formats models write into their text when their provider
-// does not turn them into native calls (a gateway's parser that fails, a
-// model without native calls, a model that falls back to its training
-// format). Each is read as the call it is; neither the live draft nor the
-// final answer ever shows any of it.
-
 var formatKnown = map[string]bool{"web_search": true, "bash_execute": true, "generate_chart": true, "write_file": true, "run_code": true}
 
-// markupSeen is what must never reach the user.
 var markupSeen = regexp.MustCompile(`(?i)<\s*/?\s*(?:[a-z0-9_-]+:)?(?:tool_call|tool_calls|function|function_calls?|invoke|parameter|arg_key|arg_value|tool_use|tools)\b|` +
 	`<[|｜]|[|｜]>|\[TOOL_CALLS\]|\[ARGS\]|to=functions\.|^\s*Action:|"name"\s*:\s*"(?:web_search|bash_execute|generate_chart|write_file|run_code)"|` +
 	`(?m:^\s*(?:web_search|bash_execute|generate_chart|write_file|run_code)\()|DSML|python_tag|functions\.[a-z_]+:\d`)
@@ -22,8 +15,8 @@ var markupSeen = regexp.MustCompile(`(?i)<\s*/?\s*(?:[a-z0-9_-]+:)?(?:tool_call|
 func TestEveryCallFormatIsReadAndNeverShown(t *testing.T) {
 	cases := []struct {
 		name, text string
-		calls      []string // the tools it calls ("" none: it is only kept from view)
-		keep       string   // words of the answer that stay
+		calls      []string
+		keep       string
 	}{
 		{"hermes (Qwen, MiMo, Hermes)", "باشه، الان می‌کشمش.\n<tool_call>\n{\"name\": \"generate_chart\", \"arguments\": {\"title\": \"فروش\", \"values\": [12, 18]}}\n</tool_call>",
 			[]string{"generate_chart"}, "الان می‌کشمش"},
@@ -75,7 +68,7 @@ func TestEveryCallFormatIsReadAndNeverShown(t *testing.T) {
 			if c.keep != "" && !strings.Contains(final, c.keep) {
 				t.Errorf("the answer lost its words: %q", final)
 			}
-			// Every moment of the stream (the live draft).
+
 			for i := 1; i <= len(c.text); i++ {
 				if !utf8Boundary(c.text, i) {
 					continue
@@ -90,8 +83,6 @@ func TestEveryCallFormatIsReadAndNeverShown(t *testing.T) {
 
 func utf8Boundary(s string, i int) bool { return i == len(s) || (s[i]&0xC0) != 0x80 }
 
-// TestOrdinaryAnswersStreamWhole: what only looks like a call (code with
-// snake_case functions, a JSON example, a link, a table) streams as written.
 func TestOrdinaryAnswersStreamWhole(t *testing.T) {
 	for _, s := range []string{
 		"سلام! این یه جواب معمولیه.\n\n- مورد اول\n- مورد دوم\n\n۱. قدم اول\n۲. قدم دوم",

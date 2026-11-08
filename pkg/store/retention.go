@@ -6,24 +6,18 @@ import (
 	"time"
 )
 
-// How long finished records are kept. The archive of conversations and the
-// users themselves are never removed here.
 const (
-	keepDailyUsage   = 90 * 24 * time.Hour  // per-user daily counters (quotas need today only)
-	keepStats        = 400 * 24 * time.Hour // the panel's statistics (a year and a bit)
-	keepLeftChats    = 180 * 24 * time.Hour // groups the bot left or was removed from
-	keepEndedJobs    = 90 * 24 * time.Hour  // scheduled tasks that ended
-	keepOpenJobs     = 3 * 24 * time.Hour   // an unfinished job nobody went on with (its files are gone by then)
-	keepBgTasks      = 7 * 24 * time.Hour   // a finished background task, listed in /tasks
-	keepCmdAudit     = 180 * 24 * time.Hour // the command gate's decisions
+	keepDailyUsage   = 90 * 24 * time.Hour
+	keepStats        = 400 * 24 * time.Hour
+	keepLeftChats    = 180 * 24 * time.Hour
+	keepEndedJobs    = 90 * 24 * time.Hour
+	keepOpenJobs     = 3 * 24 * time.Hour
+	keepBgTasks      = 7 * 24 * time.Hour
+	keepCmdAudit     = 180 * 24 * time.Hour
 	retentionBatch   = 5000
-	retentionMaxRuns = 40 // batches per table and pass (the next pass goes on)
+	retentionMaxRuns = 40
 )
 
-// Retention removes what no longer serves anyone, a batch at a time: old
-// daily counters and statistics, finished scheduled tasks,
-// groups the bot left long ago, and the memory, facts and cookies of users
-// that no longer exist. It reports how many rows each kind lost.
 func (s *Store) Retention(ctx context.Context) (map[string]int64, error) {
 	now := s.Now()
 	jobs := []struct {

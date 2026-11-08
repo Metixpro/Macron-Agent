@@ -299,8 +299,6 @@ func TestParseAndRender(t *testing.T) {
 	}
 }
 
-// A skill written by hand (the owner's editor, or the agent through a shell)
-// is found without a restart.
 func TestHandWrittenSkillsAreFound(t *testing.T) {
 	dir := t.TempDir()
 	st, err := New(dir)
@@ -318,7 +316,7 @@ func TestHandWrittenSkillsAreFound(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(folder, FileName), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	st.checked.Store(0) // the folder is looked at every few seconds; skip the wait
+	st.checked.Store(0)
 	if _, ok := st.Get("by-hand"); !ok {
 		t.Fatal("a skill written by hand must appear")
 	}

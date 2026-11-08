@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// fakeTreg answers like treg.to's routed web search.
 func fakeTreg(t *testing.T, answer func(w http.ResponseWriter, body map[string]any)) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
@@ -58,7 +57,7 @@ func ddgServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 
 func TestTregIsAskedFirst(t *testing.T) {
 	treg, _ := fakeTreg(t, func(w http.ResponseWriter, body map[string]any) {
-		if body["q"] != "golang generics" || body["limit"] != float64(8) { // more than asked: the lists are merged
+		if body["q"] != "golang generics" || body["limit"] != float64(8) {
 			t.Errorf("body: %v", body)
 		}
 		w.Header().Set("X-Treg-Served-By", "tinyfish.web.search")

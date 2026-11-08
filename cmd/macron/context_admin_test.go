@@ -70,9 +70,6 @@ func TestAProvidersOwnWindowComesFirst(t *testing.T) {
 	}
 }
 
-// A model name the bot does not know (a router's combo called «deep») gets a
-// big window by default, far more than the smallest model behind it can take:
-// the provider's page says so. A known name does not get the warning.
 func TestProviderPageWarnsAboutAnUnknownModelsWindowAndShowsItsCache(t *testing.T) {
 	h := newHarness(t)
 	ps, _ := h.st.Providers(bg)

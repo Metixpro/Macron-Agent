@@ -15,12 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// The board: the owner's jobs that outlive one conversation, in to do,
-// doing, blocked and done. The agent keeps it with kanban_board (add, move,
-// note, run); a card that runs on its own is a background task, with a budget
-// of its own and its report when it ends, and the card follows it. /board
-// shows it.
-
 const (
 	toolKanban    = "kanban_board"
 	boardDoneDays = 7
@@ -103,7 +97,6 @@ func (b *Bot) kanbanTool(u *store.User, m *telegram.Message) agent.LocalTool {
 	}
 }
 
-// syncBoard moves the cards whose background task ended.
 func (b *Bot) syncBoard(ctx context.Context, uid int64, cards []store.Card) []store.Card {
 	for i, c := range cards {
 		if c.BgTask == 0 || c.Status != store.CardDoing {
@@ -124,7 +117,6 @@ func (b *Bot) syncBoard(ctx context.Context, uid int64, cards []store.Card) []st
 	return cards
 }
 
-// boardText is the board in four columns.
 func (b *Bot) boardText(ctx context.Context, uid int64, l lang) string {
 	cards, err := b.st.Cards(ctx, uid, boardDoneDays)
 	if err != nil {
@@ -158,7 +150,6 @@ func (b *Bot) boardText(ctx context.Context, uid int64, l lang) string {
 	return strings.TrimSpace(sb.String())
 }
 
-// boardCommand is /board.
 func (b *Bot) boardCommand(ctx context.Context, m *telegram.Message, l lang) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

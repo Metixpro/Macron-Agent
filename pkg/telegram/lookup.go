@@ -8,13 +8,6 @@ import (
 	"time"
 )
 
-// What a Telegram id tells by itself: the data center of an account (read
-// from a file id of its profile picture, which lives there) and roughly when
-// the account was made (ids grow over time).
-
-// FileDC is the data center a file id points to (0 when it cannot be read).
-// A file id is URL-safe base64 of a run-length encoded record whose first
-// two little-endian int32 are the file type and the data center.
 func FileDC(fileID string) int {
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(fileID, "="))
 	if err != nil {
@@ -22,7 +15,7 @@ func FileDC(fileID string) int {
 	}
 	var out []byte
 	zero := false
-	for _, c := range raw { // zeros are stored as 0x00 followed by how many
+	for _, c := range raw {
 		switch {
 		case zero:
 			out = append(out, make([]byte, c)...)
@@ -42,7 +35,6 @@ func FileDC(fileID string) int {
 	return 0
 }
 
-// DCLocation is where a data center is.
 func DCLocation(dc int) string {
 	switch dc {
 	case 1, 3:
@@ -55,8 +47,6 @@ func DCLocation(dc int) string {
 	return ""
 }
 
-// knownAges are user ids whose accounts' creation dates are known (from
-// GetIDs, github.com/kraloveckey/getids-bot, MIT): milliseconds since 1970.
 var knownAges = map[int64]int64{
 	2768409: 1383264000000, 7679610: 1388448000000, 11538514: 1391212000000, 15835244: 1392940000000, 23646077: 1393459000000,
 	38015510: 1393632000000, 44634663: 1399334000000, 46145305: 1400198000000, 54845238: 1411257000000, 63263518: 1414454000000,
@@ -74,8 +64,6 @@ type agePoint struct {
 	at time.Time
 }
 
-// agePoints are the known ages by id, their dates made non-decreasing (ids
-// are not handed out strictly in order).
 var agePoints = func() []agePoint {
 	var pts []agePoint
 	for id, ms := range knownAges {
@@ -90,16 +78,12 @@ var agePoints = func() []agePoint {
 	return pts
 }()
 
-// AccountAge estimates when a user account was made from its id: between
-// two known ids the date is interpolated (Approx); before the first known
-// one the account is older (Before), after the last one newer (After).
 type AccountAge struct {
 	When          time.Time
 	Approx, After bool
 	Before        bool
 }
 
-// EstimateAccountAge estimates an account's creation date (users only; zero for chats and bots ids ≤ 0).
 func EstimateAccountAge(id int64) (AccountAge, bool) {
 	if id <= 0 || len(agePoints) == 0 {
 		return AccountAge{}, false

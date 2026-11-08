@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// The panel never waits for the walk of the workspaces: it shows the last
-// measure, and a new one runs in the background (one at a time).
 func TestUsageIsMeasuredInTheBackground(t *testing.T) {
 	var c usageCache
 	var runs atomic.Int32
@@ -68,12 +66,11 @@ func TestDirUsageCountsFiles(t *testing.T) {
 	}
 }
 
-// The stats button answers even while the workspaces are still being measured.
 func TestStatsButtonDoesNotWaitForTheDisk(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(55, "سلام"))
 	h.bot.usage.mu.Lock()
-	h.bot.usage.last = diskUsage{Walked: true} // a walk that never ends
+	h.bot.usage.last = diskUsage{Walked: true}
 	h.bot.usage.mu.Unlock()
 	h.tg.reset()
 	start := time.Now()

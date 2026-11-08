@@ -7,9 +7,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-// A page is read without its frame: the article, its headings, table rows
-// and code as written; not the menu, the language list, the footer, the
-// share buttons or the citation marks.
 func TestReadableTextKeepsTheContent(t *testing.T) {
 	para := strings.Repeat("The tower is the tallest in the country and one of the city's symbols. ", 6)
 	page := `<html><body>
@@ -50,15 +47,12 @@ func TestReadableTextKeepsTheContent(t *testing.T) {
 		t.Errorf("an empty list item:\n%s", got)
 	}
 
-	// A page whose <main> holds little of its text (a table of prices
-	// outside it) is read whole, without the frame.
 	page2 := `<html><body><nav>Menu</nav><main><p>Prices</p></main><table>` + strings.Repeat(`<tr><td>Dollar</td><td>269,500</td></tr>`, 40) + `</table></body></html>`
 	doc2, _ := html.Parse(strings.NewReader(page2))
 	if got := readableText(doc2); !strings.Contains(got, "Dollar | 269,500") || !strings.Contains(got, "Prices") || strings.Contains(got, "Menu") {
 		t.Errorf("a page read whole:\n%s", got)
 	}
 
-	// Documents (HTMLText) keep everything.
 	if _, text := HTMLText(`<html><body><nav>Chapter list</nav><p>Body</p></body></html>`); !strings.Contains(text, "Body") {
 		t.Errorf("document text: %q", text)
 	}

@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Strict providers (Gemini, some OpenAI proxies) refuse a tool whose
-// "required" is null, and with it native tool calls for the whole request.
 func TestNoToolSchemaHasNullRequired(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(90, "یه یادآور می‌خوام"))

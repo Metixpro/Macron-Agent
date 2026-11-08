@@ -7,7 +7,7 @@ import (
 
 func TestFileDC(t *testing.T) {
 	for id, want := range map[string]int{
-		"AgACAgQAAxkBAAIBY2": 4, // a photo stored in DC4
+		"AgACAgQAAxkBAAIBY2": 4,
 		"AgACAgIAAxkBAAIBY2": 2,
 		"AgACAgUAAxkBAAIBY2": 5,
 		"avatar":             0,
@@ -40,7 +40,7 @@ func TestEstimateAccountAge(t *testing.T) {
 	if _, ok := EstimateAccountAge(-100123); ok {
 		t.Error("a chat id has no account age")
 	}
-	// Dates never go back as ids grow.
+
 	prev := time.Time{}
 	for id := int64(3_000_000); id < 1_900_000_000; id += 7_000_000 {
 		a, _ := EstimateAccountAge(id)

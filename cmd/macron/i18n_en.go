@@ -1,8 +1,5 @@
 package main
 
-// english maps every Persian text of the bot to its English wording. A new
-// text needs an entry here with the same fmt verbs and HTML tags;
-// TestEnglishCatalog lists the missing ones.
 var english = map[string]string{
 	"⬅️ برگشت": "⬅️ Back",
 	"\n\n<i>برای انصراف /cancel رو بفرست.</i>": "\n\n<i>Send /cancel to cancel.</i>",
@@ -465,10 +462,10 @@ var english = map[string]string{
 	"دارم فایل‌ها رو نگاه می‌کنم…":                                          "Looking at the files…",
 	"دارم عکس پروفایلت رو نگاه می‌کنم…":                                     "Looking at your profile picture…",
 	"دارم روش کار می‌کنم…":                                                  "Working on it…",
-	// skills
+
 	"دارم دستورالعمل این کار رو مرور می‌کنم…":        "Going over the playbook for this…",
 	"دارم این روش رو برای دفعه‌های بعد یاد می‌گیرم…": "Learning this for next time…",
-	// image editing
+
 	"🖼 ویرایش عکس":                                        "🖼 Image editing",
 	"این شبیه کلید نیست؛ دوباره بفرست.":                   "That doesn't look like a key; send it again.",
 	"✅ کلید ذخیره شد؛ از همین الان ویرایش عکس فعاله.":     "✅ The key is saved; image editing is on from now.",
@@ -488,15 +485,14 @@ var english = map[string]string{
 	"✅ کلید معتبره؛ ویرایش عکس آماده است.":               "✅ The key is valid; image editing is ready.",
 	"🔑 کلید API سرویس ویرایش عکس رو بفرست. پیامت بعد از خوندن پاک می‌شه و کلید رمزنگاری‌شده ذخیره می‌شه.": "🔑 Send the image editing service's API key. Your message is deleted once read and the key is stored encrypted.",
 	"دارم عکس رو ویرایش می‌کنم؛ یکی دو دقیقه طول می‌کشه…":                                                 "Editing the picture; it takes a minute or two…",
-	// sub-agents
+
 	"دارم یه بخش از کار رو به یه دستیار کمکی می‌سپارم…": "Handing part of the job to a helper agent…",
-	// skill import
-	// settings
+
 	"\n🖼 ویرایش عکس با هوش مصنوعی: %s": "\n🖼 AI image editing: %s",
-	// context window
+
 	"🪟 پنجره context": "🪟 Context window",
 	"یه عدد بین ۸۰۰۰ و ۱۰ میلیون بفرست (مثلاً <code>256k</code>)، یا <code>0</code> برای خودکار.": "Send a number between 8000 and 10 million (e.g. <code>256k</code>), or <code>0</code> for automatic.",
-	// group panels
+
 	"این دکمه‌ها مال کسیه که دستور رو زده؛ اگه خودت می‌خوای، همون دستور رو بفرست 🙂":                                                     "These buttons belong to whoever sent the command; if you want them too, send the same command yourself 🙂",
 	"🔗 لینک فایل‌های <code>cookies.txt</code> رو بفرست، هر خط یه لینک (مثلاً raw گیت‌هاب یا هر آدرس مستقیم)؛ ":                          "🔗 Send links to <code>cookies.txt</code> files, one per line (a raw GitHub link or any direct address); ",
 	"هر لینک یه کوکی جدا توی استخر می‌شه و به نوبت استفاده می‌شن. هر وقت یکی بلاک بشه یا لاگینش تموم بشه، دوباره از لینکش گرفته می‌شه.": "each link becomes a separate cookie in the pool, used in turn. Whenever one is blocked or its login runs out, it is fetched again from its link.",
@@ -538,11 +534,11 @@ var english = map[string]string{
 	"\n🪟 پنجره context: خودکار (%s از اسم مدل)":                                                    "\n🪟 Context window: automatic (%s from the model's name)",
 	"🪟 پنجره context همین پرووایدر رو به توکن بفرست، مثلاً <code>128k</code> یا <code>1m</code>؛ ": "🪟 Send this provider's context window in tokens, e.g. <code>128k</code> or <code>1m</code>, ",
 	"برای مدل‌هایی که از اسمشون درست حدس زده نمی‌شه. <code>0</code> = خودکار.":                     "for models whose name does not tell it right. <code>0</code> = automatic.",
-	// Free and VIP, credit packs
+
 	"خودکار":     "Automatic",
 	"ذخیره شد ✅": "Saved ✅",
 	"%s روز":     "%s days",
-	// tokens, costs, codes, gifts, invitations, the queue
+
 	"همیشه":   "forever",
 	"%s ساعت": "%s hours",
 	"⏳ الان سرم شلوغه و توی صف هستی (%s نفر جلوتر از تو). به‌محض اینکه جا باز بشه، شروع می‌کنم.": "⏳ I'm busy right now; you're in the queue (%s ahead). I'll start as soon as a slot frees up.",

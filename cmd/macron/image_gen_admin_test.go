@@ -11,9 +11,6 @@ import (
 	"testing"
 )
 
-// TestPictureMakingKeyInThePanel: the admin gives the studio's key in the
-// panel; the message with it is deleted, the key is stored encrypted, a key the
-// service refuses is never kept, and the key never shows anywhere.
 func TestPictureMakingKeyInThePanel(t *testing.T) {
 	h := newHarness(t)
 	var asked atomic.Int32
@@ -31,7 +28,7 @@ func TestPictureMakingKeyInThePanel(t *testing.T) {
 	defer studio.Close()
 	h.bot.app.Config.ImageAPI = studio.URL
 	h.bot.app.Registry.SetImageAPI(studio.URL)
-	h.bot.app.Registry.HTTP = &http.Client{} // a plain client
+	h.bot.app.Registry.HTTP = &http.Client{}
 
 	h.click(ownerID, ownerID, 900, "a:ig")
 	if p := lastOf(h, "editMessageText"); !strings.Contains(fmt.Sprint(p.body["text"]), "تنظیم نشده") || !hasButton(buttons(p), "a:ig:key") || hasButton(buttons(p), "a:ig:del") {
@@ -41,7 +38,6 @@ func TestPictureMakingKeyInThePanel(t *testing.T) {
 		t.Fatal("no key yet")
 	}
 
-	// A key the service refuses is not saved.
 	h.click(ownerID, ownerID, 900, "a:ig:key")
 	h.tg.reset()
 	bad := private(ownerID, "wrong-key")
@@ -52,7 +48,6 @@ func TestPictureMakingKeyInThePanel(t *testing.T) {
 		t.Fatal("a refused key is not kept")
 	}
 
-	// A good one is: the message is deleted, the key stored encrypted.
 	h.click(ownerID, ownerID, 900, "a:ig:key")
 	h.tg.reset()
 	good := private(ownerID, "studio-secret-key")
@@ -75,7 +70,6 @@ func TestPictureMakingKeyInThePanel(t *testing.T) {
 		}
 	}
 
-	// Test, styles, delete.
 	h.tg.reset()
 	h.click(ownerID, ownerID, 900, "a:ig:test")
 	h.wantText("کلید معتبره")

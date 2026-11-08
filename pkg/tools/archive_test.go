@@ -20,7 +20,6 @@ func TestArchivesBeyondZip(t *testing.T) {
 	_ = r.Machine.WriteFile("ar", "proj/main.go", []byte("package main"))
 	_ = r.Machine.WriteFile("ar", "proj/node_modules/x/index.js", []byte("junk"))
 
-	// A 7z with a password: the names are hidden too.
 	out := call(t, r, "ar", ToolPackFiles, map[string]any{"paths": []string{"notes.txt", "proj"}, "format": "7z", "password": "s3cret", "filename": "secret.7z"})
 	if !strings.Contains(out, "Created secret.7z: 2 files") || !strings.Contains(out, "AES-256") || !strings.Contains(out, "1 dependency") {
 		t.Fatalf("7z: %s", out)
@@ -44,7 +43,6 @@ func TestArchivesBeyondZip(t *testing.T) {
 		t.Error("the files came out")
 	}
 
-	// A zip with a password (ZipCrypto from zip -P) goes to 7-Zip.
 	if _, err := exec.LookPath("zip"); err == nil {
 		_ = exec.Command("bash", "-c", "cd \"$1\" && zip -q -P pw locked.zip notes.txt", "z", ws).Run()
 		if out := call(t, r, "ar", ToolExtract, map[string]any{"filename": "locked.zip"}); !strings.Contains(out, "password protected") {
@@ -55,7 +53,6 @@ func TestArchivesBeyondZip(t *testing.T) {
 		}
 	}
 
-	// A tar.xz with a link that points out of the workspace; a lone .gz.
 	mk := `import tarfile, io, gzip, sys
 d = sys.argv[1]
 with tarfile.open(d + "/pkg.tar.xz", "w:xz") as t:
@@ -81,7 +78,6 @@ with gzip.open(d + "/log.txt.gz", "wb") as f: f.write(b"line one")`
 		t.Errorf("a lone .gz: %q", data)
 	}
 
-	// Several paths into one zip and a tar.gz, here, without 7-Zip.
 	if out := call(t, r, "ar", ToolPackFiles, map[string]any{"paths": []string{"notes.txt", "proj"}}); !strings.Contains(out, "Created files.zip: 2 files") {
 		t.Errorf("zip of two paths: %s", out)
 	}
@@ -95,7 +91,6 @@ with gzip.open(d + "/log.txt.gz", "wb") as f: f.write(b"line one")`
 		t.Errorf("tar.gz + password: %s", out)
 	}
 
-	// Too big for one message: parts that 7-Zip opens from the first.
 	big := make([]byte, 3<<20)
 	_, _ = rand.Read(big)
 	_ = r.Machine.WriteFile("ar", "big/blob.bin", big)

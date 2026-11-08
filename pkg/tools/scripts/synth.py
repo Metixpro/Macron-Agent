@@ -162,7 +162,7 @@ def chord_at(at):
 timeline = [(b * BAR, BAR, chord_at(b * BAR)) for b in range(bars_total)]
 
 
-# ----------------------------------------------------------------- sounds
+
 
 def tvec(n):
     return np.arange(n, dtype=np.float64) / SR
@@ -400,7 +400,7 @@ def chip_noise(vel=1.0, length=0.08):
     return np.repeat(steps, 40)[:n] * np.exp(-tvec(n) * 30) * 0.4 * vel
 
 
-# ------------------------------------------------------------ arrangement
+
 
 buses = {k: np.zeros(N) for k in ("drums", "bass", "pad", "lead", "arp", "sfx")}
 kicks = []
@@ -692,7 +692,7 @@ for fx in (d.get("sfx") or [])[:60]:
                                      float(min(max(float(fx.get("volume", 0.8)), 0), 1.5))):
         placed += 1
 
-# ---------------------------------------------------------------- mixing
+
 
 if S.get("sidechain") and kicks:
     duck = np.ones(N)

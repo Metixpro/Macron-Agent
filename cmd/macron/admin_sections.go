@@ -22,12 +22,11 @@ type (
 	askFunc  = func(*adminInput, string)
 )
 
-// handleSectionInput finishes the dialogs of the provider, channel, emoji and broadcast sections.
 func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *adminInput, done func(panelView)) bool {
 	l := b.langOf(m.From)
 	text := strings.TrimSpace(m.Text)
 	switch in.kind {
-	// ----- provider wizard
+
 	case "pv_name":
 		if text == "" || len([]rune(text)) > 40 {
 			b.reply(m, l.t("یه اسم کوتاه بفرست (حداکثر ۴۰ کاراکتر)."))
@@ -38,7 +37,7 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		b.expect(m.From.ID, in)
 		b.reply(m, l.t("🌐 آدرس API را بفرست:\n<code>https://api.openai.com/v1</code>\n<code>https://api.anthropic.com</code>\nبرای Responses، آدرس کاملِ <code>/responses</code> را بفرست."))
 	case "pv_url":
-		u, api := llm.CleanBaseURL(text) // a whole endpoint pasted (".../v1/responses") names its wire format
+		u, api := llm.CleanBaseURL(text)
 		u = strings.TrimRight(u, "/")
 		if err := providers.ValidateBaseURL(u); err != nil {
 			b.reply(m, l.t("آدرس معتبر نیست؛ باید شبیه <code>https://host/v1</code> باشه."))
@@ -95,7 +94,7 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 			t, def, ok := parseTemperature(text)
 			max := 2.0
 			if providers.API(*p) == llm.APIAnthropic {
-				max = 1 // Claude takes 0–1
+				max = 1
 			}
 			if !ok || t > max {
 				b.reply(m, l.f("یه عدد بین ۰ و %s بفرست (مثلاً <code>0.7</code>)، یا <code>-</code> برای پیش‌فرض.", l.num(int(max))))
@@ -122,7 +121,6 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		_ = b.prov.Reload(ctx)
 		done(b.viewProvider(ctx, l, p.ID))
 
-	// ----- premium emoji
 	case "em_add":
 		var ents []emoji.Entity
 		for _, e := range m.Entities {
@@ -136,7 +134,7 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 			b.reply(m, l.t("ذخیره نشد: ")+esc(err.Error()))
 			return true
 		}
-		// Extra mappings are not added; the others are.
+
 		add, rejected := emoji.Filter(existing, pairs)
 		saved := 0
 		for _, p := range add {
@@ -214,8 +212,6 @@ func shortText(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// ---------------------------------------------------------------- providers
-
 func maskKey(l lang, k string) string {
 	switch {
 	case k == "":
@@ -286,10 +282,8 @@ func (b *Bot) viewProviders(ctx context.Context, l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// maxModelButtons: a long model list (OpenRouter has hundreds) shows its start.
 const maxModelButtons = 40
 
-// viewModels lets the admin pick the provider's model from the endpoint's list.
 func (b *Bot) viewModels(l lang, p *store.Provider, models []string) panelView {
 	html := l.f("📋 <b>مدل‌های %s</b>\nیکی رو انتخاب کن:", esc(p.Name))
 	var rows [][]telegram.InlineKeyboardButton
@@ -316,7 +310,6 @@ func (b *Bot) viewModels(l lang, p *store.Provider, models []string) panelView {
 	return panelView{html: html, kb: keyboard(rows...)}
 }
 
-// apiName is how the admin panel calls a wire format.
 func apiName(api string) string {
 	switch api {
 	case llm.APIAnthropic:
@@ -327,8 +320,6 @@ func apiName(api string) string {
 	return "OpenAI-compatible (chat completions)"
 }
 
-// nextAPI is the wire format after cur, going round: chat completions →
-// Responses → Anthropic → chat completions.
 func nextAPI(cur string) string {
 	switch cur {
 	case llm.APIOpenAI:
@@ -564,8 +555,6 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 	show(b.viewProvider(ctx, l, id))
 }
 
-// ---------------------------------------------------------------- premium emoji
-
 func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 	m, _ := b.st.PremiumEmoji(ctx)
 	enabled := b.st.SettingBool(store.SettingPremiumEmoji, false)
@@ -657,7 +646,6 @@ func (b *Bot) handleEmojiPanel(ctx context.Context, q *telegram.CallbackQuery, p
 	show(b.viewEmoji(ctx, l))
 }
 
-// parseTemperature reads a temperature ("0.7", "۰٫۷", "1"); def: "-", the default.
 func parseTemperature(text string) (t float64, def, ok bool) {
 	text = strings.TrimSpace(text)
 	switch strings.ToLower(text) {
@@ -669,9 +657,6 @@ func parseTemperature(text string) (t float64, def, ok bool) {
 	return t, false, err == nil && t >= 0 && t <= 2
 }
 
-// cacheLine says how much of its prompts a provider reads from its cache, as
-// measured since the bot started ("" before anything was measured). A
-// provider that caches little costs the full prompt on every step.
 func (b *Bot) cacheLine(l lang, id int64) string {
 	r, n, known := b.providerCaches(id)
 	if n == 0 {

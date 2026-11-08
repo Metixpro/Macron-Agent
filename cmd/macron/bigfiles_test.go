@@ -7,9 +7,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Telegram's own servers hand bots files up to 20 MB; a local Bot API server
-// up to 2000 MB. A file that is too big, or that the workspace has no room
-// for, is turned away with the reason.
 func TestBigFilesFollowTheBotAPIServer(t *testing.T) {
 	h := newHarness(t)
 	h.tg.files["big"] = []byte("some data")

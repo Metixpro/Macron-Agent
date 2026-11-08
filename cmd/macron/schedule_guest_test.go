@@ -11,8 +11,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// ---------------------------------------------------------------- reminders and scheduled tasks
-
 func newUser(h *harness, id int64) *store.User {
 	u, _, err := h.st.TouchUser(bg, store.UserInfo{ID: id, FirstName: "Mahdi", Username: "mahdi"})
 	if err != nil {
@@ -25,7 +23,7 @@ func TestCreateScheduleValidates(t *testing.T) {
 	h := newHarness(t)
 	u := newUser(h, 60)
 	m := private(60, "")
-	now, _ := sched.ParseLocal("2026-10-19 09:00", h.bot.loc) // Monday
+	now, _ := sched.ParseLocal("2026-10-19 09:00", h.bot.loc)
 	try := func(args map[string]any) string { return h.bot.createSchedule(bg, u, m, args, now) }
 
 	out := try(map[string]any{"kind": "reminder", "text": "به مهدی زنگ بزن", "at": "2026-10-20 11:00"})
@@ -64,14 +62,14 @@ func TestReminderFiresOnceAtItsTime(t *testing.T) {
 	if !strings.HasPrefix(out, "Scheduled #") {
 		t.Fatal(out)
 	}
-	h.bot.runDueSchedules(bg, now) // not yet
+	h.bot.runDueSchedules(bg, now)
 	h.bot.wg.Wait()
 	if len(h.tg.of("sendMessage")) != 0 {
 		t.Fatal("too early")
 	}
 	later := now.Add(2 * time.Minute)
 	h.bot.runDueSchedules(bg, later)
-	h.bot.runDueSchedules(bg, later) // a second tick must not repeat it
+	h.bot.runDueSchedules(bg, later)
 	h.bot.wg.Wait()
 	sent := h.tg.of("sendMessage")
 	if len(sent) != 1 || int64(sent[0].body["chat_id"].(float64)) != -100600 {
@@ -144,7 +142,7 @@ func TestModelSchedulesAndUserCancels(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(h.tg.of("sendMessage")[0].body["reply_markup"]), fmt.Sprintf("sc:x:%d", list[0].ID)) {
 		t.Error("each schedule has a cancel button")
 	}
-	h.click(64, 63, 900, fmt.Sprintf("sc:x:%d", list[0].ID)) // someone else
+	h.click(64, 63, 900, fmt.Sprintf("sc:x:%d", list[0].ID))
 	if l, _ := h.st.UserSchedules(bg, 63); len(l) != 1 {
 		t.Fatal("only the owner can cancel")
 	}
@@ -153,8 +151,6 @@ func TestModelSchedulesAndUserCancels(t *testing.T) {
 		t.Error("the owner cancels with the button")
 	}
 }
-
-// ---------------------------------------------------------------- guest mode
 
 func guestMsg(userID int64, text string) *telegram.Message {
 	m := private(userID, text)
@@ -191,13 +187,13 @@ func TestGuestQueryGetsOneInPlaceAnswer(t *testing.T) {
 	if len(answers) != 1 || answers[0].body["guest_query_id"] != "gq-70" {
 		t.Fatalf("exactly one guest answer: %v", answers)
 	}
-	// The one reply goes out at once, «thinking»…
+
 	res := answers[0].body["result"].(map[string]any)
 	content := res["input_message_content"].(map[string]any)
 	if res["type"] != "article" || res["id"] == "" || content["rich_message"].(map[string]any)["markdown"] != thinkingStatus(fa) {
 		t.Errorf("a rich «thinking» placeholder: %v", res)
 	}
-	// …and becomes the answer.
+
 	edits := h.tg.of("editMessageText")
 	if len(edits) == 0 {
 		t.Fatal("the placeholder is edited with the answer")
@@ -228,7 +224,6 @@ func TestGuestRepliesSeeTheRepliedMessage(t *testing.T) {
 		t.Errorf("the replied message (text and photo) reaches the model:\n%s", req)
 	}
 
-	// Replying to the bot's own guest answer continues the conversation.
 	m2 := guestMsg(72, "چرا؟")
 	m2.ReplyToMessage = &telegram.Message{MessageID: 6, From: &telegram.User{ID: 72}, ViaBot: &telegram.User{ID: 42}, Text: "۱۰۰۰", Chat: m2.Chat}
 	h.bot.handleGuest(m2)
@@ -239,7 +234,7 @@ func TestGuestRepliesSeeTheRepliedMessage(t *testing.T) {
 
 func TestGuestFallbacksAndLimits(t *testing.T) {
 	h := newHarness(t)
-	h.bot.richOff.Store(true) // an older server: classic HTML
+	h.bot.richOff.Store(true)
 	h.llm.reply = say("**جواب** " + strings.Repeat("خیلی طولانی ", 900))
 	h.bot.handleGuest(guestMsg(73, "@WazeBot یه متن بلند بنویس"))
 	answers := h.tg.of("answerGuestQuery")
@@ -260,15 +255,12 @@ func TestGuestFallbacksAndLimits(t *testing.T) {
 		t.Errorf("an HTML answer that fits one message and points to the private chat: %d chars, %.80q…", len([]rune(text)), text)
 	}
 
-	// A query is answered once, whatever happens.
 	h.bot.guestOnce("gq-74")
 	if h.bot.guestOnce("gq-74") {
 		t.Error("a guest query cannot be answered twice")
 	}
 }
 
-// The placeholder shows what the bot is doing, and nothing changes it once
-// the answer is in.
 func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 	h := newHarness(t)
 	old := guestEditEvery
@@ -310,7 +302,6 @@ func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 		}
 	}
 
-	// A run that ends without an answer never stays «thinking».
 	h.llm.reply = say("")
 	h.tg.reset()
 	h.bot.handleGuest(guestMsg(76, "@WazeBot ؟"))
@@ -321,7 +312,7 @@ func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 	g = &guestReply{b: h.bot, queryID: "gq-x", inlineID: "im-x", rich: true}
 	h.bot.guestReplies.Store("gq-x", g)
 	h.tg.reset()
-	h.bot.finishGuest(g, fa) // what handleGuest does when the run sent nothing
+	h.bot.finishGuest(g, fa)
 	if edits = h.tg.of("editMessageText"); len(edits) != 1 || !strings.Contains(fmt.Sprint(edits[0].body), "جوابی آماده نشد") {
 		t.Errorf("a placeholder left alone gets a short note: %v", edits)
 	}
@@ -330,7 +321,6 @@ func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 		t.Errorf("a final placeholder stays: %d edits", n)
 	}
 
-	// An older server gives no inline_message_id: the answer goes as the one reply.
 	h.bot.guestStubOff.Store(true)
 	h.llm.reply = say("۴")
 	h.tg.reset()
@@ -367,7 +357,6 @@ func TestSchedulesStopWhereTheBotCannotPost(t *testing.T) {
 	}
 }
 
-// A reminder made in a forum topic is posted in that topic.
 func TestScheduleInATopic(t *testing.T) {
 	h := newHarness(t)
 	u := newUser(h, 66)
@@ -386,8 +375,6 @@ func TestScheduleInATopic(t *testing.T) {
 	}
 }
 
-// A one-time run that fails is tried again; a recurring one that keeps
-// failing is paused, its owner hears about it and can turn it on again.
 func TestFailingSchedulesRetryAndPause(t *testing.T) {
 	h := newHarness(t)
 	old := onceRetryAfter
@@ -398,7 +385,7 @@ func TestFailingSchedulesRetryAndPause(t *testing.T) {
 	now := time.Now()
 	h.bot.createSchedule(bg, u, m, map[string]any{"kind": "reminder", "text": "قرص", "in_minutes": 1}, now)
 	h.tg.mu.Lock()
-	h.tg.fail["sendMessage"] = 500 // Telegram has a bad minute
+	h.tg.fail["sendMessage"] = 500
 	h.tg.mu.Unlock()
 	h.bot.runDueSchedules(bg, now.Add(2*time.Minute))
 	h.bot.wg.Wait()
@@ -416,7 +403,6 @@ func TestFailingSchedulesRetryAndPause(t *testing.T) {
 		t.Errorf("done once it went out: %+v", list)
 	}
 
-	// A daily task whose model is down, three days running.
 	h.llm.reply = func(map[string]any, int) (map[string]any, int) { return nil, 503 }
 	h.bot.createSchedule(bg, u, m, map[string]any{"kind": "task", "text": "خبرها", "title": "خبر",
 		"at": now.In(h.bot.loc).Add(time.Minute).Format("2006-01-02 15:04"), "repeat": "daily"}, now)

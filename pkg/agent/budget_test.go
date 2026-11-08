@@ -19,7 +19,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// fakeModel answers request n with reply(n): an HTTP status and a JSON body.
 type fakeModel struct {
 	mu       sync.Mutex
 	requests []map[string]any
@@ -101,7 +100,7 @@ func TestBudgetIsAnnouncedAndTheEndIsReported(t *testing.T) {
 	if strings.Count(res.WorkLog, "list_files") != 5 {
 		t.Errorf("work log:\n%s", res.WorkLog)
 	}
-	// The third identical call is flagged.
+
 	if m := msgs(reqs[3]); !strings.Contains(m[len(m)-2]["content"].(string), "already made this exact call 2 times") {
 		t.Errorf("repetition notice missing: %v", m[len(m)-2])
 	}
@@ -149,8 +148,7 @@ func TestTheModelFailingMidJobKeepsTheProgress(t *testing.T) {
 	if calls.Load() != 2+midRunRetries {
 		t.Errorf("mid-job failures are retried: %d calls", calls.Load())
 	}
-	// Before any work, a failure is still an error (the user is refunded),
-	// after one more try.
+
 	var first atomic.Int32
 	b, _ := newBudgetAgent(t, func(int) (int, any) {
 		first.Add(1)
@@ -159,7 +157,7 @@ func TestTheModelFailingMidJobKeepsTheProgress(t *testing.T) {
 	if _, err := b.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Content: "x"}}); err == nil || first.Load() != 2 {
 		t.Errorf("expected an error after one retry: %v, %d calls", err, first.Load())
 	}
-	// A first answer that fails once (a loaded local server) is asked again.
+
 	c, _ := newBudgetAgent(t, func(n int) (int, any) {
 		if n == 0 {
 			return 503, map[string]any{"error": map[string]any{"message": "busy"}}
@@ -275,10 +273,10 @@ func TestMessagesDuringAJobReachTheModel(t *testing.T) {
 	a, f := newBudgetAgent(t, func(n int) (int, any) {
 		switch n {
 		case 0:
-			push("also add a chart") // arrives while the first tool runs
+			push("also add a chart")
 			return 200, answer(callsTo("list_files", `{}`), "tool_calls")
 		case 1:
-			push("and make it short") // arrives while the answer is being written
+			push("and make it short")
 			return 200, answer(map[string]any{"role": "assistant", "content": "Here is the report."}, "stop")
 		}
 		return 200, answer(map[string]any{"role": "assistant", "content": "Short report with a chart."}, "stop")
@@ -299,7 +297,7 @@ func TestAutoContinueReportDoesNotAskToContinue(t *testing.T) {
 		if n < 5 {
 			return 200, answer(callsTo("list_files", fmt.Sprintf(`{"path":"p%d"}`, n)), "tool_calls")
 		}
-		return 500, map[string]any{"error": "down"} // the report cannot be written: the built-in one is used
+		return 500, map[string]any{"error": "down"}
 	})
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Content: "big job"}, MaxSteps: 5, AutoContinue: true, Lang: "en"})
 	if err != nil || !res.Partial || res.StopReason != "steps" {
@@ -323,7 +321,7 @@ func TestFastModeAnswersAtTheLastStep(t *testing.T) {
 		if n == 0 {
 			return 200, answer(callsTo("list_files", `{}`), "tool_calls")
 		}
-		// Even if the model wants another tool, the last step has none to offer.
+
 		return 200, answer(map[string]any{"role": "assistant", "content": "Here it is."}, "stop")
 	})
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Content: "quick"}, MaxSteps: 2,
@@ -385,7 +383,7 @@ func TestTheLearnedWindowMovesUp(t *testing.T) {
 
 type providerLLM struct {
 	calls int
-	names []string // the provider of each answer
+	names []string
 }
 
 func (p *providerLLM) Complete(_ context.Context, req llm.Request) (*llm.Response, error) {

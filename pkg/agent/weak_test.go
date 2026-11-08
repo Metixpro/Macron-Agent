@@ -22,8 +22,6 @@ func priceTool(got *map[string]any) LocalTool {
 		}}
 }
 
-// A call with the tool and its parameters named another way, and a number in
-// Persian digits, runs as meant; the transcript keeps the repaired call.
 func TestAWeakModelsCallIsRepaired(t *testing.T) {
 	var got map[string]any
 	a, script := setup(t,
@@ -51,7 +49,6 @@ func TestAWeakModelsCallIsRepaired(t *testing.T) {
 	}
 }
 
-// «الان سرچ می‌کنم…» and no call: it is sent back to do it.
 func TestAnAnnouncementWithoutACallIsSentBack(t *testing.T) {
 	var got map[string]any
 	a, script := setup(t,
@@ -71,7 +68,6 @@ func TestAnAnnouncementWithoutACallIsSentBack(t *testing.T) {
 		t.Errorf("quality: %+v", q)
 	}
 
-	// Refused calls count too.
 	a, _ = setup(t,
 		llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall("c1", "lookup_price", `{"limit": 3}`)}},
 		llm.Message{Role: "assistant", Content: "ok"},
@@ -82,8 +78,6 @@ func TestAnAnnouncementWithoutACallIsSentBack(t *testing.T) {
 	}
 }
 
-// A focused request is offered what its words point to, and more_tools
-// brings every tool from the next step.
 func TestFocusedTools(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall("m1", ToolMoreTools, `{"need": "a chart"}`)}},
@@ -105,7 +99,6 @@ func TestFocusedTools(t *testing.T) {
 		t.Error("the model is told how its list works")
 	}
 
-	// A chart request gets the chart tool at once; without FocusTools, everything.
 	if f := focusTools(allDefs(a), "یه نمودار از فروش بکش"); !hasTool(f, "generate_chart") || hasTool(f, "search_music") {
 		t.Errorf("chart: %v", names(f))
 	}
@@ -131,8 +124,6 @@ func names(ts []llm.Tool) []string {
 
 func hasTool(ts []llm.Tool, n string) bool { return slices.Contains(names(ts), n) }
 
-// A model without native calls writes one in a JSON block, with the name
-// and a parameter off: it still runs.
 func TestATextCallWithANameOffRuns(t *testing.T) {
 	var got map[string]any
 	a, _ := setup(t,
@@ -143,14 +134,12 @@ func TestATextCallWithANameOffRuns(t *testing.T) {
 	if err != nil || res.Answer != "۴۲" || got["query"] != "دلار" {
 		t.Fatalf("%+v %v %v", res, err, got)
 	}
-	// An answer that only shows a JSON example keeps it.
+
 	if s := stripToolMarkup("```json\n{\"name\": \"search\", \"arguments\": {}}\n```", map[string]bool{"web_search": true}); !strings.Contains(s, "search") {
 		t.Errorf("an example stays in an answer: %q", s)
 	}
 }
 
-// A model that struggles hands the rest of the job to the stronger one, once:
-// the context it is asked with changes and a focused request gets every tool.
 func TestAStrugglingModelEscalates(t *testing.T) {
 	type key struct{}
 	var whys []string
@@ -176,7 +165,6 @@ func TestAStrugglingModelEscalates(t *testing.T) {
 		t.Errorf("the stronger model chooses from every tool: %v → %v", first, second)
 	}
 
-	// Two failed steps; the third does not ask again.
 	escalated, whys = 0, nil
 	fail := LocalTool{Def: llm.Tool{Type: "function", Function: llm.ToolDef{Name: "flaky", Parameters: map[string]any{"type": "object"}}},
 		Handler: func(ctx context.Context, _ map[string]any) (ToolOutput, error) {
@@ -202,7 +190,6 @@ func TestAStrugglingModelEscalates(t *testing.T) {
 		t.Errorf("the steps after it run with the stronger model's context: %q", outs)
 	}
 
-	// Without Escalate nothing changes.
 	a, _ = setup(t, llm.Message{Role: "assistant", Content: ""}, llm.Message{Role: "assistant", Content: "hi"})
 	if res, _ = a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Role: "user", Content: "hey"}}); res.Escalated {
 		t.Error("escalated with nowhere to go")

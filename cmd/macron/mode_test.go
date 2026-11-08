@@ -53,7 +53,7 @@ func TestFastMode(t *testing.T) {
 	if last["tools"] != nil {
 		t.Error("the second step answers without tools")
 	}
-	// No button under the answer: the mode is chosen with /mode.
+
 	rich := h.tg.of("sendRichMessage")
 	if kb := rich[len(rich)-1].body["reply_markup"]; kb != nil {
 		t.Fatalf("no mode button under answers: %v", kb)
@@ -66,14 +66,12 @@ func TestFastMode(t *testing.T) {
 		t.Error("/deep shows the mode message with the new choice")
 	}
 
-	// Deep mode: the full agent again.
 	h.llm.reply = say("باشه.")
 	h.send(private(90, "یه سایت بساز"))
 	if tools := strings.Join(offeredTools(h.llm.last()), ","); !strings.Contains(tools, "write_file") {
 		t.Errorf("deep mode offers every tool: %s", tools)
 	}
 
-	// A button left under an older answer only removes itself.
 	h.click(91, -100500, 701, "mode:t:90")
 	if h.bot.fastMode(bg, 91) {
 		t.Error("an old answer button changes nothing")

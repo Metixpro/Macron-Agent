@@ -43,8 +43,8 @@ func TestEstimateTokens(t *testing.T) {
 	if EstimateTokens("") != 0 || EstimateTokens("a") != 1 {
 		t.Error("tiny inputs")
 	}
-	en := EstimateTokens(strings.Repeat("word ", 400)) // 2000 chars
-	fa := EstimateTokens(strings.Repeat("سلام ", 400)) // 1600 Persian letters + 400 spaces
+	en := EstimateTokens(strings.Repeat("word ", 400))
+	fa := EstimateTokens(strings.Repeat("سلام ", 400))
 	if en < 400 || en > 600 || fa < 800 || fa > 1000 {
 		t.Errorf("estimates en=%d fa=%d", en, fa)
 	}
@@ -57,8 +57,8 @@ func TestSaveLoadAndCompress(t *testing.T) {
 	budget := 1000
 	m := New(s, f, func() int { return budget })
 
-	long := strings.Repeat("این یک پیام طولانی است. ", 20) // ~ 240 tokens
-	// Two exchanges (~980 tokens) fit; the third pushes past the budget.
+	long := strings.Repeat("این یک پیام طولانی است. ", 20)
+
 	for i := 0; i < 2; i++ {
 		if c, err := m.Save(ctx, 1, "سوال "+long, "جواب "+long); err != nil || c {
 			t.Fatalf("turn %d: compressed=%v err=%v", i, c, err)
@@ -79,7 +79,6 @@ func TestSaveLoadAndCompress(t *testing.T) {
 		t.Errorf("summarizer prompt: %v", f.prompts)
 	}
 
-	// The previous summary is fed into the next compression.
 	for i := 0; i < 3; i++ {
 		m.Save(ctx, 1, "دوباره "+long, "باز "+long)
 	}
@@ -102,13 +101,12 @@ func TestCompressionFallbackAndReset(t *testing.T) {
 	if c.Tokens > 2000 || strings.Count(c.Summary, "dropped") != 1 {
 		t.Fatalf("the budget must hold even when the summarizer fails: tokens=%d summary=%q", c.Tokens, c.Summary)
 	}
-	// One giant message is shortened on save.
+
 	m.Save(ctx, 4, strings.Repeat("خیلی ", 5000), "ok")
 	if c, _ := m.Load(ctx, 4); c.Tokens > 2000/2+10 {
 		t.Errorf("a single huge turn must be capped: %d tokens", c.Tokens)
 	}
 
-	// Forced compression folds everything but the recent turns.
 	f.fail = false
 	m.budget = func() int { return 1 << 30 }
 	for i := 0; i < 4; i++ {
@@ -130,9 +128,6 @@ func TestCompressionFallbackAndReset(t *testing.T) {
 	}
 }
 
-// Short turns pile up too: past maxTurns the oldest are folded, down to
-// keepTurns at once, and in between the kept turns only grow at their end,
-// so the start of what a request carries stays the same (providers cache it).
 func TestManyShortTurnsAreFoldedNowAndThen(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
@@ -166,7 +161,7 @@ func TestEachUserHasTheirOwnBudget(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	m := New(s, &fakeLLM{}, func() int { return 32000 })
-	// User 2 is on a tier with a small window; the others get the default.
+
 	m.UserBudget = func(_ context.Context, userID int64) int {
 		if userID == 2 {
 			return 1000
@@ -186,8 +181,6 @@ func TestEachUserHasTheirOwnBudget(t *testing.T) {
 	}
 }
 
-// A summarizer that is down for a moment costs nothing: just over the budget
-// the turns stay as they are, and the next save summarizes them.
 func TestABriefOutageKeepsTheTurns(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)

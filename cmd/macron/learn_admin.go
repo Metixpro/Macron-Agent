@@ -13,12 +13,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// The 🧠 Learning section of the panel: the lessons waiting for an admin,
-// the ones in use, and learning on or off.
-
 const lessonsPage = 8
 
-// viewLearn is 🧠 Learning: what it built, what it learned lately, and its settings.
 func (b *Bot) viewLearn(ctx context.Context, l lang) panelView {
 	counts, _ := b.st.LessonCounts(ctx)
 	var sb strings.Builder
@@ -37,7 +33,6 @@ func (b *Bot) viewLearn(ctx context.Context, l lang) panelView {
 	)}
 }
 
-// viewLearnSkills lists the skills learning built (lessons-<field>).
 func (b *Bot) viewLearnSkills(ctx context.Context, l lang) panelView {
 	var rows [][]telegram.InlineKeyboardButton
 	var sb strings.Builder
@@ -68,8 +63,6 @@ func (b *Bot) viewLearnSkills(ctx context.Context, l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// viewLearnSkill is one built skill: its lessons (each to see, edit or take
-// back) and a button that removes the whole skill.
 func (b *Bot) viewLearnSkill(ctx context.Context, l lang, field string) panelView {
 	list, _ := b.st.Lessons(ctx, store.LessonApproved, field, 200)
 	var sb strings.Builder
@@ -86,8 +79,6 @@ func (b *Bot) viewLearnSkill(ctx context.Context, l lang, field string) panelVie
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// viewLearnLog is what learning did lately, newest first, with ↩️ on each
-// lesson still in use.
 func (b *Bot) viewLearnLog(ctx context.Context, l lang, page int) panelView {
 	logs, _ := b.st.LessonLogs(ctx, "", 200)
 	var sb strings.Builder
@@ -125,11 +116,8 @@ func (b *Bot) viewLearnLog(ctx context.Context, l lang, page int) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// learnReviewSteps are the choices of the review button: 25 → 50 → 100 → off.
 var learnReviewSteps = map[int]int{learnReviewDefault: 50, 50: 100, 100: 0, 0: learnReviewDefault}
 
-// viewLearnSettings: learning on or off, at once or after an admin, the
-// caps, the review, the exam and the weekly report.
 func (b *Bot) viewLearnSettings(ctx context.Context, l lang) panelView {
 	counts, _ := b.st.LessonCounts(ctx)
 	auto := b.st.SettingBool(settingLearnAuto, true)
@@ -353,7 +341,7 @@ func (b *Bot) handleLearnPanel(ctx context.Context, l lang, adminID int64, parts
 		switch {
 		case arg(2) == "ok":
 			err2 = b.applyLesson(ctx, id, x)
-		case x.Status == store.LessonApproved: // ↩️ or ❌ on a lesson in use: the skill goes back to what it was
+		case x.Status == store.LessonApproved:
 			_, err2 = b.undoLesson(ctx, id)
 		default:
 			status := map[string]string{"no": store.LessonRejected, "undo": store.LessonPending}[arg(2)]
@@ -399,7 +387,6 @@ func (b *Bot) handleLearnPanel(ctx context.Context, l lang, adminID int64, parts
 	show(b.viewLearn(ctx, l))
 }
 
-// learnInput takes an admin's edit of a lesson.
 func (b *Bot) learnInput(ctx context.Context, l lang, m *telegram.Message, in *adminInput, done func(panelView)) {
 	x, err := b.st.Lesson(ctx, in.target)
 	if err != nil {
@@ -422,7 +409,6 @@ func (b *Bot) learnInput(ctx context.Context, l lang, m *telegram.Message, in *a
 	done(b.viewLesson(ctx, l, x.ID))
 }
 
-// learnLabel is the panel's button, with the lessons waiting.
 func (b *Bot) learnLabel(ctx context.Context, l lang) string {
 	if counts, err := b.st.LessonCounts(ctx); err == nil && counts[store.LessonPending] > 0 {
 		return l.f("🧠 یادگیری (%s درس جدید)", l.num(counts[store.LessonPending]))
@@ -430,7 +416,6 @@ func (b *Bot) learnLabel(ctx context.Context, l lang) string {
 	return l.t("🧠 یادگیری")
 }
 
-// viewExams shows the exam's latest runs and the cases of the last one.
 func (b *Bot) viewExams(ctx context.Context, l lang) panelView {
 	var sb strings.Builder
 	sb.WriteString(l.t("🧪 <b>امتحان دوره‌ای</b>\n\nیه سری درخواست ثابت و سخت (حساب، کد، فایل، نمودار، حفظ دستورها، صداقت، فارسی) که هر شب ساعت ۴، بعد از عوض شدن مدل یا پرووایدر، یا با دکمه زیر اجرا می‌شن و با کد نمره می‌گیرن. ") +
@@ -466,7 +451,6 @@ func (b *Bot) viewExams(ctx context.Context, l lang) panelView {
 	)}
 }
 
-// startExam runs the exam in the background and sends the result to the admin who asked.
 func (b *Bot) startExam(adminID int64) {
 	b.wg.Add(1)
 	go func() {

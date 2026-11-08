@@ -1,14 +1,3 @@
-// Package skills keeps procedural knowledge on disk: how to do a kind of job,
-// written as rules, not facts. A skill is a folder with a SKILL.md (a short
-// front matter and the instructions) and optional files beside it
-// (references/, templates/, scripts/):
-//
-//	<root>/<category>/<name>/SKILL.md
-//
-// The system prompt carries only an index (each name with a one-line
-// description); the model reads a whole skill, or one of its files, when the
-// task needs it. The skills live outside the workspaces, which are emptied
-// automatically.
 package skills
 
 import (
@@ -36,14 +25,13 @@ const (
 	FileName        = "SKILL.md"
 	DefaultCategory = "general"
 	DefaultVersion  = "1.0.0"
-	// MaxDescription is the longest description, in characters.
+
 	MaxDescription = 200
-	// MaxBody bounds a SKILL.md.
+
 	MaxBody = 256 << 10
-	// MaxFileRead bounds what ReadFile returns of one file.
+
 	MaxFileRead = 200 << 10
-	// IndexLimit is the most skills listed one by one in the index; above
-	// it, the index lists the categories and how many skills each has.
+
 	IndexLimit = 80
 
 	indexDescription = 160
@@ -65,10 +53,8 @@ var (
 	nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,63}$`)
 )
 
-// ValidName reports whether s can name a skill or a category.
 func ValidName(s string) bool { return nameRe.MatchString(s) }
 
-// NormalizeName lowercases a name and turns spaces into dashes ("Linux Ops" → "linux-ops").
 func NormalizeName(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), "-")
 }
@@ -80,7 +66,7 @@ type Skill struct {
 	Version     string
 	Body        string
 	Dir         string
-	Files       []string // reference, template and script files, relative to Dir
+	Files       []string
 	Enabled     bool
 	Uses        int
 	UpdatedAt   time.Time
@@ -89,17 +75,16 @@ type Skill struct {
 type Store struct {
 	mu     sync.RWMutex
 	dir    string
-	list   []Skill // by category, then name; disabled ones too
+	list   []Skill
 	byName map[string]*Skill
 	index  string
 	on     int
 	uses   map[string]int
 
-	sig     string       // what the folder looked like when it was loaded
-	checked atomic.Int64 // when the folder was last looked at (unix nano)
+	sig     string
+	checked atomic.Int64
 }
 
-// New opens the skills folder (creating it when missing) and loads it.
 func New(dir string) (*Store, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -118,11 +103,8 @@ func New(dir string) (*Store, error) {
 	return s, s.Reload()
 }
 
-// Dir is the skills folder.
 func (s *Store) Dir() string { return s.dir }
 
-// Reload reads every skill from disk again. A broken skill is skipped (and
-// logged); it never stops the others from loading.
 func (s *Store) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -258,7 +240,6 @@ func loadSkill(dir, category string) (Skill, error) {
 	return sk, nil
 }
 
-// attachments lists the files beside SKILL.md (no hidden files, no symlinks).
 func attachments(dir string) []string {
 	var out []string
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
@@ -287,7 +268,6 @@ func attachments(dir string) []string {
 	return out
 }
 
-// privateNote ends the index: the skills are for the work, not for the user.
 const privateNote = "Skills are private: never name or list them to the user."
 
 func buildIndex(list []Skill, on int) string {
@@ -330,12 +310,8 @@ func buildIndex(list []Skill, on int) string {
 	return sb.String()
 }
 
-// recheckEvery is how often the folder is looked at for skills written by
-// hand (by the owner, or by the agent through a shell).
 const recheckEvery = 2 * time.Second
 
-// dirSignature says what the skill files look like: any skill added, removed
-// or edited changes it.
 func dirSignature(dir string) string {
 	var n int
 	var newest time.Time
@@ -365,8 +341,6 @@ func dirSignature(dir string) string {
 	return fmt.Sprintf("%d/%d/%d", n, size, newest.UnixNano())
 }
 
-// refresh reads the folder again when a skill file changed on disk. It looks
-// at most every recheckEvery, so asking for the index on every request is cheap.
 func (s *Store) refresh() {
 	now := time.Now().UnixNano()
 	last := s.checked.Load()
@@ -383,7 +357,6 @@ func (s *Store) refresh() {
 	}
 }
 
-// Len is the number of enabled skills (the ones in the index).
 func (s *Store) Len() int {
 	s.refresh()
 	s.mu.RLock()
@@ -391,8 +364,6 @@ func (s *Store) Len() int {
 	return s.on
 }
 
-// Index is the block for the system prompt ("" when there is no enabled skill).
-// It is built when the skills load, never per message.
 func (s *Store) Index() string {
 	s.refresh()
 	s.mu.RLock()
@@ -400,7 +371,6 @@ func (s *Store) Index() string {
 	return s.index
 }
 
-// Get finds a skill by name, enabled or not.
 func (s *Store) Get(name string) (Skill, bool) {
 	s.refresh()
 	s.mu.RLock()
@@ -412,7 +382,6 @@ func (s *Store) Get(name string) (Skill, bool) {
 	return *sk, true
 }
 
-// Snapshot lists every skill (disabled ones too), by category and name.
 func (s *Store) Snapshot() []Skill {
 	s.refresh()
 	s.mu.RLock()
@@ -422,7 +391,6 @@ func (s *Store) Snapshot() []Skill {
 	return out
 }
 
-// Touch counts one use of a skill; the counts survive restarts.
 func (s *Store) Touch(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -441,8 +409,6 @@ func (s *Store) Touch(name string) {
 	}
 }
 
-// ReadFile returns one file of a skill. rel must stay inside the skill
-// folder; symlinks are never followed. A long file is cut at MaxFileRead.
 func (s *Store) ReadFile(name, rel string) (string, error) {
 	sk, ok := s.Get(name)
 	if !ok {
@@ -501,15 +467,12 @@ func (s *Store) ReadFile(name, rel string) (string, error) {
 	return out, nil
 }
 
-// Save creates a skill or replaces the description and instructions of an
-// existing one (its patch version goes up: 1.0.0 → 1.0.1). An empty category
-// keeps the current one ("general" for a new skill).
 func (s *Store) Save(name, description, body, category string) error {
 	name, category = NormalizeName(name), NormalizeName(category)
 	description = textutil.OneLine(description)
 	body = strings.TrimSpace(strings.ReplaceAll(body, "\r\n", "\n"))
 	if strings.HasPrefix(body, "---") {
-		_, body = Parse(body) // the whole SKILL.md was sent as the body
+		_, body = Parse(body)
 	}
 	switch {
 	case !ValidName(name):
@@ -571,8 +534,6 @@ func (s *Store) Save(name, description, body, category string) error {
 	return s.reloadLocked()
 }
 
-// Import saves a whole SKILL.md (front matter and body), e.g. a file an admin
-// uploaded; fallbackName names it when the front matter does not.
 func (s *Store) Import(raw, fallbackName string) (string, error) {
 	raw = strings.TrimPrefix(raw, "\uFEFF")
 	if !utf8.ValidString(raw) {
@@ -592,7 +553,6 @@ func (s *Store) Import(raw, fallbackName string) (string, error) {
 	return name, nil
 }
 
-// Delete removes a skill folder.
 func (s *Store) Delete(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -610,8 +570,6 @@ func (s *Store) Delete(name string) error {
 	return s.reloadLocked()
 }
 
-// SetEnabled turns a skill on or off; a disabled skill leaves the index but
-// stays on disk.
 func (s *Store) SetEnabled(name string, on bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -642,7 +600,7 @@ func (s *Store) SetEnabled(name string, on bool) error {
 
 func removeIfEmpty(dir, root string) {
 	if dir != root && strings.HasPrefix(dir, root+string(filepath.Separator)) {
-		_ = os.Remove(dir) // fails, as it should, when the folder still has something
+		_ = os.Remove(dir)
 	}
 }
 
@@ -659,8 +617,6 @@ func bumpPatch(v string) string {
 	return strings.Join(parts[:3], ".")
 }
 
-// writeAtomic replaces a file through a temporary file in the same folder:
-// a reader never sees half a file.
 func writeAtomic(p string, data []byte) error {
 	f, err := os.CreateTemp(filepath.Dir(p), ".tmp-*")
 	if err != nil {
@@ -686,11 +642,8 @@ func writeAtomic(p string, data []byte) error {
 	return err
 }
 
-// ---------------------------------------------------------------- front matter
-
 type field struct{ key, value string }
 
-// frontMatter keeps the keys in their order; unknown keys survive a rewrite.
 type frontMatter []field
 
 func (m frontMatter) get(key string) string {
@@ -722,9 +675,6 @@ func (m *frontMatter) del(key string) {
 	*m = out
 }
 
-// Parse splits a SKILL.md into its front matter (the simple "key: value"
-// lines between the first two "---" lines) and its body. It needs no YAML
-// library: quoted values are unquoted, nested values are ignored.
 func Parse(raw string) (frontMatter, string) {
 	raw = strings.ReplaceAll(strings.TrimPrefix(raw, "\uFEFF"), "\r\n", "\n")
 	lines := strings.Split(raw, "\n")
@@ -747,7 +697,7 @@ func Parse(raw string) (frontMatter, string) {
 		}
 		meta.set(key, unquote(strings.TrimSpace(value)))
 	}
-	return nil, strings.TrimSpace(raw) // no closing "---": it was not front matter
+	return nil, strings.TrimSpace(raw)
 }
 
 func unquote(v string) string {
@@ -762,7 +712,6 @@ func unquote(v string) string {
 	return v
 }
 
-// Render writes a SKILL.md: the front matter, then the body.
 func Render(meta frontMatter, body string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")

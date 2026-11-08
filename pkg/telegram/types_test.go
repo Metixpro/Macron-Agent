@@ -22,7 +22,7 @@ func TestForwardOrigins(t *testing.T) {
 			"Mina (hidden user, ID not provided by Telegram)", 0, 0},
 		{`{"forward_origin":{"type":"chat","date":1,"sender_chat":{"id":-1005,"type":"supergroup","title":"Team"}}}`,
 			"Team · id: -1005 · sent anonymously on behalf of the group", -1005, 0},
-		// Older Bot API servers
+
 		{`{"forward_from_chat":{"id":-1009,"type":"channel","title":"Old"},"forward_from_message_id":5,"forward_date":1}`,
 			"Old · id: -1009 · msg_id: 5", -1009, 0},
 		{`{"forward_from":{"id":7,"first_name":"Bob","is_bot":true},"forward_date":1}`, "Bob · bot · id: 7", 0, 7},

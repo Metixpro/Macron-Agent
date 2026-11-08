@@ -7,22 +7,16 @@ import (
 	"unicode"
 )
 
-// ---------------------------------------------------------------- the archive
-
-// MaxArchiveChars bounds what one archived message keeps.
 const MaxArchiveChars = 8000
 
-// ArchiveTurn is one message of the archive.
 type ArchiveTurn struct {
 	ID        int64
 	UserID    int64
-	Role      string // user | assistant
+	Role      string
 	Content   string
 	CreatedAt time.Time
 }
 
-// Archive keeps messages for good (the conversation window summarizes and
-// forgets them; the archive does not, until DeleteArchive).
 func (s *Store) Archive(ctx context.Context, userID int64, turns ...ArchiveTurn) error {
 	now := s.Now()
 	for _, t := range turns {
@@ -38,7 +32,6 @@ func (s *Store) Archive(ctx context.Context, userID int64, turns ...ArchiveTurn)
 	return nil
 }
 
-// ArchiveHit is a match with the words around it.
 type ArchiveHit struct {
 	ID        int64
 	Role      string
@@ -46,7 +39,6 @@ type ArchiveHit struct {
 	CreatedAt time.Time
 }
 
-// searchTerms makes a query safe for FTS5: words only, each a prefix.
 func searchTerms(query string) []string {
 	var terms []string
 	for _, w := range strings.FieldsFunc(query, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
@@ -60,8 +52,6 @@ func searchTerms(query string) []string {
 	return terms
 }
 
-// SearchArchive finds archived messages of a user that match the words of
-// query (all of them; if none matches, any of them), best first.
 func (s *Store) SearchArchive(ctx context.Context, userID int64, query string, since time.Time, limit int) ([]ArchiveHit, error) {
 	terms := searchTerms(query)
 	if len(terms) == 0 {
@@ -110,8 +100,6 @@ func (s *Store) SearchArchive(ctx context.Context, userID int64, query string, s
 	return nil, nil
 }
 
-// ArchiveAround returns the message with the given id and the ones next to it
-// (the question of an answer, the answer of a question), in order.
 func (s *Store) ArchiveAround(ctx context.Context, userID, id int64, before, after int) ([]ArchiveTurn, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, role, content, created_at FROM (
 			SELECT id, user_id, role, content, created_at FROM chat_archive WHERE user_id = ? AND id <= ? ORDER BY id DESC LIMIT ?
@@ -133,14 +121,12 @@ func (s *Store) ArchiveAround(ctx context.Context, userID, id int64, before, aft
 	return out, rows.Err()
 }
 
-// ArchiveCount is how many messages a user has in the archive.
 func (s *Store) ArchiveCount(ctx context.Context, userID int64) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM chat_archive WHERE user_id = ?`, userID).Scan(&n)
 	return n, err
 }
 
-// DeleteArchive forgets a user's archive (the search index with it).
 func (s *Store) DeleteArchive(ctx context.Context, userID int64) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM chat_archive WHERE user_id = ?`, userID)
 	if err != nil {

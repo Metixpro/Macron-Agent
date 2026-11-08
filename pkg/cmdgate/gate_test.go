@@ -50,7 +50,6 @@ func newGate(mode string) (*Gate, *memStore) {
 	return g, st
 }
 
-// asking answers every question with c, and counts them.
 func asking(c Choice, n *int) context.Context {
 	return WithAsker(context.Background(), func(context.Context, Question) Choice {
 		*n++
@@ -58,7 +57,6 @@ func asking(c Choice, n *int) context.Context {
 	})
 }
 
-// The floor holds in every mode, with yolo, from every origin.
 func TestHardlineHoldsEverywhere(t *testing.T) {
 	for _, mode := range []string{ModeSmart, ModeManual, ModeOff} {
 		g, st := newGate(mode)
@@ -78,7 +76,7 @@ func TestHardlineHoldsEverywhere(t *testing.T) {
 			t.Errorf("%s: the owner was asked about the floor", mode)
 		}
 	}
-	g := New(testEnv, true) // yolo from the environment at start
+	g := New(testEnv, true)
 	if v := g.Check(context.Background(), "s", "rm -rf /"); v.Allow {
 		t.Error("boot yolo does not lift the floor")
 	}
@@ -98,7 +96,6 @@ func TestSafeCommandsRunWithoutAsking(t *testing.T) {
 	}
 }
 
-// once, session, always and no.
 func TestTheOwnerDecides(t *testing.T) {
 	g, st := newGate(ModeManual)
 	asked := 0
@@ -136,7 +133,6 @@ func TestDenyRulesWinOverEverything(t *testing.T) {
 	}
 }
 
-// Nobody watching: refused at once, never waiting for an answer.
 func TestUnattendedFailsClosed(t *testing.T) {
 	g, st := newGate(ModeSmart)
 	g.Guardian = func(context.Context, string, string, []Finding) (Risk, string, error) { return RiskLow, "fine", nil }
@@ -157,7 +153,7 @@ func TestUnattendedFailsClosed(t *testing.T) {
 	if asked != 0 {
 		t.Error("nobody is asked")
 	}
-	// A sub-agent of a schedule stays unattended.
+
 	if WithOrigin(WithOrigin(context.Background(), OriginCron), OriginUser) != nil && OriginOf(WithOrigin(WithOrigin(context.Background(), OriginCron), OriginUser)) != OriginCron {
 		t.Error("an unattended origin sticks")
 	}
@@ -198,7 +194,6 @@ func TestGuardian(t *testing.T) {
 	}
 }
 
-// Three refusals in a row stop the job; an approval resets the count.
 func TestDenialBreaker(t *testing.T) {
 	g, _ := newGate(ModeSmart)
 	g.Guardian = func(context.Context, string, string, []Finding) (Risk, string, error) {
@@ -215,7 +210,7 @@ func TestDenialBreaker(t *testing.T) {
 	if !v.Stop || !strings.HasPrefix(v.Message, HardStop) {
 		t.Fatalf("3 in a row stop the job: %+v", v)
 	}
-	// An approval between refusals resets the count.
+
 	asked := 0
 	g.Check(ctx, "t", "rm -rf a")
 	g.Check(ctx, "t", "rm -rf b")

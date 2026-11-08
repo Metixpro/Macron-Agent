@@ -44,7 +44,7 @@ func TestButton(t *testing.T) {
 	cases := []struct{ in, label, id string }{
 		{"🔥 آمار", "آمار", "222"},
 		{"تنظیمات ❤️", "تنظیمات", "333"},
-		{"😀", "\u200c", "111"}, // emoji-only: the icon alone, not the emoji twice
+		{"😀", "\u200c", "111"},
 		{"📊 بدون نگاشت", "📊 بدون نگاشت", ""},
 		{"متن ساده", "متن ساده", ""},
 	}
@@ -58,7 +58,7 @@ func TestButton(t *testing.T) {
 func utf16Len(s string) int { return len(utf16.Encode([]rune(s))) }
 
 func TestParseMappings(t *testing.T) {
-	// "😀 ⭐\n🔥 5368324170671202286\nhello 123456\n❤️\n" where ⭐ is a custom emoji entity.
+
 	line1 := "😀 ⭐"
 	text := line1 + "\n🔥 5368324170671202286\nhello 123456\n❤️\n👍 ✨ extra words"
 	ents := []Entity{
@@ -100,7 +100,7 @@ func TestPreview(t *testing.T) {
 }
 
 func TestDedupeAndFilter(t *testing.T) {
-	// One emoji keeps its first mapping; different emojis may share a premium emoji.
+
 	kept, extra := Dedupe([]Pair{{"❤️", "1"}, {"❤", "2"}, {"😀", "3"}, {"🙂", "3"}, {"🔥", "4"}})
 	if len(kept) != 4 || len(extra) != 1 || extra[0].Emoji != "❤" || kept[2].Emoji != "🙂" {
 		t.Fatalf("kept %v extra %v", kept, extra)

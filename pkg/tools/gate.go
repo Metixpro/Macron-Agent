@@ -13,9 +13,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// gateCommand asks the command gate whether a command may run here; it
-// returns why not ("" when it may), and keeps the checkpoint the gate asks
-// for before a destructive command.
 func (r *Registry) gateCommand(ctx context.Context, sessionID, cmd string) string {
 	if r.Gate == nil {
 		return ""
@@ -32,7 +29,6 @@ func (r *Registry) gateCommand(ctx context.Context, sessionID, cmd string) strin
 	return ""
 }
 
-// checkpoint keeps a copy of what a command is about to delete.
 func (r *Registry) checkpoint(ctx context.Context, sessionID string, paths []string) string {
 	if err := os.MkdirAll(r.CheckpointDir, 0o700); err != nil {
 		return "checkpoint: " + err.Error()
@@ -64,7 +60,7 @@ func (r *Registry) checkpoint(ctx context.Context, sessionID string, paths []str
 	defer cancel()
 	cmd := exec.CommandContext(checkpointCtx, "tar", args...)
 	cmd.Dir = ws
-	// The archive helper needs no model credentials or caller TAR_OPTIONS.
+
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "LANG=C.UTF-8"}
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(file)

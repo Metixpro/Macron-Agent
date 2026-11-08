@@ -357,8 +357,6 @@ func TestMCPStdioServer(t *testing.T) {
 	}
 }
 
-// fakeHTTPServer is a Streamable HTTP MCP server; sseCalls answers tools/call
-// as an event stream.
 func fakeHTTPServer(t *testing.T, sseCalls bool) (*httptest.Server, *sync.Map) {
 	seen := &sync.Map{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -455,8 +453,6 @@ func TestMCPHTTPServer(t *testing.T) {
 	}
 }
 
-// TestMCPLegacySSE: an older server whose stream (GET) gives the address to
-// post to, and answers on the stream.
 func TestMCPLegacySSE(t *testing.T) {
 	m := newManager(t)
 	stream := make(chan []byte, 16)
@@ -498,7 +494,7 @@ func TestMCPLegacySSE(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	defer m.Close() // first: the server waits for its stream to end
+	defer m.Close()
 	ctx := context.Background()
 	keys, err := m.AddServers(ctx, []ServerConfig{{ID: "clock", URL: srv.URL + "/sse", Access: AccessEveryone}})
 	if err != nil {
@@ -556,8 +552,6 @@ func toolNameOK(s string) bool {
 	return true
 }
 
-// TestScriptOnTheMachine runs a plugin on the machine: in the user's work
-// folder, with the real path of it in the input, writing where it likes.
 func TestScriptOnTheMachine(t *testing.T) {
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
 	if err != nil {
@@ -599,8 +593,6 @@ print(json.dumps(out))
 	}
 }
 
-// TestMCPStdio runs an MCP server's program in the real
-// machine, from a plugin folder.
 func TestMCPStdio(t *testing.T) {
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
 	if err != nil {
@@ -647,9 +639,6 @@ rl.on('line', async line => {
   }
 });`
 
-// TestNodeMCPServerFetchesThroughTheProxy: a Node MCP server (as npx starts
-// one) here reaches the internet with its own fetch, through the
-// guarded proxy.
 func TestNodeMCPServerFetchesThroughTheProxy(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not installed")

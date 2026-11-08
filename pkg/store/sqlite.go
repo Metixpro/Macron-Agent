@@ -15,14 +15,8 @@ import (
 	"modernc.org/sqlite"
 )
 
-// The store keeps everything in one SQLite file (pure Go, no cgo): the
-// personal agent runs on its owner's own machine, so there is no database
-// server to install, no password to set and one file to back up.
-
 const driverName = "macron-sqlite"
 
-// timeLayout is how a time is written: UTC, fixed width, so text order is
-// time order (the comparisons in the queries are text comparisons).
 const timeLayout = "2006-01-02 15:04:05.000"
 
 func init() {
@@ -39,9 +33,6 @@ func (d *tdriver) Open(name string) (driver.Conn, error) {
 	return &tconn{Conn: c}, nil
 }
 
-// tconn is SQLite's connection with two additions: a time is written the way
-// the queries compare it (CheckNamedValue), and a time that comes out of an
-// expression is read back as a time (timeRows).
 type tconn struct{ driver.Conn }
 
 func (c *tconn) QueryContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
@@ -55,12 +46,9 @@ func (c *tconn) QueryContext(ctx context.Context, q string, args []driver.NamedV
 	return nil, driver.ErrSkip
 }
 
-// timeRows hands a time that came out of an expression (MIN(expires_at),
-// COALESCE(finished_at, created_at)) as a time, as a column declared DATETIME
-// is: SQLite keeps no type for the result of an expression.
 type timeRows struct {
 	driver.Rows
-	expr []bool // per column: not a table column (no declared type)
+	expr []bool
 }
 
 func (r *timeRows) Next(dest []driver.Value) error {
@@ -95,7 +83,6 @@ func (r *timeRows) ColumnTypeDatabaseTypeName(i int) string {
 	return ""
 }
 
-// looksStoredTime: "2006-01-02 15:04:05" or with ".000", the format times are written in.
 func looksStoredTime(s string) bool {
 	if len(s) != 19 && len(s) != 23 {
 		return false
@@ -170,8 +157,6 @@ func (c *tconn) IsValid() bool {
 	return true
 }
 
-// CheckNamedValue writes a time as UTC text of a fixed width. Everything else
-// is converted as database/sql would.
 func (c *tconn) CheckNamedValue(nv *driver.NamedValue) error {
 	v, err := driver.DefaultParameterConverter.ConvertValue(nv.Value)
 	if err != nil {
@@ -184,10 +169,6 @@ func (c *tconn) CheckNamedValue(nv *driver.NamedValue) error {
 	return nil
 }
 
-// sqliteDSN is the connection string for a database file: write-ahead log
-// (readers do not block the writer), a long wait instead of "database is
-// locked", transactions that take the write lock at once (no deadlock from a
-// read that turns into a write), foreign keys off (the schema has none).
 func sqliteDSN(path string) string {
 	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
 	q := url.Values{}
@@ -200,8 +181,6 @@ func sqliteDSN(path string) string {
 	return u.String()
 }
 
-// DBPath returns the file a database address names: "sqlite:/path/file.db" or
-// just "/path/file.db".
 func DBPath(dsn string) string {
 	dsn = strings.TrimSpace(dsn)
 	dsn = strings.TrimPrefix(dsn, "sqlite://")
@@ -209,8 +188,6 @@ func DBPath(dsn string) string {
 	return dsn
 }
 
-// openDB opens the database file (creating it, and its folder, with owner-only
-// permissions: it holds the owner's conversations).
 func openDB(path string) (*sql.DB, error) {
 	if path == "" {
 		return nil, errors.New("the database path is empty")
@@ -231,14 +208,13 @@ func openDB(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// One writer at a time anyway; a few readers beside it.
+
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(0)
 	return db, nil
 }
 
-// sqliteCode is SQLite's extended result code of err (0 when it is not one).
 func sqliteCode(err error) int {
 	var se *sqlite.Error
 	if errors.As(err, &se) {
@@ -247,7 +223,6 @@ func sqliteCode(err error) int {
 	return 0
 }
 
-// SQLite result codes the store reacts to.
 const (
 	codeBusy             = 5
 	codeLocked           = 6
@@ -255,8 +230,6 @@ const (
 	codeConstraintPK     = 1555
 )
 
-// alreadyApplied: what a statement does is there already (a database that
-// ran it before its version was recorded, a manual fix).
 func alreadyApplied(err error) bool {
 	if err == nil {
 		return false
@@ -265,7 +238,6 @@ func alreadyApplied(err error) bool {
 	return strings.Contains(m, "duplicate column name") || strings.Contains(m, "already exists")
 }
 
-// isDuplicate: a unique key or the primary key refused a second row.
 func isDuplicate(err error) bool {
 	switch sqliteCode(err) {
 	case codeConstraintUnique, codeConstraintPK:
@@ -274,7 +246,6 @@ func isDuplicate(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-// isBusy: the file is locked by another writer for longer than the wait.
 func isBusy(err error) bool {
 	c := sqliteCode(err) & 0xff
 	return c == codeBusy || c == codeLocked

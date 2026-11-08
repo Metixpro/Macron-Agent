@@ -15,13 +15,6 @@ import (
 	"time"
 )
 
-// Anthropic's Messages API. Requests and answers keep the package's
-// OpenAI-shaped types: system messages become the system blocks, tool calls
-// tool_use blocks and tool results tool_result blocks. Prompt caching is on:
-// the tools, the stable start of the system prompt (Message.Stable) and the
-// conversation so far are cached, so each step of a job only pays for what
-// is new.
-
 const anthropicVersion = "2023-06-01"
 
 var ephemeral = map[string]any{"type": "ephemeral"}
@@ -50,7 +43,7 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
-			if !leading { // a note in the middle of the conversation
+			if !leading {
 				add("user", textBlock(m.Text()))
 				continue
 			}
@@ -106,19 +99,18 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 		}
 		tools[len(tools)-1]["cache_control"] = ephemeral
 		body["tools"] = tools
-		// A job's conversation grows step by step: cache it up to here.
+
 		last := msgs[len(msgs)-1].Content
 		last[len(last)-1]["cache_control"] = ephemeral
 	}
-	// No temperature unless the admin chose one: some Claude models refuse
-	// any but the default (a 400; then it is learned and left out).
+
 	if c.TemperatureSet && !c.noTemperature.Load() {
 		body["temperature"] = c.Temperature
 	}
 	if e := c.wireEffort(req); e != "" {
 		body["output_config"] = map[string]any{"effort": e}
 	}
-	// Said either way: some gateways (kie.ai) stream unless told not to.
+
 	body["stream"] = req.OnDelta != nil
 	return body
 }
@@ -149,7 +141,6 @@ func userBlocks(m Message) []map[string]any {
 	return out
 }
 
-// imageBlock turns a data: URL into a base64 image and anything else into a URL image.
 func imageBlock(src string) map[string]any {
 	if rest, ok := strings.CutPrefix(src, "data:"); ok {
 		if meta, data, ok := strings.Cut(rest, ","); ok && strings.HasSuffix(meta, ";base64") {
@@ -160,8 +151,6 @@ func imageBlock(src string) map[string]any {
 	return map[string]any{"type": "image", "source": map[string]any{"type": "url", "url": src}}
 }
 
-// toolID makes a call id from another provider (a job that failed over in
-// the middle) one Anthropic accepts: letters, digits, _ and -.
 func toolID(id string) string {
 	clean := strings.Map(func(r rune) rune {
 		if r == '_' || r == '-' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
@@ -175,7 +164,6 @@ func toolID(id string) string {
 	return clean
 }
 
-// toolInput is a call's arguments as the object Anthropic wants.
 func toolInput(args string) map[string]any {
 	var in map[string]any
 	if json.Unmarshal([]byte(args), &in) != nil || in == nil {
@@ -184,9 +172,6 @@ func toolInput(args string) map[string]any {
 	return in
 }
 
-// anthropicMaxTokens: the API wants a limit. Streamed answers get room for
-// big files written in one call; older models allow less. A refusal that
-// names the model's own limit is remembered.
 func (c *Client) anthropicMaxTokens(req Request) int {
 	if req.MaxTokens > 0 {
 		return req.MaxTokens
@@ -201,7 +186,7 @@ func (c *Client) anthropicMaxTokens(req Request) int {
 	case strings.Contains(m, "claude-3-5"):
 		return 8192
 	case req.OnDelta == nil && (c.effortFor(req) == EffortHigh || c.effortFor(req) == EffortUltra):
-		return 16000 // room to think
+		return 16000
 	case req.OnDelta == nil:
 		return 8192
 	case c.effortFor(req) == EffortUltra:
@@ -212,11 +197,9 @@ func (c *Client) anthropicMaxTokens(req Request) int {
 
 var maxTokensRefusal = regexp.MustCompile(`max_tokens: \d+ > (\d+)`)
 
-// learnAnthropic reads a refusal of the output limit ("max_tokens: 32000 >
-// 8192, which is the maximum allowed"); it reports whether to go again.
 func (c *Client) learnAnthropic(body string) bool {
 	if b := strings.ToLower(body); strings.Contains(b, "temperature") && c.TemperatureSet && !c.noTemperature.Load() {
-		c.noTemperature.Store(true) // the model takes only its default
+		c.noTemperature.Store(true)
 		return true
 	}
 	m := maxTokensRefusal.FindStringSubmatch(body)
@@ -274,12 +257,11 @@ func (e anthropicError) api() *APIError {
 	return &APIError{Status: status, Body: e.Type + ": " + e.Message}
 }
 
-// stopReason maps Anthropic's stop reasons to the OpenAI ones the agent reads.
 func stopReason(s string) string {
 	switch s {
 	case "tool_use":
 		return "tool_calls"
-	case "max_tokens", "model_context_window_exceeded": // cut off either way
+	case "max_tokens", "model_context_window_exceeded":
 		return "length"
 	case "refusal":
 		return "content_filter"

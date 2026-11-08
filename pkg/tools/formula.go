@@ -7,33 +7,22 @@ import (
 	"unicode"
 )
 
-// A formula in a file the bot makes has no value until a spreadsheet
-// program opens it and calculates; a phone's preview, Telegram's among
-// them, shows the stored value only, so «=SUM(B2:B9)» would show nothing.
-// The common formulas are worked out here and their values stored with
-// them: numbers, cells, ranges, + − × ÷ ^ and %, SUM, AVERAGE, MIN, MAX,
-// COUNT, ROUND, ABS and PRODUCT on the same sheet. Anything else is left
-// to the program (the workbook asks it to calculate everything on load).
-
 type sheetCalc struct {
 	rows [][]any
 	memo map[string]float64
-	bad  map[string]bool // no value here
-	busy map[string]bool // being worked out: a cycle
+	bad  map[string]bool
+	busy map[string]bool
 }
 
 func newSheetCalc(rows [][]any) *sheetCalc {
 	return &sheetCalc{rows: rows, memo: map[string]float64{}, bad: map[string]bool{}, busy: map[string]bool{}}
 }
 
-// formulaValue is the value of the formula in a cell, when it can be worked out.
 func (c *sheetCalc) formulaValue(row, col int) (float64, bool) {
 	v, ok, _ := c.cell(row, col)
 	return v, ok
 }
 
-// cell is a cell's number: ok false when it has none (text, an error);
-// empty for a blank cell.
 func (c *sheetCalc) cell(row, col int) (v float64, ok, empty bool) {
 	if row < 0 || row >= len(c.rows) || col < 0 || col >= len(c.rows[row]) || c.rows[row][col] == nil {
 		return 0, false, true
@@ -90,7 +79,6 @@ func (p *formulaParser) peek() byte {
 	return 0
 }
 
-// expr: term (+|- term)*
 func (p *formulaParser) expr() (float64, bool) {
 	v, ok := p.term()
 	for ok {
@@ -110,7 +98,6 @@ func (p *formulaParser) expr() (float64, bool) {
 	return 0, false
 }
 
-// term: power (*|/ power)*
 func (p *formulaParser) term() (float64, bool) {
 	v, ok := p.power()
 	for ok {
@@ -123,7 +110,7 @@ func (p *formulaParser) term() (float64, bool) {
 			p.pos++
 			w, ok2 := p.power()
 			if w == 0 {
-				return 0, false // #DIV/0!: left to the program
+				return 0, false
 			}
 			v, ok = v/w, ok2
 		default:
@@ -133,7 +120,6 @@ func (p *formulaParser) term() (float64, bool) {
 	return 0, false
 }
 
-// power: unary (^ unary)*
 func (p *formulaParser) power() (float64, bool) {
 	v, ok := p.unary()
 	for ok && p.peek() == '^' {
@@ -203,10 +189,9 @@ func (p *formulaParser) atom() (float64, bool) {
 	return 0, false
 }
 
-// function reads the arguments of a function and works it out.
 func (p *formulaParser) function(name string) (float64, bool) {
 	var nums []float64
-	count := 0 // COUNT counts numbers only
+	count := 0
 	for p.peek() != ')' {
 		if !p.argument(&nums, &count) {
 			return 0, false
@@ -274,8 +259,6 @@ func (p *formulaParser) function(name string) (float64, bool) {
 	return 0, false
 }
 
-// argument reads one argument: a range (its numbers; text and blanks are
-// skipped, as the program does) or an expression.
 func (p *formulaParser) argument(nums *[]float64, count *int) bool {
 	save := p.pos
 	p.space()
@@ -301,7 +284,7 @@ func (p *formulaParser) argument(nums *[]float64, count *int) bool {
 					*count++
 				case empty:
 				case p.calc.isFormula(r, c):
-					return false // a formula with no value here: so has this one
+					return false
 				}
 			}
 		}
@@ -324,7 +307,6 @@ func (c *sheetCalc) isFormula(row, col int) bool {
 	return ok && len(s) > 1 && s[0] == '='
 }
 
-// parseRef reads "B12" or "$B$12" (0-based row and column).
 func parseRef(ref string) (row, col int, ok bool) {
 	ref = strings.ReplaceAll(ref, "$", "")
 	i := 0

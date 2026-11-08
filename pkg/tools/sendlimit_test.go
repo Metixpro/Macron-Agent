@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Through a local Bot API server the tools work up to 2000 MB: they say so,
-// and downloads, splits and archives follow it.
 func TestSendLimitFollowsTheBotAPIServer(t *testing.T) {
 	old := [...]int64{dlSendLimit, dlFitBytes, telegramMaxBytes, telegramPartBytes, maxDownloadBytes}
 	defer func() {

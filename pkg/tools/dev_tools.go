@@ -13,26 +13,22 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// Developer tools: run code like a terminal and install packages into the
-// user's own environment.
-
 const (
 	ToolRunCode = "run_code"
 
 	scratchDir        = ".run"
 	maxCodeBytes      = 512 << 10
-	maxShownOutput    = 12000 // the end of a background job's log the model is shown
+	maxShownOutput    = 12000
 	installTimeout    = 4 * time.Minute
-	maxRunSeconds     = 7200 // run_code
-	maxBashSeconds    = 7200 // bash_execute
+	maxRunSeconds     = 7200
+	maxBashSeconds    = 7200
 	maxInstallCount   = 10
-	maxProjectInstall = 80 // from a project's manifest
+	maxProjectInstall = 80
 )
 
-// language describes how to run one kind of source file.
 type language struct {
 	Name    string
-	Program string // the program that must be installed
+	Program string
 	Ext     string
 	argv    func(file string, args []string) []string
 	display func(file string) string
@@ -76,7 +72,7 @@ var languages = []language{
 		},
 		display: func(f string) string { return "g++ " + f + " -o prog && ./prog" }},
 	{Name: "java", Program: "java", Ext: ".java",
-		// A single source file runs as it is (JEP 330).
+
 		argv: func(f string, a []string) []string {
 			return append([]string{"java", "-Dfile.encoding=UTF-8", f}, a...)
 		},
@@ -153,7 +149,7 @@ func (r *Registry) pickLanguage(name, file string) (language, error) {
 			}
 		}
 	}
-	if name == "typescript" || name == "ts" { // the runtime that is installed
+	if name == "typescript" || name == "ts" {
 		name = "deno"
 		if _, ok := r.langs["deno"]; !ok {
 			name = "bun"
@@ -192,7 +188,7 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 	if err != nil {
 		return "error: " + err.Error(), nil
 	}
-	if lang.Name == "bash" { // a shell script is commands like any other
+	if lang.Name == "bash" {
 		script := code
 		if strings.TrimSpace(script) == "" {
 			if b, _, err := r.Machine.ReadFile(sessionID, file, maxCodeBytes); err == nil {
@@ -224,7 +220,7 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 	timeout := time.Duration(intArg(args, "timeout_seconds", 60, 1, maxRunSeconds)) * time.Second
 	run := lang.argv(argFile(file), argv)
 	shown, env := commandLine(lang, file, argv), lang.env
-	if dir := r.goPackageDir(sessionID, lang, file); dir != "" { // a module: the whole package, its dependencies
+	if dir := r.goPackageDir(sessionID, lang, file); dir != "" {
 		run = append([]string{"bash", "-c", `cd "$1" && shift && exec go run . "$@"`, "go", dir}, argv...)
 		shown = "cd " + shellQuote(dir) + " && go run ."
 		for _, a := range argv {
@@ -238,8 +234,8 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 		Timeout:     timeout,
 		Env:         env,
 		MergeOutput: true,
-		Tee:         outputTee(ctx), // the live view shows the last line printed
-		InSession:   true,           // in the conversation's shell, beside its background jobs
+		Tee:         outputTee(ctx),
+		InSession:   true,
 	})
 	out := terminalTranscript(shown, res, true)
 	if files := r.changedFiles(sessionID, before); len(files) > 0 {
@@ -248,7 +244,6 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 	return out, nil
 }
 
-// commandLine is the command as a person would type it.
 func commandLine(l language, file string, args []string) string {
 	shown := strings.TrimPrefix(file, scratchDir+"/")
 	cmd := ""
@@ -270,15 +265,8 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// TranscriptPrefix starts every terminal transcript; front-ends use it to
-// recognise one.
 const TranscriptPrefix = "$ "
 
-// terminalTranscript renders a run the way a terminal shows it:
-//
-//	$ python3 app.py
-//	...output...
-//	[exit 1 · 52ms]
 func terminalTranscript(cmd string, res *machine.ExecutionResult, hints bool) string {
 	var sb strings.Builder
 	sb.WriteString(TranscriptPrefix + cmd + "\n")
@@ -290,7 +278,7 @@ func terminalTranscript(cmd string, res *machine.ExecutionResult, hints bool) st
 		}
 		out += res.Stderr
 	}
-	out = strings.TrimRight(out, "\n") // whole: Execute caps it and keeps the rest in a file (KeepWhole)
+	out = strings.TrimRight(out, "\n")
 	if out != "" {
 		sb.WriteString(out + "\n")
 	}
@@ -318,7 +306,6 @@ var (
 	nodeMissingRe = regexp.MustCompile(`Cannot find module '([@A-Za-z0-9_./-]+)'`)
 )
 
-// pipNames maps import names to the package that provides them.
 var pipNames = map[string]string{
 	"cv2": "opencv-python-headless", "PIL": "pillow", "sklearn": "scikit-learn", "yaml": "pyyaml", "bs4": "beautifulsoup4",
 	"dateutil": "python-dateutil", "dotenv": "python-dotenv", "telegram": "python-telegram-bot", "Crypto": "pycryptodome",
@@ -340,8 +327,6 @@ func missingModuleHint(out string) string {
 	return ""
 }
 
-// argList is a program's arguments: a list, or one string split at spaces
-// (a comma belongs to its argument: --format=csv,json).
 func argList(v any) []string {
 	if s, ok := v.(string); ok && !strings.HasPrefix(strings.TrimSpace(s), "[") {
 		return strings.Fields(s)
@@ -349,8 +334,6 @@ func argList(v any) []string {
 	return anyList(v)
 }
 
-// anyList is a list argument however it was sent: a list, a list as JSON
-// text, one item per line or per comma, or words.
 func anyList(v any) []string {
 	var out []string
 	switch x := v.(type) {
@@ -367,13 +350,13 @@ func anyList(v any) []string {
 		x = strings.TrimSpace(x)
 		switch {
 		case x == "":
-		case strings.HasPrefix(x, "["): // a list sent as JSON text
+		case strings.HasPrefix(x, "["):
 			var list []any
 			if json.Unmarshal([]byte(x), &list) == nil {
 				return anyList(list)
 			}
 			out = strings.Fields(x)
-		case strings.Contains(x, "\n"), strings.Contains(x, ","): // one per line, or "a.pdf, my file.pdf"
+		case strings.Contains(x, "\n"), strings.Contains(x, ","):
 			for _, part := range strings.FieldsFunc(x, func(r rune) bool { return r == '\n' || r == ',' }) {
 				if part = strings.TrimSpace(part); part != "" {
 					out = append(out, part)
@@ -386,7 +369,6 @@ func anyList(v any) []string {
 	return out
 }
 
-// argFile keeps a file name from being read as an option.
 func argFile(name string) string {
 	if strings.HasPrefix(name, "-") {
 		return "./" + name
@@ -394,9 +376,6 @@ func argFile(name string) string {
 	return name
 }
 
-// goPackageDir is the folder of a Go file inside a module (a go.mod above
-// it): run_code runs its whole package (main split over files) with the
-// module's dependencies. "" for a file on its own.
 func (r *Registry) goPackageDir(sessionID string, lang language, file string) string {
 	if lang.Name != "go" || file == "" || strings.HasPrefix(file, scratchDir+"/") {
 		return ""

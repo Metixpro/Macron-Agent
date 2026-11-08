@@ -1,8 +1,3 @@
-// Package machine is where the agent lives: this computer. It runs the
-// agent's commands directly, as the user that runs the agent, with that
-// user's files, network and programs; keeps a work folder for each
-// conversation; reaches any file by its path; and keeps background jobs.
-// The machine is the owner's, and so is the agent.
 package machine
 
 import (
@@ -25,29 +20,26 @@ import (
 	"time"
 )
 
-// Config configures a Machine.
 type Config struct {
-	BaseDir       string // the folder of the work folders, one for each conversation
-	MaxConcurrent int    // commands that run at the same time (default: 8, or twice the CPUs)
+	BaseDir       string
+	MaxConcurrent int
 }
 
-// Machine is safe for concurrent use.
 type Machine struct {
 	BaseDir string
 	cfg     Config
 	sem     chan struct{}
-	heavy   chan struct{} // the share of the slots heavy commands may take
+	heavy   chan struct{}
 
 	mu      sync.Mutex
 	touched map[string]time.Time
 	active  map[string]int
-	shells  map[string]*shell // the sessions' shells, by work folder (see shell.go)
+	shells  map[string]*shell
 
-	shellStart sync.Mutex // one shell starts at a time
+	shellStart sync.Mutex
 	reaper     sync.Once
 }
 
-// ExecutionResult is the outcome of a command.
 type ExecutionResult struct {
 	Stdout    string `json:"stdout"`
 	Stderr    string `json:"stderr"`
@@ -57,33 +49,24 @@ type ExecutionResult struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// RunOptions describes one command.
 type RunOptions struct {
-	Args           []string // argv executed directly, without a shell
-	HostExecutable bool     // internally resolved host binary; do not translate argv[0] through /workspace
-	Shell          string   // OR a bash script (exactly one of Args/Shell)
-	Stdin          []byte   // optional stdin
-	// InSession runs the command in the conversation's own shell when it has
-	// one (after a background job started), so it reaches that job on
-	// localhost and shares its environment.
+	Args           []string
+	HostExecutable bool
+	Shell          string
+	Stdin          []byte
+
 	InSession bool
-	Timeout   time.Duration     // default 30s
-	Env       map[string]string // extra environment variables
-	// MergeOutput sends stdout and stderr into one stream (ExecutionResult.Stdout),
-	// in the order they were written, exactly as a terminal would show them.
+	Timeout   time.Duration
+	Env       map[string]string
+
 	MergeOutput bool
-	// Tee also receives everything the command prints, as it prints it (for
-	// live progress); it may be written from two goroutines at once.
+
 	Tee io.Writer
-	// Heavy marks a command that keeps the CPU busy (a download, a video
-	// encode): at most as many as there are CPUs run at once, so light ones
-	// (code, conversions of a few seconds) never wait behind them.
+
 	Heavy bool
 }
 
 const (
-	// MountPoint is a name for the work folder that the model and the skills
-	// use: in a command or a file name it means the real folder.
 	MountPoint = "/workspace"
 )
 
@@ -91,9 +74,6 @@ const maxCapturedOutput = 64 * 1024
 
 var safeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-// SafeSessionID maps any string to a directory name that cannot traverse paths.
-// Plain ids are kept as-is; anything else is hashed. The hashed form contains a
-// '.', which plain ids cannot, so the two spaces never collide.
 func SafeSessionID(id string) string {
 	if id == "" {
 		return "default"
@@ -105,7 +85,6 @@ func SafeSessionID(id string) string {
 	return "h." + hex.EncodeToString(sum[:10])
 }
 
-// New creates a Machine whose work folders live under cfg.BaseDir.
 func New(cfg Config) (*Machine, error) {
 	if cfg.BaseDir == "" {
 		cfg.BaseDir = "./workspaces"
@@ -116,7 +95,7 @@ func New(cfg Config) (*Machine, error) {
 	}
 	cfg.BaseDir = abs
 	if cfg.MaxConcurrent <= 0 {
-		cfg.MaxConcurrent = max(8, 2*runtime.NumCPU()) // the owner's jobs do not queue behind each other
+		cfg.MaxConcurrent = max(8, 2*runtime.NumCPU())
 	}
 	if err := os.MkdirAll(cfg.BaseDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
@@ -132,7 +111,6 @@ func New(cfg Config) (*Machine, error) {
 	}, nil
 }
 
-// Workspace returns (and creates) the directory of a session.
 func (s *Machine) Workspace(sessionID string) (string, error) {
 	top := s.topWorkspace(sessionID)
 	ws := top
@@ -146,25 +124,18 @@ func (s *Machine) Workspace(sessionID string) (string, error) {
 	return ws, nil
 }
 
-// A sub-session is a sub-agent's own workspace: a folder inside its parent's
-// (hidden in .agents), so the parent's quota covers it, the user's installed
-// packages work in it, and nothing it makes reaches the user until the
-// parent takes it over.
 const (
 	subSep = "::"
 	SubDir = ".agents"
 )
 
-// SubSession names the workspace of a sub-agent of parent.
 func SubSession(parent, name string) string { return ParentSession(parent) + subSep + name }
 
-// ParentSession is the session a sub-session belongs to (a session itself otherwise).
 func ParentSession(id string) string {
 	p, _, _ := strings.Cut(id, subSep)
 	return p
 }
 
-// SubPath is where a sub-session's workspace is inside its parent's ("" for a session).
 func SubPath(id string) string {
 	_, n, ok := strings.Cut(id, subSep)
 	if !ok {
@@ -173,7 +144,6 @@ func SubPath(id string) string {
 	return SubDir + "/" + SafeSessionID(n)
 }
 
-// topWorkspace is the folder of the session a (sub-)session belongs to.
 func (s *Machine) topWorkspace(sessionID string) string {
 	return filepath.Join(s.BaseDir, SafeSessionID(ParentSession(sessionID)))
 }
@@ -205,8 +175,6 @@ func (s *Machine) end(ws string) {
 	s.mu.Unlock()
 }
 
-// StartJanitor deletes the files of work folders older than ttl, now and
-// then. ttl 0 keeps everything for ever (the default of a personal server).
 func (s *Machine) StartJanitor(ctx context.Context, ttl, every time.Duration) {
 	if ttl <= 0 {
 		return
@@ -230,8 +198,6 @@ func (s *Machine) StartJanitor(ctx context.Context, ttl, every time.Duration) {
 	}()
 }
 
-// sweep deletes files (and links) older than ttl. Folders that are running a
-// command are skipped; empty ones are removed.
 func (s *Machine) sweep(ttl time.Duration) (files, workspaces int) {
 	entries, err := os.ReadDir(s.BaseDir)
 	if err != nil {
@@ -260,7 +226,7 @@ func (s *Machine) sweep(ttl time.Duration) (files, workspaces int) {
 				}
 				return nil
 			}
-			// Lstat-based info: a symlink's own age counts, its target is never touched.
+
 			if info, err := d.Info(); err == nil && info.ModTime().Before(cutoff) {
 				if os.Remove(p) == nil {
 					files++
@@ -268,8 +234,8 @@ func (s *Machine) sweep(ttl time.Duration) (files, workspaces int) {
 			}
 			return nil
 		})
-		for i := len(dirs) - 1; i >= 0; i-- { // deepest first
-			_ = os.Remove(dirs[i]) // only succeeds when empty
+		for i := len(dirs) - 1; i >= 0; i-- {
+			_ = os.Remove(dirs[i])
 		}
 		if left, err := os.ReadDir(ws); err == nil && len(left) == 0 {
 			if os.Remove(ws) == nil {
@@ -283,19 +249,17 @@ func (s *Machine) sweep(ttl time.Duration) (files, workspaces int) {
 	return files, workspaces
 }
 
-// Execute runs a bash script.
 func (s *Machine) Execute(ctx context.Context, sessionID, command string, timeout time.Duration) *ExecutionResult {
 	return s.Run(ctx, sessionID, RunOptions{Shell: command, Timeout: timeout})
 }
 
-// Run executes a command in the session's work folder.
 func (s *Machine) Run(ctx context.Context, sessionID string, opts RunOptions) *ExecutionResult {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
 		return &ExecutionResult{ExitCode: -1, Error: err.Error()}
 	}
 	if opts.InSession {
-		if sh := s.shellOf(ws); sh != nil { // its background jobs are on its localhost
+		if sh := s.shellOf(ws); sh != nil {
 			return s.runInShell(ctx, sh, opts)
 		}
 	}
@@ -304,13 +268,12 @@ func (s *Machine) Run(ctx context.Context, sessionID string, opts RunOptions) *E
 		return &ExecutionResult{ExitCode: -1, Error: err.Error()}
 	}
 	defer release()
-	top := s.topWorkspace(sessionID) // a sub-agent's command keeps its parent's folder too
+	top := s.topWorkspace(sessionID)
 	s.begin(top)
 	defer s.end(top)
 	return s.runIn(ctx, ws, opts)
 }
 
-// acquire takes a slot (and one of the heavy commands' share).
 func (s *Machine) acquire(ctx context.Context, heavy bool) (func(), error) {
 	errBusy := errors.New("cancelled while waiting for a free slot")
 	if heavy {
@@ -367,14 +330,14 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 	stdout := &capWriter{max: maxCapturedOutput}
 	stderr := &capWriter{max: maxCapturedOutput}
 	if opts.MergeOutput {
-		stderr = stdout // the same writer: exec uses one pipe, so the order is kept
+		stderr = stdout
 	}
 	var outW, errW io.Writer = stdout, stderr
 	if opts.Tee != nil {
 		outW = io.MultiWriter(stdout, opts.Tee)
 		errW = io.MultiWriter(stderr, opts.Tee)
 		if opts.MergeOutput {
-			errW = outW // still one writer, one pipe
+			errW = outW
 		}
 	}
 	cmd.Stdout, cmd.Stderr = outW, errW
@@ -410,7 +373,6 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 
 const defaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-// Available reports which of the given programs are installed.
 func (s *Machine) Available(programs ...string) map[string]bool {
 	out := map[string]bool{}
 	for _, p := range programs {
@@ -421,7 +383,6 @@ func (s *Machine) Available(programs ...string) map[string]bool {
 	return out
 }
 
-// Check reports whether a command succeeds, e.g. that a Python module imports.
 func (s *Machine) Check(argv ...string) bool {
 	tmp, err := os.MkdirTemp(s.BaseDir, ".probe-")
 	if err != nil {
@@ -431,9 +392,6 @@ func (s *Machine) Check(argv ...string) bool {
 	return s.runIn(context.Background(), tmp, RunOptions{Args: argv, HostExecutable: true, Timeout: 30 * time.Second}).ExitCode == 0
 }
 
-// baseEnv is the environment of a command: the service user's own, without
-// the agent's own tokens and keys (see hostEnv), and a few settings that make
-// tools behave in a pipe: no color, no pager, no terminal.
 func (s *Machine) baseEnv(opts RunOptions, ws string) map[string]string {
 	host := hostEnv()
 	home, tmp := host["HOME"], "/tmp"
@@ -443,17 +401,17 @@ func (s *Machine) baseEnv(opts RunOptions, ws string) map[string]string {
 	env := map[string]string{
 		"LC_ALL":                        "C.UTF-8",
 		"PYTHONUNBUFFERED":              "1",
-		"PYTHONDONTWRITEBYTECODE":       "1", // a file edited within the same second is run as edited, not from a stale cache
+		"PYTHONDONTWRITEBYTECODE":       "1",
 		"MPLBACKEND":                    "Agg",
 		"MPLCONFIGDIR":                  tmp + "/mpl",
 		"TERM":                          "dumb",
 		"NO_COLOR":                      "1",
 		"PIP_DISABLE_PIP_VERSION_CHECK": "1",
-		// git commit needs a name when the user has none.
+
 		"GIT_AUTHOR_NAME": "Macron", "GIT_AUTHOR_EMAIL": "macron@localhost",
 		"GIT_COMMITTER_NAME": "Macron", "GIT_COMMITTER_EMAIL": "macron@localhost",
 	}
-	for k, v := range host { // the service user's own environment decides
+	for k, v := range host {
 		env[k] = v
 	}
 	if env["HOME"] == "" {
@@ -473,10 +431,6 @@ func flattenEnv(m map[string]string) []string {
 	return out
 }
 
-// capWriter keeps at most about max bytes of a command's output, so one that
-// prints gigabytes cannot exhaust the bot's memory: the start and the end
-// (where a build's error or a script's result is), with a mark where the
-// middle was dropped.
 type capWriter struct {
 	max       int
 	head      []byte
@@ -495,20 +449,19 @@ func (w *capWriter) Write(p []byte) (int, error) {
 		w.head = append(w.head, p[:take]...)
 		p = p[take:]
 	}
-	if len(p) >= w.tailMax() { // one big write: only its end can stay
+	if len(p) >= w.tailMax() {
 		w.dropped += int64(len(w.tail) + len(p) - w.tailMax())
 		w.tail = append(w.tail[:0], p[len(p)-w.tailMax():]...)
 		w.truncated = w.dropped > 0
 		return n, nil
 	}
 	w.tail = append(w.tail, p...)
-	if len(w.tail) > 2*w.tailMax() { // trimmed now and then, not on every write
+	if len(w.tail) > 2*w.tailMax() {
 		w.trim()
 	}
 	return n, nil
 }
 
-// trim drops the oldest part of the end past tailMax.
 func (w *capWriter) trim() {
 	if over := len(w.tail) - w.tailMax(); over > 0 {
 		w.dropped += int64(over)
@@ -517,16 +470,15 @@ func (w *capWriter) trim() {
 	}
 }
 
-// String is what was kept.
 func (w *capWriter) String() string {
 	w.trim()
 	if !w.truncated {
 		return string(w.head) + string(w.tail)
 	}
 	mark := fmt.Sprintf("\n… [%s of output cut from the middle] …\n", humanBytes(w.dropped))
-	tail := w.tail[min(len(mark), len(w.tail)):] // the whole stays within max
+	tail := w.tail[min(len(mark), len(w.tail)):]
 	if i := bytes.IndexByte(tail, '\n'); i >= 0 && i < 400 {
-		tail = tail[i+1:] // the end starts at a line
+		tail = tail[i+1:]
 	}
 	return strings.TrimRight(string(w.head), "\n") + mark + string(tail)
 }

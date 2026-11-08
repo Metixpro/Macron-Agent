@@ -18,14 +18,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The plugins tool: how the agent connects MCP servers and script plugins
-// when its owner asks for them in the chat. There is no panel for this: "add
-// the GitHub MCP server, here is my token" is a sentence, and this tool is
-// what the sentence turns into. A server lands in mcp_servers.json (the
-// standard {"mcpServers": {…}} file, which can also be edited by hand), a
-// script in the plugins folder; either is live after a reload, which every
-// action here does by itself.
-
 const toolPlugins = "plugins"
 
 const pluginsToolHelp = "Connect, list, test and remove your own extra tools: MCP servers and script plugins. " +
@@ -35,7 +27,6 @@ const pluginsToolHelp = "Connect, list, test and remove your own extra tools: MC
 	"set_env (id, env_name, env_value: a secret a plugin asks for); test; install_deps; reload (after editing mcp_servers.json or the plugins folder by hand). " +
 	"The new tools are in your tool list from the next step."
 
-// pluginsTool is the tool for the owner's private chat.
 func (b *Bot) pluginsTool(u *store.User, m *telegram.Message) []agent.LocalTool {
 	if b.plugins == nil || !b.isAdmin(u.ID) {
 		return nil
@@ -104,7 +95,6 @@ func argMap(args map[string]any, k string) map[string]string {
 	return out
 }
 
-// pluginKey finds the manager's key for an id: servers are "@id", scripts "id".
 func (b *Bot) pluginKey(id string) (string, error) {
 	id = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(id), "@"))
 	if id == "" {
@@ -306,10 +296,6 @@ func slugOf(parts ...string) string {
 	return "mcp"
 }
 
-// ---------------------------------------------------------------- mcp_servers.json
-
-// readMCPFile reads the file as a map and finds where the servers are: under
-// "mcpServers" (the usual form) or at the top.
 func readMCPFile(path string) (top map[string]json.RawMessage, servers map[string]json.RawMessage, err error) {
 	top = map[string]json.RawMessage{}
 	data, err := os.ReadFile(path)
@@ -331,7 +317,7 @@ func readMCPFile(path string) (top map[string]json.RawMessage, servers map[strin
 	if len(top) == 0 {
 		return top, map[string]json.RawMessage{}, nil
 	}
-	return top, top, nil // servers at the top of the file
+	return top, top, nil
 }
 
 func writeMCPFile(path string, top, servers map[string]json.RawMessage) error {
@@ -350,13 +336,12 @@ func writeMCPFile(path string, top, servers map[string]json.RawMessage) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil { // it may hold tokens
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
 }
 
-// writeMCPServer adds (or replaces) a server in the file.
 func writeMCPServer(path string, c plugins.ServerConfig) error {
 	top, servers, err := readMCPFile(path)
 	if err != nil {
@@ -392,7 +377,6 @@ func writeMCPServer(path string, c plugins.ServerConfig) error {
 	return writeMCPFile(path, top, servers)
 }
 
-// removeMCPServer takes a server out of the file.
 func removeMCPServer(path, id string) error {
 	top, servers, err := readMCPFile(path)
 	if err != nil {

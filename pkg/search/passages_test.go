@@ -26,13 +26,13 @@ Generic type aliases let a type alias have type parameters, a long-awaited featu
 	if len(got) != 2 || !strings.Contains(got[0], "released in February") || !strings.Contains(got[1], "type parameters") {
 		t.Fatalf("%q", got)
 	}
-	// Persian, with Arabic letter forms and the zero-width non-joiner folded.
+
 	fa := keyPassages("به سایت ما خوش آمدید و اخبار روز را این‌جا بخوانید، همه چیز درباره اقتصاد.\n"+
 		"قيمت دلار آزاد امروز در بازار تهران به ۹۰ هزار تومان رسید که بیشتر از دیروز است.", queryTerms("قیمت دلار امروز چنده؟"))
 	if len(fa) != 1 || !strings.Contains(fa[0], "۹۰ هزار تومان") {
 		t.Fatalf("persian: %q", fa)
 	}
-	// Nothing matches: the page's lead paragraph.
+
 	lead := keyPassages(strings.Repeat("A long first paragraph about something else entirely. ", 4), queryTerms("zebra"))
 	if len(lead) != 1 {
 		t.Errorf("lead: %q", lead)

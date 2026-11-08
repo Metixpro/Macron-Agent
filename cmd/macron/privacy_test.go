@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// The machine is the owner's: nothing about it is hidden from them. The
-// model sees its own address and says it; the system prompt says so.
 func TestTheServerIsNotPrivateFromItsOwner(t *testing.T) {
 	h := newHarness(t)
 	_ = h.bot.app.Machine.WriteFile(sessionFor(95), "net.json", []byte(`{"ip":"203.0.113.77","hostname":"box.example.net","city":"Geneva"}`))
@@ -49,9 +47,6 @@ func TestToolListNeverReachesTheUser(t *testing.T) {
 	}
 }
 
-// The owner, in a private chat, sees everything about the bot: the prompt
-// says so (with the model in use) and the leak guard lets the list through.
-// Anyone else, and the owner in a group, gets the usual privacy.
 func TestTheOwnerSeesEverything(t *testing.T) {
 	h := newHarness(t)
 	dump := "ابزارهام اینان:\n- `web_search`\n- `web_fetch`\n- `generate_image`\n- `download_media_ytdlp`"

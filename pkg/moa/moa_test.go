@@ -11,13 +11,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// fakeModels answers each slot: advisors with their name, the aggregator
-// with "done"; fail lists providers that fail.
 type fakeModels struct {
 	mu    sync.Mutex
 	calls map[string][]llm.Request
 	fail  map[string]error
-	once  map[string]error // fails the first call only
+	once  map[string]error
 }
 
 func (f *fakeModels) call(_ context.Context, s Slot, req llm.Request) (*llm.Response, error) {
@@ -49,7 +47,6 @@ func preset(fanout string) Preset {
 
 var conversation = []llm.Message{{Role: "system", Content: "you are an agent"}, {Role: "user", Content: "solve the hard task"}}
 
-// rounds runs n rounds of a job: each round adds a tool call and its result.
 func rounds(c *Client, n int) {
 	msgs := append([]llm.Message(nil), conversation...)
 	for i := 0; i < n; i++ {
@@ -90,8 +87,6 @@ func TestDisabledIsTheAggregatorAlone(t *testing.T) {
 	}
 }
 
-// The advisors see the conversation's text only; their views are a separate
-// last user message, the aggregator's prefix stays as it was.
 func TestAdvisorsAndTheBlock(t *testing.T) {
 	f := &fakeModels{}
 	cl := &Client{Preset: preset(FanoutUserTurn), Call: f.call}
@@ -115,13 +110,12 @@ func TestAdvisorsAndTheBlock(t *testing.T) {
 	if len(conversation) != 2 {
 		t.Fatal("the caller's messages were changed")
 	}
-	// The view is a function of the stable history: the same again.
+
 	if a, b := fmt.Sprint(View(conversation)), fmt.Sprint(View(append(conversation, llm.Message{Role: "tool", Content: "x"}))); a != b {
 		t.Errorf("tool results change the view:\n%s\n%s", a, b)
 	}
 }
 
-// An advisor whose key fails does not fail the turn: its error is in the block.
 func TestAFailingAdvisor(t *testing.T) {
 	f := &fakeModels{fail: map[string]error{"gpt": errors.New("401 invalid api key")}}
 	p := preset(FanoutUserTurn)
@@ -142,8 +136,6 @@ func TestAFailingAdvisor(t *testing.T) {
 	}
 }
 
-// A template that insists on alternating roles: the failed request is sent
-// once more merged, and from then on that destination gets it merged at once.
 func TestAlternationRecovery(t *testing.T) {
 	strict := &Strict{}
 	alternate := &llm.APIError{Status: 400, Body: "Conversation roles must alternate user/assistant/user/assistant/..."}
@@ -159,12 +151,12 @@ func TestAlternationRecovery(t *testing.T) {
 	if retry := f.calls["opus"][1].Messages; len(retry) != 2 || !strings.Contains(retry[1].Content, "solve the hard task") || !strings.Contains(retry[1].Content, "reference") {
 		t.Fatalf("the retry merges the user messages: %+v", retry)
 	}
-	// The next request of the session goes merged at once.
+
 	cl2 := &Client{Preset: preset(FanoutUserTurn), Call: f.call, Strict: strict, Dest: dest}
 	if _, err := cl2.Complete(context.Background(), llm.Request{Messages: conversation}); err != nil || f.n("opus") != 3 || len(f.calls["opus"][2].Messages) != 2 {
 		t.Fatalf("pre-merged: %d calls, %v", f.n("opus"), err)
 	}
-	// Another destination keeps the cacheable shape.
+
 	other := &Client{Preset: Preset{Name: "x", Aggregator: Slot{Provider: "claude"}, References: []Slot{{Provider: "gpt"}}}, Call: f.call, Strict: strict, Dest: dest}
 	_, _ = other.Complete(context.Background(), llm.Request{Messages: conversation})
 	if len(f.calls["claude"][0].Messages) != 3 {

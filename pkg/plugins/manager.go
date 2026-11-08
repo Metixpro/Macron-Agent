@@ -24,15 +24,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// State is what the panel sets for a plugin, kept by the bot (sealed):
-// on or off, who may use it, and its secrets.
 type State struct {
 	Enabled *bool             `json:"enabled,omitempty"`
 	Access  string            `json:"access,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-// StateStore keeps the panel's choices and the MCP servers added in it.
 type StateStore interface {
 	PluginState(key string) State
 	SetPluginState(key string, st State) error
@@ -40,7 +37,6 @@ type StateStore interface {
 	SetPanelServers(list []ServerConfig) error
 }
 
-// MemoryStates is a StateStore in memory (tests, the CLI).
 type MemoryStates struct {
 	mu      sync.Mutex
 	states  map[string]State
@@ -76,20 +72,17 @@ func (s *MemoryStates) SetPanelServers(list []ServerConfig) error {
 	return nil
 }
 
-// Kinds of plugin.
 const (
 	KindScript = "script"
 	KindMCP    = "mcp"
 )
 
-// Where a plugin comes from.
 const (
-	SourceFolder = "folder" // a folder in the plugins directory
-	SourceFile   = "file"   // mcp_servers.json
-	SourcePanel  = "panel"  // added in the bot's panel
+	SourceFolder = "folder"
+	SourceFile   = "file"
+	SourcePanel  = "panel"
 )
 
-// MCP connection states.
 const (
 	StatusOff        = "off"
 	StatusConnecting = "connecting"
@@ -98,43 +91,40 @@ const (
 )
 
 const (
-	maxPluginTools = 1000      // all plugins' tools together: a request loads the ones it needs (agent.ToolSearch)
-	maxZipFiles    = 2000      // files of an uploaded plugin
-	maxZipBytes    = 100 << 20 // unpacked
-	maxZipFile     = 50 << 20  // one file
-	maxZipPlugins  = 10        // plugins in one archive
+	maxPluginTools = 1000
+	maxZipFiles    = 2000
+	maxZipBytes    = 100 << 20
+	maxZipFile     = 50 << 20
+	maxZipPlugins  = 10
 	depsTimeout    = 10 * time.Minute
 	testSession    = "plugin-test"
 	buildSession   = "plugin-build"
 )
 
-// ToolInfo is one tool of a plugin, as the model sees it.
 type ToolInfo struct {
-	Name        string // the name the model calls
+	Name        string
 	Description string
-	Conflict    bool // a tool of the same name came first: not offered
+	Conflict    bool
 }
 
-// Info is what the panel shows of a plugin.
 type Info struct {
 	Key, ID, Name, Version, Author, Description string
 	Kind, Source                                string
-	Runtime, Entry                              string // a script
-	Command, URL                                string // an MCP server
+	Runtime, Entry                              string
+	Command, URL                                string
 	Enabled                                     bool
 	Access                                      string
 	Net                                         bool
 	TimeoutSeconds, MemoryMB                    int
 	Tools                                       []ToolInfo
-	EnvNames                                    []string        // the secrets it uses
-	EnvSet                                      map[string]bool // those that have a value
-	EnvOwn                                      map[string]bool // those set in the panel (removable there)
+	EnvNames                                    []string
+	EnvSet                                      map[string]bool
+	EnvOwn                                      map[string]bool
 	EnvHelp                                     map[string]string
 	Status, Error, ServerName                   string
-	Deps                                        bool // requirements.txt or package.json
+	Deps                                        bool
 }
 
-// Ready reports a plugin whose tools are offered.
 func (i Info) Ready() bool {
 	return i.Enabled && i.Error == "" && (i.Kind == KindScript || i.Status == StatusReady)
 }
@@ -177,27 +167,26 @@ func (p *plugin) access() string {
 }
 
 type toolRef struct {
-	key, name string // the plugin, and the tool's own name there
+	key, name string
 	def       llm.Tool
 }
 
-// Manager loads the plugins and serves their tools. Safe for concurrent use.
 type Manager struct {
-	Dir     string           // the plugins folder (one folder per plugin)
-	MCPFile string           // mcp_servers.json ("" or missing: none)
-	Machine *machine.Machine // where scripts and MCP programs run
-	HTTP    *http.Client     // reaches the MCP servers that are given by address
+	Dir     string
+	MCPFile string
+	Machine *machine.Machine
+	HTTP    *http.Client
 	States  StateStore
-	Version string // the bot's, told to MCP servers
-	// IsAdmin decides who may use the tools of an admins-only plugin.
+	Version string
+
 	IsAdmin func(sessionID string) bool
-	// Reserved names the built-in tools: a plugin cannot take their names.
+
 	Reserved func(name string) bool
 
 	mu      sync.RWMutex
 	plugins map[string]*plugin
 	index   map[string]toolRef
-	order   []string // the exposed names, sorted
+	order   []string
 	life    context.Context
 	stop    context.CancelFunc
 }
@@ -216,7 +205,6 @@ func (m *Manager) init() {
 	}
 }
 
-// states is where the panel's choices are kept.
 func (m *Manager) states() StateStore {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -224,7 +212,6 @@ func (m *Manager) states() StateStore {
 	return m.States
 }
 
-// canRun reports whether programs may be run.
 func (m *Manager) canRun() error {
 	if m.Machine == nil {
 		return errors.New("no machine to run programs on")
@@ -232,8 +219,6 @@ func (m *Manager) canRun() error {
 	return nil
 }
 
-// Reload reads the plugins folder and the MCP servers again. Scripts are
-// ready at once; MCP servers connect in the background (Info.Status).
 func (m *Manager) Reload(ctx context.Context) {
 	m.mu.Lock()
 	m.init()
@@ -259,7 +244,7 @@ func (m *Manager) Reload(ctx context.Context) {
 		}
 		prev, ok := old[key]
 		if ok && prev.mcp != nil && sameServer(prev, p) && p.enabled() {
-			p.mcp = prev.mcp // the running session goes on
+			p.mcp = prev.mcp
 			continue
 		}
 		p.mcp = &mcpSession{status: StatusOff}
@@ -293,7 +278,6 @@ func sameServer(a, b *plugin) bool {
 	return bytes.Equal(x, y)
 }
 
-// scan reads the plugin folders.
 func (m *Manager) scan() []*plugin {
 	if m.Dir == "" {
 		return nil
@@ -318,7 +302,7 @@ func (m *Manager) scan() []*plugin {
 		p := &plugin{key: e.Name(), kind: KindScript, source: SourceFolder, dir: dir}
 		data, err := os.ReadFile(filepath.Join(dir, manifestName))
 		if err != nil {
-			continue // not a plugin folder
+			continue
 		}
 		man, err := ParseManifest(data)
 		switch {
@@ -339,7 +323,6 @@ func (m *Manager) scan() []*plugin {
 	return out
 }
 
-// findEntry is a plugin's program, relative to its folder.
 func findEntry(dir, entry string) string {
 	list := defaultEntries
 	if entry != "" {
@@ -354,8 +337,6 @@ func findEntry(dir, entry string) string {
 	return ""
 }
 
-// servers are the MCP servers: mcp_servers.json's, then the panel's (a
-// panel server replaces the file's of the same id).
 func (m *Manager) servers() []namedServerConfig {
 	byID := map[string]namedServerConfig{}
 	var order []string
@@ -394,14 +375,13 @@ type namedServerConfig = struct {
 	panel bool
 }
 
-// rebuildLocked indexes the tools of the plugins that are on (m.mu held).
 func (m *Manager) rebuildLocked() {
 	index := map[string]toolRef{}
 	keys := make([]string, 0, len(m.plugins))
 	for k := range m.plugins {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys) // the same plugin wins a name every time
+	sort.Strings(keys)
 	for _, k := range keys {
 		p := m.plugins[k]
 		if !p.enabled() || p.err != "" {
@@ -428,7 +408,6 @@ type exposedTool struct {
 	orig string
 }
 
-// toolsOf are a plugin's tools under the names the model calls.
 func (m *Manager) toolsOf(p *plugin) []exposedTool {
 	var out []exposedTool
 	switch p.kind {
@@ -464,7 +443,6 @@ func (m *Manager) toolsOf(p *plugin) []exposedTool {
 	return out
 }
 
-// mcpToolName is the name the model calls a server's tool by.
 func mcpToolName(server, tool string) string {
 	clean := func(s string) string {
 		var b strings.Builder
@@ -485,9 +463,6 @@ func mcpToolName(server, tool string) string {
 	return name
 }
 
-// ---------------------------------------------------------------- the registry's side
-
-// Tools are the tools of the plugins that are on (and connected).
 func (m *Manager) Tools() []llm.Tool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -498,7 +473,6 @@ func (m *Manager) Tools() []llm.Tool {
 	return out
 }
 
-// Has reports a tool of a plugin that is on.
 func (m *Manager) Has(name string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -506,7 +480,6 @@ func (m *Manager) Has(name string) bool {
 	return ok
 }
 
-// Allowed reports whether a session may use a plugin's tool.
 func (m *Manager) Allowed(name, sessionID string) bool {
 	m.mu.RLock()
 	ref, ok := m.index[name]
@@ -524,7 +497,6 @@ func (m *Manager) Allowed(name, sessionID string) bool {
 	return true
 }
 
-// Call runs a plugin's tool.
 func (m *Manager) Call(ctx context.Context, sessionID, name string, args map[string]any) (string, error) {
 	m.mu.RLock()
 	ref, ok := m.index[name]
@@ -542,9 +514,6 @@ func (m *Manager) Call(ctx context.Context, sessionID, name string, args map[str
 	return m.runScript(ctx, p, sessionID, ref.name, args)
 }
 
-// ---------------------------------------------------------------- scripts
-
-// command is how a plugin's program is started, its folder seen at root.
 func (p *plugin) command(root string) []string {
 	entry := root + "/" + p.entry
 	switch runtimeOf(p.entry) {
@@ -563,7 +532,7 @@ func (p *plugin) memoryMB() int {
 		return *p.man.MemoryMB
 	}
 	if runtimeOf(p.entry) == runtimeNode {
-		return 0 // V8 reserves gigabytes of address space up front
+		return 0
 	}
 	return defaultMemoryMB
 }
@@ -576,7 +545,7 @@ func (m *Manager) runScript(ctx context.Context, p *plugin, sessionID, tool stri
 		args = map[string]any{}
 	}
 	workspace := machine.MountPoint
-	if w, err := m.Machine.Workspace(sessionID); err == nil { // the work folder itself
+	if w, err := m.Machine.Workspace(sessionID); err == nil {
 		workspace = w
 	}
 	input, err := json.Marshal(map[string]any{"tool": tool, "session_id": sessionID, "args": args, "workspace": workspace})
@@ -618,8 +587,6 @@ func (m *Manager) runScript(ctx context.Context, p *plugin, sessionID, tool stri
 	return out, nil
 }
 
-// ---------------------------------------------------------------- MCP
-
 type mcpSession struct {
 	mu         sync.Mutex
 	t          transport
@@ -627,7 +594,7 @@ type mcpSession struct {
 	status     string
 	err        string
 	serverName string
-	dial       sync.Mutex // one connection attempt at a time
+	dial       sync.Mutex
 }
 
 func (s *mcpSession) close() {
@@ -640,7 +607,6 @@ func (s *mcpSession) close() {
 	}
 }
 
-// connect opens a server's session and lists its tools.
 func (m *Manager) connect(p *plugin) {
 	ctx, cancel := context.WithTimeout(m.life, mcpStartTimeout)
 	defer cancel()
@@ -677,7 +643,6 @@ func (m *Manager) reconnect(ctx context.Context, p *plugin) error {
 	return err
 }
 
-// dial connects to a server: its program here, or its address.
 func (m *Manager) dial(ctx context.Context, p *plugin) (transport, []mcpTool, string, error) {
 	c := p.srv
 	if c.URL != "" {
@@ -686,7 +651,7 @@ func (m *Manager) dial(ctx context.Context, p *plugin) (transport, []mcpTool, st
 			headers[k] = v
 		}
 		for k, v := range p.state.Env {
-			headers[k] = v // for a server by address, the panel's secrets are headers
+			headers[k] = v
 		}
 		client := m.HTTP
 		sse := c.Transport == "sse" || (c.Transport == "" && strings.HasSuffix(strings.TrimRight(c.URL, "/"), "/sse"))
@@ -722,7 +687,7 @@ func (m *Manager) dial(ctx context.Context, p *plugin) (transport, []mcpTool, st
 	for k, v := range p.state.Env {
 		env[k] = v
 	}
-	// npx installs without asking (stdin is the server's JSON-RPC) and quietly.
+
 	for k, v := range map[string]string{"npm_config_yes": "true", "npm_config_update_notifier": "false", "npm_config_fund": "false",
 		"npm_config_audit": "false", "NO_UPDATE_NOTIFIER": "1"} {
 		if _, set := env[k]; !set {
@@ -769,7 +734,7 @@ func (m *Manager) callMCP(ctx context.Context, p *plugin, sessionID, tool string
 			s.status = StatusConnecting
 		}
 		s.mu.Unlock()
-		raw, err = call() // the session broke: once more, on a new one
+		raw, err = call()
 	}
 	if err != nil {
 		if errors.As(err, &rpcErr) {
@@ -786,9 +751,6 @@ func (m *Manager) callMCP(ctx context.Context, p *plugin, sessionID, tool string
 	return callResult(raw, save), nil
 }
 
-// ---------------------------------------------------------------- the panel's side
-
-// List describes every plugin, scripts first.
 func (m *Manager) List() []Info {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -805,7 +767,6 @@ func (m *Manager) List() []Info {
 	return out
 }
 
-// Get describes one plugin.
 func (m *Manager) Get(key string) (Info, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -848,7 +809,7 @@ func (m *Manager) infoLocked(p *plugin) Info {
 		i.URL, i.Net = p.srv.URL, true
 		for k := range p.srv.Env {
 			i.EnvNames = append(i.EnvNames, k)
-			i.EnvSet[k] = true // set in mcp_servers.json
+			i.EnvSet[k] = true
 		}
 		for k := range p.state.Env {
 			if !contains(i.EnvNames, k) {
@@ -883,12 +844,10 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// SetEnabled turns a plugin on or off.
 func (m *Manager) SetEnabled(ctx context.Context, key string, on bool) error {
 	return m.update(ctx, key, func(st *State) { st.Enabled = &on })
 }
 
-// SetAccess decides who may use a plugin's tools.
 func (m *Manager) SetAccess(ctx context.Context, key, access string) error {
 	if access != AccessEveryone && access != AccessAdmins {
 		return errors.New("unknown access")
@@ -896,7 +855,6 @@ func (m *Manager) SetAccess(ctx context.Context, key, access string) error {
 	return m.update(ctx, key, func(st *State) { st.Access = access })
 }
 
-// SetEnv sets a plugin's secret ("" removes it).
 func (m *Manager) SetEnv(ctx context.Context, key, name, value string) error {
 	m.mu.RLock()
 	p := m.plugins[key]
@@ -952,7 +910,6 @@ func (m *Manager) update(ctx context.Context, key string, change func(*State)) e
 	return nil
 }
 
-// AddServers adds MCP servers in the panel (an id that is taken gets a number).
 func (m *Manager) AddServers(ctx context.Context, list []ServerConfig) ([]string, error) {
 	panel := m.states().PanelServers()
 	taken := map[string]bool{}
@@ -981,7 +938,6 @@ func (m *Manager) AddServers(ctx context.Context, list []ServerConfig) ([]string
 	return keys, nil
 }
 
-// Wait waits until a server is connected or failed (or d passes).
 func (m *Manager) Wait(key string, d time.Duration) Info {
 	deadline := time.Now().Add(d)
 	for {
@@ -993,7 +949,6 @@ func (m *Manager) Wait(key string, d time.Duration) Info {
 	}
 }
 
-// Delete removes a plugin: its folder, or a server added in the panel.
 func (m *Manager) Delete(ctx context.Context, key string) error {
 	m.mu.RLock()
 	p := m.plugins[key]
@@ -1028,7 +983,6 @@ func (m *Manager) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// Close ends the MCP sessions.
 func (m *Manager) Close() {
 	m.mu.Lock()
 	if m.stop != nil {
@@ -1043,15 +997,11 @@ func (m *Manager) Close() {
 	}
 }
 
-// ---------------------------------------------------------------- installing
-
-// Installed is what an install did.
 type Installed struct {
 	Keys []string
-	Deps string // the end of the dependency install's output ("" when there was nothing to install)
+	Deps string
 }
 
-// InstallScript installs one .py, .sh or .js file as a plugin.
 func (m *Manager) InstallScript(ctx context.Context, fileName string, code []byte) (Installed, error) {
 	if len(code) > maxZipFile {
 		return Installed{}, errors.New("the file is too large")
@@ -1074,7 +1024,6 @@ type fileData struct {
 	mode os.FileMode
 }
 
-// InstallZip installs the plugins of a zip: every folder with a plugin.json.
 func (m *Manager) InstallZip(ctx context.Context, archive []byte) (Installed, error) {
 	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	if err != nil {
@@ -1128,7 +1077,7 @@ func (m *Manager) InstallZip(ctx context.Context, archive []byte) (Installed, er
 			}
 			rel := strings.TrimPrefix(name, prefix)
 			if other := nestedRoot(rel, roots, root); other {
-				continue // another plugin's file
+				continue
 			}
 			data, err := readZip(f, maxZipFile)
 			if err != nil {
@@ -1161,7 +1110,6 @@ func (m *Manager) InstallZip(ctx context.Context, archive []byte) (Installed, er
 	return out, nil
 }
 
-// nestedRoot reports a file that belongs to a deeper plugin folder.
 func nestedRoot(rel string, roots []string, root string) bool {
 	for _, r := range roots {
 		if r == root {
@@ -1200,7 +1148,6 @@ func readZip(f *zip.File, limit int64) ([]byte, error) {
 	return data, nil
 }
 
-// writePlugin puts a plugin's files in its folder, replacing it whole.
 func (m *Manager) writePlugin(id string, files map[string]fileData) error {
 	if m.Dir == "" {
 		return errors.New("no plugins folder is set (WAZE_PLUGINS_DIR)")
@@ -1246,8 +1193,6 @@ func (m *Manager) writePlugin(id string, files map[string]fileData) error {
 	return os.Rename(tmp, final)
 }
 
-// InstallDeps installs a plugin's requirements.txt (into its .deps) and
-// package.json (node_modules), here.
 func (m *Manager) InstallDeps(ctx context.Context, key string) (string, error) {
 	m.mu.RLock()
 	p := m.plugins[key]
@@ -1291,19 +1236,14 @@ func lastLine(s string) string {
 	return s
 }
 
-// ---------------------------------------------------------------- testing
-
-// TestResult is one tool tried by the self-test.
 type TestResult struct {
 	Tool    string
 	OK      bool
-	Skipped string // why it was not tried
+	Skipped string
 	Took    time.Duration
 	Output  string
 }
 
-// Test tries a plugin: each tool of a script (with its test_args, or with
-// none when it needs none), or a fresh connection to an MCP server.
 func (m *Manager) Test(ctx context.Context, key string) ([]TestResult, error) {
 	m.mu.RLock()
 	p := m.plugins[key]

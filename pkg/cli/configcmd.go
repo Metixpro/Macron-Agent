@@ -92,9 +92,6 @@ func configCmd(io *IO, args []string) int {
 	return 0
 }
 
-// backup saves the home folder as one archive: the database as a consistent
-// copy (the agent may be running), the notes, skills, plugins and settings;
-// the workspaces' files only with --all.
 func backup(io *IO, args []string) int {
 	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
 	fs.SetOutput(io.Err)
@@ -185,7 +182,7 @@ func backup(io *IO, args []string) int {
 		case fi.IsDir() && rel == "workspaces" && !*all:
 			return filepath.SkipDir
 		case rel == config.FileDB || rel == config.FileDB+"-wal" || rel == config.FileDB+"-shm" || rel == config.FileDB+"-journal":
-			return nil // the live database and its journal: the consistent copy goes in below
+			return nil
 		case !fi.IsDir() && !fi.Mode().IsRegular():
 			return nil
 		}
@@ -220,8 +217,6 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// dbSettingKey: a lower_case key is one of the agent's own settings, kept in
-// its database (what the panel changes); UPPER_CASE keys live in config.env.
 func dbSettingKey(k string) bool {
 	if k == "" || k[0] < 'a' || k[0] > 'z' {
 		return false
@@ -234,7 +229,6 @@ func dbSettingKey(k string) bool {
 	return true
 }
 
-// dbSettingCmd reads or changes one of the agent's own settings.
 func dbSettingCmd(io *IO, args []string) int {
 	ctx := context.Background()
 	path := config.HomePath(config.FileDB)

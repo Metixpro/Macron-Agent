@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// A profile is another agent on the same machine: its own home and service.
 func TestProfiles(t *testing.T) {
 	t.Setenv(EnvHome, "")
 	h, _ := os.UserHomeDir()

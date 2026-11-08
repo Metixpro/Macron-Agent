@@ -15,14 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The server panel (admin panel → 🖥 سرور): CPU, memory, disk and network
-// of the machine, the bot's own service, the machine, the busiest
-// processes, a day of history, and alerts when a limit is crossed.
-//
-//	a:sys:W          the panel over the last W (1h, 6h, 24h)
-//	a:syschart:W     a chart image of that stretch
-//	a:sysal          the alerts' settings · a:sysal:t on/off · a:sysal:cpu|ram|disk cycles the limit
-
 const (
 	defaultSysLimit = 90
 	sysSparkWidth   = 24
@@ -34,7 +26,6 @@ var sysWindows = []struct {
 	name string
 }{{"1h", time.Hour, "۱ ساعت"}, {"6h", 6 * time.Hour, "۶ ساعت"}, {"24h", 24 * time.Hour, "۲۴ ساعت"}}
 
-// sysLimitChoices are what tapping a limit's button goes through (0: off).
 var sysLimitChoices = []int{0, 70, 80, 85, 90, 95}
 
 func sysWindow(key string) (time.Duration, string, string) {
@@ -46,7 +37,6 @@ func sysWindow(key string) (time.Duration, string, string) {
 	return sysWindows[0].d, sysWindows[0].name, sysWindows[0].key
 }
 
-// sampler is the server monitor (made on first use).
 func (b *Bot) sampler() *sysmon.Sampler {
 	b.sysOnce.Do(func() {
 		disks := []string{"/"}
@@ -58,16 +48,13 @@ func (b *Bot) sampler() *sysmon.Sampler {
 	return b.sys
 }
 
-// startSysmon starts reading the server and watching its limits.
 func (b *Bot) startSysmon(ctx context.Context) { go b.sampler().Run(ctx) }
 
-// sameDevice reports whether two paths are on one filesystem.
 func sameDevice(a, c string) bool {
 	var x, y syscall.Stat_t
 	return syscall.Stat(a, &x) == nil && syscall.Stat(c, &y) == nil && x.Dev == y.Dev
 }
 
-// sysLimits are the percentages that raise an alert (all 0 when they are off).
 func (b *Bot) sysLimits() sysmon.Limits {
 	if !b.st.SettingBool(store.SettingSysAlerts, true) {
 		return sysmon.Limits{}
@@ -79,7 +66,6 @@ func (b *Bot) sysLimits() sysmon.Limits {
 	}
 }
 
-// adminIDs are the owners and the admins.
 func (b *Bot) adminIDs(ctx context.Context) []int64 {
 	seen := map[int64]bool{}
 	var out []int64
@@ -97,7 +83,6 @@ func (b *Bot) adminIDs(ctx context.Context) []int64 {
 	return out
 }
 
-// sysAlert tells the admins that a limit was crossed or is over.
 func (b *Bot) sysAlert(a sysmon.Alert) {
 	ctx, cancel := b.ctx(time.Minute)
 	defer cancel()
@@ -143,8 +128,6 @@ func sysAlertText(l lang, a sysmon.Alert) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// ---------------------------------------------------------------- the panel
-
 func levelIcon(pct float64) string {
 	switch {
 	case pct >= 85:
@@ -155,13 +138,11 @@ func levelIcon(pct float64) string {
 	return "🟢"
 }
 
-// bar is a percentage as eight cells.
 func bar(pct float64) string {
 	n := min(max(int(pct/12.5+0.5), 0), 8)
 	return strings.Repeat("▰", n) + strings.Repeat("▱", 8-n)
 }
 
-// spark draws values (0..top) as one character each.
 func spark(vals []float64, top float64) string {
 	const blocks = "▁▂▃▄▅▆▇█"
 	r := []rune(blocks)
@@ -292,7 +273,6 @@ func (b *Bot) viewServer(l lang, key string) panelView {
 	)}
 }
 
-// viewSysAlerts shows the alerts' settings.
 func (b *Bot) viewSysAlerts(l lang) panelView {
 	on := b.st.SettingBool(store.SettingSysAlerts, true)
 	lim := func(k string) int { return b.st.SettingInt(k, defaultSysLimit) }
@@ -322,7 +302,6 @@ func (b *Bot) viewSysAlerts(l lang) panelView {
 	)}
 }
 
-// cycleSysLimit moves a limit to the next choice.
 func (b *Bot) cycleSysLimit(ctx context.Context, key string) {
 	cur := b.st.SettingInt(key, defaultSysLimit)
 	next := sysLimitChoices[0]
@@ -335,7 +314,6 @@ func (b *Bot) cycleSysLimit(ctx context.Context, key string) {
 	_ = b.st.SetSetting(ctx, key, strconv.Itoa(next))
 }
 
-// handleSysCallback serves the server panel's buttons.
 func (b *Bot) handleSysCallback(ctx context.Context, l lang, section string, parts []string, chatID, admin int64, answer func(string, bool), show showFunc) {
 	arg := ""
 	if len(parts) > 2 {
@@ -364,7 +342,6 @@ func (b *Bot) handleSysCallback(ctx context.Context, l lang, section string, par
 	}
 }
 
-// sendSysChart draws CPU and memory over the stretch and sends it.
 func (b *Bot) sendSysChart(ctx context.Context, chatID, admin int64, key string) {
 	l := b.lang(admin)
 	win, winName, _ := sysWindow(key)
@@ -397,7 +374,6 @@ func (b *Bot) sendSysChart(ctx context.Context, chatID, admin int64, key string)
 	_ = b.api.SendPhoto(ctx, chatID, telegram.File{Name: "server.png", Reader: f}, caption)
 }
 
-// sysLine is the server in one line, for the stats panel.
 func (b *Bot) sysLine(l lang) string {
 	sample := b.sampler().Latest()
 	if !sample.Ready {

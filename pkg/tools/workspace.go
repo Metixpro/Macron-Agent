@@ -9,16 +9,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// A sub-agent works in a workspace of its own (machine.SubSession): the files
-// and folders its task names are copied in, the files it hands back are
-// moved out when it is done, and the rest goes with its workspace. Sub-agents
-// side by side never see, overwrite or report each other's files.
-
-// shareLimit is how much is copied into a sub-agent's workspace at most.
 const shareLimit = 200 << 20
 
-// ShareFiles copies into sub the files and folders of its parent's
-// workspace that text names, and returns their names.
 func (r *Registry) ShareFiles(parent, sub, text string) []string {
 	entries, _ := r.Machine.List(parent, 8, 5000)
 	budget := min(int64(shareLimit), r.Machine.FreeSpace())
@@ -66,7 +58,6 @@ func (r *Registry) ShareFiles(parent, sub, text string) []string {
 	return shared
 }
 
-// SubFiles lists the files of a (sub-)workspace with their size and time.
 func (r *Registry) SubFiles(sessionID string) map[string]string {
 	out := map[string]string{}
 	entries, _ := r.Machine.List(sessionID, 8, 5000)
@@ -78,9 +69,6 @@ func (r *Registry) SubFiles(sessionID string) map[string]string {
 	return out
 }
 
-// HandOver moves files of a sub-agent's workspace into its parent's and
-// returns where each went. A file it was given and changed replaces the
-// original; a new one whose name is taken gets another (photo-2.png).
 func (r *Registry) HandOver(sub string, names, shared []string) map[string]string {
 	parent, dir := machine.ParentSession(sub), machine.SubPath(sub)
 	moved := map[string]string{}
@@ -99,7 +87,6 @@ func (r *Registry) HandOver(sub string, names, shared []string) map[string]strin
 	return moved
 }
 
-// RemoveSub deletes a sub-agent's workspace.
 func (r *Registry) RemoveSub(sub string) {
 	if dir := machine.SubPath(sub); dir != "" {
 		_ = r.Machine.RemoveAll(machine.ParentSession(sub), dir)
@@ -117,7 +104,6 @@ func (r *Registry) freeName(sessionID, name string) string {
 	}
 }
 
-// hiddenPath: a dot file or folder anywhere in the path (internal).
 func hiddenPath(name string) bool {
 	for _, part := range strings.Split(name, "/") {
 		if strings.HasPrefix(part, ".") {
@@ -127,7 +113,6 @@ func hiddenPath(name string) bool {
 	return false
 }
 
-// inside reports whether name is one of names or inside one of them.
 func inside(names []string, name string) bool {
 	for _, n := range names {
 		if name == n || strings.HasPrefix(name, n+"/") {
@@ -137,8 +122,6 @@ func inside(names []string, name string) bool {
 	return false
 }
 
-// mentions reports whether text names a file or folder (not as a part of a
-// longer name: "data.png" does not name "a.png").
 func mentions(text, name string) bool {
 	word := func(r byte) bool {
 		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.'

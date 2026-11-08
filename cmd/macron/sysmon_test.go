@@ -10,8 +10,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/sysmon"
 )
 
-// The server panel shows the machine, the bot's own service and the machine;
-// its alerts reach the admins; only admins may open it.
 func TestServerPanel(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(55, "سلام"))
@@ -47,7 +45,6 @@ func TestServerPanel(t *testing.T) {
 		t.Errorf("the stats panel sums the server up and links to it: %v", v.body["text"])
 	}
 
-	// Alerts: on by default, switched and stepped from the panel.
 	h.click(ownerID, ownerID, 9, "a:sysal")
 	if v := lastOf(h, "editMessageText"); !strings.Contains(v.body["text"].(string), "90٪") {
 		t.Errorf("the default limits: %v", v.body["text"])
@@ -68,7 +65,6 @@ func TestServerPanel(t *testing.T) {
 		t.Errorf("alerts off: %+v", l)
 	}
 
-	// An alert goes to the owner, with the busiest processes.
 	h.tg.reset()
 	h.bot.sysAlert(sysmon.Alert{Kind: sysmon.AlertCPU, Value: 97.4, Limit: 90, Top: []sysmon.Proc{{Name: "ffmpeg", CPU: 180}}})
 	h.wantText("CPU سرور بالاست")
@@ -80,7 +76,6 @@ func TestServerPanel(t *testing.T) {
 	h.bot.sysAlert(sysmon.Alert{Kind: sysmon.AlertRAM, Value: 50, Limit: 90, Recovered: true})
 	h.wantText("به حالت عادی برگشت")
 
-	// A user who is no admin gets nothing.
 	h.tg.reset()
 	h.click(55, 55, 1, "a:sys:1h")
 	if len(h.tg.of("editMessageText")) != 0 {

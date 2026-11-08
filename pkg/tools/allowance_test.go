@@ -18,7 +18,7 @@ func TestAllowance(t *testing.T) {
 	if n, note := take(ctx, kindImages, 1); n != 0 || note == "" {
 		t.Fatalf("spent: %d %q", n, note)
 	}
-	giveBack(ctx, kindImages, 2) // a search found fewer
+	giveBack(ctx, kindImages, 2)
 	if n, _ := take(ctx, kindImages, 5); n != 2 {
 		t.Errorf("given back: %d", n)
 	}
@@ -29,7 +29,6 @@ func TestAllowance(t *testing.T) {
 		t.Error("a zero limit is no limit")
 	}
 
-	// A tool that makes one picture: refused once spent, given back when it made none.
 	calls := 0
 	made := oneImage(func(context.Context, string, map[string]any) (string, error) {
 		calls++

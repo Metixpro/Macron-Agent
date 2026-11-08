@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// buttons returns "label → data" for each inline button of a call.
 func buttons(c tgCall) []string {
 	var out []string
 	kb, _ := c.body["reply_markup"].(map[string]any)
@@ -79,7 +78,6 @@ func TestFilesPanel(t *testing.T) {
 		t.Errorf("empty categories are hidden: %v", btns)
 	}
 
-	// A category, a page at a time.
 	h.click(uid, uid, 900, "f:c:"+id+":img:0")
 	page := lastOf(h, "editMessageText")
 	btns = buttons(page)
@@ -101,20 +99,17 @@ func TestFilesPanel(t *testing.T) {
 		t.Errorf("second page: %v", btns)
 	}
 
-	// Someone else's panel does nothing.
 	h.tg.reset()
 	h.click(99, uid, 900, "f:s:"+id+":"+fileHash("pic_01.png")+":img:1")
 	if len(h.tg.of("sendPhoto")) != 0 || !strings.Contains(fmt.Sprint(lastOf(h, "answerCallbackQuery").body["text"]), "مال کس دیگه‌ای است") {
 		t.Error("only the owner of the panel can use it")
 	}
 
-	// Tapping a file sends that one file.
 	h.click(uid, uid, 900, "f:s:"+id+":"+fileHash("pic_01.png")+":img:1")
 	if p := h.tg.of("sendPhoto"); len(p) != 1 || p[0].body["photo_name"] != "pic_01.png" {
 		t.Fatalf("one tap, one file: %v", p)
 	}
 
-	// The whole category, in albums, all of them.
 	h.tg.reset()
 	h.click(uid, uid, 900, "f:a:"+id+":img")
 	albums := h.tg.of("sendMediaGroup")
@@ -122,7 +117,6 @@ func TestFilesPanel(t *testing.T) {
 		t.Errorf("12 pictures: an album of 10 and one of 2, oldest first: %d albums", len(albums))
 	}
 
-	// Delete mode.
 	h.click(uid, uid, 900, "f:d:"+id+":code:0")
 	btns = buttons(lastOf(h, "editMessageText"))
 	if !hasButton(btns, "🗑 app.py → f:r:"+id+":"+fileHash("app.py")+":code:0") || !hasButton(btns, "✅ تموم شد") {
@@ -136,7 +130,6 @@ func TestFilesPanel(t *testing.T) {
 		t.Errorf("the page is refreshed: %v", btns)
 	}
 
-	// Everything as one zip, folders included, installed packages left out.
 	h.tg.reset()
 	h.click(uid, uid, 900, "f:z:"+id)
 	doc := lastOf(h, "sendDocument")
@@ -147,7 +140,6 @@ func TestFilesPanel(t *testing.T) {
 		t.Errorf("zip caption: %v", doc.body["caption"])
 	}
 
-	// Emptying asks first, then keeps only the hidden packages.
 	h.click(uid, uid, 900, "f:w:"+id)
 	if !hasButton(buttons(lastOf(h, "editMessageText")), "f:W:"+id) {
 		t.Error("emptying needs a confirmation")
@@ -208,7 +200,7 @@ func TestFileJobsDoNotOverlap(t *testing.T) {
 	h := newHarness(t)
 	const uid = 63
 	_ = h.bot.app.Machine.WriteFile(sessionFor(uid), "a.pdf", []byte("%PDF"))
-	// A slow Telegram keeps the first upload busy.
+
 	release := make(chan struct{})
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/sendDocument") {

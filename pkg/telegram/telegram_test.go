@@ -56,7 +56,7 @@ func TestMarkdownNeverProducesInvalidHTML(t *testing.T) {
 	for _, s := range nasty {
 		got := MarkdownToHTML(s)
 		if !ValidHTML(got) {
-			// The pipeline may mis-nest overlapping emphasis; the sender must then fall back to plain text.
+
 			if plain := textutil.StripHTML(got); strings.Contains(plain, "\x00") {
 				t.Errorf("placeholder leaked for %q: %q", s, plain)
 			}
@@ -95,7 +95,7 @@ func TestSplitHTML(t *testing.T) {
 			t.Fatalf("chunk %d splits an entity", i)
 		}
 	}
-	// No text is lost or duplicated.
+
 	var joined strings.Builder
 	for _, ch := range chunks {
 		joined.WriteString(textutil.StripHTML(ch))
@@ -110,13 +110,11 @@ func TestSplitHTML(t *testing.T) {
 	if got := SplitHTML("", 100); len(got) != 1 {
 		t.Errorf("empty input: %q", got)
 	}
-	// A single token longer than the limit is hard-split without looping forever.
+
 	if got := SplitHTML(strings.Repeat("x", 1000), 100); len(got) != 10 {
 		t.Errorf("hard split: %d chunks", len(got))
 	}
 }
-
-// ---- Bot client against a fake Telegram server ----------------------------------
 
 type fakeTG struct {
 	mu      sync.Mutex
@@ -208,7 +206,7 @@ func TestRateLimitIsRetriedOnce(t *testing.T) {
 }
 
 func TestTokenIsScrubbedFromErrors(t *testing.T) {
-	bot := NewBotWithBase("123:SECRET", "http://127.0.0.1:1") // nothing listens here
+	bot := NewBotWithBase("123:SECRET", "http://127.0.0.1:1")
 	_, err := bot.GetMe(context.Background())
 	if err == nil {
 		t.Fatal("expected a connection error")
@@ -267,7 +265,6 @@ func TestUploadStreamsFileWithSanitizedName(t *testing.T) {
 		t.Fatalf("name=%q size=%d chat=%s caption=%q", gotName, gotSize, gotChat, gotCaption)
 	}
 
-	// A Telegram-side rejection surfaces as an error.
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
 		tgError(w, 400, "Bad Request: file is too big", 0)
@@ -308,8 +305,6 @@ func TestFlexInt64(t *testing.T) {
 	}
 }
 
-// Telegram sends draft_id as a string when the stop button is pressed; that
-// used to fail the whole getUpdates batch and wedge the poller.
 func TestGetUpdatesToleratesStringDraftIDAndBadUpdates(t *testing.T) {
 	bot, f := newFakeTG(t)
 	f.handler = func(method string, body map[string]any, w http.ResponseWriter) bool {
@@ -430,7 +425,6 @@ func TestGuestMessageUpdate(t *testing.T) {
 		t.Errorf("answerGuestQuery payload: %v", b)
 	}
 
-	// The guest answer is edited by its inline_message_id: a rich message, or HTML.
 	if err := bot.EditInlineRich(context.Background(), "IM-1", RichMessage{Markdown: "**۴**", IsRTL: true}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -444,15 +438,12 @@ func TestGuestMessageUpdate(t *testing.T) {
 		t.Errorf("an HTML inline edit: %v", e)
 	}
 
-	// An older server answers true: no id, no error.
 	f.handler = nil
 	if id, err := bot.AnswerGuestQuery(context.Background(), "GQ2", GuestHTML("x", nil)); err != nil || id != "" {
 		t.Errorf("true as the result: %q %v", id, err)
 	}
 }
 
-// OnSent hears every message the bot sends or edits, an album's too, with
-// the context of the request that sent it.
 func TestOnSentHearsMessagesAndAlbums(t *testing.T) {
 	bot, f := newFakeTG(t)
 	f.handler = func(m string, body map[string]any, w http.ResponseWriter) bool {

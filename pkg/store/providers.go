@@ -7,30 +7,25 @@ import (
 	"time"
 )
 
-// ErrDuplicate is returned when a unique value already exists.
 var ErrDuplicate = errors.New("already exists")
 
-// Provider is an OpenAI-compatible LLM endpoint.
 type Provider struct {
 	ID       int64
 	Name     string
 	BaseURL  string
 	APIKey   string
 	Model    string
-	Priority int // lower = tried first during failover
+	Priority int
 	Enabled  bool
 	Vision   bool
-	API      string // the wire format: "openai", "responses", "anthropic" or "" (guessed from the address)
-	// NoStream turns streaming off: for a gateway whose streams break or stall,
-	// the answer then arrives whole.
+	API      string
+
 	NoStream bool
-	// ContextWindow is this provider's context window in tokens (0 = from
-	// the panel, the environment or the model's name).
+
 	ContextWindow int
-	// Temperature is this provider's sampling temperature (nil = the default).
+
 	Temperature *float64
-	// Effort is how hard its model thinks: low, medium, high or ultracode
-	// ("" = the model's own default).
+
 	Effort       string
 	CreatedAt    time.Time
 	LastOKAt     *time.Time
@@ -68,7 +63,6 @@ func (s *Store) scanProvider(sc interface{ Scan(...any) error }) (*Provider, err
 	return &p, nil
 }
 
-// AddProvider inserts a provider and returns its id.
 func (s *Store) AddProvider(ctx context.Context, p Provider) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `INSERT INTO providers (name, base_url, api_key, model, priority, enabled, vision, api, context_window,
 		created_at, temperature, effort, no_stream) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, truncate(p.Name, 64), p.BaseURL, s.seal(p.APIKey),
@@ -82,7 +76,6 @@ func (s *Store) AddProvider(ctx context.Context, p Provider) (int64, error) {
 	return res.LastInsertId()
 }
 
-// UpdateProvider saves the editable fields of a provider.
 func (s *Store) UpdateProvider(ctx context.Context, p Provider) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE providers SET name = ?, base_url = ?, api_key = ?, model = ?, priority = ?, enabled = ?, vision = ?,
 		api = ?, context_window = ?, temperature = ?, effort = ?, no_stream = ? WHERE id = ?`, truncate(p.Name, 64), p.BaseURL, s.seal(p.APIKey),
@@ -106,7 +99,6 @@ func (s *Store) Provider(ctx context.Context, id int64) (*Provider, error) {
 	return p, err
 }
 
-// Providers lists providers by priority.
 func (s *Store) Providers(ctx context.Context) ([]Provider, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+providerColumns+` FROM providers ORDER BY priority, id`)
 	if err != nil {
@@ -124,7 +116,6 @@ func (s *Store) Providers(ctx context.Context) ([]Provider, error) {
 	return out, rows.Err()
 }
 
-// RecordProviderResult updates health statistics after a request.
 func (s *Store) RecordProviderResult(ctx context.Context, id int64, ok bool, latency time.Duration, errMsg string) error {
 	ms := int(latency.Milliseconds())
 	if ok {

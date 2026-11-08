@@ -21,15 +21,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// Archives beyond zip and tar: RAR, 7z, xz, zstd, single compressed files,
-// ISO images and password-protected archives are opened by an archiver
-// here (7-Zip, else unar, else bsdtar), into a hidden folder
-// first; links and special files are dropped before anything reaches the
-// workspace. Packing takes several files and folders, makes zip, tar.gz or
-// 7z (AES-256 with a password) and cuts what is too big for Telegram into
-// parts that 7-Zip, WinRAR and ZArchiver open from the first one.
-
-// An archive over telegramMaxBytes is cut into telegramPartBytes parts (see SetSendLimit).
 var (
 	telegramPartBytes int64 = 45 << 20
 	telegramMaxBytes  int64 = 49 << 20
@@ -37,7 +28,6 @@ var (
 
 const maxListed = 150
 
-// externalExts are read by an archiver here (zip and tar are read here).
 var externalExts = []string{".tar.xz", ".txz", ".tar.zst", ".tzst", ".rar", ".7z", ".001", ".gz", ".bz2", ".xz", ".zst", ".lzma",
 	".iso", ".cab"}
 
@@ -46,7 +36,6 @@ var archiverOnce struct {
 	list []string
 }
 
-// archivers are the archive programs of the machine, the best first.
 func (r *Registry) archivers() []string {
 	archiverOnce.Do(func() {
 		have := r.Machine.Available("7z", "7zz", "unar", "bsdtar")
@@ -59,7 +48,6 @@ func (r *Registry) archivers() []string {
 	return archiverOnce.list
 }
 
-// zipNeedsArchiver: a zip with encrypted entries or methods Go cannot read (LZMA, Deflate64…).
 func (r *Registry) zipNeedsArchiver(sessionID, name, kind string) bool {
 	if kind != "zip" {
 		return false
@@ -86,7 +74,7 @@ func archiverArgs(tool, name, out, password string) []string {
 	case "7z", "7zz":
 		pw := password
 		if pw == "" {
-			pw = "-" // never a prompt: a wrong password is reported instead
+			pw = "-"
 		}
 		return []string{tool, "x", "-y", "-bd", "-bb0", "-p" + pw, "-o./" + out, "./" + name}
 	case "unar":
@@ -109,7 +97,6 @@ func needsPassword(out string) bool {
 		strings.Contains(l, "incorrect password") || strings.Contains(l, "encrypted") && strings.Contains(l, "password")
 }
 
-// extractExternal unpacks with an archiver of the machine.
 func (r *Registry) extractExternal(ctx context.Context, sessionID, name, dest, password string) string {
 	tools := r.archivers()
 	if len(tools) == 0 {
@@ -152,9 +139,9 @@ func (r *Registry) extractExternal(ctx context.Context, sessionID, name, dest, p
 		done()
 		switch {
 		case len(entries) == 1 && !entries[0].IsDir() && archiveKind(entries[0].Name()) == "tar":
-			// A .tar.xz or .tar.zst gives its .tar first: that is read here, links dropped.
+
 			return r.extract(ctx, sessionID, tmp+"/"+entries[0].Name(), dest, "")
-		case len(entries) == 1 && entries[0].IsDir(): // one folder at the top: its contents
+		case len(entries) == 1 && entries[0].IsDir():
 			src = tmp + "/" + entries[0].Name()
 		}
 	}
@@ -173,7 +160,6 @@ func (r *Registry) extractExternal(ctx context.Context, sessionID, name, dest, p
 	return s + " Map it with project_tree."
 }
 
-// cleanTree drops links and special files under dir and counts the files.
 func (r *Registry) cleanTree(sessionID, dir string) (files int, size int64, dropped int) {
 	fsys, done, err := r.projectFS(sessionID)
 	if err != nil {
@@ -200,7 +186,6 @@ func (r *Registry) cleanTree(sessionID, dir string) (files int, size int64, drop
 	return files, size, len(drop)
 }
 
-// moveTree moves the files under src into dest, folder by folder, replacing files of the same name.
 func (r *Registry) moveTree(sessionID, src, dest string) (int, error) {
 	fsys, done, err := r.projectFS(sessionID)
 	if err != nil {
@@ -233,7 +218,6 @@ func (r *Registry) moveTree(sessionID, src, dest string) (int, error) {
 	return n, nil
 }
 
-// listArchive tells what an archive holds without unpacking it.
 func (r *Registry) listArchive(ctx context.Context, sessionID, name, password string) string {
 	kind := archiveKind(name)
 	if kind == "" {
@@ -336,8 +320,6 @@ func (r *Registry) listExternal(ctx context.Context, sessionID, name, password s
 	return name + " holds:\n" + strings.Join(lines, "\n")
 }
 
-// ---------------------------------------------------------------- packing
-
 func (r *Registry) packFiles(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 	raw := anyList(args["paths"])
 	if p := strArg(args, "path"); p != "" {
@@ -432,7 +414,6 @@ func (r *Registry) packFiles(ctx context.Context, sessionID string, args map[str
 	return s + ". Send it with send_file.", nil
 }
 
-// packGo writes a zip or a tar.gz here, from several files and folders.
 func (r *Registry) packGo(sessionID string, roots []string, name, ext string, all bool) (files, left int, raw int64, err error) {
 	fsys, done, err := r.projectFS(sessionID)
 	if err != nil {
@@ -539,7 +520,6 @@ func (r *Registry) packGo(sessionID string, roots []string, name, ext string, al
 	return files, left, raw, r.Machine.Rename(sessionID, tmp, name)
 }
 
-// pack7z makes a 7z (or, with a password, an AES-256 zip) with 7-Zip here.
 func (r *Registry) pack7z(ctx context.Context, sessionID string, roots []string, name, ext, password string, all bool) (int, int, int64, error) {
 	tool := ""
 	for _, t := range r.archivers() {
@@ -560,14 +540,14 @@ func (r *Registry) pack7z(ctx context.Context, sessionID string, roots []string,
 	if password != "" {
 		argv = append(argv, "-p"+password)
 		if ext == ".7z" {
-			argv = append(argv, "-mhe=on") // the file names are hidden too
+			argv = append(argv, "-mhe=on")
 		} else {
 			argv = append(argv, "-mem=AES256")
 		}
 	}
 	left := 0
 	if !all {
-		if fsys, done, err := r.projectFS(sessionID); err == nil { // what is left out, as packGo counts it
+		if fsys, done, err := r.projectFS(sessionID); err == nil {
 			for _, root := range roots {
 				_ = walk(fsys, root, false, func(_ string, _ fs.DirEntry, skipped bool) error {
 					if skipped {
@@ -629,8 +609,6 @@ func (r *Registry) pack7z(ctx context.Context, sessionID string, roots []string,
 	return files, left, raw, nil
 }
 
-// splitFile cuts a file into numbered parts (name.001, name.002…), byte for
-// byte, the way 7-Zip makes volumes, and removes the whole.
 func (r *Registry) splitFile(sessionID, name string, part, size int64) ([]string, error) {
 	if size > r.Machine.FreeSpace() {
 		return nil, fmt.Errorf("not enough free space to cut it into parts")
@@ -666,10 +644,6 @@ func (r *Registry) splitFile(sessionID, name string, part, size int64) ([]string
 	return parts, r.Machine.Remove(sessionID, name)
 }
 
-// zipName is an entry's name as UTF-8. A zip made on Windows without the
-// UTF-8 flag keeps names in the system's code page: Persian and Arabic ones
-// are read as Windows-1256, others as the zip standard's CP437, so the file
-// is unpacked under a readable name instead of being dropped.
 func zipName(zf *zip.File) string {
 	if utf8.ValidString(zf.Name) {
 		return zf.Name

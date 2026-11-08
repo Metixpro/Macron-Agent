@@ -19,21 +19,16 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/search"
 )
 
-// A headless Chromium driven by Playwright, here, with the network of the
-// machine it runs on.
-
 const (
 	ToolBrowser    = "browser"
 	browserTimeout = 3 * time.Minute
 )
 
 var (
-	// chromeDirs are where Playwright keeps its browsers.
 	chromeDirs = []string{"/usr/local/share/ms-playwright", "/ms-playwright", "/opt/pw-browsers", "/usr/lib/ms-playwright"}
-	// chromeBinaries are Chromiums installed by the distribution: Debian's
-	// chromium package (install.sh's fallback when Playwright cannot download).
+
 	chromeBinaries = []string{"/usr/lib/chromium/chromium"}
-	// webLibDirs hold JavaScript libraries served offline to rendered pages.
+
 	webLibDirs = []string{"/usr/local/share/waze/weblibs", "/usr/share/waze/weblibs"}
 
 	revisionRe = regexp.MustCompile(`-(\d+)/`)
@@ -42,7 +37,6 @@ var (
 
 var checks sync.Map
 
-// check runs a probe once per kind of machine (tests build many registries).
 func (r *Registry) check(argv ...string) bool {
 	key := fmt.Sprint(argv)
 	if v, ok := checks.Load(key); ok {
@@ -56,14 +50,12 @@ func (r *Registry) check(argv ...string) bool {
 type browserRuntime struct {
 	chrome string
 	libs   []string
-	slots  chan struct{} // browsers running at once
-	agents chan struct{} // browser agents running at once (registerBrowserAgent)
-	// agentPython runs browser-use ("" when it is not installed).
+	slots  chan struct{}
+	agents chan struct{}
+
 	agentPython string
 }
 
-// findChrome picks the newest Chromium the machine can see; the lighter
-// headless shell first.
 func findChrome() string {
 	dirs := append([]string(nil), chromeDirs...)
 	if cache, err := os.UserCacheDir(); err == nil {
@@ -110,7 +102,6 @@ func findChrome() string {
 	return ""
 }
 
-// detectBrowser finds Chromium and checks that Playwright imports here.
 func (r *Registry) detectBrowser() *browserRuntime {
 	chrome := findChrome()
 	if chrome == "" {
@@ -128,7 +119,6 @@ func (r *Registry) detectBrowser() *browserRuntime {
 	return b
 }
 
-// webLibs lists the offline libraries by file name.
 func (b *browserRuntime) webLibs() []string {
 	var names []string
 	for _, d := range b.libs {
@@ -143,19 +133,16 @@ func (b *browserRuntime) webLibs() []string {
 	return slices.Compact(names)
 }
 
-// runBrowser runs an embedded script with Chromium (offline when asked). The
-// script's JSON answer is decoded into out.
 func (r *Registry) runBrowser(ctx context.Context, sessionID, script string, cfg map[string]any, online bool, timeout time.Duration, out any) error {
 	return r.runBrowserWith(ctx, sessionID, script, cfg, browserRun{online: online, timeout: timeout}, out)
 }
 
-// browserRun is how a browser script runs.
 type browserRun struct {
 	online  bool
 	timeout time.Duration
-	bridge  *llmBridge    // the model, for browser_agent.py: served next to the proxy
-	slots   chan struct{} // nil: the browsers' own
-	python  string        // "" = python3
+	bridge  *llmBridge
+	slots   chan struct{}
+	python  string
 }
 
 func (r *Registry) runBrowserWith(ctx context.Context, sessionID, script string, cfg map[string]any, run browserRun, out any) error {
@@ -184,9 +171,8 @@ func (r *Registry) runBrowserWith(ctx context.Context, sessionID, script string,
 		py = "python3"
 	}
 	opts := machine.RunOptions{HostExecutable: true, Args: []string{py, "-I", "-c", string(common) + "\n" + string(code)}, Timeout: run.timeout,
-		Heavy: script == "motion.py"} // a frame-by-frame render keeps the CPU busy
-	// The browser reaches the network directly, as any program on this machine
-	// does; a page that only renders local files is kept offline.
+		Heavy: script == "motion.py"}
+
 	cfg["offline"] = !(run.online || run.bridge != nil)
 	if run.bridge != nil {
 		dir, err := os.MkdirTemp("", "macron-llm-")
@@ -216,7 +202,7 @@ func (r *Registry) registerBrowserTools() {
 		return
 	}
 	if r.Search != nil {
-		r.Search.Render = r.renderPage // the last way to read a page that blocks bots
+		r.Search.Render = r.renderPage
 	}
 	r.add(ToolBrowser,
 		"A real browser (headless Chromium): open, click, fill forms, log in, scroll, read, run JS, screenshot, PDF, upload, "+
@@ -240,9 +226,6 @@ func (r *Registry) registerBrowserTools() {
 	r.registerMotionTool()
 }
 
-// renderPage reads a page with the headless browser, for web_fetch when the
-// site blocks plain requests. It runs in a session of its own, with a fresh
-// profile each time.
 func (r *Registry) renderPage(ctx context.Context, url string) (*search.Page, error) {
 	var res struct {
 		Page  browserPage `json:"page"`
@@ -258,7 +241,6 @@ func (r *Registry) renderPage(ctx context.Context, url string) (*search.Page, er
 	return &search.Page{URL: res.Page.URL, Title: res.Page.Title, Text: res.Page.Text}, nil
 }
 
-// renderSession is the machine session of renderPage.
 const renderSession = "waze-render"
 
 type browserPage struct {
@@ -369,16 +351,11 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// browserActions are the actions browser.py knows, with the field a bare
-// value of each goes to.
 var browserActions = map[string]string{"goto": "url", "click": "selector", "fill": "text", "type": "text", "press": "key",
 	"select": "value", "check": "selector", "uncheck": "selector", "hover": "selector", "scroll": "to", "wait": "ms",
 	"screenshot": "name", "pdf": "name", "extract": "selector", "eval": "script", "back": "", "forward": "", "reload": "",
 	"upload": "selector", "download": "selector"}
 
-// normalizeActions reads the shapes models write actions in, besides
-// {"action": "goto", "url": …}: {"goto": "https://…"}, {"click": {"selector": …}},
-// {"url": …} alone (a goto), and "goto https://…" as text.
 func normalizeActions(acts []any) []any {
 	out := make([]any, 0, len(acts))
 	for _, a := range acts {

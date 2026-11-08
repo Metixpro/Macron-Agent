@@ -24,28 +24,21 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// cookiePool gives the downloaders the cookies added in the admin panel
-// (database) and the cookies.txt files of WAZE_COOKIES_DIR. Picks prefer
-// the least recently used ready cookie; a blocked one rests for a while.
-// A cookie added from a link (as tg-ytdlp-bot's cookie URLs) is fetched
-// again when it is blocked or its login runs out, and every few hours.
 type cookiePool struct {
 	st   *store.Store
 	dir  string
-	http *http.Client // fetches the linked cookies: the registry's client
+	http *http.Client
 
 	mu         sync.Mutex
 	files      *tools.MemoryCookiePool
 	filesSig   string
-	filesAt    time.Time // when the folder was last looked at
+	filesAt    time.Time
 	refreshing map[int64]bool
-	queue      chan store.DLCookie // linked cookies waiting to be fetched again
+	queue      chan store.DLCookie
 }
 
 func newCookiePool(st *store.Store, dir string) *cookiePool { return &cookiePool{st: st, dir: dir} }
 
-// plainFetch fetches cookies from their links (they are fetched again by
-// themselves, for good).
 var plainFetch = netclient.NewClient(netclient.Options{Timeout: 30 * time.Second})
 
 const (
@@ -54,12 +47,11 @@ const (
 	maxCookieBytes  = 1 << 20
 
 	cookieRefreshEvery = 6 * time.Hour
-	cookieRefreshGap   = 5 * time.Minute // a blocked linked cookie is not fetched more often
-	cookieFolderTTL    = 5 * time.Second // the folder is listed again at most this often
-	cookieFetchers     = 2               // linked cookies fetched at once
+	cookieRefreshGap   = 5 * time.Minute
+	cookieFolderTTL    = 5 * time.Second
+	cookieFetchers     = 2
 )
 
-// folder reloads the files of the cookies folder when they change.
 func (p *cookiePool) folder() *tools.MemoryCookiePool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -91,7 +83,7 @@ func (p *cookiePool) folder() *tools.MemoryCookiePool {
 	}
 	old := p.files
 	p.files, p.filesSig = tools.NewMemoryCookiePool(cookies...), sig.String()
-	if old != nil { // the cookies still there keep their rests and their turn
+	if old != nil {
 		p.files.Inherit(old)
 	}
 	return p.files
@@ -100,7 +92,7 @@ func (p *cookiePool) folder() *tools.MemoryCookiePool {
 func (p *cookiePool) Pick(host string, skip map[string]bool) (tools.Cookie, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if list, err := p.st.Cookies(ctx); err == nil { // least recently used first
+	if list, err := p.st.Cookies(ctx); err == nil {
 		now := p.st.Now()
 		for _, c := range list {
 			tc := tools.Cookie{ID: cookieDBPrefix + strconv.FormatInt(c.ID, 10), Label: c.Label, Domains: c.Domains, Data: c.Data}
@@ -152,7 +144,6 @@ func (p *cookiePool) byID(ctx context.Context, id int64) (store.DLCookie, bool) 
 	return c, err == nil
 }
 
-// user gives a user's own cookies (/cookies) to their downloads.
 func (p *cookiePool) user(sessionID string) []tools.Cookie {
 	n, ok := strings.CutPrefix(sessionID, "tg-")
 	if !ok {
@@ -175,7 +166,6 @@ func (p *cookiePool) user(sessionID string) []tools.Cookie {
 	return out
 }
 
-// fetchCookies downloads a cookies.txt from a link.
 func (p *cookiePool) fetchCookies(ctx context.Context, link string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(link))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -213,8 +203,6 @@ func (p *cookiePool) fetchCookies(ctx context.Context, link string) (string, err
 	return text, nil
 }
 
-// refresh fetches a linked cookie again; it reports whether it changed (new
-// cookies are ready at once).
 func (p *cookiePool) refresh(ctx context.Context, c store.DLCookie) (bool, error) {
 	data, err := p.fetchCookies(ctx, c.SourceURL)
 	if err != nil {
@@ -224,9 +212,6 @@ func (p *cookiePool) refresh(ctx context.Context, c store.DLCookie) (bool, error
 	return changed, p.st.RefreshCookie(ctx, c.ID, tools.CookieDomains(data), data, changed)
 }
 
-// refreshLater queues a linked cookie to be fetched again: a few workers
-// fetch them one after the other, so a start with many stale cookies never
-// fires them all at once.
 func (p *cookiePool) refreshLater(c store.DLCookie) {
 	if c.SourceURL == "" || c.FetchedAt != nil && p.st.Now().Sub(*c.FetchedAt) < cookieRefreshGap {
 		return
@@ -248,7 +233,7 @@ func (p *cookiePool) refreshLater(c store.DLCookie) {
 	select {
 	case p.queue <- c:
 		p.refreshing[c.ID] = true
-	default: // many waiting already: the next round takes it
+	default:
 	}
 }
 
@@ -265,11 +250,10 @@ func (p *cookiePool) fetcher() {
 		p.mu.Lock()
 		delete(p.refreshing, c.ID)
 		p.mu.Unlock()
-		time.Sleep(2 * time.Second) // spread over time
+		time.Sleep(2 * time.Second)
 	}
 }
 
-// refreshLoop fetches the linked cookies again every few hours.
 func (p *cookiePool) refreshLoop(ctx context.Context) {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
@@ -290,7 +274,6 @@ func (p *cookiePool) refreshLoop(ctx context.Context) {
 	}
 }
 
-// folderStatus counts the folder's cookies and the resting ones.
 func (p *cookiePool) folderStatus() (total, resting int) {
 	f := p.folder()
 	if f == nil {
@@ -306,7 +289,6 @@ func (p *cookiePool) folderStatus() (total, resting int) {
 	return total, resting
 }
 
-// migrateSingleCookie moves the single cookies.txt of older versions into the pool.
 func migrateSingleCookie(ctx context.Context, st *store.Store) {
 	data, err := st.SecretSetting(settingDLCookies)
 	if err != nil || strings.TrimSpace(data) == "" {
@@ -320,7 +302,6 @@ func migrateSingleCookie(ctx context.Context, st *store.Store) {
 	}
 }
 
-// cookieLabel names a cookie after its main sites.
 func cookieLabel(domains []string, suffix string) string {
 	main := []string{}
 	for _, d := range domains {
@@ -341,10 +322,6 @@ func cookieLabel(domains []string, suffix string) string {
 	return label
 }
 
-// The pool's cookies are tried in the background now and then, one at a
-// time (as 🩺 does): a cookie whose account was refused rests before a
-// user's download meets it, and a linked one is fetched again first. A
-// failure that is not the account's (the network, the video) rests nothing.
 const (
 	cookieCheckEvery = 6 * time.Hour
 	cookieCheckRest  = 6 * time.Hour
@@ -366,7 +343,6 @@ func (p *cookiePool) checkLoop(ctx context.Context, test func(ctx context.Contex
 	}
 }
 
-// checkAll tries the cookies that are not resting and returns how many it rested.
 func (p *cookiePool) checkAll(ctx context.Context, test func(ctx context.Context, data, host string) tools.CookieTest) int {
 	list, err := p.st.Cookies(ctx)
 	if err != nil {

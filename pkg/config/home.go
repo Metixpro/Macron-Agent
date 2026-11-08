@@ -9,31 +9,12 @@ import (
 	"strings"
 )
 
-// The agent lives in one folder, its home (default ~/.macron):
-//
-//	config.env       settings and keys (owner-only permissions)
-//	macron.db        the database (conversations, providers, schedules…)
-//	secret.key       the key that seals provider keys in the database
-//	SOUL.md          the personality; edit it with any editor
-//	USER.md          what the agent knows about its owner
-//	MEMORY.md        what the agent learned about its work and machine
-//	skills/          procedural skills, <category>/<name>/SKILL.md
-//	plugins/         script plugins; mcp_servers.json lists MCP servers
-//	workspaces/      the files the agent makes and receives
-//
-// Backing up the folder is backing up the agent.
-//
-// A profile (MACRON_PROFILE=work) is another agent on the same machine, with
-// a home of its own (~/.macron/profiles/work) and a service of its own
-// (macron-work.service): its own bot, settings, memory and skills.
 const (
 	EnvHome    = "MACRON_HOME"
 	EnvEnvFile = "MACRON_ENV_FILE"
 	EnvProfile = "MACRON_PROFILE"
 )
 
-// Profile is the profile this agent runs as ("" the default one). A name
-// that is not lower-case letters, digits, - or _ (at most 32) is ignored.
 func Profile() string {
 	p := strings.TrimSpace(os.Getenv(EnvProfile))
 	if p == "" || len(p) > 32 || p == "default" {
@@ -47,7 +28,6 @@ func Profile() string {
 	return p
 }
 
-// ServiceName is the profile's service ("macron", or "macron-<profile>").
 func ServiceName() string {
 	if p := Profile(); p != "" {
 		return "macron-" + p
@@ -55,7 +35,6 @@ func ServiceName() string {
 	return "macron"
 }
 
-// Home is the agent's folder.
 func Home() string {
 	if h := strings.TrimSpace(os.Getenv(EnvHome)); h != "" {
 		return filepath.Clean(h)
@@ -70,12 +49,10 @@ func Home() string {
 	return base
 }
 
-// HomePath is a path inside the home folder.
 func HomePath(parts ...string) string {
 	return filepath.Join(append([]string{Home()}, parts...)...)
 }
 
-// File names inside the home folder.
 const (
 	FileConfig = "config.env"
 	FileDB     = "macron.db"
@@ -85,8 +62,6 @@ const (
 	FileMemory = "MEMORY.md"
 )
 
-// EnvFilePath is the settings file to read: $MACRON_ENV_FILE, else the home
-// folder's config.env.
 func EnvFilePath() string {
 	if p := strings.TrimSpace(os.Getenv(EnvEnvFile)); p != "" {
 		return p
@@ -94,9 +69,6 @@ func EnvFilePath() string {
 	return HomePath(FileConfig)
 }
 
-// AliasEnv gives every MACRON_* variable its WAZE_* name (the names the code
-// reads), unless that one is set, and the other way round, so a .env of the
-// public Macron works here as well.
 func AliasEnv() {
 	for _, kv := range os.Environ() {
 		k, v, ok := strings.Cut(kv, "=")
@@ -116,13 +88,8 @@ func AliasEnv() {
 	}
 }
 
-// EnvDB names the database file.
 const EnvDB = "WAZE_DB"
 
-// SecretKey is the key that seals the provider keys in the database:
-// $WAZE_SECRET_KEY, else the home folder's secret.key, made on first use
-// (random, owner-only permissions). Losing the file loses the sealed keys,
-// not the conversations.
 func SecretKey() (string, error) {
 	if k := strings.TrimSpace(os.Getenv("WAZE_SECRET_KEY")); k != "" {
 		return k, nil

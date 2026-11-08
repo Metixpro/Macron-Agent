@@ -22,8 +22,8 @@ func TestGroupModeration(t *testing.T) {
 	h := newHarness(t)
 	b := h.bot
 	spammer := &telegram.User{ID: 555, FirstName: "Spam", LastName: "Bot"}
-	h.tg.members["-100500:42"] = "administrator" // the bot
-	h.tg.members["-100500:77"] = "administrator" // the asker
+	h.tg.members["-100500:42"] = "administrator"
+	h.tg.members["-100500:77"] = "administrator"
 	h.tg.members["-100500:78"] = "member"
 	h.tg.members["-100500:555"] = "member"
 	h.tg.members["-100500:556"] = "administrator"
@@ -59,7 +59,6 @@ func TestGroupModeration(t *testing.T) {
 		t.Errorf("bot admins are protected: %s", out)
 	}
 
-	// Three warnings mute for a day and start over.
 	h.tg.reset()
 	for i := 1; i <= 3; i++ {
 		out = b.moderate(t.Context(), modMessage(77, "", spammer), map[string]any{"action": "warn", "reason": "link"})
@@ -75,7 +74,6 @@ func TestGroupModeration(t *testing.T) {
 		t.Errorf("info: %s", out)
 	}
 
-	// Purge from the replied message on; lock and unlock; an invite link.
 	h.tg.reset()
 	if out := b.moderate(t.Context(), modMessage(77, "", spammer), map[string]any{"action": "purge"}); !strings.Contains(out, "deleted up to 20 messages") {
 		t.Errorf("purge: %s", out)
@@ -97,12 +95,11 @@ func TestGroupModeration(t *testing.T) {
 	if out := b.moderate(t.Context(), modMessage(77, "", nil), map[string]any{"action": "invite_link", "duration": "1d", "count": 10.0}); !strings.Contains(out, "https://t.me/+abc123") || !strings.Contains(out, "for 10 people") {
 		t.Errorf("invite link: %s", out)
 	}
-	// Every right, as far as the asker has them (the rest is left out).
+
 	if out := b.moderate(t.Context(), modMessage(77, "", &telegram.User{ID: 78, FirstName: "Sara"}), map[string]any{"action": "promote", "text": "full"}); !strings.Contains(out, "is now an admin with: change_info") || !strings.Contains(out, "manage_topics (you don't have it yourself)") {
 		t.Errorf("full, capped by the asker's rights: %s", out)
 	}
 
-	// Without the right, the bot says what it needs.
 	h.tg.members["-100500:42"] = "administrator-limited"
 	if out := b.moderate(t.Context(), modMessage(77, "", spammer), map[string]any{"action": "mute"}); !strings.Contains(out, "with the right to ban users") {
 		t.Errorf("the bot's own rights: %s", out)

@@ -18,87 +18,69 @@ import (
 )
 
 const (
-	draftEvery = 700 * time.Millisecond // refresh while the answer streams
-	// streamFrom is how long a reply is before it streams into the live view.
-	// A model writes its text before its calls in the same reply («باشه، الان
-	// می‌گیرمش…», half an answer), and nothing tells a preface from an answer
-	// until the reply ends: shorter text never shows, so the user sees the
-	// work and then the answer, not words and then the work. A short answer
-	// arrives whole a moment later; a long one streams once past this.
-	// Before any tool ran it takes longer (streamFromFirst): such a reply may
-	// still be sent back to work («I can't download it, here's how…»); an
-	// essay or a long text streams all the same.
+	draftEvery = 700 * time.Millisecond
+
 	streamFrom      = 600
 	streamFromFirst = 1500
-	stepEvery       = 250 * time.Millisecond // refresh after a step starts or ends
-	draftKeepAlive  = 9 * time.Second        // drafts vanish after ~30 s without updates
+	stepEvery       = 250 * time.Millisecond
+	draftKeepAlive  = 9 * time.Second
 	actionEvery     = 4500 * time.Millisecond
-	tickEvery       = 2 * time.Second // refreshes the elapsed time of a running step
+	tickEvery       = 2 * time.Second
 )
 
 var (
-	groupEditEvery    = 3 * time.Second         // groups allow ~20 edits a minute
-	privateEditEvery  = 1200 * time.Millisecond // a private chat's live message changes about once a second
-	privateClockEvery = 5 * time.Second         // a long step: refresh the running time of a private live message
-	traceMsgDelay     = 1200 * time.Millisecond // short steps in groups need no classic trace message
-	groupClockEvery   = 15 * time.Second        // a long step: refresh the running time of a group's live message
-	stopButtonAfter   = 6 * time.Second         // quick answers never show a stop button
-	guestEditEvery    = 2500 * time.Millisecond // a guest placeholder (an inline message) changes now and then
+	groupEditEvery    = 3 * time.Second
+	privateEditEvery  = 1200 * time.Millisecond
+	privateClockEvery = 5 * time.Second
+	traceMsgDelay     = 1200 * time.Millisecond
+	groupClockEvery   = 15 * time.Second
+	stopButtonAfter   = 6 * time.Second
+	guestEditEvery    = 2500 * time.Millisecond
 )
 
-// liveView shows that the bot is working. Everywhere: a chat action
-// ("typing…", "uploading photo…"). In private chats a rich draft shows a
-// thinking bubble, then the answer as it is written. In groups one rich
-// message (a reply with a stop button) does the same: "thinking", the terminal,
-// the answer as it is written, and finally becomes the answer itself. With the
-// live terminal on, the user also sees the tools it uses (see trace.go). When
-// rich messages are not available, a group gets a classic trace message that
-// is deleted once the answer is there.
 type liveView struct {
 	b       *Bot
 	chatID  int64
 	userID  int64
 	replyTo int64
 	draftID int64
-	private bool   // a private chat
-	canStop bool   // the draft shows Telegram's stop button (liveStop)
-	runKey  string // the job the draft belongs to: its stop button stops that job only
+	private bool
+	canStop bool
+	runKey  string
 
 	mu        sync.Mutex
-	drafts    bool // private chat; false after the first unsupported error
-	terminal  bool // the live terminal is on
-	tracing   bool // a tool has started
-	worked    bool // a tool has started in this request (tracing goes back to false between rounds)
+	drafts    bool
+	terminal  bool
+	tracing   bool
+	worked    bool
 	status    string
 	text      string
 	action    string
 	tr        trace
-	think     thinkLog  // the thinking card's steps (the terminal is off)
-	noting    bool      // a tool has started and the thinking card shows what is being done
-	started   time.Time // when the request started
+	think     thinkLog
+	noting    bool
+	started   time.Time
 	dirty     bool
-	urgent    bool // a step changed: show it soon, even if it is quick
+	urgent    bool
 	lastFlush time.Time
 
-	traceMsg int64 // groups: the live (or classic trace) message
+	traceMsg int64
 	lastEdit time.Time
-	firstAt  time.Time // groups: when the first step started
-	rich     bool      // groups: the live message is a rich message
-	stopData string    // groups: the callback data of the job's stop button
-	shown    string    // groups: what the live message shows now
-	shownKB  bool      // groups: the live message has its stop button
-	gone     bool      // groups: the live message was deleted by someone
+	firstAt  time.Time
+	rich     bool
+	stopData string
+	shown    string
+	shownKB  bool
+	gone     bool
 
 	stopOnce sync.Once
 	done     chan struct{}
 	finished chan struct{}
 
-	muted bool        // a guest chat without a placeholder: the bot shows nothing
-	guest *guestReply // a guest chat: the placeholder shows what the bot is doing
+	muted bool
+	guest *guestReply
 	lng   lang
-	// detached: a background task's card (see bgtasks.go). No "typing…" while
-	// the user chats about other things, and the answer comes as a new
-	// message (Telegram tells the user about it; an edit it would not).
+
 	detached bool
 }
 
@@ -106,25 +88,22 @@ func (b *Bot) newLive(m *telegram.Message, userID int64) *liveView {
 	l := &liveView{
 		b: b, chatID: m.Chat.ID, userID: userID, replyTo: m.MessageID, draftID: rand.Int64N(1<<31) + 1,
 		private: m.Chat.Private(), canStop: true,
-		drafts: m.Chat.Private(), terminal: b.st.SettingBool(store.SettingLiveTrace, true),
+		drafts: m.Chat.Private() && m.MessageID == 0, terminal: b.st.SettingBool(store.SettingLiveTrace, true),
 		status: thinkingStatus(b.langOf(m.From)), action: "typing", dirty: true, started: time.Now(), lng: b.langOf(m.From),
 		done: make(chan struct{}), finished: make(chan struct{}),
 	}
 	if m.GuestQueryID != "" {
-		// The bot is not in the chat: no chat action, no draft, no message of
-		// its own; only its one reply, the placeholder, can change.
+
 		l.muted, l.drafts, l.terminal = true, false, false
 		if g := b.guestReply(m.GuestQueryID); g != nil {
 			l.muted, l.guest, l.lastEdit, l.dirty = false, g, time.Now(), false
 		}
 	}
-	// Scheduled tasks (no message to reply to) keep the classic trace.
-	l.rich = !l.drafts && !l.muted && m.MessageID != 0 && !b.richOff.Load()
+
+	l.rich = !l.private && !l.drafts && !l.muted && m.MessageID != 0 && !b.richOff.Load()
 	return l
 }
 
-// detach makes the card a background task's: a live message (never a
-// draft, which would lock a private chat's input), titled with the task.
 func (l *liveView) detach(title string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -133,14 +112,11 @@ func (l *liveView) detach(title string) {
 	l.tr.title = title
 }
 
-// draftOwner is the job a private chat's draft shows: its stop button stops
-// that job, never a later one.
 type draftOwner struct {
 	userID, chatID int64
 	key            string
 }
 
-// editEvery is how often the live message may change.
 func (l *liveView) editEvery() time.Duration {
 	if l.private {
 		return privateEditEvery
@@ -148,7 +124,6 @@ func (l *liveView) editEvery() time.Duration {
 	return groupEditEvery
 }
 
-// clockEvery is how often a long step's running time is refreshed.
 func (l *liveView) clockEvery() time.Duration {
 	if l.private {
 		return privateClockEvery
@@ -185,8 +160,7 @@ func (l *liveView) start(ctx context.Context) {
 					lastAction = time.Now()
 				}
 				l.mu.Lock()
-				// The spinner and the running time move the draft; a group message
-				// only shows the running time now and then.
+
 				if l.drafts && l.tracing && l.text == "" && time.Since(l.lastFlush) >= tickEvery {
 					l.dirty = true
 				}
@@ -207,7 +181,6 @@ func (l *liveView) start(ctx context.Context) {
 	}()
 }
 
-// stop ends the updates; it is safe to call more than once.
 func (l *liveView) stop() {
 	l.stopOnce.Do(func() {
 		close(l.done)
@@ -216,8 +189,6 @@ func (l *liveView) stop() {
 	})
 }
 
-// discard stops the view and removes the trace message of a group (once the
-// answer has been sent).
 func (l *liveView) discard() {
 	l.stop()
 	l.mu.Lock()
@@ -231,17 +202,12 @@ func (l *liveView) discard() {
 	}
 }
 
-// toolStart records a tool that begins, the agent's own (sub 0) or a
-// sub-agent's. Text the model wrote before the call was only a preamble and
-// is dropped.
 func (l *liveView) toolStart(sub int, name string) { l.toolStartWith(sub, name, "") }
 
-// toolStartWith is toolStart with the call's arguments, which the thinking
-// card reads what the step is about from (see thinking.go).
 func (l *liveView) toolStartWith(sub int, name, args string) {
 	note := ""
 	if toolLabel(name) != "" && !l.termOn() {
-		note = l.redact(thinkText(l.lng, name, args)) // a link, a name or a query can carry what must not show
+		note = l.redact(thinkText(l.lng, name, args))
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -254,7 +220,7 @@ func (l *liveView) toolStartWith(sub int, name, args string) {
 	}
 
 	if toolLabel(name) == "" {
-		return // e.g. a reaction: nothing to show, and the text goes on
+		return
 	}
 	if l.terminal {
 		if l.tr.start(sub, name, time.Now()) && !l.tracing {
@@ -267,7 +233,6 @@ func (l *liveView) toolStartWith(sub int, name, args string) {
 	l.text, l.dirty, l.urgent = "", true, true
 }
 
-// redact hides secrets and the server's own names in what the view shows.
 func (l *liveView) redact(s string) string {
 	if l.b == nil {
 		return s
@@ -275,7 +240,6 @@ func (l *liveView) redact(s string) string {
 	return l.b.redact(s)
 }
 
-// termOn reports whether the live terminal is on.
 func (l *liveView) termOn() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -286,11 +250,11 @@ func (l *liveView) subAgent(title string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.terminal {
-		l.noting = true // the thinking card names it, and its calls follow
+		l.noting = true
 		l.text, l.dirty, l.urgent = "", true, true
 		return l.think.subStart(l.lng.f("دستیار کمکی: %s", textutil.TruncateRunes(l.redact(title), 40, "…")), time.Now())
 	}
-	id := l.tr.subStart(l.redact(title), time.Now()) // keep the sub-agent in the live trace
+	id := l.tr.subStart(l.redact(title), time.Now())
 	if !l.tracing {
 		l.tracing, l.firstAt = true, time.Now()
 	}
@@ -298,7 +262,6 @@ func (l *liveView) subAgent(title string) int {
 	return id
 }
 
-// subDone marks a sub-agent finished.
 func (l *liveView) subDone(id int, failed bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -313,8 +276,6 @@ func (l *liveView) subDone(id int, failed bool) {
 	l.dirty, l.urgent = true, true
 }
 
-// setPlan shows the job's plan (update_plan) above the terminal; text the
-// model wrote before it was a preamble and is dropped.
 func (l *liveView) setPlan(items []agent.PlanItem) {
 	shown := make([]agent.PlanItem, len(items))
 	for i, it := range items {
@@ -326,8 +287,6 @@ func (l *liveView) setPlan(items []agent.PlanItem) {
 	l.text, l.dirty, l.urgent = "", true, true
 }
 
-// note shows that a message the user sent during the job reached the model.
-// An answer being written is dropped: the model starts over with it.
 func (l *liveView) note() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -337,7 +296,6 @@ func (l *liveView) note() {
 	l.text, l.status, l.dirty, l.urgent = "", thinkingStatus(l.lng), true, true
 }
 
-// toolProgress shows how far a running tool is.
 func (l *liveView) toolProgress(sub int, name, text string, output bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -346,7 +304,7 @@ func (l *liveView) toolProgress(sub int, name, text string, output bool) {
 		return
 	}
 	if !l.terminal {
-		if !output { // a state ("45% · 12/27 MB"), never what a program printed
+		if !output {
 			l.think.progress(sub, name, textutil.OneLine(text))
 			l.dirty = true
 		}
@@ -356,7 +314,6 @@ func (l *liveView) toolProgress(sub int, name, text string, output bool) {
 	l.dirty = true
 }
 
-// toolEnd records the outcome of a tool.
 func (l *liveView) toolEnd(sub int, name, result string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -374,7 +331,6 @@ func (l *liveView) toolEnd(sub int, name, result string) {
 	l.dirty, l.urgent = true, true
 }
 
-// context shows how full the model's context is.
 func (l *liveView) context(used, window int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -385,8 +341,6 @@ func (l *liveView) context(used, window int) {
 	l.dirty = true
 }
 
-// compacted shows a compaction as an event, with the room it made, so the
-// meter going down reads as what it is.
 func (l *liveView) compacted(before, after, window int, summarized bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -398,8 +352,6 @@ func (l *liveView) compacted(before, after, window int, summarized bool) {
 	l.dirty, l.urgent = true, true
 }
 
-// escalated shows that the rest of the job went to the stronger model
-// (without naming a model: the card says the job is taken more seriously).
 func (l *liveView) escalated(string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -410,7 +362,6 @@ func (l *liveView) escalated(string) {
 	l.dirty, l.urgent = true, true
 }
 
-// setText streams the answer being written.
 func (l *liveView) setText(partial string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -463,13 +414,12 @@ func (l *liveView) flush(ctx context.Context) {
 		rm = telegram.RichMessage{Markdown: md, IsRTL: telegram.IsMostlyRTL(text)}
 	case tracing:
 		rm = telegram.RichMessage{Markdown: trace}
-	case notes != "": // the terminal is off: what it is doing and what it has done
+	case notes != "":
 		rm = telegram.RichMessage{Markdown: notes, IsRTL: l.lng == fa}
-	case plan != "": // the terminal is off: the plan under the status
+	case plan != "":
 		rm = telegram.RichMessage{Markdown: escapeMarkdown(status) + "\n\n" + plan, IsRTL: l.lng == fa}
 	default:
-		// Telegram's own thinking bubble, with the status and its icon (an
-		// animated one when premium emoji are set up, e.g. from t.me/addemoji/AIActions).
+
 		rm = telegram.RichMessage{HTML: "<tg-thinking>" + telegram.EscapeHTML(status) + "</tg-thinking>", IsRTL: l.lng == fa}
 	}
 	dctx, cancel := context.WithTimeout(ctx, 8*time.Second)
@@ -491,12 +441,11 @@ func (l *liveView) flush(ctx context.Context) {
 		return
 	}
 	if telegram.IsUnsupported(err) || telegram.IsBadRequest(err) {
-		// Partial Markdown can be momentarily invalid; only give up on drafts
-		// when even the plain thinking bubble is refused.
+
 		if text != "" || tracing {
 			if tracing && text == "" {
 				l.mu.Lock()
-				l.tracing = false // fall back to the thinking bubble
+				l.tracing = false
 				l.mu.Unlock()
 			}
 			return
@@ -508,8 +457,58 @@ func (l *liveView) flush(ctx context.Context) {
 	}
 }
 
-// flushGroup sends or edits the trace message of a group chat.
+func (l *liveView) flushPrivateMessage(ctx context.Context) {
+	l.mu.Lock()
+	id := l.traceMsg
+	if l.gone || (id != 0 && (!l.dirty || (!l.urgent && time.Since(l.lastEdit) < l.editEvery()))) {
+		l.mu.Unlock()
+		return
+	}
+	body, _ := l.groupBody()
+	withStop := l.canStop && l.stopData != ""
+	if id != 0 && body == l.shown && withStop == l.shownKB {
+		l.dirty, l.urgent = false, false
+		l.mu.Unlock()
+		return
+	}
+	l.dirty, l.urgent, l.lastEdit = false, false, time.Now()
+	stopData := l.stopData
+	l.mu.Unlock()
+	html := telegram.MarkdownToHTML(body)
+	if set := l.b.premium(); set != nil {
+		html = set.HTML(html)
+	}
+	var kb *telegram.InlineKeyboardMarkup
+	if withStop {
+		kb = l.b.stopKeyboard(l.lng, stopData)
+	}
+	sctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	var err error
+	if id != 0 {
+		err = l.b.api.EditMessageText(sctx, l.chatID, id, html, kb)
+	} else {
+		var sent *telegram.Message
+		sent, err = l.b.api.SendHTML(sctx, l.chatID, html, telegram.SendOptions{ReplyTo: l.replyTo, Silent: true, Markup: kb})
+		if err == nil {
+			id = sent.MessageID
+		}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err != nil && !telegram.IsNotModified(err) {
+		l.gone = messageGone(err)
+		l.dirty = !l.gone
+		return
+	}
+	l.traceMsg, l.shown, l.shownKB = id, body, withStop
+}
+
 func (l *liveView) flushGroup(ctx context.Context) {
+	if l.private {
+		l.flushPrivateMessage(ctx)
+		return
+	}
 	l.mu.Lock()
 	if !l.terminal || !l.tracing || !l.dirty || time.Since(l.lastEdit) < l.editEvery() || time.Since(l.firstAt) < traceMsgDelay {
 		l.mu.Unlock()
@@ -537,7 +536,7 @@ func (l *liveView) flushGroup(ctx context.Context) {
 		}
 		if err != nil && !telegram.IsNotModified(err) && telegram.IsBadRequest(err) {
 			l.mu.Lock()
-			l.terminal = false // the message is gone or cannot be edited: stop tracing
+			l.terminal = false
 			l.mu.Unlock()
 		}
 		return
@@ -551,12 +550,12 @@ func (l *liveView) flushGroup(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if err != nil {
-		l.terminal = false // e.g. no right to send messages: never retry
+		l.terminal = false
 		return
 	}
 	select {
 	case <-l.done:
-		// stopped while sending: delete right away (discard may have run already)
+
 		go func() {
 			dctx, cancel := l.b.ctx(10 * time.Second)
 			defer cancel()
@@ -567,9 +566,6 @@ func (l *liveView) flushGroup(ctx context.Context) {
 	}
 }
 
-// flushGuest edits a guest query's placeholder: what the bot is doing, then
-// the answer as it is written. An inline message is edited now and then
-// only, like a group's live message.
 func (l *liveView) flushGuest(ctx context.Context) {
 	l.mu.Lock()
 	if !l.dirty || time.Since(l.lastEdit) < guestEditEvery {
@@ -582,9 +578,6 @@ func (l *liveView) flushGuest(ctx context.Context) {
 	l.guest.progress(ctx, body, rtl, l.text == "")
 }
 
-// groupBody is what a group's live message shows (l.mu held), as rich
-// Markdown: the answer being written, the terminal, or a quote card with what
-// the bot is doing («💭 دارم فکر می‌کنم…»).
 func (l *liveView) groupBody() (md string, rtl bool) {
 	switch {
 	case l.text != "":
@@ -597,11 +590,10 @@ func (l *liveView) groupBody() (md string, rtl bool) {
 	case len(l.tr.plan) > 0:
 		return l.bgHead() + escapeMarkdown(l.status) + "\n\n" + l.tr.planMD(), l.lng == fa
 	}
-	// A plain line, not a quote: a quote's bar collides with 💭 in right-to-left text.
+
 	return l.bgHead() + l.status, l.lng == fa
 }
 
-// bgHead is a background task's name over its card ("" for a request).
 func (l *liveView) bgHead() string {
 	if !l.detached || l.tr.title == "" {
 		return ""
@@ -609,15 +601,12 @@ func (l *liveView) bgHead() string {
 	return "**" + escapeMarkdown(l.lng.f("🔄 کار پس‌زمینه: %s", textutil.TruncateRunes(l.tr.title, 60, "…"))) + "**\n"
 }
 
-// stopRow is the stop button inside the live message: a borderless link
-// under the content, on the side the text starts.
 func (l *liveView) stopRow() string {
 	align := "left"
 	if l.lng == fa {
 		align = "right"
 	}
-	// With premium emoji the icon is the premium emoji alone: the emoji
-	// character next to it would show twice.
+
 	raw := l.lng.t("⏹ توقف")
 	content := telegram.EscapeHTML(raw)
 	if set := l.b.premium(); set != nil {
@@ -630,20 +619,16 @@ func (l *liveView) stopRow() string {
 	return "\n\n" + row
 }
 
-// liveTry is one way to show the live message: with premium emoji or
-// without, the stop button inside it or (on servers that refuse that) under it.
 type liveTry struct {
 	rm    telegram.RichMessage
 	kb    *telegram.InlineKeyboardMarkup
-	noRow bool // the stop button moved under the message
+	noRow bool
 }
 
-// wantsStop reports whether the job runs long enough for a stop button (l.mu held).
 func (l *liveView) wantsStop() bool {
 	return l.tracing || l.noting || time.Since(l.started) >= stopButtonAfter
 }
 
-// flushRich sends or edits a group's live rich message.
 func (l *liveView) flushRich(ctx context.Context) {
 	l.mu.Lock()
 	id := l.traceMsg
@@ -661,8 +646,7 @@ func (l *liveView) flushRich(ctx context.Context) {
 	l.lastEdit = time.Now()
 	l.mu.Unlock()
 
-	// The best look first; a refused one falls back to a plainer one.
-	row := withStop && !l.b.stopRowOff.Load()
+	row := withStop && !l.private && !l.b.stopRowOff.Load()
 	full, kb := body, (*telegram.InlineKeyboardMarkup)(nil)
 	switch {
 	case row:
@@ -716,24 +700,23 @@ func (l *liveView) flushRich(ctx context.Context) {
 		case err == nil:
 			l.shown, l.shownKB = body, withStop
 		case messageGone(err):
-			l.gone, l.traceMsg = true, 0 // someone deleted it: show nothing more
+			l.gone, l.traceMsg = true, 0
 		}
-		// Other errors (half-written Markdown, too many edits): the next change tries again.
+
 		return
 	}
 	if err != nil {
 		if ctx.Err() == nil {
 			log.Printf("[chat %d] live message: %v", l.chatID, err)
 		}
-		// No rich messages here: the classic trace takes over (it gives up by
-		// itself when the bot may not write at all).
+
 		l.rich, l.dirty, l.lastEdit = false, true, time.Time{}
 		return
 	}
 	l.shown, l.shownKB = body, withStop
 	select {
 	case <-l.done:
-		// stopped while sending: delete right away (discard may have run already)
+
 		go func() {
 			dctx, cancel := l.b.ctx(10 * time.Second)
 			defer cancel()
@@ -744,14 +727,10 @@ func (l *liveView) flushRich(ctx context.Context) {
 	}
 }
 
-// messageGone reports an edit of a message that no longer exists.
 func messageGone(err error) bool {
 	return telegram.IsBadRequest(err) && strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
-// replace turns a group's live message into rm (an answer or a notice), with
-// kb under it (nil: no buttons), and keeps it; it fails when there is no live
-// message to reuse.
 func (l *liveView) replace(ctx context.Context, rm telegram.RichMessage, kb *telegram.InlineKeyboardMarkup) error {
 	l.stop()
 	l.mu.Lock()
@@ -762,14 +741,14 @@ func (l *liveView) replace(ctx context.Context, rm telegram.RichMessage, kb *tel
 		return errNoLiveMessage
 	}
 	if kb == nil {
-		kb = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{}} // removes the stop button
+		kb = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{}}
 	}
 	if err := l.b.api.EditRichMessage(ctx, l.chatID, id, rm, kb); err != nil {
 		return err
 	}
 	l.mu.Lock()
 	if l.traceMsg == id {
-		l.traceMsg = 0 // it is the answer now: discard keeps it
+		l.traceMsg = 0
 	}
 	l.mu.Unlock()
 	return nil
@@ -777,8 +756,6 @@ func (l *liveView) replace(ctx context.Context, rm telegram.RichMessage, kb *tel
 
 var errNoLiveMessage = errors.New("no live message")
 
-// replaceHTML puts a short system text (stopped, an error, a timeout) in the
-// live message's place: with premium emoji first, like every other message.
 func (l *liveView) replaceHTML(ctx context.Context, html string, rtl bool, kb *telegram.InlineKeyboardMarkup) error {
 	if set := l.b.premium(); set != nil {
 		if fancy := set.HTML(html); fancy != html && l.replace(ctx, telegram.RichMessage{HTML: fancy, IsRTL: rtl}, kb) == nil {
@@ -788,8 +765,6 @@ func (l *liveView) replaceHTML(ctx context.Context, html string, rtl bool, kb *t
 	return l.replace(ctx, telegram.RichMessage{HTML: html, IsRTL: rtl}, kb)
 }
 
-// inPlace returns how the answer's first part replaces a group's live
-// message (premium emoji first), or nil when there is none.
 func (l *liveView) inPlace() func(ctx context.Context, md string) error {
 	l.mu.Lock()
 	ok := l.rich && !l.gone && l.traceMsg != 0 && !l.detached
@@ -808,7 +783,6 @@ func (l *liveView) inPlace() func(ctx context.Context, md string) error {
 	}
 }
 
-// streams says whether a reply this long shows while it is written.
 func (l *liveView) streams(partial string) bool {
 	l.mu.Lock()
 	from := streamFromFirst

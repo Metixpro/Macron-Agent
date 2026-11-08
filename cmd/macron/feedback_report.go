@@ -12,14 +12,9 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The weekly report: every Saturday morning the bot's owners get how the
-// week went (jobs, reactions, complaints, the tools that failed most with
-// their last error), what to do about it, and the lessons waiting for them.
-// The panel shows the same report any time (🧠 Learning → 📈).
-
 const (
-	settingWeeklyReport = "weekly_report"      // "false" turns it off
-	settingWeeklySent   = "weekly_report_sent" // when the last one went (RFC3339)
+	settingWeeklyReport = "weekly_report"
+	settingWeeklySent   = "weekly_report_sent"
 	reportDays          = 7
 	dailyKeep           = 90 * 24 * time.Hour
 )
@@ -32,8 +27,8 @@ type toolRow struct {
 
 type reportData struct {
 	jobs, partial, up, down, complaints, repeats int
-	tools                                        []toolRow      // by failures
-	unhappy                                      map[string]int // tool → 👎, complaints and repeats about its answers
+	tools                                        []toolRow
+	unhappy                                      map[string]int
 	pending                                      int
 }
 
@@ -97,7 +92,6 @@ func pct(n, of int) int {
 	return n * 100 / of
 }
 
-// toolHint is what to look at when a tool fails a lot.
 func toolHint(l lang, tool string) string {
 	switch tool {
 	case "download_media_ytdlp":
@@ -116,7 +110,6 @@ func toolHint(l lang, tool string) string {
 	return l.t("آخرین خطاش رو ببین؛ اگه همیشه همینه، برای رفعش بفرست.")
 }
 
-// weeklyReport is the report of the days since since, in the admin's language.
 func (b *Bot) weeklyReport(ctx context.Context, l lang, since time.Time) string {
 	d, err := b.gatherReport(ctx, since)
 	if err != nil {
@@ -187,7 +180,6 @@ func (b *Bot) weeklyReport(ctx context.Context, l lang, since time.Time) string 
 	return sb.String()
 }
 
-// runWeeklyReports sends the report on Saturday mornings.
 func (b *Bot) runWeeklyReports(ctx context.Context) {
 	t := time.NewTicker(20 * time.Minute)
 	defer t.Stop()
@@ -201,7 +193,6 @@ func (b *Bot) runWeeklyReports(ctx context.Context) {
 	}
 }
 
-// maybeWeeklyReport sends the report if it is due (Saturday from 9:00, once a week).
 func (b *Bot) maybeWeeklyReport(ctx context.Context, now time.Time) bool {
 	if !b.st.SettingBool(settingWeeklyReport, true) {
 		return false
@@ -218,7 +209,7 @@ func (b *Bot) maybeWeeklyReport(ctx context.Context, now time.Time) bool {
 	sctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	if err := b.st.SetSetting(sctx, settingWeeklySent, now.UTC().Format(time.RFC3339)); err != nil {
-		return false // first marked as sent: it never goes twice
+		return false
 	}
 	since := now.Add(-reportDays * 24 * time.Hour)
 	for id := range b.owner {

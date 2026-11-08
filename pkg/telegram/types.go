@@ -15,13 +15,12 @@ type User struct {
 	Username     string `json:"username,omitempty"`
 	LanguageCode string `json:"language_code,omitempty"`
 	IsPremium    bool   `json:"is_premium,omitempty"`
-	// SupportsGuestQueries is set (getMe only) when Guest Mode is enabled in BotFather.
+
 	SupportsGuestQueries bool `json:"supports_guest_queries,omitempty"`
-	// CanReadAllGroupMessages is set (getMe only) when privacy mode is off.
+
 	CanReadAllGroupMessages bool `json:"can_read_all_group_messages,omitempty"`
 }
 
-// FullName is "First Last" (or the username when both are empty).
 func (u User) FullName() string {
 	n := strings.TrimSpace(u.FirstName + " " + u.LastName)
 	if n == "" && u.Username != "" {
@@ -39,13 +38,12 @@ type Chat struct {
 	LastName  string `json:"last_name,omitempty"`
 }
 
-// Private reports a one-to-one chat with a user.
 func (c Chat) Private() bool { return c.Type == "private" }
 
 type MessageEntity struct {
 	Type          string `json:"type"`
-	Offset        int    `json:"offset"` // UTF-16 code units
-	Length        int    `json:"length"` // UTF-16 code units
+	Offset        int    `json:"offset"`
+	Length        int    `json:"length"`
 	URL           string `json:"url,omitempty"`
 	User          *User  `json:"user,omitempty"`
 	Language      string `json:"language,omitempty"`
@@ -90,7 +88,6 @@ type Video struct {
 	Thumbnail *PhotoSize `json:"thumbnail,omitempty"`
 }
 
-// Poll is a native Telegram poll.
 type Poll struct {
 	ID                    string       `json:"id"`
 	Question              string       `json:"question"`
@@ -105,8 +102,6 @@ type PollOption struct {
 	VoterCount int    `json:"voter_count"`
 }
 
-// PollAnswer is a vote in a non-anonymous poll sent by the bot. An empty
-// OptionIDs means the vote was retracted.
 type PollAnswer struct {
 	PollID    string `json:"poll_id"`
 	VoterChat *Chat  `json:"voter_chat,omitempty"`
@@ -131,7 +126,6 @@ type Audio struct {
 	FileSize  int64  `json:"file_size,omitempty"`
 }
 
-// Dice is an animated emoji with a random value.
 type Dice struct {
 	Emoji string `json:"emoji"`
 	Value int    `json:"value"`
@@ -155,19 +149,17 @@ type TextQuote struct {
 	IsManual bool   `json:"is_manual,omitempty"`
 }
 
-// MessageOrigin describes where a forwarded message came from.
 type MessageOrigin struct {
-	Type            string `json:"type"` // user | hidden_user | chat | channel
+	Type            string `json:"type"`
 	Date            int64  `json:"date"`
 	SenderUser      *User  `json:"sender_user,omitempty"`
 	SenderUserName  string `json:"sender_user_name,omitempty"`
 	SenderChat      *Chat  `json:"sender_chat,omitempty"`
 	Chat            *Chat  `json:"chat,omitempty"`
-	MessageID       int64  `json:"message_id,omitempty"`       // channel: the original post
-	AuthorSignature string `json:"author_signature,omitempty"` // channel post or anonymous admin
+	MessageID       int64  `json:"message_id,omitempty"`
+	AuthorSignature string `json:"author_signature,omitempty"`
 }
 
-// Name is a readable description of the origin.
 func (o *MessageOrigin) Name() string {
 	switch {
 	case o == nil:
@@ -184,7 +176,6 @@ func (o *MessageOrigin) Name() string {
 	return "unknown"
 }
 
-// ChatID is the channel or group the message came from (0 for people).
 func (o *MessageOrigin) ChatID() int64 {
 	switch {
 	case o == nil:
@@ -197,7 +188,6 @@ func (o *MessageOrigin) ChatID() int64 {
 	return 0
 }
 
-// UserID is the person the message came from (0 when unknown or hidden).
 func (o *MessageOrigin) UserID() int64 {
 	if o == nil || o.SenderUser == nil {
 		return 0
@@ -205,11 +195,6 @@ func (o *MessageOrigin) UserID() int64 {
 	return o.SenderUser.ID
 }
 
-// Describe identifies the origin exactly, for the model:
-//
-//	Channel · @channel · id: -100123 · msg_id: 45
-//	Ali Rezaei · @ali · id: 123456789
-//	Ali (hidden user, ID not provided by Telegram)
 func (o *MessageOrigin) Describe() string {
 	if o == nil {
 		return ""
@@ -285,18 +270,17 @@ type Message struct {
 	Contact         *Contact        `json:"contact,omitempty"`
 	ReplyToMessage  *Message        `json:"reply_to_message,omitempty"`
 	Quote           *TextQuote      `json:"quote,omitempty"`
-	// ExternalReply is a message of another chat or topic being replied to
-	// (or one the bot cannot see, in guest mode); see Replied.
+
 	ExternalReply *ExternalReplyInfo `json:"external_reply,omitempty"`
 	ReplyToStory  *Story             `json:"reply_to_story,omitempty"`
-	// ForumTopicCreated marks the first message of a forum topic.
+
 	ForumTopicCreated json.RawMessage `json:"forum_topic_created,omitempty"`
 	IsTopicMessage    bool            `json:"is_topic_message,omitempty"`
-	// IsAutomaticForward marks a channel post copied into its discussion group.
+
 	IsAutomaticForward bool           `json:"is_automatic_forward,omitempty"`
 	MessageThreadID    int64          `json:"message_thread_id,omitempty"`
 	ForwardOrigin      *MessageOrigin `json:"forward_origin,omitempty"`
-	// The forward fields before Bot API 7.0; some Bot API servers still send them. Use Origin.
+
 	ForwardFrom          *User           `json:"forward_from,omitempty"`
 	ForwardFromChat      *Chat           `json:"forward_from_chat,omitempty"`
 	ForwardFromMessageID int64           `json:"forward_from_message_id,omitempty"`
@@ -312,18 +296,13 @@ type Message struct {
 
 	SuccessfulPayment *SuccessfulPayment `json:"successful_payment,omitempty"`
 	RefundedPayment   *RefundedPayment   `json:"refunded_payment,omitempty"`
-	// Album holds the other items of an album (a media group: Telegram sends
-	// each item as its own message) that the bot merged into this one, and
-	// AlbumDone marks the merged message; the bot sets them, Telegram never does.
+
 	Album     []*Message `json:"-"`
 	AlbumDone bool       `json:"-"`
-	// GuestQueryID is set on a guest message (Bot API 10.0): the bot was
-	// summoned in a chat it is not a member of and answers with answerGuestQuery.
+
 	GuestQueryID string `json:"guest_query_id,omitempty"`
 }
 
-// Origin is where a forwarded message came from (nil when it is not forwarded),
-// from forward_origin or, on older Bot API servers, the forward_from* fields.
 func (m *Message) Origin() *MessageOrigin {
 	switch {
 	case m == nil:
@@ -344,13 +323,11 @@ func (m *Message) Origin() *MessageOrigin {
 	return nil
 }
 
-// HasMedia reports whether the message carries a photo, file or other media.
 func (m *Message) HasMedia() bool {
 	return len(m.Photo) > 0 || m.Document != nil || m.Voice != nil || m.Audio != nil || m.Video != nil ||
 		m.VideoNote != nil || m.Animation != nil || m.Sticker != nil || m.Location != nil || m.Contact != nil
 }
 
-// Body returns the text or caption, or what a rich message says.
 func (m *Message) Body() string {
 	switch {
 	case m.Text != "":
@@ -363,7 +340,6 @@ func (m *Message) Body() string {
 	return ""
 }
 
-// BodyEntities returns the entities of the text or caption.
 func (m *Message) BodyEntities() []MessageEntity {
 	if m.Text != "" {
 		return m.Entities
@@ -371,7 +347,6 @@ func (m *Message) BodyEntities() []MessageEntity {
 	return m.CaptionEntities
 }
 
-// LargestPhoto returns the biggest size not above maxSide pixels (or the smallest available).
 func (m *Message) LargestPhoto(maxSide int) *PhotoSize {
 	var best *PhotoSize
 	for i := range m.Photo {
@@ -390,12 +365,10 @@ func (m *Message) LargestPhoto(maxSide int) *PhotoSize {
 }
 
 type ChatMember struct {
-	Status   string `json:"status"` // creator | administrator | member | restricted | left | kicked
+	Status   string `json:"status"`
 	User     User   `json:"user"`
-	IsMember bool   `json:"is_member,omitempty"` // for "restricted"
+	IsMember bool   `json:"is_member,omitempty"`
 
-	// For administrators: what they may do (can_be_edited: the bot may
-	// change their rights, which Telegram allows only for admins it promoted).
 	CanBeEdited         bool   `json:"can_be_edited,omitempty"`
 	IsAnonymous         bool   `json:"is_anonymous,omitempty"`
 	CanManageChat       bool   `json:"can_manage_chat,omitempty"`
@@ -407,13 +380,12 @@ type ChatMember struct {
 	CanEditStories      bool   `json:"can_edit_stories,omitempty"`
 	CanDeleteStories    bool   `json:"can_delete_stories,omitempty"`
 	CustomTitle         string `json:"custom_title,omitempty"`
-	// Shared by administrators and restricted members.
+
 	CanChangeInfo   bool `json:"can_change_info,omitempty"`
 	CanInviteUsers  bool `json:"can_invite_users,omitempty"`
 	CanPinMessages  bool `json:"can_pin_messages,omitempty"`
 	CanManageTopics bool `json:"can_manage_topics,omitempty"`
-	// For restricted and banned members: until when (0 = for ever), and
-	// what a restricted member may still send.
+
 	UntilDate             int64 `json:"until_date,omitempty"`
 	CanSendMessage        bool  `json:"can_send_messages,omitempty"`
 	CanSendAudios         bool  `json:"can_send_audios,omitempty"`
@@ -427,7 +399,6 @@ type ChatMember struct {
 	CanAddWebPagePreviews bool  `json:"can_add_web_page_previews,omitempty"`
 }
 
-// Rights are an administrator's rights (the owner has them all).
 func (m *ChatMember) Rights() AdminRights {
 	if m.Status == "creator" {
 		return AllAdminRights()
@@ -441,7 +412,6 @@ func (m *ChatMember) Rights() AdminRights {
 		CanPostStories: m.CanPostStories, CanEditStories: m.CanEditStories, CanDeleteStories: m.CanDeleteStories}
 }
 
-// Permissions are what a restricted member may still do.
 func (m *ChatMember) Permissions() ChatPermissions {
 	return ChatPermissions{CanSendMessages: m.CanSendMessage, CanSendAudios: m.CanSendAudios, CanSendDocuments: m.CanSendDocuments,
 		CanSendPhotos: m.CanSendPhotos, CanSendVideos: m.CanSendVideos, CanSendVideoNotes: m.CanSendVideoNotes,
@@ -450,7 +420,6 @@ func (m *ChatMember) Permissions() ChatPermissions {
 		CanPinMessages: m.CanPinMessages, CanManageTopics: m.CanManageTopics}
 }
 
-// Joined reports whether the member currently belongs to the chat.
 func (m *ChatMember) Joined() bool {
 	switch m.Status {
 	case "creator", "administrator", "member":
@@ -469,17 +438,12 @@ type ChatMemberUpdated struct {
 	NewChatMember ChatMember `json:"new_chat_member"`
 }
 
-// MessageGenerationStopped is sent when the user presses "stop" on a draft.
 type MessageGenerationStopped struct {
 	Chat            Chat      `json:"chat"`
 	MessageThreadID int64     `json:"message_thread_id,omitempty"`
 	DraftID         FlexInt64 `json:"draft_id"`
 }
 
-// FlexInt64 is an integer Telegram sometimes sends as a JSON string
-// (draft_id arrives as "123" in stopped_message_generation). It accepts
-// 123, "123" and null; a non-numeric string decodes to 0 instead of
-// failing the whole update.
 type FlexInt64 int64
 
 func (f *FlexInt64) UnmarshalJSON(b []byte) error {
@@ -497,7 +461,7 @@ func (f *FlexInt64) UnmarshalJSON(b []byte) error {
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		*f = 0 // unknown format: keep the update, just without an id
+		*f = 0
 		return nil
 	}
 	*f = FlexInt64(n)
@@ -524,7 +488,6 @@ type Update struct {
 	MessageReaction          *MessageReactionUpdated   `json:"message_reaction,omitempty"`
 }
 
-// MessageReactionUpdated is a user's change of their reactions to a message.
 type MessageReactionUpdated struct {
 	Chat        Chat           `json:"chat"`
 	MessageID   int64          `json:"message_id"`
@@ -534,7 +497,6 @@ type MessageReactionUpdated struct {
 	NewReaction []ReactionType `json:"new_reaction"`
 }
 
-// Added are the emoji reactions in new that were not in old.
 func (r *MessageReactionUpdated) Added() []string {
 	had := map[string]bool{}
 	for _, x := range r.OldReaction {
@@ -549,7 +511,6 @@ func (r *MessageReactionUpdated) Added() []string {
 	return out
 }
 
-// PreCheckoutQuery asks the bot to confirm a purchase (answer within 10 s).
 type PreCheckoutQuery struct {
 	ID             string `json:"id"`
 	From           User   `json:"from"`
@@ -558,7 +519,6 @@ type PreCheckoutQuery struct {
 	InvoicePayload string `json:"invoice_payload"`
 }
 
-// SuccessfulPayment is the service message of a completed purchase.
 type SuccessfulPayment struct {
 	Currency                string `json:"currency"`
 	TotalAmount             int    `json:"total_amount"`
@@ -567,7 +527,6 @@ type SuccessfulPayment struct {
 	ProviderPaymentChargeID string `json:"provider_payment_charge_id,omitempty"`
 }
 
-// RefundedPayment is the service message of a refunded purchase.
 type RefundedPayment struct {
 	Currency                string `json:"currency"`
 	TotalAmount             int    `json:"total_amount"`
@@ -586,7 +545,6 @@ type ChatPhoto struct {
 	BigFileID   string `json:"big_file_id"`
 }
 
-// ChatFullInfo is the subset of getChat the bot uses.
 type ChatFullInfo struct {
 	ID           int64            `json:"id"`
 	Type         string           `json:"type"`
@@ -614,7 +572,6 @@ type TelegramFile struct {
 	FileSize int64  `json:"file_size"`
 }
 
-// Button styles (Bot API 9.4).
 const (
 	StyleDanger  = "danger"
 	StyleSuccess = "success"
@@ -638,14 +595,11 @@ type BotCommand struct {
 	Description string `json:"description"`
 }
 
-// BotCommandScope selects who sees a command list.
 type BotCommandScope struct {
-	Type   string `json:"type"` // default | all_private_chats | all_group_chats | chat
+	Type   string `json:"type"`
 	ChatID int64  `json:"chat_id,omitempty"`
 }
 
-// RichMessage is the InputRichMessage of Bot API 10.1: exactly one of
-// Markdown or HTML must be set.
 type RichMessage struct {
 	Markdown            string          `json:"markdown,omitempty"`
 	HTML                string          `json:"html,omitempty"`
@@ -654,39 +608,31 @@ type RichMessage struct {
 	Media               []RichMediaSpec `json:"media,omitempty"`
 }
 
-// RichMediaSpec is an InputRichMessageMedia: a file shown where the text links
-// to tg://photo?id=ID (or tg://video, tg://audio, tg://document).
 type RichMediaSpec struct {
 	ID    string            `json:"id"`
-	Media map[string]string `json:"media"` // an InputMedia* object
+	Media map[string]string `json:"media"`
 }
 
-// ReactionType is an emoji reaction.
 type ReactionType struct {
-	Type  string `json:"type"` // "emoji"
+	Type  string `json:"type"`
 	Emoji string `json:"emoji"`
 }
 
-// ReplyParameters describes the message being replied to.
 type ReplyParameters struct {
 	MessageID                int64 `json:"message_id"`
 	AllowSendingWithoutReply bool  `json:"allow_sending_without_reply,omitempty"`
 }
 
-// SendOptions are the common optional parameters of the send methods.
 type SendOptions struct {
-	ReplyTo        int64 // message id to reply to (sent even if it was deleted)
+	ReplyTo        int64
 	Markup         *InlineKeyboardMarkup
 	Silent         bool
 	ProtectContent bool
-	EffectID       string // message effect, private chats only
-	// ThreadID is the forum topic the message goes to (0: the chat itself,
-	// or the topic of the message it replies to).
+	EffectID       string
+
 	ThreadID int64
 }
 
-// InTopic sets the topic of m on o: in a forum, what the bot sends about a
-// message stays in that message's topic.
 func (o SendOptions) InTopic(m *Message) SendOptions {
 	if m != nil && m.IsTopicMessage && m.MessageThreadID != 0 {
 		o.ThreadID = m.MessageThreadID
@@ -715,12 +661,8 @@ func (o SendOptions) apply(p map[string]any) {
 	}
 }
 
-// TelegramServiceID is the account a channel's posts come from in its
-// discussion group.
 const TelegramServiceID = 777000
 
-// FromChannel reports a message a channel or a chat posted, not a person:
-// a channel post copied into its discussion group, or one sent as a channel.
 func (m *Message) FromChannel() bool {
 	return m.IsAutomaticForward || (m.From != nil && m.From.ID == TelegramServiceID) || (m.SenderChat != nil && m.SenderChat.Type == "channel")
 }

@@ -11,12 +11,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// Checking cookies before they are used, as tg-ytdlp-bot does: a cookies.txt
-// whose login has run out is skipped without a wasted download, and a
-// YouTube cookie can be tried for real (yt-dlp reads a video's details with
-// it, nothing is downloaded).
-
-// loginCookies are the cookies that carry a site's login.
 var loginCookies = map[string][]string{
 	"youtube.com":    {"SID", "SAPISID", "__Secure-3PAPISID", "__Secure-1PSID", "LOGIN_INFO"},
 	"google.com":     {"SID", "SAPISID", "__Secure-3PAPISID", "__Secure-1PSID"},
@@ -32,14 +26,12 @@ var loginCookies = map[string][]string{
 	"vimeo.com":      {"vimeo"},
 }
 
-// CookieLogin is what a cookies.txt holds for one site.
 type CookieLogin struct {
 	Site    string
-	Expires time.Time // when the login runs out (zero: it lasts the session)
+	Expires time.Time
 	Expired bool
 }
 
-// CookieLogins lists the logins of a Netscape cookies.txt, by site.
 func CookieLogins(data string, now time.Time) []CookieLogin {
 	type found struct {
 		latest  time.Time
@@ -90,8 +82,6 @@ func CookieLogins(data string, now time.Time) []CookieLogin {
 	return out
 }
 
-// CookieExpired reports a cookie whose login for host has run out (one
-// without a known login for the site is not judged).
 func CookieExpired(c Cookie, host string, now time.Time) bool {
 	host = strings.TrimPrefix(strings.ToLower(host), "www.")
 	for _, l := range CookieLogins(c.Data, now) {
@@ -102,19 +92,15 @@ func CookieExpired(c Cookie, host string, now time.Time) bool {
 	return false
 }
 
-// cookieTestURL is the video a YouTube cookie is tried on (YouTube's own channel).
 const cookieTestURL = "https://www.youtube.com/watch?v=_GuOjXYl5ew"
 
-// CookieTest is the outcome of trying a cookie.
 type CookieTest struct {
 	OK      bool
-	Live    bool   // tried on the site itself (YouTube); otherwise only read
-	Refused bool   // the account's fault (no login, run out, refused), not the network's or the video's
-	Detail  string // the video title, or why it failed
+	Live    bool
+	Refused bool
+	Detail  string
 }
 
-// TestCookie checks a cookies.txt for host: the login is there and current,
-// and for YouTube yt-dlp can read a video's details with it.
 func (r *Registry) TestCookie(ctx context.Context, data, host string) CookieTest {
 	host = cookieHost("", host)
 	now := time.Now()
@@ -137,7 +123,7 @@ func (r *Registry) TestCookie(ctx context.Context, data, host string) CookieTest
 	if d == nil || len(d.YtDlp) == 0 {
 		return CookieTest{OK: true, Detail: "the login is there (yt-dlp is missing, so it was not tried)"}
 	}
-	// Each try has a private folder of its own, so several run side by side.
+
 	const session = "cookie-check"
 	secret, err := newSecretDir()
 	if err != nil {
@@ -162,14 +148,12 @@ func (r *Registry) TestCookie(ctx context.Context, data, host string) CookieTest
 	switch {
 	case res.ExitCode == 0 && out != "":
 		return CookieTest{OK: true, Live: true, Detail: lastLine(out)}
-	case containsAny(errText, "requested format is not available"): // a format problem, not the login's
+	case containsAny(errText, "requested format is not available"):
 		return CookieTest{OK: true, Live: true, Detail: "works (" + tail(lastLine(errText), 120) + ")"}
 	}
 	return CookieTest{Live: true, Refused: cookieBlocked(errText), Detail: tail(lastLine(errText), 200)}
 }
 
-// cookieRotationsPerHour bounds the cookies one user's downloads may go
-// through in an hour, so one user cannot burn the whole pool.
 const cookieRotationsPerHour = 8
 
 type rotationLimiter struct {
@@ -197,14 +181,10 @@ func (l *rotationLimiter) allow(session string, now time.Time) bool {
 	return true
 }
 
-// UserCookiePrefix starts the id of a cookie a user added for their own downloads.
 const UserCookiePrefix = "user:"
 
-// SetUserCookies gives the downloaders each user's own cookies (tried
-// before the shared pool, and only for that user).
 func (r *Registry) SetUserCookies(f func(sessionID string) []Cookie) { r.userCookies = f }
 
-// KnownLoginSite reports a domain whose login cookies are known.
 func KnownLoginSite(domain string) bool {
 	domain = strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(domain), "."), "www.")
 	for site := range loginCookies {

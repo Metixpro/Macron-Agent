@@ -11,11 +11,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// Subtitles come with a download in four ways: as SRT files next to the
-// video ("file"), alone ("only"), embedded in the MP4 as a track players can
-// switch on ("embed"), or burned into the picture ("burn"), which Telegram's
-// own player shows but which re-encodes the video.
-
 const (
 	burnMaxSeconds = 20 * 60
 	burnFile       = ".burn.srt"
@@ -28,12 +23,10 @@ func isSubtitle(name string) bool {
 	return ext == ".srt" || ext == ".vtt"
 }
 
-// subLang is the language code of "Video.fa.srt".
 func subLang(name string) string {
 	return strings.TrimPrefix(path.Ext(strings.TrimSuffix(name, path.Ext(name))), ".")
 }
 
-// subtitleArgs asks yt-dlp for the subtitles, written or automatic.
 func (d *DownloaderInfo) subtitleArgs(q dlRequest) []string {
 	if q.subs == "" {
 		return nil
@@ -51,7 +44,6 @@ func (d *DownloaderInfo) subtitleArgs(q dlRequest) []string {
 	return a
 }
 
-// subtitleFiles lists the subtitles a download wrote.
 func (r *Registry) subtitleFiles(sessionID string, before map[string]string) []dlFile {
 	var out []dlFile
 	for name, sig := range r.rootSnapshot(sessionID) {
@@ -66,7 +58,6 @@ func (r *Registry) subtitleFiles(sessionID string, before map[string]string) []d
 	return out
 }
 
-// burnSubs draws the subtitles of the first wanted language into the video.
 func (r *Registry) burnSubs(ctx context.Context, sessionID string, files []dlFile, langs string) ([]dlFile, string) {
 	vi := slices.IndexFunc(files, func(f dlFile) bool { return !isSubtitle(f.name) })
 	var subs []int

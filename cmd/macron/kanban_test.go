@@ -12,7 +12,7 @@ func TestKanbanBoard(t *testing.T) {
 	step := 0
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		text := llmText(req)
-		if strings.Contains(text, "card #1 of the owner's board") { // the background task itself
+		if strings.Contains(text, "card #1 of the owner's board") {
 			return map[string]any{"role": "assistant", "content": "گزارش: انجام شد"}, 0
 		}
 		switch {
@@ -38,7 +38,7 @@ func TestKanbanBoard(t *testing.T) {
 	if c, _ := h.st.Card(bg, ownerID, 1); c.Status != store.CardDone || !strings.Contains(c.Notes, "finished") {
 		t.Fatalf("the card follows its task: %+v", c)
 	}
-	// Someone else has no board.
+
 	h.tg.reset()
 	h.send(private(555, "/board"))
 	h.noText("تخته کار")

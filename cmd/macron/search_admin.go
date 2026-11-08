@@ -13,12 +13,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Web search in the admin panel: the treg.to token (searched first; free
-// TinyFish, then paid vendors within a one-cent cap) with DuckDuckGo behind it.
-
 const settingTregToken = "treg_token"
 
-// tregToken reads the token from the panel (encrypted), else from the environment.
 func tregToken(st *store.Store, env string) func() string {
 	return func() string {
 		if t, err := st.SecretSetting(settingTregToken); err == nil && strings.TrimSpace(t) != "" {
@@ -89,7 +85,6 @@ func (b *Bot) viewSearch(l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// testSearch runs one search through treg and reports what happened.
 func (b *Bot) testSearch(ctx context.Context, l lang, token string) string {
 	t := b.app.Search.Treg
 	if token == "" {

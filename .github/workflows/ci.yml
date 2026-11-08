@@ -24,9 +24,6 @@ jobs:
       - name: the installer parses
         run: bash -n install.sh
 
-  # The final gate: the one-line installer on a clean Ubuntu LTS, then the
-  # program's own checks. With the CI bot's secrets set it also runs as a
-  # system service and must answer Telegram's getMe (macron --check).
   clean-install:
     runs-on: ubuntu-24.04
     env:

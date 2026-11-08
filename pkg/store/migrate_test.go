@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// A database made by the previous release (schema version 1, with the outside
-// classifier's log and settings) upgrades in place: its data stays, the old
-// log and settings go, and the owner's choices carry over to the new keys.
 func TestUpgradeFromVersion1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.db")
 	db, err := openDB(DBPath(path))
@@ -16,7 +13,7 @@ func TestUpgradeFromVersion1(t *testing.T) {
 	}
 	stmts := append([]string{`CREATE TABLE schema_migrations (version INTEGER NOT NULL PRIMARY KEY, applied_at DATETIME NOT NULL)`}, migrations[0]...)
 	stmts = append(stmts,
-		// what version 1 had besides
+
 		`CREATE TABLE snap_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at DATETIME NOT NULL, kind TEXT NOT NULL DEFAULT '')`,
 		`CREATE INDEX idx_snap_log_at ON snap_log (at)`,
 		`INSERT INTO snap_log (at, kind) VALUES ('2026-01-01 00:00:00', 'chat')`,

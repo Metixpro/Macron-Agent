@@ -20,8 +20,6 @@ func TestSynthStyleForPicksTheClosestStyle(t *testing.T) {
 	}
 }
 
-// muxAudio puts a track under a silent video, cut and faded, with the picture
-// copied as it is.
 func TestMuxAudioPutsMusicUnderTheVideo(t *testing.T) {
 	r := songRegistry(t, newFakeSongService(t))
 	if !r.downloaderInfo().FFmpeg {
@@ -54,9 +52,6 @@ func TestMuxAudioPutsMusicUnderTheVideo(t *testing.T) {
 	}
 }
 
-// music.ai: real instrumental music from the song service goes under the
-// video, made while it renders; when the service cannot, a synthesizer's does;
-// the video is never lost.
 func TestMotionGraphicWithAIMusic(t *testing.T) {
 	f := newFakeSongService(t)
 	r := browserRegistry(t)
@@ -94,7 +89,6 @@ func TestMotionGraphicWithAIMusic(t *testing.T) {
 		t.Errorf("no link or key reaches the model:\n%s", out)
 	}
 
-	// the service fails: the synthesizer's music, in the style the tags point to
 	f.failWith = "no credit"
 	f.polls.Store(0)
 	out = call(t, r, "mm", ToolMotion, args(map[string]any{"ai": "chiptune game"}, "chip"))
@@ -110,7 +104,6 @@ func TestMotionGraphicWithAIMusic(t *testing.T) {
 		}
 	}
 
-	// no key: nothing is asked of the service, and it is said
 	r.SetMusicKey(func() string { return "" })
 	before := f.created.Load()
 	out = call(t, r, "mm", ToolMotion, args(map[string]any{"ai": "lofi chill"}, "nokey"))

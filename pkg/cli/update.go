@@ -11,8 +11,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/updater"
 )
 
-// update is «macron update»: the newest release, checked and installed by
-// pkg/updater, then the service restarted.
 func update(io *IO, args []string) int {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(io.Err)

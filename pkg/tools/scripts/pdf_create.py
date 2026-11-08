@@ -39,7 +39,7 @@ for path in (
 
 
 def safe(s):
-    # The built-in Helvetica font only knows Latin-1.
+
     return s if FONT != "Helvetica" else s.encode("latin-1", "replace").decode("latin-1")
 
 

@@ -16,29 +16,19 @@ import (
 	"time"
 )
 
-// A session's shell: a process that stays up between commands, the way a
-// terminal does. Background jobs (a dev server, a database, a watcher) run in
-// it, and while it is up the commands that ask for it (RunOptions.InSession)
-// run in it too, so they reach those jobs on localhost and share /tmp. The
-// first background job starts it; it ends when nothing has run in it for
-// shellIdle (a long time while a job still runs). A supervisor inside runs
-// the commands; it speaks JSON lines over its stdin and stdout, so nothing in
-// the work folder or on the disk carries the bot's orders.
-
 const (
-	shellIdle    = time.Hour           // a shell nothing runs in
-	shellJobIdle = 30 * 24 * time.Hour // a shell with a job running keeps it for a month of silence
+	shellIdle    = time.Hour
+	shellJobIdle = 30 * 24 * time.Hour
 	shellMaxLife = 30 * 24 * time.Hour
 	maxShells    = 64
-	// MaxJobs is how many background jobs a session runs at once.
+
 	MaxJobs = 50
-	// JobsDir holds the background jobs' output, in the workspace.
+
 	JobsDir = ".jobs"
-	// jobLogKeep is what a job's log keeps of its end once it grows to 4×.
+
 	jobLogKeep = 2 << 20
 )
 
-// Job is a background job of a session's shell.
 type Job struct {
 	ID      int
 	Command string
@@ -46,8 +36,8 @@ type Job struct {
 	Started time.Time
 	Ended   time.Time
 	Running bool
-	Code    int    // the exit code, once it ended
-	Log     string // its output, in the workspace
+	Code    int
+	Log     string
 }
 
 type shellMsg struct {
@@ -68,9 +58,9 @@ type shell struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 	started time.Time
-	why     atomic.Value // why it ended
+	why     atomic.Value
 
-	wmu sync.Mutex // writes to the supervisor
+	wmu sync.Mutex
 
 	mu      sync.Mutex
 	calls   map[int]chan shellMsg
@@ -106,7 +96,6 @@ func (sh *shell) send(m map[string]any) error {
 	return err
 }
 
-// call opens a conversation with the supervisor; drop ends it.
 func (sh *shell) call() (int, chan shellMsg) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
@@ -122,7 +111,6 @@ func (sh *shell) drop(id int) {
 	sh.mu.Unlock()
 }
 
-// read hands the supervisor's messages to their callers.
 func (sh *shell) read(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
@@ -139,14 +127,13 @@ func (sh *shell) read(r io.Reader) {
 		} else if ch := sh.calls[m.ID]; ch != nil {
 			select {
 			case ch <- m:
-			default: // a caller that stopped listening
+			default:
 			}
 		}
 		sh.mu.Unlock()
 	}
 }
 
-// shellOf is the running shell of a workspace (nil: none).
 func (s *Machine) shellOf(ws string) *shell {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -156,7 +143,6 @@ func (s *Machine) shellOf(ws string) *shell {
 	return nil
 }
 
-// startShell returns the shell of a session, starting it if needed.
 func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 	s.shellStart.Lock()
 	defer s.shellStart.Unlock()
@@ -196,7 +182,7 @@ func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 	sh := &shell{ws: ws, in: in, cancel: cancel, done: make(chan struct{}), started: time.Now(), used: time.Now(),
 		calls: map[int]chan shellMsg{}, jobs: map[int]*Job{}}
 	top := s.topWorkspace(sessionID)
-	s.begin(top) // the janitor leaves a workspace with a running shell alone
+	s.begin(top)
 	go sh.read(out)
 	go func() {
 		err := cmd.Wait()
@@ -226,10 +212,9 @@ func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 	return sh, nil
 }
 
-// stop ends a shell and everything running in it.
 func (sh *shell) stop(why string) {
 	sh.why.Store(why)
-	_ = sh.in.Close() // the supervisor stops its processes and leaves
+	_ = sh.in.Close()
 	go func() {
 		select {
 		case <-sh.done:
@@ -239,7 +224,6 @@ func (sh *shell) stop(why string) {
 	}()
 }
 
-// reapShells ends the shells nobody uses any more.
 func (s *Machine) reapShells() {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
@@ -269,7 +253,6 @@ func (s *Machine) reapShells() {
 	}
 }
 
-// runInShell runs one command of the user's code inside the session's shell.
 func (s *Machine) runInShell(ctx context.Context, sh *shell, opts RunOptions) *ExecutionResult {
 	release, err := s.acquire(ctx, opts.Heavy)
 	if err != nil {
@@ -304,7 +287,7 @@ func (s *Machine) runInShell(ctx context.Context, sh *shell, opts RunOptions) *E
 	stdout, stderr := &capWriter{max: maxCapturedOutput}, &capWriter{max: maxCapturedOutput}
 	start := time.Now()
 	res := &ExecutionResult{}
-	deadline := time.NewTimer(timeout + 15*time.Second) // the supervisor's own timer stops it first
+	deadline := time.NewTimer(timeout + 15*time.Second)
 	defer deadline.Stop()
 	stopped := false
 	stopRun := func() {
@@ -334,7 +317,7 @@ wait:
 				case m.Timeout:
 					res.ExitCode, res.Error = 124, fmt.Sprintf("execution timed out after %v", timeout)
 				case m.Code < 0:
-					res.ExitCode = 128 - m.Code // a signal, as a shell reports it
+					res.ExitCode = 128 - m.Code
 				default:
 					res.ExitCode = m.Code
 				}
@@ -372,8 +355,6 @@ wait:
 	return res
 }
 
-// StartJob runs a command in the background in the session's shell (started
-// if needed); its output goes to JobsDir/<id>.log in the workspace.
 func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job, error) {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -426,7 +407,6 @@ func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job,
 	}
 }
 
-// Jobs lists a session's background jobs, the newest last (nil: no shell).
 func (s *Machine) Jobs(sessionID string) []Job {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -448,7 +428,6 @@ func (s *Machine) Jobs(sessionID string) []Job {
 	return out
 }
 
-// ShellEnded says why a session's shell is gone ("" while it runs or if it never did).
 func (s *Machine) ShellEnded(sessionID string) string {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -464,7 +443,6 @@ func (s *Machine) ShellEnded(sessionID string) string {
 	return why
 }
 
-// KillJob stops a background job and what it started.
 func (s *Machine) KillJob(ctx context.Context, sessionID string, n int) error {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -497,7 +475,6 @@ func (s *Machine) KillJob(ctx context.Context, sessionID string, n int) error {
 	return nil
 }
 
-// StopShell ends a session's shell and its jobs (false: it had none).
 func (s *Machine) StopShell(sessionID string) bool {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -512,7 +489,6 @@ func (s *Machine) StopShell(sessionID string) bool {
 	return true
 }
 
-// shellQuote quotes a word for bash.
 func shellQuote(s string) string {
 	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?&|;<>(){}[]#~") {
 		return s
@@ -520,10 +496,6 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// shellSupervisor runs inside a session's shell: commands come as JSON lines
-// on its stdin and their output and ends go back on its stdout. Each command
-// runs in a process group of its own; what a command leaves behind ends
-// with it, while a background job keeps what it starts until it is stopped.
 const shellSupervisor = `import codecs, json, os, signal, subprocess, sys, threading, time
 KEEP = int(sys.argv[1])
 out = sys.stdout.buffer
@@ -667,18 +639,16 @@ for p in list(runs.values()) + [j["p"] for j in jobs.values()]:
         pass
 `
 
-// Load is what the machine is doing now.
 type Load struct {
-	Running  int // commands running (and shells counted as one each)
-	Slots    int // command slots taken
+	Running  int
+	Slots    int
 	SlotsMax int
-	Heavy    int // slots heavy commands (downloads, encodes) take
+	Heavy    int
 	HeavyMax int
-	Shells   int // persistent shells up
-	Jobs     int // background jobs running in them
+	Shells   int
+	Jobs     int
 }
 
-// Load reports the machine's activity.
 func (s *Machine) Load() Load {
 	l := Load{Slots: len(s.sem), SlotsMax: cap(s.sem), Heavy: len(s.heavy), HeavyMax: cap(s.heavy)}
 	s.mu.Lock()

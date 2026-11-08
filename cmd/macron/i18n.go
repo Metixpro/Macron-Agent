@@ -13,11 +13,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The bot speaks Persian and English. Texts are written in Persian in the
-// code and looked up by that wording in the English catalog (i18n_en.go), so
-// the code still reads naturally; a test keeps the catalog complete. Each
-// user gets their /language choice, else the language of their Telegram app.
-
 type lang uint8
 
 const (
@@ -27,7 +22,6 @@ const (
 
 const prefLang = "lang"
 
-// t translates a text.
 func (l lang) t(s string) string {
 	if l == en {
 		if e, ok := english[s]; ok {
@@ -37,10 +31,8 @@ func (l lang) t(s string) string {
 	return s
 }
 
-// f translates a format and fills it.
 func (l lang) f(format string, a ...any) string { return fmt.Sprintf(l.t(format), a...) }
 
-// num writes a number with the language's digits.
 func (l lang) num(n int) string {
 	if l == en {
 		return strconv.Itoa(n)
@@ -55,7 +47,6 @@ func (l lang) code() string {
 	return "fa"
 }
 
-// hasPersian reports whether s has Persian (Arabic-script) letters.
 func hasPersian(s string) bool {
 	for _, r := range s {
 		if unicode.In(r, unicode.Arabic) && unicode.IsLetter(r) {
@@ -65,8 +56,6 @@ func hasPersian(s string) bool {
 	return false
 }
 
-// langFromCode maps Telegram's language_code: Persian (and Dari, Pashto)
-// apps and unknown ones read Persian, every other one English.
 func langFromCode(code string) lang {
 	switch strings.ToLower(strings.SplitN(code, "-", 2)[0]) {
 	case "", "fa", "ps", "prs":
@@ -85,11 +74,10 @@ func parseLang(s string) (lang, bool) {
 	return fa, false
 }
 
-// langs caches each user's language.
 type langs struct {
 	mu     sync.Mutex
-	chosen map[int64]lang // set with /language
-	app    map[int64]lang // from the Telegram app
+	chosen map[int64]lang
+	app    map[int64]lang
 	loaded map[int64]bool
 }
 
@@ -100,12 +88,11 @@ func (s *langs) lock() {
 	}
 }
 
-// langOf is the language of the user behind an update.
 func (b *Bot) langOf(u *telegram.User) lang {
 	if u == nil {
 		return fa
 	}
-	if u.LanguageCode != "" { // missing on users the bot builds itself (scheduled tasks)
+	if u.LanguageCode != "" {
 		b.langs.lock()
 		b.langs.app[u.ID] = langFromCode(u.LanguageCode)
 		b.langs.mu.Unlock()
@@ -113,7 +100,6 @@ func (b *Bot) langOf(u *telegram.User) lang {
 	return b.lang(u.ID)
 }
 
-// lang is a user's language by id (owners in the log, reminders, panels).
 func (b *Bot) lang(id int64) lang {
 	b.langs.lock()
 	loaded := b.langs.loaded[id]
@@ -148,7 +134,6 @@ func (b *Bot) loadLang(id int64) {
 	}
 }
 
-// setLang stores a user's choice.
 func (b *Bot) setLang(ctx context.Context, id int64, l lang) error {
 	if err := b.st.SetUserPref(ctx, id, prefLang, l.code()); err != nil {
 		return err
@@ -159,7 +144,6 @@ func (b *Bot) setLang(ctx context.Context, id int64, l lang) error {
 	return nil
 }
 
-// logLang is the language of the owners' log: the first owner's.
 func (b *Bot) logLang() lang {
 	var first int64
 	for id := range b.owner {
@@ -173,7 +157,6 @@ func (b *Bot) logLang() lang {
 	return b.lang(first)
 }
 
-// chatLang is the language of a chat: the user's in private, the group's otherwise.
 func (b *Bot) chatLang(ctx context.Context, chatID int64) lang {
 	if chatID > 0 {
 		return b.lang(chatID)
@@ -181,7 +164,6 @@ func (b *Bot) chatLang(ctx context.Context, chatID int64) lang {
 	return b.groupLang(ctx, chatID)
 }
 
-// groupLang is the language of a group: that of whoever added the bot.
 func (b *Bot) groupLang(ctx context.Context, chatID int64) lang {
 	if c, err := b.st.Chat(ctx, chatID); err == nil && c.AddedBy != 0 {
 		return b.lang(c.AddedBy)
@@ -189,7 +171,6 @@ func (b *Bot) groupLang(ctx context.Context, chatID int64) lang {
 	return fa
 }
 
-// describeRule says when a schedule repeats, in the user's language.
 func describeRule(l lang, r sched.Rule) string {
 	if l == en {
 		return r.DescribeEnglish()
@@ -197,7 +178,6 @@ func describeRule(l lang, r sched.Rule) string {
 	return r.Describe()
 }
 
-// sendLanguage offers the two languages.
 func (b *Bot) sendLanguage(m *telegram.Message, l lang) {
 	ctx, cancel := b.ctx(15 * time.Second)
 	defer cancel()

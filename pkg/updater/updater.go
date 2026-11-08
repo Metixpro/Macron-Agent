@@ -1,8 +1,3 @@
-// Package updater finds, checks and installs new releases of Macron Agent:
-// «macron update» in the terminal and /update in the chat use it alike.
-// Nothing is replaced until the download matches its SHA-256 sum and the new
-// program starts as the version it should be; a failed step leaves the
-// installed program untouched.
 package updater
 
 import (
@@ -29,16 +24,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
-// Repository is where the releases are.
 const Repository = "Metixpro/Macron-Agent"
 
-// ReleaseAPI is the releases' API (replaced in tests).
 var ReleaseAPI = "https://api.github.com/repos/" + Repository + "/releases"
 
-// Token is a GitHub token for a higher rate limit ("" none).
 var Token = func() string { return strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) }
 
-// SelfPath is the running program (replaced in tests).
 var SelfPath = func() (string, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -50,11 +41,10 @@ var SelfPath = func() (string, error) {
 	return self, nil
 }
 
-// Release is a published release.
 type Release struct {
 	TagName    string `json:"tag_name"`
 	HTMLURL    string `json:"html_url"`
-	Body       string `json:"body"` // the changelog
+	Body       string `json:"body"`
 	Prerelease bool   `json:"prerelease"`
 	Assets     []struct {
 		Name   string `json:"name"`
@@ -64,15 +54,12 @@ type Release struct {
 	} `json:"assets"`
 }
 
-// Version is the release's version without its v.
 func (r Release) Version() string { return strings.TrimPrefix(r.TagName, "v") }
 
-// AssetName is the archive of a release for this machine.
 func AssetName(version string) string {
 	return fmt.Sprintf("macron-%s-%s-%s.tar.gz", strings.TrimPrefix(version, "v"), runtime.GOOS, runtime.GOARCH)
 }
 
-// Newer reports whether version a is newer than b (numbers split at . and -).
 func Newer(a, b string) bool {
 	pa, pb := versionParts(a), versionParts(b)
 	for i := 0; i < max(len(pa), len(pb)); i++ {
@@ -96,7 +83,7 @@ func versionParts(v string) []int {
 	for _, p := range strings.FieldsFunc(v, func(r rune) bool { return r == '.' || r == '-' || r == '+' }) {
 		n, err := strconv.Atoi(p)
 		if err != nil {
-			break // "dev", "rc1": the numbers before it decide
+			break
 		}
 		out = append(out, n)
 	}
@@ -136,7 +123,6 @@ func get(ctx context.Context, url string, api bool) (*http.Response, error) {
 	return resp, nil
 }
 
-// Latest is the newest release (tag "" ) or the release of a tag.
 func Latest(ctx context.Context, tag string) (*Release, error) {
 	url := ReleaseAPI + "/latest"
 	if tag != "" {
@@ -173,8 +159,6 @@ func download(ctx context.Context, url string, limit int64) ([]byte, error) {
 	return data, nil
 }
 
-// downloadAsset falls back to GitHub's public asset API when a browser/CDN
-// URL is unavailable. Checksums and preflight still run on the returned bytes.
 func downloadAsset(ctx context.Context, browserURL, apiURL string, limit int64) ([]byte, error) {
 	data, err := download(ctx, browserURL, limit)
 	if err == nil || !strings.HasPrefix(apiURL, ReleaseAPI+"/assets/") {
@@ -187,7 +171,6 @@ func downloadAsset(ctx context.Context, browserURL, apiURL string, limit int64) 
 	return data, nil
 }
 
-// ChecksumOf finds the sum of file in a SHA256SUMS listing ("<sum>  <file>" lines).
 func ChecksumOf(sums, file string) (string, bool) {
 	for _, line := range strings.Split(sums, "\n") {
 		f := strings.Fields(line)
@@ -198,7 +181,6 @@ func ChecksumOf(sums, file string) (string, bool) {
 	return "", false
 }
 
-// ExtractBinary reads the program out of a release archive.
 func ExtractBinary(archive []byte) ([]byte, error) {
 	zr, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
@@ -219,8 +201,6 @@ func ExtractBinary(archive []byte) ([]byte, error) {
 	}
 }
 
-// Install downloads a release, checks it against SHA256SUMS, tries the new
-// program and puts it in place of the running one. step reports progress.
 func Install(ctx context.Context, rel *Release, step func(string)) error {
 	if step == nil {
 		step = func(string) {}
@@ -265,9 +245,6 @@ func Install(ctx context.Context, rel *Release, step func(string)) error {
 	return Swap(self, bin, rel.Version())
 }
 
-// Preflight is run on the staged program before it replaces the running one
-// (a variable for the tests): it must start as the version it should be and,
-// where the agent is set up, pass «macron --check».
 var Preflight = func(path, version string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -276,7 +253,7 @@ var Preflight = func(path, version string) error {
 		return fmt.Errorf("the new program does not start as version %s (%v %q): it is NOT installed", version, err, strings.TrimSpace(string(out)))
 	}
 	if _, err := os.Stat(config.EnvFilePath()); err != nil {
-		return nil // not set up here: nothing more to try
+		return nil
 	}
 	cctx, ccancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer ccancel()
@@ -295,7 +272,6 @@ func lastLines(s string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-// Swap puts a new program in place of the running one, after Preflight.
 func Swap(self string, bin []byte, version string) error {
 	dir := filepath.Dir(self)
 	stage, err := os.MkdirTemp(dir, ".macron-update-")
@@ -312,20 +288,17 @@ func Swap(self string, bin []byte, version string) error {
 	}
 	old := self + ".old"
 	_ = os.Remove(old)
-	if err := os.Link(self, old); err != nil { // keep the old one; the running program is not moved
+	if err := os.Link(self, old); err != nil {
 		if data, rerr := os.ReadFile(self); rerr == nil {
 			_ = os.WriteFile(old, data, 0o755)
 		}
 	}
-	if err := os.Rename(next, self); err != nil { // atomic on the same filesystem
+	if err := os.Rename(next, self); err != nil {
 		return err
 	}
 	return nil
 }
 
-// RestartLater restarts the service a few seconds from now, outside this
-// process, so a running agent can finish its answer first and come back as
-// the new version. It tells how.
 func RestartLater(self string, system bool) (string, error) {
 	scope := []string{"--user"}
 	if system {
@@ -341,7 +314,7 @@ func RestartLater(self string, system bool) (string, error) {
 			_ = out
 		}
 	}
-	// No systemd-run: a detached shell restarts it after the answer.
+
 	cmd := exec.Command("sh", "-c", "sleep 3; exec \"$0\" service restart", self)
 	cmd.SysProcAttr = detached()
 	if err := cmd.Start(); err != nil {

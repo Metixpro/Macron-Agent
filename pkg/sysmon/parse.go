@@ -6,10 +6,8 @@ import (
 	"time"
 )
 
-// cpuTimes are the jiffies of a CPU (or all of them).
 type cpuTimes struct{ busy, total uint64 }
 
-// pct is the share of the time spent working since prev.
 func (c cpuTimes) pct(prev cpuTimes) float64 {
 	if c.total <= prev.total || c.busy < prev.busy {
 		return 0
@@ -29,7 +27,6 @@ func fields(s string) []uint64 {
 	return out
 }
 
-// parseCPU reads /proc/stat: all CPUs, then each core.
 func parseCPU(stat string) (all cpuTimes, cores []cpuTimes) {
 	for _, line := range strings.Split(stat, "\n") {
 		name, rest, ok := strings.Cut(line, " ")
@@ -42,13 +39,13 @@ func parseCPU(stat string) (all cpuTimes, cores []cpuTimes) {
 		}
 		var total uint64
 		for i, v := range f {
-			if i < 8 { // guest time is inside user time already
+			if i < 8 {
 				total += v
 			}
 		}
 		idle := f[3]
 		if len(f) > 4 {
-			idle += f[4] // waiting for the disk is not work
+			idle += f[4]
 		}
 		t := cpuTimes{busy: total - min(idle, total), total: total}
 		if name == "cpu" {
@@ -60,7 +57,6 @@ func parseCPU(stat string) (all cpuTimes, cores []cpuTimes) {
 	return all, cores
 }
 
-// parseLoad reads /proc/loadavg.
 func parseLoad(s string) (l [3]float64) {
 	f := strings.Fields(s)
 	for i := 0; i < 3 && i < len(f); i++ {
@@ -69,8 +65,6 @@ func parseLoad(s string) (l [3]float64) {
 	return l
 }
 
-// parseMem reads /proc/meminfo (bytes): the memory in use is the total less
-// what is available (caches that can be dropped are not use).
 func parseMem(s string) (total, used, swapTotal, swapUsed uint64) {
 	var avail, free, swapFree uint64
 	var haveAvail bool
@@ -99,12 +93,11 @@ func parseMem(s string) (total, used, swapTotal, swapUsed uint64) {
 		}
 	}
 	if !haveAvail {
-		avail = free + buffers + cached // kernels before 3.14
+		avail = free + buffers + cached
 	}
 	return total, total - min(avail, total), swapTotal, swapTotal - min(swapFree, swapTotal)
 }
 
-// kbField reads the number of a "Name:   1234 kB" line.
 func kbField(line string) uint64 {
 	_, rest, _ := strings.Cut(line, ":")
 	f := strings.Fields(rest)
@@ -115,7 +108,6 @@ func kbField(line string) uint64 {
 	return n
 }
 
-// parseUptime reads /proc/uptime.
 func parseUptime(s string) time.Duration {
 	f := strings.Fields(s)
 	if len(f) == 0 {
@@ -125,8 +117,6 @@ func parseUptime(s string) time.Duration {
 	return time.Duration(sec * float64(time.Second))
 }
 
-// parseNet reads /proc/net/dev: the bytes in and out of the real interfaces
-// (not loopback, containers' or bridges').
 func parseNet(s string) (rx, tx uint64) {
 	for _, line := range strings.Split(s, "\n") {
 		name, rest, ok := strings.Cut(line, ":")
@@ -149,19 +139,17 @@ func parseNet(s string) (rx, tx uint64) {
 
 type procStat struct {
 	name     string
-	ticks    uint64 // user + system
+	ticks    uint64
 	threads  int
 	rssPages uint64
 }
 
-// parseProcStat reads /proc/<pid>/stat; the name sits in parentheses and
-// may hold spaces and parentheses itself.
 func parseProcStat(s string) (procStat, bool) {
 	open, closeP := strings.IndexByte(s, '('), strings.LastIndexByte(s, ')')
 	if open < 0 || closeP < open {
 		return procStat{}, false
 	}
-	f := strings.Fields(s[closeP+1:]) // field 3 (the state) is f[0]
+	f := strings.Fields(s[closeP+1:])
 	if len(f) < 22 {
 		return procStat{}, false
 	}

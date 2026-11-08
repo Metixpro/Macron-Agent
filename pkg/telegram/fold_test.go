@@ -35,7 +35,6 @@ func TestFoldCodeAndPlainText(t *testing.T) {
 		t.Errorf("a long code block folds:\n%.300s", got)
 	}
 
-	// A long text without headings: the first paragraphs stay, the rest folds.
 	var ps []string
 	for i := 0; i < 12; i++ {
 		ps = append(ps, para(fmt.Sprintf("p%d", i), 100))
@@ -49,7 +48,6 @@ func TestFoldCodeAndPlainText(t *testing.T) {
 		t.Errorf("about a screen stays in view: %d runes", n)
 	}
 
-	// Short answers, and answers with their own collapsible blocks, stay as they are.
 	if FoldLong("short", testFold) != "short" {
 		t.Error("short")
 	}
@@ -57,7 +55,7 @@ func TestFoldCodeAndPlainText(t *testing.T) {
 	if FoldLong(own, testFold) != own {
 		t.Error("an answer with its own block is not folded again")
 	}
-	// A code block is never cut, and a fence inside a folded section stays whole.
+
 	md = "## A\n\n" + para("a", 600) + "\n\n```go\n\n" + strings.Repeat("x := 1\n\n", 30) + "```\n\n## B\n\n" + para("b", 600)
 	got = FoldLong(md, testFold)
 	if strings.Count(got, "```") != 2 || strings.Count(got, "<details") != 2 {
@@ -65,7 +63,6 @@ func TestFoldCodeAndPlainText(t *testing.T) {
 	}
 }
 
-// Classic messages have no collapsible blocks: a title and an expandable quotation.
 func TestClassicDetails(t *testing.T) {
 	got := MarkdownToHTML("Intro\n\n<details open><summary>**More**</summary>\n\nHidden *text* here\n\n</details>")
 	if !strings.Contains(got, "<b>More</b>") || !strings.Contains(got, "<blockquote expandable>Hidden <i>text</i> here</blockquote>") || strings.Contains(got, "details") {

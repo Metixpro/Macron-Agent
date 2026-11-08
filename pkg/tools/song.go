@@ -22,23 +22,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Songs with a singer, from lyrics, through the song service. A task is
-// created with the lyrics, a style and a voice, then its status page is polled
-// until the songs are ready (about two minutes; the service makes two versions
-// each time). The key is the admin's: the panel or the environment
-// (SetMusicKey), never the source. The service's links never reach the model
-// or the user; each song is downloaded, given its cover and its tags, and
-// delivered as a file.
-
-// ToolSong makes a song with a singer from lyrics.
 const ToolSong = "generate_song"
 
-// ErrMusicKey is a key the song service does not accept.
 var ErrMusicKey = errors.New("the song service did not accept its key")
 
 const (
-	// songCallback fills the service's required callback_url: the bot reads
-	// the result from the status page instead (it has no public address).
 	songCallback   = "https://example.com/waze-song-callback"
 	songMaxAudio   = 40 << 20
 	songMaxCover   = 4 << 20
@@ -50,14 +38,11 @@ const (
 
 var (
 	songPollEvery = 6 * time.Second
-	songSlots     = make(chan struct{}, maxSongsAtOnce) // the service is shared: a few songs at a time
+	songSlots     = make(chan struct{}, maxSongsAtOnce)
 )
 
-// SetMusicKey gives the song service's key (read on every call, so a key set
-// in the admin panel works at once). Call it before serving.
 func (r *Registry) SetMusicKey(key func() string) { r.musicKey = key }
 
-// MusicKey is the key in use ("" = none).
 func (r *Registry) MusicKey() string { return r.musicKeyNow() }
 
 func (r *Registry) musicKeyNow() string {
@@ -67,7 +52,6 @@ func (r *Registry) musicKeyNow() string {
 	return strings.TrimSpace(r.musicKey())
 }
 
-// SetMusicAPI points the song tool at a service ("" = none).
 func (r *Registry) SetMusicAPI(url string) {
 	r.musicAPI = url
 	if url != "" {
@@ -75,7 +59,6 @@ func (r *Registry) SetMusicAPI(url string) {
 	}
 }
 
-// SongReady reports whether generate_song can work.
 func (r *Registry) SongReady() bool { return r.musicAPI != "" && r.musicKeyNow() != "" }
 
 func (r *Registry) registerSongTool() {
@@ -92,8 +75,6 @@ func (r *Registry) registerSongTool() {
 		}, nil, oneDownload(r.generateSong))
 }
 
-// CheckMusicKey asks the service whether a key is good without making a song:
-// an empty request is refused for what it lacks (400), after the key passed.
 func (r *Registry) CheckMusicKey(ctx context.Context, key string) error {
 	if r.musicAPI == "" {
 		return errors.New("the song service is turned off (WAZE_MUSIC_API_URL=off)")
@@ -149,8 +130,7 @@ func (r *Registry) generateSong(ctx context.Context, sessionID string, args map[
 	style := cleanStyle(strArg(args, "style"))
 	gender := songGender(strArg(args, "gender"))
 	if instrumental {
-		// The service takes a section tag as "no words", and style tags that say so
-		// keep any voice out; the words the model may have sent are not sung.
+
 		lyrics, style, gender = instrumentalLyrics, instrumentalStyle(strArg(args, "style")), ""
 	}
 	title := cleanTitle(strArg(args, "title"))
@@ -164,7 +144,7 @@ func (r *Registry) generateSong(ctx context.Context, sessionID string, args map[
 		title = "Song"
 	}
 
-	base := "Macron_AI_-_" + sanitizeBase(title) // "Artist - Title": the audio message shows both
+	base := "Macron_AI_-_" + sanitizeBase(title)
 	if fn := strArg(args, "filename"); fn != "" {
 		base = strings.TrimSuffix(sanitizeBase(fn), ".mp3")
 	}
@@ -216,9 +196,6 @@ func (r *Registry) generateSong(ctx context.Context, sessionID string, args map[
 	return sb.String(), nil
 }
 
-// saveLyrics keeps the words of a song as a text file beside it (name.txt), so
-// they can be given back any time later: the conversation does not keep what a
-// tool call carried. It returns the file's name ("" if it could not be saved).
 func (r *Registry) saveLyrics(sessionID, base, title, style, gender, lyrics string) string {
 	voice := gender
 	if voice == "" {
@@ -233,10 +210,6 @@ func (r *Registry) saveLyrics(sessionID, base, title, style, gender, lyrics stri
 	return name
 }
 
-// makeSong has the service make a song and saves up to keep of its versions as
-// base.mp3, base_2.mp3…, with the cover and the tags (title, artist, the lyrics) when tags is set. It
-// returns the files and the longest length in seconds. It is the whole of the
-// work, for the tool and for the music of a motion graphic.
 func (r *Registry) makeSong(ctx context.Context, sessionID, lyrics, title, style, gender, base string, keep int, tags bool) ([]savedImage, float64, error) {
 	select {
 	case songSlots <- struct{}{}:
@@ -271,7 +244,7 @@ func (r *Registry) makeSong(ctx context.Context, sessionID, lyrics, title, style
 		size, err := r.saveSong(ctx, sessionID, v, name, title, lyrics, tags)
 		if err != nil {
 			log.Printf("generate_song: version %d could not be saved: %v", i+1, err)
-			continue // the other version may still be good
+			continue
 		}
 		files = append(files, savedImage{name: name, size: size})
 		seconds = max(seconds, v.seconds)
@@ -282,7 +255,6 @@ func (r *Registry) makeSong(ctx context.Context, sessionID, lyrics, title, style
 	return files, seconds, nil
 }
 
-// songFailure is what the model is told when no song came.
 func songFailure(err error) string {
 	switch {
 	case errors.Is(err, ErrMusicKey):
@@ -294,7 +266,6 @@ func songFailure(err error) string {
 	return fmt.Sprintf("song making failed: %v. Tell the user it is temporarily unavailable; do NOT offer a different song as if it were this one.", err)
 }
 
-// createSong starts a task and returns the address of its status page.
 func (r *Registry) createSong(ctx context.Context, sessionID, lyrics, title, style, gender string) (string, error) {
 	body := map[string]any{"user_id": editUserID(sessionID), "callback_url": songCallback, "lyrics": lyrics, "title": title, "style": style}
 	if gender != "" {
@@ -354,7 +325,6 @@ func (r *Registry) createSong(ctx context.Context, sessionID, lyrics, title, sty
 	return u.String(), nil
 }
 
-// waitSong polls the status page until the songs are ready.
 func (r *Registry) waitSong(ctx context.Context, statusURL string) ([]songVersion, error) {
 	start := time.Now()
 	missing := 0
@@ -366,7 +336,7 @@ func (r *Registry) waitSong(ctx context.Context, statusURL string) ([]songVersio
 		case errors.Is(err, ErrMusicKey):
 			return nil, err
 		case err != nil:
-			if missing++; missing > 3 { // a network hiccup, or the task not found right after its creation
+			if missing++; missing > 3 {
 				return nil, err
 			}
 		case problem != "":
@@ -385,9 +355,6 @@ func (r *Registry) waitSong(ctx context.Context, statusURL string) ([]songVersio
 	}
 }
 
-// songStatus reads the status page once: the state, the songs when they are
-// ready (distinct ones: a second version may point at the first's file), or
-// the reason when it failed.
 func (r *Registry) songStatus(ctx context.Context, statusURL string) (state string, versions []songVersion, problem string, err error) {
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -461,7 +428,6 @@ func (r *Registry) songStatus(ctx context.Context, statusURL string) (state stri
 	return state, nil, "", nil
 }
 
-// saveSong downloads a song, gives it its cover and tags, and keeps it as name.
 func (r *Registry) saveSong(ctx context.Context, sessionID string, v songVersion, name, title, lyrics string, withTags bool) (int64, error) {
 	dctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -485,7 +451,7 @@ func (r *Registry) saveSong(ctx context.Context, sessionID string, v songVersion
 		return 0, err
 	}
 	if withTags {
-		// best effort: the song is good without them
+
 		r.embedSongTags(ctx, sessionID, name, title, lyrics, r.fetchCover(ctx, v.cover))
 	}
 	if _, fi, err := r.Machine.Open(sessionID, name); err == nil {
@@ -494,9 +460,8 @@ func (r *Registry) saveSong(ctx context.Context, sessionID string, v songVersion
 	return 0, errors.New("the song was not saved")
 }
 
-// fetchCover downloads the cover picture (nil when it cannot be).
 func (r *Registry) fetchCover(ctx context.Context, link string) []byte {
-	if !strings.HasPrefix(link, "https://") && !sameHost(link, r.musicAPI) { // a plain link only from the service itself
+	if !strings.HasPrefix(link, "https://") && !sameHost(link, r.musicAPI) {
 		return nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -518,16 +483,13 @@ func (r *Registry) fetchCover(ctx context.Context, link string) []byte {
 	if err != nil || len(data) > songMaxCover {
 		return nil
 	}
-	// The picture is checked by what it is, not by what its host says (a CDN
-	// serves a JPEG as application/octet-stream).
+
 	if _, format, err := image.DecodeConfig(bytes.NewReader(data)); err != nil || (format != "jpeg" && format != "png") {
 		return nil
 	}
 	return data
 }
 
-// embedSongTags puts the title, the artist, the lyrics (a "lyrics" tag: ffprobe shows
-// it) and, when there is one, the cover into the mp3 with ffmpeg, here.
 func (r *Registry) embedSongTags(ctx context.Context, sessionID, name, title, lyrics string, cover []byte) {
 	args := []string{"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", "./" + name}
 	if len(cover) > 0 {
@@ -559,7 +521,6 @@ func (r *Registry) embedSongTags(ctx context.Context, sessionID, name, title, ly
 	_ = r.Machine.WriteFile(sessionID, name, tagged)
 }
 
-// lyricLines counts the lines of a lyric that are sung (not blank, not a section tag).
 func lyricLines(s string) int {
 	n := 0
 	for _, line := range strings.Split(s, "\n") {
@@ -572,7 +533,6 @@ func lyricLines(s string) int {
 	return n
 }
 
-// firstLyric is the first sung line (a title when the model gave none).
 func firstLyric(s string) string {
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
@@ -583,14 +543,12 @@ func firstLyric(s string) string {
 	return ""
 }
 
-// cleanTitle makes a title fit a file name and a tag: one line, no markup.
 func cleanTitle(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.NewReplacer("\"", "", "`", "", "*", "", "[", "", "]", "", "/", " ", "\\", " ").Replace(s)
 	return strings.TrimSpace(textutil.TruncateRunes(s, 48, ""))
 }
 
-// cleanStyle is the style tags: one line of text, "Pop" when there are none.
 func cleanStyle(s string) string {
 	if s = cleanStyleText(s); s == "" {
 		return "Pop"
@@ -598,7 +556,6 @@ func cleanStyle(s string) string {
 	return s
 }
 
-// cleanStyleText is the style tags as one line of text ("" when there are none).
 func cleanStyleText(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.Map(func(r rune) rune {
@@ -610,16 +567,8 @@ func cleanStyleText(s string) string {
 	return textutil.TruncateRunes(s, 200, "")
 }
 
-// instrumentalLyrics is what the service is given instead of words for a track
-// with no singer: only section tags that name a break with no voice. Measured on
-// the live service, with speech recognition on the tracks: a bare "[Instrumental]"
-// is not enough (the service wrote and sang its own words for a solo piano, and
-// vocals came on a lo-fi beat with three of them), while these tags, with the
-// style tags below, gave no singing in eight tracks of four styles.
 const instrumentalLyrics = "[Intro]\n[Instrumental Break]\n[Instrumental Solo]\n[Instrumental Break]\n[Outro]"
 
-// instrumentalStyle puts the no-voice tags first (the style is cut at 200
-// characters) and keeps the genre and instruments the model chose.
 func instrumentalStyle(style string) string {
 	const tags = "instrumental, no vocals, no singing"
 	style = cleanStyleText(style)
@@ -629,8 +578,6 @@ func instrumentalStyle(style string) string {
 	return textutil.TruncateRunes(tags+", "+style, 200, "")
 }
 
-// styleTitle is a title made from the first style tag ("lo-fi hip hop, piano"
-// → "Lo-Fi Hip Hop"), for an instrumental the model gave no title.
 func styleTitle(style string) string {
 	for _, tag := range strings.Split(style, ",") {
 		tag = strings.TrimSpace(tag)
@@ -652,7 +599,6 @@ func styleTitle(style string) string {
 	return "Instrumental"
 }
 
-// songGender is the voice the service takes ("" = its own default).
 func songGender(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "male", "man", "m", "مرد", "مردانه":

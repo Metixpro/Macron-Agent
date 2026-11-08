@@ -9,9 +9,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Reactions to the bot's answers, complaints and repeats are counted with
-// the tools of the answer; reactions to other messages are not. The weekly
-// report shows them, with the tools that failed most and what to do.
 func TestFeedbackAndTheWeeklyReport(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -42,12 +39,12 @@ func TestFeedbackAndTheWeeklyReport(t *testing.T) {
 			User: &telegram.User{ID: 90}, NewReaction: []telegram.ReactionType{{Type: "emoji", Emoji: emoji}}})
 	}
 	react(answerID, "👎")
-	react(answerID+1000, "👍") // not one of the bot's messages
+	react(answerID+1000, "👍")
 	h.send(private(90, "اشتباهه"))
 	h.send(private(90, "فایلم رو بخون"))
-	h.send(private(90, "فایلم رو بخون")) // the same again: a repeat
+	h.send(private(90, "فایلم رو بخون"))
 	h.send(private(90, "ادامه بده"))
-	h.send(private(90, "ادامه بده")) // continuing is no repeat
+	h.send(private(90, "ادامه بده"))
 
 	sums, _ := h.st.DailySums(bg, time.Now().Add(-24*time.Hour))
 	got := map[string]int{}
@@ -68,8 +65,7 @@ func TestFeedbackAndTheWeeklyReport(t *testing.T) {
 		}
 	}
 
-	// Saturday from 9:00, once a week, to the owners.
-	sat := time.Date(2026, 10, 31, 10, 0, 0, 0, h.bot.loc) // a Saturday
+	sat := time.Date(2026, 10, 31, 10, 0, 0, 0, h.bot.loc)
 	h.tg.reset()
 	if h.bot.maybeWeeklyReport(bg, sat.Add(-2*time.Hour)) {
 		t.Error("not before 9:00")

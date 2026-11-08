@@ -9,15 +9,6 @@ import (
 	"unicode/utf8"
 )
 
-// What every API accepts of a conversation with tools: each result right
-// after the call it answers, every call answered, an id on each, and no
-// tool turns at all in a request that offers no tools. Gateways that turn
-// one API into another are the strictest: one that drops the calls of a
-// request without tools still sends their results, and the API behind it
-// answers "No tool call found for function call output with call_id …".
-
-// normalizeTranscript returns the conversation fixed for sending; msgs is
-// not changed.
 func normalizeTranscript(msgs []Message, toolsOffered bool) []Message {
 	out := make([]Message, 0, len(msgs)+2)
 	for i := 0; i < len(msgs); i++ {
@@ -55,7 +46,7 @@ func normalizeTranscript(msgs []Message, toolsOffered bool) []Message {
 						break
 					}
 				}
-				if slot < 0 && t.ToolCallID == "" { // no id: the first call not answered yet
+				if slot < 0 && t.ToolCallID == "" {
 					for j := range calls {
 						if results[j] == nil {
 							slot = j
@@ -83,7 +74,7 @@ func normalizeTranscript(msgs []Message, toolsOffered bool) []Message {
 			out = append(out, orphans...)
 			out = append(out, between...)
 			i = k - 1
-		case m.Role == "tool": // a result with no call before it
+		case m.Role == "tool":
 			out = append(out, orphanResult(m))
 		default:
 			out = append(out, m)
@@ -95,7 +86,6 @@ func normalizeTranscript(msgs []Message, toolsOffered bool) []Message {
 	return out
 }
 
-// orphanResult is a tool result whose call is gone, kept as a note.
 func orphanResult(t Message) Message {
 	name := t.Name
 	if name == "" {
@@ -104,8 +94,6 @@ func orphanResult(t Message) Message {
 	return Message{Role: "user", Content: "(Earlier result of " + name + ":)\n" + t.Content}
 }
 
-// flattenTools writes the tool calls and results as plain conversation, for
-// a request that offers no tools or a gateway that cannot pair them.
 func flattenTools(msgs []Message) []Message {
 	out := make([]Message, 0, len(msgs))
 	for _, m := range msgs {
@@ -141,7 +129,6 @@ func flattenTools(msgs []Message) []Message {
 	return out
 }
 
-// hasToolTurns reports tool calls or results in a conversation.
 func hasToolTurns(msgs []Message) bool {
 	for _, m := range msgs {
 		if m.Role == "tool" || len(m.ToolCalls) > 0 {
@@ -151,7 +138,6 @@ func hasToolTurns(msgs []Message) bool {
 	return false
 }
 
-// toolPairingError recognises an API refusing how calls and results are paired.
 func toolPairingError(err error) bool {
 	var api *APIError
 	if !errors.As(err, &api) || IsContextOverflow(err) {
@@ -168,15 +154,11 @@ func toolPairingError(err error) bool {
 	return false
 }
 
-// gatewayErrorRe is an error a gateway sent as the answer's text (HTTP 200):
-// "[Error] …", "[upstream error] …". No model starts an answer like that.
 var gatewayErrorRe = regexp.MustCompile(`(?is)^\s*\[\s*(?:error|err|upstream error|api error|proxy error)\s*\]`)
 
-// knownFailures are the API errors gateways pass on as text.
 var knownFailures = []string{"no tool call found for function call output", "no tool output found for function call",
 	"invalid 'input[", "upstream request failed", "upstream_error", "the upstream server"}
 
-// looksLikeGatewayError reports an answer text that is really an error.
 func looksLikeGatewayError(text string) bool {
 	t := strings.TrimSpace(text)
 	if t == "" || len(t) > 1500 {
@@ -197,7 +179,6 @@ func looksLikeGatewayError(text string) bool {
 	return false
 }
 
-// gatewayError turns an answer that is an error into one.
 func gatewayError(resp *Response) error {
 	if resp == nil || len(resp.Message.ToolCalls) > 0 || !looksLikeGatewayError(resp.Message.Content) {
 		return nil
@@ -205,8 +186,6 @@ func gatewayError(resp *Response) error {
 	return &APIError{Status: http.StatusBadGateway, Body: strings.TrimSpace(resp.Message.Content)}
 }
 
-// errorPrefix reports streamed text that is, or may still become, an error
-// passed on as text: it is not shown while it might be one.
 func errorPrefix(text string) bool {
 	t := strings.ToLower(strings.TrimLeft(text, " \t\r\n"))
 	if t == "" {
@@ -220,7 +199,7 @@ func errorPrefix(text string) bool {
 	}
 	for _, w := range []string{"[error]", "[err]", "[upstream error]", "[api error]", "[proxy error]"} {
 		if len(t) < len(w) && strings.HasPrefix(w, strings.ReplaceAll(t, " ", "")) {
-			return true // "[Err" so far
+			return true
 		}
 	}
 	return false

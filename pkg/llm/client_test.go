@@ -102,7 +102,7 @@ func TestChatGivesUpAfterMaxRetries(t *testing.T) {
 func TestChatRespectsContext(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-release // hang until the test finishes
+		<-release
 	}))
 	defer srv.Close()
 	defer close(release)
@@ -199,7 +199,7 @@ func TestStreamingTextAndToolCalls(t *testing.T) {
 }
 
 func TestStreamFallbacks(t *testing.T) {
-	// Server ignores stream=true and answers with plain JSON.
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(okBody())) }))
 	defer srv.Close()
 	var got string
@@ -208,7 +208,6 @@ func TestStreamFallbacks(t *testing.T) {
 		t.Fatalf("json fallback: %v %q", err, got)
 	}
 
-	// Gateway rejects stream_options: retried once without it.
 	var calls atomic.Int32
 	strict := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -226,7 +225,6 @@ func TestStreamFallbacks(t *testing.T) {
 		t.Fatalf("stream_options fallback: %v calls=%d", err, calls.Load())
 	}
 
-	// An error after output started is not retried.
 	var n atomic.Int32
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n.Add(1)
@@ -238,7 +236,6 @@ func TestStreamFallbacks(t *testing.T) {
 		t.Fatalf("partial stream: %v attempts=%d", err, n.Load())
 	}
 
-	// An error before any output is retried.
 	var m atomic.Int32
 	flaky := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if m.Add(1) == 1 {
@@ -305,7 +302,7 @@ func TestPolicyViolations(t *testing.T) {
 			t.Errorf("%q is not a refusal", s)
 		}
 	}
-	// An error object (status 502 inside the client) is refused once, not retried.
+
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -316,7 +313,7 @@ func TestPolicyViolations(t *testing.T) {
 	if !IsPolicyViolation(err) || calls.Load() != 1 {
 		t.Fatalf("err=%v calls=%d", err, calls.Load())
 	}
-	// An empty answer stopped by the filter is a refusal too.
+
 	filteredSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":""},"finish_reason":"content_filter"}]}`))
 	}))
@@ -336,7 +333,7 @@ func TestStreamsMayBeLongButNotStalled(t *testing.T) {
 	}
 	flowing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		for i := 0; i < 8; i++ { // 8 × 100 ms: longer than the idle limit in total
+		for i := 0; i < 8; i++ {
 			chunk(w, "a")
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -367,9 +364,6 @@ func TestStreamsMayBeLongButNotStalled(t *testing.T) {
 		t.Fatalf("a stalled stream must fail fast: %v after %s", err, time.Since(start))
 	}
 
-	// A provider that takes the request and never answers is given up on as
-	// soon as a stalled stream would be (not after the 10-minute header wait),
-	// as a transport error the provider list fails over on.
 	silent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
@@ -413,7 +407,7 @@ func TestUsageReadsCachedTokens(t *testing.T) {
 			t.Errorf("%s: %+v %v", raw, u, err)
 		}
 	}
-	// Cached prompt tokens count a tenth; new ones and the answer in full.
+
 	if b := (Usage{PromptTokens: 1000, CachedTokens: 800, CompletionTokens: 50}).Billable(); b != 200+80+50 {
 		t.Errorf("billable: %d", b)
 	}
@@ -422,9 +416,6 @@ func TestUsageReadsCachedTokens(t *testing.T) {
 	}
 }
 
-// Some servers send every call whole, all with index 0: a new id is a new
-// call. A stream that stops in the middle of a call (no finish, no [DONE])
-// is reported as cut, so the call is not run.
 func TestStreamCallsWithoutIndexAndCutStreams(t *testing.T) {
 	cut := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

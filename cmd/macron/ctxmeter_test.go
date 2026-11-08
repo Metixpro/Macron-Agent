@@ -8,11 +8,9 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
-// The live view's context meter goes on from one request to the next:
-// a big tool output in the first job is not "forgotten" by the meter.
 func TestTheContextMeterGoesOnAcrossRequests(t *testing.T) {
 	h := newHarness(t)
-	big := strings.Repeat("goroutines and channels make concurrency simple. ", 800) // ~10k tokens
+	big := strings.Repeat("goroutines and channels make concurrency simple. ", 800)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		switch n {
 		case 0:
@@ -38,7 +36,6 @@ func TestTheContextMeterGoesOnAcrossRequests(t *testing.T) {
 		t.Errorf("the meter went back from %d to %d", first, second)
 	}
 
-	// After /reset nothing is carried.
 	h.send(private(66, "/reset"))
 	if mc, _ := h.bot.mem.Load(bg, 66); mc.Messages == 0 {
 		if n, _ := h.bot.contextCarry(bg, 66, mc); n != 0 {

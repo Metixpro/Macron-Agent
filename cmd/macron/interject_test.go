@@ -14,7 +14,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// background starts a request and returns a wait for its end.
 func (h *harness) background(m *telegram.Message) func() {
 	done := make(chan struct{})
 	go func() {
@@ -30,7 +29,6 @@ func (h *harness) background(m *telegram.Message) func() {
 	}
 }
 
-// reactedTo returns the reactions set on a message.
 func (h *harness) reactedTo(msgID int64) string {
 	var out []string
 	for _, c := range h.tg.of("setMessageReaction") {
@@ -47,7 +45,7 @@ func followUpMsg(m *telegram.Message, id int64, text string) *telegram.Message {
 	return &n
 }
 
-func TestAMessageDuringAJobJoinsIt(t *testing.T) {
+func TestPrivateMessageDuringJobRunsNext(t *testing.T) {
 	h := newHarness(t)
 	started, proceed := make(chan struct{}), make(chan struct{})
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -56,39 +54,30 @@ func TestAMessageDuringAJobJoinsIt(t *testing.T) {
 			<-proceed
 			return toolCall("list_files", `{}`), 0
 		}
-		return map[string]any{"role": "assistant", "content": "گزارش آماده‌ست، با نمودار."}, 0
+		if n == 1 {
+			return map[string]any{"role": "assistant", "content": "پوشه بررسی شد"}, 0
+		}
+		return map[string]any{"role": "assistant", "content": "این پاسخ بعدی است"}, 0
 	}
-	first := private(60, "یه گزارش از فروش بساز")
+	first := private(60, "فایل‌های پوشه را بررسی کن")
 	wait := h.background(first)
 	<-started
-	h.bot.handleMessage(followUpMsg(first, 78, "یه نمودار هم بذار توش"))
+	h.bot.handleMessage(followUpMsg(first, 78, "حالا پیام بعدی را پاسخ بده"))
 	close(proceed)
 	wait()
-
-	if h.llm.count() != 2 {
-		t.Fatalf("one job, two model calls: %d", h.llm.count())
+	if h.llm.count() != 3 {
+		t.Fatalf("expected separate requests: %d", h.llm.count())
 	}
-	req := llmText(h.llm.last())
-	if !strings.Contains(req, "یه نمودار هم بذار توش") || !strings.Contains(req, "while you were working") {
-		t.Errorf("the model must see the new message as part of the job:\n%s", req)
+	if strings.Contains(llmText(h.llm.requests[1]), "حالا پیام بعدی را پاسخ بده") {
+		t.Fatal("queued message leaked into active task")
 	}
-	if strings.Contains(h.tg.allText(), "هنوز دارم روی") {
-		t.Errorf("no busy message any more:\n%s", h.tg.allText())
+	if !strings.Contains(llmText(h.llm.last()), "حالا پیام بعدی را پاسخ بده") || strings.Contains(llmText(h.llm.last()), "while you were working") {
+		t.Fatal("queued message did not start a separate turn")
 	}
-	if r := h.reactedTo(78); !strings.Contains(r, "✍") {
-		t.Errorf("the added message gets ✍: %q", r)
-	}
-	h.wantText("گزارش آماده‌ست، با نمودار.")
-	if n := len(h.tg.of("sendRichMessage")); n != 1 {
-		t.Errorf("one answer for the whole job: %d", n)
-	}
-	if used, _ := h.st.UsedToday(bg, 60); used != 1 {
-		t.Errorf("a message added to a job is not a new request: %d used", used)
-	}
-	// The conversation remembers what was added.
-	mc, _ := h.bot.mem.Load(bg, 60)
-	if hist := fmt.Sprint(mc.History); !strings.Contains(hist, "یه نمودار هم بذار توش") {
-		t.Errorf("memory misses the added message: %s", hist)
+	h.wantText("پوشه بررسی شد")
+	h.wantText("این پاسخ بعدی است")
+	if used, _ := h.st.UsedToday(bg, 60); used != 2 {
+		t.Fatalf("two requests must be counted, got %d", used)
 	}
 }
 
@@ -135,10 +124,10 @@ func TestReplyingToYourOwnRequestInAGroupJoinsTheJob(t *testing.T) {
 	first := group(62, "مکرون یه متن تبریک بنویس")
 	wait := h.background(first)
 	<-started
-	reply := followUpMsg(first, 78, "انگلیسیش رو هم بنویس") // no «مکرون»: a reply to the request itself
+	reply := followUpMsg(first, 78, "انگلیسیش رو هم بنویس")
 	reply.ReplyToMessage = &telegram.Message{MessageID: 77, From: first.From, Chat: first.Chat, Text: first.Text}
 	h.bot.handleMessage(reply)
-	// Someone else's reply to it is not for the bot.
+
 	other := followUpMsg(first, 79, "منم می‌خوام")
 	other.From = &telegram.User{ID: 63, FirstName: "Sara"}
 	other.ReplyToMessage = reply.ReplyToMessage
@@ -247,7 +236,6 @@ func TestTheStopButtonMovesUnderTheMessageOnOlderServers(t *testing.T) {
 	h.wantText("تموم شد.")
 }
 
-// stopButtonData returns the callback data of the stop button in the live messages.
 func stopButtonData(h *harness) string {
 	re := regexp.MustCompile(`data="(run:stop:[^"]+)"`)
 	for _, c := range append(h.tg.of("sendRichMessage"), h.tg.of("editMessageText")...) {
@@ -258,7 +246,6 @@ func stopButtonData(h *harness) string {
 	return ""
 }
 
-// blockedGroupJob starts a group job that waits until the test lets it go.
 func blockedGroupJob(t *testing.T, h *harness, uid int64) (proceed func(), wait func()) {
 	old := stopButtonAfter
 	stopButtonAfter = 0
@@ -300,21 +287,20 @@ func TestOnlyTheAskerOrABotAdminCanStopAJob(t *testing.T) {
 	run, _ := h.bot.runs.Load(int64(65))
 	stopped := func() bool { return run.(*activeRun).stopped.Load() }
 
-	// Another member: refused, with an alert.
 	h.click(66, -100500, 501, data)
 	if !strings.Contains(lastCallbackAnswer(h), "مال کسیه") || stopped() {
 		t.Fatalf("another member must not stop it: %q", lastCallbackAnswer(h))
 	}
-	// Forged data in their own name does not reach the job either.
+
 	h.click(66, -100500, 501, strings.Replace(data, "run:stop:65:", "run:stop:66:", 1))
-	// The asker with a stale button (another job's key) or from another chat: nothing happens.
+
 	h.click(65, -100500, 501, "run:stop:65:deadbeef")
 	h.click(65, -100999, 501, data)
 	h.click(65, -100500, 501, "run:stop:65")
 	if stopped() {
 		t.Fatal("a button stops only its own job, in its own chat")
 	}
-	// Someone else saying «بیخیال» stops nothing of it.
+
 	other := group(66, "مکرون بیخیال")
 	other.MessageID = 90
 	h.bot.handleMessage(other)
@@ -347,8 +333,6 @@ func TestABotAdminCanStopAnyJob(t *testing.T) {
 	h.noText("کار تموم شد ✅")
 }
 
-// The text that takes the live message's place when a job is stopped has
-// premium emoji, like every other message.
 func TestAStoppedJobsTextHasPremiumEmoji(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.SetSetting(bg, store.SettingPremiumEmoji, "true")
@@ -384,7 +368,7 @@ func TestTheStopButtonUnderTheGroupLiveMessage(t *testing.T) {
 	wait()
 	h.wantText(textCancelled)
 	h.noText("نباید برسه")
-	// The notice takes the live message's place.
+
 	edits := h.tg.of("editMessageText")
 	if len(edits) == 0 || !strings.Contains(fmt.Sprint(edits[len(edits)-1].body["rich_message"]), "ولش کردم") {
 		t.Errorf("the live message says it stopped: %v", edits)
@@ -424,13 +408,10 @@ func TestAMessageAfterTheAnswerRunsNext(t *testing.T) {
 	h.noText("هنوز دارم روی")
 }
 
-// A long job does not stop at the end of its budget while it makes
-// progress: the budget grows in the same run (no progress report in the
-// middle, nothing lost), and it finishes with one answer.
 func TestALongJobRunsToTheEnd(t *testing.T) {
 	h := newHarness(t)
-	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "0") // to the end of the job
-	const parts = 30                                        // far more than the 4-step budget
+	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "0")
+	const parts = 30
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if n < parts {
 			return toolCall("list_files", fmt.Sprintf(`{"path":"part%d"}`, n)), 0
@@ -456,18 +437,17 @@ func TestALongJobRunsToTheEnd(t *testing.T) {
 	}
 }
 
-// With a limit of N extensions, the job stops after them as before.
 func TestAutoContinueLimitIsKept(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "1")
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if req["tools"] == nil { // the wrap-up
+		if req["tools"] == nil {
 			return map[string]any{"role": "assistant", "content": "تا اینجا انجام شد."}, 0
 		}
 		return toolCall("list_files", fmt.Sprintf(`{"path":"part%d"}`, n)), 0
 	}
 	h.send(private(73, "یه پروژه بزرگ بساز"))
-	// 4 steps, one extension of 25, then the wrap-up.
+
 	if n := h.llm.count(); n != 4+25+1 {
 		t.Errorf("%d model calls", n)
 	}
@@ -479,7 +459,7 @@ func TestTheAnswerOfALongJobIsStillDelivered(t *testing.T) {
 	answerSendBudget = 300 * time.Millisecond
 	t.Cleanup(func() { answerSendBudget = old })
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		time.Sleep(700 * time.Millisecond) // longer than the time to deliver
+		time.Sleep(700 * time.Millisecond)
 		return map[string]any{"role": "assistant", "content": "بعد از یه کار طولانی، اینم جواب."}, 0
 	}
 	h.send(private(69, "یه کار طولانی"))
@@ -503,7 +483,9 @@ func TestStopRequests(t *testing.T) {
 }
 
 func TestActiveRunInbox(t *testing.T) {
-	r := newRun(1, private(1, "x"), func() {}, nil, tierOwner)
+	m := private(1, "x")
+	m.Chat.Type = "supergroup"
+	r := newRun(1, m, func() {}, nil, tierOwner)
 	x := &interjection{text: "a", memo: "a"}
 	if ok, queued := r.push(x); !ok || queued {
 		t.Fatalf("push: %v %v", ok, queued)
@@ -521,7 +503,7 @@ func TestActiveRunInbox(t *testing.T) {
 	for i := 0; i < maxPending; i++ {
 		r.push(&interjection{text: "c"})
 	}
-	// Past the limit nothing is refused: it joins the last one waiting.
+
 	more := &interjection{text: "LATE-1", memo: "late", msg: llm.Message{Role: "user", Content: agent.InterjectionNote + "LATE-1"}}
 	if ok, _ := r.push(more); !ok {
 		t.Fatal("a message past the limit is refused")
@@ -539,10 +521,6 @@ func TestActiveRunInbox(t *testing.T) {
 	}
 }
 
-// A message that comes while the user's job is still starting (it holds the
-// key but is not yet open to messages) is not refused as «busy»: it waits
-// for the job to open and joins it. That is what a second message sent in the
-// same second as the first met.
 func TestAMessageDuringJobStartJoinsItInsteadOfBusy(t *testing.T) {
 	h := newHarness(t)
 	release, why := h.bot.gate.TryAcquire("12")
@@ -553,17 +531,101 @@ func TestAMessageDuringJobStartJoinsItInsteadOfBusy(t *testing.T) {
 	first := private(12, "اولین پیام")
 	run := newRun(12, first, func() {}, nil, tierOwner)
 	go func() {
-		time.Sleep(700 * time.Millisecond) // the job opens a moment after the message arrived
+		time.Sleep(700 * time.Millisecond)
 		h.bot.runs.Store(int64(12), run)
 	}()
 	h.send(followUpMsg(first, 99, "این رو هم اضافه کن"))
 	h.noText("هنوز دارم روی درخواست قبلی")
 	h.noText("still working on your previous request")
-	xs := run.take()
+	xs := run.finish()
 	if len(xs) != 1 || !strings.Contains(xs[0].text, "این رو هم اضافه کن") {
 		t.Errorf("the message joined the job: %v", xs)
 	}
 	if len(h.llm.requests) != 0 {
 		t.Error("it did not start a second job")
+	}
+}
+
+func TestPrivateQueueKeepsFIFOAndSurvivesStop(t *testing.T) {
+	r := newRun(1, private(1, "first"), func() {}, nil, tierOwner)
+	for i := 0; i < maxPending; i++ {
+		ok, queued := r.push(&interjection{text: fmt.Sprint(i)})
+		if !ok || !queued {
+			t.Fatal("private message did not queue")
+		}
+	}
+	if ok, full := r.push(&interjection{text: "overflow"}); ok || !full {
+		t.Fatal("full queue did not reject the extra message")
+	}
+	if r.take() != nil {
+		t.Fatal("active task consumed the next task's messages")
+	}
+	r.stop()
+	queued := r.finish()
+	if len(queued) != maxPending {
+		t.Fatal("stop lost queued tasks")
+	}
+	for i, x := range queued {
+		if x.text != fmt.Sprint(i) {
+			t.Fatal("queue order changed")
+		}
+	}
+}
+
+func TestPrivateMessagesRunOneAtATimeInArrivalOrder(t *testing.T) {
+	h := newHarness(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
+		if n == 0 {
+			close(started)
+			<-release
+		}
+		return map[string]any{"role": "assistant", "content": fmt.Sprintf("پاسخ نوبت %d", n)}, 0
+	}
+	first := private(63, "درخواست شماره اول")
+	wait := h.background(first)
+	<-started
+	h.bot.handleMessage(followUpMsg(first, 78, "درخواست شماره دوم"))
+	h.bot.handleMessage(followUpMsg(first, 79, "درخواست شماره سوم"))
+	if h.llm.count() != 1 {
+		t.Error("queued requests started before the current one ended")
+	}
+	close(release)
+	wait()
+	if h.llm.count() != 3 {
+		t.Fatalf("expected three separate turns, got %d", h.llm.count())
+	}
+	for i, want := range []string{"درخواست شماره اول", "درخواست شماره دوم", "درخواست شماره سوم"} {
+		messages := h.llm.requests[i]["messages"].([]any)
+		last := messages[len(messages)-1].(map[string]any)
+		if !strings.Contains(fmt.Sprint(last["content"]), want) {
+			t.Fatalf("wrong queued turn %d: %v", i, last)
+		}
+	}
+}
+
+func TestStoppingPrivateTaskStillRunsTheQueuedMessage(t *testing.T) {
+	h := newHarness(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
+		if n == 0 {
+			close(started)
+			<-release
+			return map[string]any{"role": "assistant", "content": "late"}, 0
+		}
+		return map[string]any{"role": "assistant", "content": "پاسخ پیام بعدی"}, 0
+	}
+	first := private(64, "اولین درخواست را انجام بده")
+	wait := h.background(first)
+	<-started
+	h.bot.handleMessage(followUpMsg(first, 78, "پیام منتظر در صف را پاسخ بده"))
+	stopLiveMessage(h, 64)
+	close(release)
+	wait()
+	h.wantText(textCancelled)
+	h.wantText("پاسخ پیام بعدی")
+	h.noText("late")
+	if h.llm.count() != 2 || !strings.Contains(llmText(h.llm.last()), "پیام منتظر در صف را پاسخ بده") {
+		t.Fatalf("stopping current task did not preserve the next turn; calls=%d", h.llm.count())
 	}
 }

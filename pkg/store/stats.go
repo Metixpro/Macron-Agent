@@ -7,14 +7,12 @@ import (
 	"time"
 )
 
-// Stat kinds.
 const (
 	StatTool     = "tool"
 	StatProvider = "provider"
-	StatRoute    = "route" // smart model routing: "light:KIND", "strong:KIND" or "escalated:KIND"
+	StatRoute    = "route"
 )
 
-// RecordStat adds one event (and optional token counts) to today's statistics.
 func (s *Store) RecordStat(ctx context.Context, kind, name string, failed bool, promptTokens, completionTokens int) error {
 	fail := 0
 	if failed {
@@ -28,7 +26,6 @@ func (s *Store) RecordStat(ctx context.Context, kind, name string, failed bool, 
 	return err
 }
 
-// Overview is the headline numbers of the admin dashboard.
 type Overview struct {
 	Users, NewToday, New7d                   int
 	ActiveToday, Active7d, Active30d         int
@@ -40,7 +37,6 @@ type Overview struct {
 	PremiumEmoji                             int
 }
 
-// Overview computes the dashboard numbers.
 func (s *Store) Overview(ctx context.Context) (*Overview, error) {
 	now := s.Now()
 	today := s.DayStart(now)
@@ -65,7 +61,7 @@ func (s *Store) Overview(ctx context.Context) (*Overview, error) {
 		{`SELECT COUNT(*) AS providers, COALESCE(SUM(enabled), 0) AS providers_enabled FROM providers`, nil, []any{&o.Providers, &o.ProvidersEnabled}},
 		{`SELECT COUNT(*) AS premium_emoji FROM premium_emoji`, nil, []any{&o.PremiumEmoji}},
 	}
-	// One round trip: each part is a derived table of one row.
+
 	var (
 		sb   strings.Builder
 		args []any
@@ -85,7 +81,6 @@ func (s *Store) Overview(ctx context.Context) (*Overview, error) {
 	return o, nil
 }
 
-// DayPoint is one day of the activity chart.
 type DayPoint struct {
 	Day      string
 	Requests int
@@ -93,7 +88,6 @@ type DayPoint struct {
 	NewUsers int
 }
 
-// DailySeries returns the last n days of activity, oldest first (missing days are zero).
 func (s *Store) DailySeries(ctx context.Context, n int) ([]DayPoint, error) {
 	local := s.now().In(s.loc)
 	points := make([]DayPoint, n)
@@ -121,7 +115,6 @@ func (s *Store) DailySeries(ctx context.Context, n int) ([]DayPoint, error) {
 	}
 	rows.Close()
 
-	// New users per local day: shift UTC timestamps by the zone offset (Tehran has no DST).
 	_, offset := local.Zone()
 	rows, err = s.db.QueryContext(ctx, `SELECT STRFTIME('%Y-%m-%d', created_at, PRINTF('%+d seconds', ?)) d, COUNT(*) FROM users
 		WHERE created_at >= ? GROUP BY d`, offset, s.DayStart(local.AddDate(0, 0, -n+1)))
@@ -142,7 +135,6 @@ func (s *Store) DailySeries(ctx context.Context, n int) ([]DayPoint, error) {
 	return points, rows.Err()
 }
 
-// Ranked is a name with a count, for "top" lists.
 type Ranked struct {
 	ID       int64
 	Name     string
@@ -151,7 +143,6 @@ type Ranked struct {
 	Tokens   int64
 }
 
-// TopUsersToday ranks users by requests today.
 func (s *Store) TopUsersToday(ctx context.Context, limit int) ([]Ranked, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT u.id, TRIM((u.first_name || ' ' || u.last_name)), d.requests FROM daily_usage d
 		JOIN users u ON u.id = d.user_id WHERE d.day = ? ORDER BY d.requests DESC LIMIT ?`, s.Today(), limit)
@@ -170,7 +161,6 @@ func (s *Store) TopUsersToday(ctx context.Context, limit int) ([]Ranked, error) 
 	return out, rows.Err()
 }
 
-// TopStats ranks tools or providers over the last n days.
 func (s *Store) TopStats(ctx context.Context, kind string, days, limit int) ([]Ranked, error) {
 	since := s.now().In(s.loc).AddDate(0, 0, -days+1).Format(time.DateOnly)
 	rows, err := s.db.QueryContext(ctx, `SELECT name, SUM(count), SUM(failures), SUM(prompt_tokens + completion_tokens) FROM usage_stats
@@ -190,7 +180,6 @@ func (s *Store) TopStats(ctx context.Context, kind string, days, limit int) ([]R
 	return out, rows.Err()
 }
 
-// DatabaseSize is the size of the database file in bytes.
 func (s *Store) DatabaseSize(ctx context.Context) (int64, error) {
 	var n int64
 	err := s.db.QueryRowContext(ctx, `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`).Scan(&n)

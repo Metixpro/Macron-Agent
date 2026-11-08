@@ -10,7 +10,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// fakePlugins are an MCP server's tools, more than go as they are.
 type fakePlugins struct{ called []string }
 
 func (f *fakePlugins) Tools() []llm.Tool {
@@ -34,8 +33,6 @@ func (f *fakePlugins) Call(_ context.Context, _, name string, _ map[string]any) 
 	return "3 rows", nil
 }
 
-// Many plugin tools wait unloaded: the first call carries none of them and
-// tool_search; what a search finds is offered from the next step and runs.
 func TestPluginToolsWaitUntilSearched(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("c1", ToolSearch, `{"query":"sqlite query"}`)}},
@@ -63,7 +60,6 @@ func TestPluginToolsWaitUntilSearched(t *testing.T) {
 	}
 }
 
-// A plugin tool the conversation names is loaded by itself.
 func TestANamedPluginToolIsLoaded(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: "باشه"})
 	a.Registry.SetPlugins(&fakePlugins{})
@@ -77,8 +73,6 @@ func TestANamedPluginToolIsLoaded(t *testing.T) {
 
 func llmText(req map[string]any) string { return fmt.Sprint(req["messages"]) }
 
-// A family the message names is loaded before the first step: no round
-// goes to tool_search for what the request already says.
 func TestAFamilyTheMessageNamesIsLoaded(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("c1", "sqlite_query", `{"q":"select count(*) from users"}`)}},

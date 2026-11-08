@@ -16,7 +16,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Settings written to config.env (the names the agent reads; see pkg/config).
 const (
 	keyToken    = "TELEGRAM_BOT_TOKEN"
 	keyOwners   = "MACRON_OWNERS"
@@ -26,7 +25,6 @@ const (
 	keyTimezone = "MACRON_TIMEZONE"
 )
 
-// provider presets of the wizard.
 var presets = []struct{ name, url, model string }{
 	{"OpenAI-compatible (any address)", "", ""},
 	{"OpenAI", "https://api.openai.com/v1", "gpt-5"},
@@ -36,7 +34,6 @@ var presets = []struct{ name, url, model string }{
 	{"A model on this machine (Ollama)", "http://127.0.0.1:11434/v1", ""},
 }
 
-// telegramAPI is the Bot API address (api.telegram.org; replaced in tests).
 var telegramAPI = "https://api.telegram.org"
 
 func setup(io *IO, args []string) int {
@@ -65,7 +62,6 @@ func setup(io *IO, args []string) int {
 	}
 	io.printf("\n🤖 Macron Agent setup · home folder: %s\n\n", config.Home())
 
-	// ---- the bot
 	tok := firstNonEmpty(*token, getEnv(env, keyToken))
 	var me *telegram.User
 	for attempt := 0; attempt < 3; attempt++ {
@@ -100,7 +96,6 @@ func setup(io *IO, args []string) int {
 	io.printf("     ✓ bot @%s verified\n\n", me.Username)
 	env.Set(keyToken, tok)
 
-	// ---- the owner
 	owners := firstNonEmpty(*owner, getEnv(env, keyOwners))
 	if owners == "" {
 		if !interactive {
@@ -122,7 +117,6 @@ func setup(io *IO, args []string) int {
 	io.printf("     ✓ owner: %s\n\n", owners)
 	env.Set(keyOwners, owners)
 
-	// ---- the clock
 	zone := firstNonEmpty(*tz, getEnv(env, keyTimezone))
 	if zone == "" {
 		zone = defaultZone()
@@ -138,7 +132,6 @@ func setup(io *IO, args []string) int {
 	env.Set(keyTimezone, zone)
 	io.printf("     ✓ time zone: %s\n\n", zone)
 
-	// ---- the model
 	if code := setupModel(ctx, io, env, interactive, *apiURL, *apiKey, *model, *skipTest); code != 0 {
 		return code
 	}
@@ -149,7 +142,6 @@ func setup(io *IO, args []string) int {
 	}
 	io.printf("\n✅ Saved %s (only you can read it).\n", envPath)
 
-	// ---- run it
 	switch {
 	case *noService:
 		io.printf("Then send /start to @%s.\n", me.Username)
@@ -251,7 +243,6 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 	return 0
 }
 
-// askOwner waits for a message to the bot (its sender is the owner) or for a typed id.
 func askOwner(ctx context.Context, io *IO, token string) string {
 	typed := make(chan string, 1)
 	go func() {
@@ -323,8 +314,6 @@ func shorten(err error) string {
 	return s
 }
 
-// defaultZone is what the wizard offers: the machine's zone, except that a
-// server set to UTC (most are) gets Asia/Tehran, the agent's home zone.
 func defaultZone() string {
 	if z := systemZone(); z != "UTC" && z != "Etc/UTC" {
 		return z
@@ -332,7 +321,6 @@ func defaultZone() string {
 	return "Asia/Tehran"
 }
 
-// systemZone is the machine's time zone name (UTC when it cannot tell).
 func systemZone() string {
 	if tz := os.Getenv("TZ"); tz != "" {
 		if _, err := time.LoadLocation(tz); err == nil {

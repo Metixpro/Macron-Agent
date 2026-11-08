@@ -1,9 +1,3 @@
-// Package netclient builds the HTTP clients the agent uses to reach the
-// internet: sane timeouts, a body that cannot stall forever, a redirect limit.
-//
-// The agent lives on the owner's own machine, so nothing here refuses an
-// address: localhost, the local network and the machine's own address are
-// reachable like from any program there.
 package netclient
 
 import (
@@ -19,19 +13,14 @@ import (
 	"time"
 )
 
-// Options tune the client.
 type Options struct {
-	// Timeout is the overall request timeout (0 = none; rely on context).
 	Timeout time.Duration
-	// UseEnvProxy honours HTTP(S)_PROXY.
+
 	UseEnvProxy bool
-	// HeaderTimeout is how long a response's headers may take (0: 30 s),
-	// BodyIdle how long its body may send nothing (0: 60 s). A model that
-	// thinks before it answers needs more of both.
+
 	HeaderTimeout, BodyIdle time.Duration
 }
 
-// NewClient returns an *http.Client with sane timeouts.
 func NewClient(opts Options) *http.Client {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
@@ -65,8 +54,6 @@ func NewClient(opts Options) *http.Client {
 	}
 }
 
-// bodyIdle is how long a response body may send nothing before it is given
-// up: a server that stalls never holds a request (and its slot) for good.
 var bodyIdle = 60 * time.Second
 
 type idleTransport struct {
@@ -109,7 +96,6 @@ func (b *idleBody) Close() error {
 	return b.rc.Close()
 }
 
-// ValidateURL accepts only absolute http(s) URLs with a host.
 func ValidateURL(raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	u, err := url.Parse(raw)

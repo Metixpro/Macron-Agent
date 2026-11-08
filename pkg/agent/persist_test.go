@@ -79,7 +79,6 @@ func TestFailureAndGiveUpDetection(t *testing.T) {
 	}
 }
 
-// An empty reply is asked again once, instead of telling the user to resend.
 func TestAnEmptyReplyIsAskedAgain(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: ""}, llm.Message{Role: "assistant", Content: "سلام رفیق 👋"})
 	a.MaxSteps = 8
@@ -89,7 +88,6 @@ func TestAnEmptyReplyIsAskedAgain(t *testing.T) {
 	}
 }
 
-// "I have no internet" while the tools are offered: sent back once to do it.
 func TestSayingItHasNoToolsIsSentBack(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: "متأسفانه من به اینترنت دسترسی ندارم و نمی‌تونم قیمت امروز رو ببینم."},
@@ -103,14 +101,13 @@ func TestSayingItHasNoToolsIsSentBack(t *testing.T) {
 	offered := map[string]bool{"web_search": true, "send_file": true}
 	for ans, want := range map[string]bool{"I can't browse the web, sorry.": true, "نمی تونم فایل بفرستم": true,
 		"به عنوان یه هوش مصنوعی احساسی ندارم": false, "سایت رو باز کردم و خوندم": false,
-		"نمی‌تونم عکس بسازم": false} { // no picture tool offered: saying so is right
+		"نمی‌تونم عکس بسازم": false} {
 		if _, got := deniesTools(ans, offered); got != want {
 			t.Errorf("deniesTools(%q) != %v", ans, want)
 		}
 	}
 }
 
-// A long job may be sent back twice, when it failed again after the first nudge.
 func TestALongJobIsNudgedTwice(t *testing.T) {
 	call := map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("c1", "read_site", "{}")}}
 	a, script := setup(t,

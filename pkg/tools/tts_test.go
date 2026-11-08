@@ -44,7 +44,6 @@ func TestPiperVoiceSetup(t *testing.T) {
 	}
 }
 
-// leftovers lists the hidden WAVs Piper left in a workspace.
 func leftovers(t *testing.T, r *Registry, session string) []string {
 	ws, _ := r.Machine.Workspace(session)
 	m, _ := filepath.Glob(filepath.Join(ws, ".tts-*"))
@@ -88,7 +87,6 @@ func TestTextToSpeechWithPiper(t *testing.T) {
 		t.Errorf("the WAV was left behind: %v", left)
 	}
 
-	// English never goes to the Persian voice, nor does a voice of Edge TTS asked for by name.
 	for _, args := range []map[string]any{{"text": "Hello, this is Macron."}, {"text": "سلام", "voice": "jenny"}, {"text": "سلام", "voice": "dilara"}} {
 		if out := call(t, r, "p", "text_to_speech", args); strings.Contains(out, "Piper") {
 			t.Errorf("%v went to Piper: %s", args, out)

@@ -20,7 +20,7 @@ func TestArchiveSearchPersianEnglishAndNeighbours(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// someone else's message never shows up
+
 	_ = s.Archive(bg, 8, ArchiveTurn{Role: "user", Content: "سرور هتزنر من"})
 
 	hits, err := s.SearchArchive(bg, 7, "سرور هتزنر", time.Time{}, 5)
@@ -36,11 +36,11 @@ func TestArchiveSearchPersianEnglishAndNeighbours(t *testing.T) {
 	if hits, _ := s.SearchArchive(bg, 7, "ship dep", time.Time{}, 5); len(hits) == 0 {
 		t.Errorf("prefix: %+v", hits)
 	}
-	// no hit for all the words: any of them is enough
+
 	if hits, _ := s.SearchArchive(bg, 7, "ship بی‌کلام zzzz", time.Time{}, 5); len(hits) < 2 {
 		t.Errorf("any-word fallback: %+v", hits)
 	}
-	// FTS syntax in the query is just text
+
 	if _, err := s.SearchArchive(bg, 7, `"ship" OR NEAR( ) * -`, time.Time{}, 5); err != nil {
 		t.Errorf("query syntax must not leak: %v", err)
 	}

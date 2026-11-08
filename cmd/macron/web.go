@@ -25,20 +25,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Two small HTTP services, both off until their address is set:
-//
-//   - The incoming webhook (MACRON_WEBHOOK_ADDR, e.g. :8787): POST
-//     /hook/<name> with X-Macron-Timestamp (unix seconds) and
-//     X-Macron-Signature: sha256=<hex HMAC-SHA256 of "<timestamp>.<body>">,
-//     keyed with webhook.secret. A valid event becomes a background task of
-//     the owner: it runs on its own, with nobody to approve a dangerous
-//     command (the gate refuses those), and its report comes in the chat.
-//     Old or replayed events (more than 5 minutes off) are refused.
-//   - The dashboard (MACRON_DASHBOARD_ADDR, loopback only, e.g.
-//     127.0.0.1:8788): a read-only page of the service, the providers, the
-//     latest decisions and lessons, and the skills, behind dashboard.token
-//     (/dashboard in the chat gives the link).
-
 const (
 	envWebhookAddr     = "MACRON_WEBHOOK_ADDR"
 	envDashboardAddr   = "MACRON_DASHBOARD_ADDR"
@@ -46,12 +32,11 @@ const (
 	settingDashToken   = "dashboard.token"
 	webhookSkew        = 5 * time.Minute
 	webhookMaxBody     = 256 << 10
-	webhookEventsShown = 20000 // characters of an event the task gets
+	webhookEventsShown = 20000
 )
 
 var hookNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,40}$`)
 
-// secretSetting returns a sealed setting, made at random the first time.
 func (b *Bot) secretSetting(ctx context.Context, key string) string {
 	if v, err := b.st.SecretSetting(key); err == nil && v != "" {
 		return v
@@ -67,7 +52,6 @@ func (b *Bot) secretSetting(ctx context.Context, key string) string {
 	return stored
 }
 
-// signHook is the signature a sender puts on an event.
 func signHook(secret, ts string, body []byte) string {
 	m := hmac.New(sha256.New, []byte(secret))
 	m.Write([]byte(ts + "."))
@@ -75,7 +59,6 @@ func signHook(secret, ts string, body []byte) string {
 	return "sha256=" + hex.EncodeToString(m.Sum(nil))
 }
 
-// webhookHandler takes signed events.
 func (b *Bot) webhookHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hook/", func(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +92,7 @@ func (b *Bot) webhookHandler() http.Handler {
 			http.Error(w, "bad signature", http.StatusUnauthorized)
 			return
 		}
-		b.hookSeen.Range(func(k, v any) bool { // what is older than the skew can no longer be replayed
+		b.hookSeen.Range(func(k, v any) bool {
 			if time.Since(v.(time.Time)) > 2*webhookSkew {
 				b.hookSeen.Delete(k)
 			}
@@ -121,7 +104,7 @@ func (b *Bot) webhookHandler() http.Handler {
 		}
 		id, err := b.hookTask(r.Context(), name, body)
 		if err != nil {
-			b.hookSeen.Delete(want) // A request that created no task may be retried.
+			b.hookSeen.Delete(want)
 			log.Printf("webhook %s: %v", name, err)
 			http.Error(w, "not accepted", http.StatusServiceUnavailable)
 			return
@@ -132,7 +115,6 @@ func (b *Bot) webhookHandler() http.Handler {
 	return mux
 }
 
-// hookTask turns an event into a background task of the first owner.
 func (b *Bot) hookTask(ctx context.Context, name string, body []byte) (int64, error) {
 	owner := b.firstOwner()
 	if owner == 0 {
@@ -154,7 +136,6 @@ func (b *Bot) hookTask(ctx context.Context, name string, body []byte) (int64, er
 	return strconv.ParseInt(sub[1], 10, 64)
 }
 
-// loopback reports an address on this machine only.
 func loopback(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -167,7 +148,6 @@ func loopback(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// dashboardHandler is the read-only page.
 func (b *Bot) dashboardHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
@@ -233,7 +213,6 @@ func (b *Bot) dashboardHTML(ctx context.Context) string {
 	return sb.String()
 }
 
-// serveWeb starts the services whose address is set.
 func (b *Bot) serveWeb(ctx context.Context) {
 	serve := func(name, addr string, h http.Handler) {
 		srv := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
@@ -260,7 +239,6 @@ func (b *Bot) serveWeb(ctx context.Context) {
 	}
 }
 
-// dashboardCommand gives the owner the dashboard's link and the webhook's secret.
 func (b *Bot) dashboardCommand(ctx context.Context, m *telegram.Message, l lang) {
 	var sb strings.Builder
 	if addr := strings.TrimSpace(os.Getenv(envDashboardAddr)); addr != "" && loopback(addr) {

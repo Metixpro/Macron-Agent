@@ -6,10 +6,10 @@ import stat
 import subprocess
 import sys
 
-# Unpacks the .deb files apt downloaded into the user's package folder: the
-# files only, no package script runs. Then makes them usable from there:
-# links into the system go to the unpacked copy, the alternatives the
-# packages would register become links, and PHP extensions get their ini.
+
+
+
+
 
 req = json.load(sys.stdin)
 debs, root = req["debs"], req["root"]

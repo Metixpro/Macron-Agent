@@ -73,7 +73,7 @@ def launch(pw):
         "--js-flags=--max-old-space-size=1024", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist",
         "--font-render-hinting=none", "--force-color-profile=srgb",
     ]
-    if CFG.get("offline"):  # a page of local files: nowhere to go
+    if CFG.get("offline"):
         args += ["--proxy-server=http://127.0.0.1:9", "--proxy-bypass-list=<-loopback>"]
     return pw.chromium.launch(executable_path=CFG["chrome"], headless=True, args=args, chromium_sandbox=False, timeout=60000)
 

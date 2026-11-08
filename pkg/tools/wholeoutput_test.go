@@ -12,8 +12,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// A tool's output longer than the model reads in one go keeps its middle in
-// a file of the workspace, and the model is told where.
 func TestALongOutputIsKeptWhole(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	var lines []string
@@ -38,7 +36,7 @@ func TestALongOutputIsKeptWhole(t *testing.T) {
 	if err != nil || string(data) != big {
 		t.Fatalf("the file holds the whole output: %v (%d bytes)", err, len(data))
 	}
-	// The newest are kept.
+
 	for i := 0; i < wholeOutputKeep+5; i++ {
 		_, _ = r.Execute(context.Background(), "s1", "big_dump", "{}")
 	}
@@ -47,7 +45,7 @@ func TestALongOutputIsKeptWhole(t *testing.T) {
 	if len(entries) != wholeOutputKeep {
 		t.Fatalf("kept %d files", len(entries))
 	}
-	// A short output is as it was.
+
 	r.Register(llm.Tool{Type: "function", Function: llm.ToolDef{Name: "small", Parameters: map[string]any{"type": "object", "properties": map[string]any{}}}},
 		func(context.Context, string, map[string]any) (string, error) { return "ok", nil })
 	if out, _ := r.Execute(context.Background(), "s1", "small", "{}"); out != "ok" {
@@ -55,8 +53,6 @@ func TestALongOutputIsKeptWhole(t *testing.T) {
 	}
 }
 
-// Several files in one read_file call, and a count of matches per file in
-// one search_code call: a job over many files does not take a round each.
 func TestManyFilesInOneCall(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	for i := 1; i <= 5; i++ {

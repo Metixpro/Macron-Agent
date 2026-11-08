@@ -16,30 +16,21 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Background tasks: a long job (an app build, a long render, a big download
-// or conversion) the agent starts with background_task runs on its own. It
-// has a live card of its own with a stop button; the user goes on chatting
-// meanwhile (their messages start new requests and never join it); its
-// result comes as a new message replying to the request, and is kept in the
-// conversation. Each task is recorded (store.BgTask): /tasks lists them, and
-// when a restart of the bot cuts one short its user is told, with 🔁.
-
 const (
 	toolBackground = "background_task"
-	maxBgPerUser   = 2 // tasks of a user running or waiting at once
+	maxBgPerUser   = 2
 	maxBgPerAdmin  = 4
-	bgNoticeFor    = 6 * time.Hour // after a restart, users whose task ran this recently are told
-	bgStepsFactor  = 3             // a task gets this many times a request's steps…
+	bgNoticeFor    = 6 * time.Hour
+	bgStepsFactor  = 3
 	bgMaxSteps     = 400
-	bgMinTimeout   = 45 * time.Minute // …and this much time, at least
+	bgMinTimeout   = 45 * time.Minute
 	bgMaxTimeout   = 3 * time.Hour
-	bgListed       = 8 // tasks /tasks shows
+	bgListed       = 8
 )
 
-// bgRun is a background task as it runs; runPrompt says how it ended.
 type bgRun struct {
 	task   store.BgTask
-	status string // store.Bg*; "" while it runs (or when the bot shut down)
+	status string
 	note   string
 }
 
@@ -49,12 +40,10 @@ func (r *bgRun) end(status, note string) {
 	}
 }
 
-// bgBudget is a task's steps and time: more than a request's.
 func bgBudget(steps int, timeout time.Duration) (int, time.Duration) {
 	return min(max(steps*bgStepsFactor, 120), bgMaxSteps), min(max(timeout*bgStepsFactor, bgMinTimeout), bgMaxTimeout)
 }
 
-// backgroundTool starts a background task from a request.
 func (b *Bot) backgroundTool(u *store.User, m *telegram.Message) agent.LocalTool {
 	return agent.LocalTool{
 		Def: llm.Tool{Type: "function", Function: llm.ToolDef{
@@ -76,7 +65,6 @@ func (b *Bot) backgroundTool(u *store.User, m *telegram.Message) agent.LocalTool
 	}
 }
 
-// startBg records a task and starts it; the text is the tool's result.
 func (b *Bot) startBg(ctx context.Context, u *store.User, m *telegram.Message, title, goal string) string {
 	title = textutil.TruncateRunes(textutil.OneLine(strings.TrimSpace(title)), 60, "…")
 	goal = strings.TrimSpace(goal)
@@ -108,7 +96,6 @@ func (b *Bot) startBg(ctx context.Context, u *store.User, m *telegram.Message, t
 		"don't do this job yourself.", id, title)
 }
 
-// launchBg runs a task on its own.
 func (b *Bot) launchBg(task store.BgTask) {
 	b.wg.Add(1)
 	go func() {
@@ -117,7 +104,6 @@ func (b *Bot) launchBg(task store.BgTask) {
 	}()
 }
 
-// runBg is a task from start to end.
 func (b *Bot) runBg(task store.BgTask) {
 	ctx, cancel := b.ctx(time.Minute)
 	u, err := b.st.User(ctx, task.UserID)
@@ -141,7 +127,7 @@ func (b *Bot) runBg(task store.BgTask) {
 		prefix: l.f("✅ **کار پس‌زمینه تموم شد:** %s", strings.ReplaceAll(task.Title, "*", ""))})
 	switch {
 	case b.jobCtx.Err() != nil && run.status != store.BgDone:
-		return // the bot is going down: the next start finds the task running and tells its user
+		return
 	case run.status != "":
 	case err == nil:
 		run.status = store.BgDone
@@ -161,7 +147,6 @@ func (b *Bot) finishBg(id int64, status, note string) {
 	}
 }
 
-// stopBg stops a running task of the user (false: none such running).
 func (b *Bot) stopBg(uid, id int64) bool {
 	v, ok := b.bgRuns.Load(id)
 	if !ok {
@@ -174,8 +159,6 @@ func (b *Bot) stopBg(uid, id int64) bool {
 	r.stop()
 	return true
 }
-
-// ---------------------------------------------------------------- /tasks
 
 func bgStatusIcon(status string) string {
 	switch status {
@@ -191,8 +174,6 @@ func bgStatusIcon(status string) string {
 	return "⚠️"
 }
 
-// sendTasks lists the user's background tasks, with ⏹ for the running ones
-// and 🔁 for those that did not finish.
 func (b *Bot) sendTasks(ctx context.Context, m *telegram.Message, uid int64) {
 	l := b.langOf(m.From)
 	tasks, err := b.st.UserBgTasks(ctx, uid, bgListed)
@@ -229,7 +210,6 @@ func (b *Bot) sendTasks(ctx context.Context, m *telegram.Message, uid int64) {
 	b.sendHTML(ctx, m.Chat.ID, sb.String(), opts)
 }
 
-// handleBgCallback: bg:stop:<user>:<task> and bg:retry:<user>:<task>.
 func (b *Bot) handleBgCallback(ctx context.Context, q *telegram.CallbackQuery, answer func(string, bool)) {
 	l := b.langOf(&q.From)
 	parts := strings.Split(q.Data, ":")
@@ -288,10 +268,6 @@ func (b *Bot) handleBgCallback(ctx context.Context, q *telegram.CallbackQuery, a
 	}
 }
 
-// ---------------------------------------------------------------- after a restart
-
-// orphanedBgTasks runs once at start, before any update is read: the tasks a
-// restart cut short become interrupted.
 func (b *Bot) orphanedBgTasks(ctx context.Context) []store.BgTask {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -302,7 +278,6 @@ func (b *Bot) orphanedBgTasks(ctx context.Context) []store.BgTask {
 	return tasks
 }
 
-// tellBgRestarted tells the users whose task a restart cut short, with 🔁.
 func (b *Bot) tellBgRestarted(ctx context.Context, tasks []store.BgTask) {
 	for _, t := range tasks {
 		started := t.CreatedAt
@@ -324,8 +299,6 @@ func (b *Bot) tellBgRestarted(ctx context.Context, tasks []store.BgTask) {
 	}
 }
 
-// ---------------------------------------------------------------- the run's view of its task
-
 func (r *bgRun) taskID() int64 {
 	if r == nil {
 		return 0
@@ -333,16 +306,13 @@ func (r *bgRun) taskID() int64 {
 	return r.task.ID
 }
 
-// stopData and retryData are the task's buttons.
 func (r *bgRun) stopData() string  { return fmt.Sprintf("bg:stop:%d:%d", r.task.UserID, r.task.ID) }
 func (r *bgRun) retryData() string { return fmt.Sprintf("bg:retry:%d:%d", r.task.UserID, r.task.ID) }
 
-// memoryText is how the conversation keeps the task's request.
 func (r *bgRun) memoryText() string {
 	return fmt.Sprintf("[background task #%d «%s», which I started for the user and ran on my own; its goal:]\n%s", r.task.ID, r.task.Title, r.task.Goal)
 }
 
-// failed records a task that ended with an error.
 func (r *bgRun) failed(stopped bool, err error) {
 	switch {
 	case r == nil:
@@ -355,7 +325,6 @@ func (r *bgRun) failed(stopped bool, err error) {
 	}
 }
 
-// ended records a task that gave its answer.
 func (r *bgRun) ended(stopped bool, res *agent.Result) {
 	switch {
 	case r == nil:

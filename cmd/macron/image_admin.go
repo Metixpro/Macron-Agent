@@ -11,18 +11,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// AI image editing in the admin panel (under ⚙️ settings): the key of the
-// Nano Banana task service, which edits pictures and is generate_image's
-// second engine.
-//
-//	a:ie             status
-//	a:ie:key         set the key (dialog; the message is deleted, the key stored encrypted)
-//	a:ie:test        check the key in use
-//	a:ie:del         remove the panel's key (the environment's, if any, is used again)
-
 const settingImageEditKey = "image_edit_key"
 
-// imageEditKey reads the key from the panel (encrypted), else from the environment.
 func imageEditKey(st *store.Store, env string) func() string {
 	return func() string {
 		if k, err := st.SecretSetting(settingImageEditKey); err == nil && strings.TrimSpace(k) != "" {
@@ -58,7 +48,6 @@ func (b *Bot) viewImageEdit(l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// testImageEdit checks a key with the service and says what happened.
 func (b *Bot) testImageEdit(ctx context.Context, l lang, key string) string {
 	if strings.TrimSpace(key) == "" {
 		return l.t("❌ کلیدی تنظیم نشده.")
@@ -96,10 +85,9 @@ func (b *Bot) handleImageEditPanel(ctx context.Context, q *telegram.CallbackQuer
 	show(b.viewImageEdit(l))
 }
 
-// handleImageEditInput saves a key the admin sent, once the service accepts it.
 func (b *Bot) handleImageEditInput(ctx context.Context, m *telegram.Message, done func(panelView)) bool {
 	l := b.langOf(m.From)
-	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // a key is a password: never leave it in the chat
+	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 	key := strings.TrimSpace(m.Text)
 	if key == "" || strings.ContainsAny(key, " \n\t") || len(key) > 300 {
 		b.reply(m, l.t("این شبیه کلید نیست؛ دوباره بفرست."))

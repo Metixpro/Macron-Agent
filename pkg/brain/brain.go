@@ -1,13 +1,3 @@
-// Package brain keeps what the agent is and knows as plain files the owner
-// can open in any editor:
-//
-//	SOUL.md     who the agent is: personality, tone, values, red lines
-//	USER.md     what it knows about its owner (one fact per line)
-//	MEMORY.md   what it learned about its work, projects and machine
-//
-// The files are the truth: the agent changes them with its tools, the owner
-// changes them by hand or from Telegram, and both see the other's edits at
-// the next message. Nothing here is a cache of a database.
 package brain
 
 import (
@@ -21,10 +11,9 @@ import (
 	"unicode/utf8"
 )
 
-// Brain is the folder of the files.
 type Brain struct {
 	Dir         string
-	DefaultSoul string // the soul written when SOUL.md does not exist yet
+	DefaultSoul string
 
 	User   *Notes
 	Memory *Notes
@@ -35,23 +24,19 @@ type Brain struct {
 	soulSize int64
 }
 
-// File names.
 const (
 	SoulFile   = "SOUL.md"
 	UserFile   = "USER.md"
 	MemoryFile = "MEMORY.md"
 )
 
-// Limits: what goes into every prompt stays small.
 const (
-	MaxEntries    = 80  // facts in one notes file
-	MaxEntryChars = 400 // one fact
+	MaxEntries    = 80
+	MaxEntryChars = 400
 	MaxFileChars  = 12000
 	MaxSoulBytes  = 64 << 10
 )
 
-// Open prepares the folder: it creates it and writes the three files if they
-// are missing (the soul from defaultSoul).
 func Open(dir, defaultSoul string) (*Brain, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -76,8 +61,6 @@ func Open(dir, defaultSoul string) (*Brain, error) {
 
 func (b *Brain) soulPath() string { return filepath.Join(b.Dir, SoulFile) }
 
-// Soul is the text of SOUL.md ("" when it is empty or missing: the caller
-// falls back to its default). It is read again when the file changes.
 func (b *Brain) Soul() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -96,7 +79,6 @@ func (b *Brain) Soul() string {
 	return b.soul
 }
 
-// SoulText is the soul as the owner sees it in the file.
 func (b *Brain) SoulText() string {
 	if s := b.Soul(); s != "" {
 		return s
@@ -104,12 +86,10 @@ func (b *Brain) SoulText() string {
 	return strings.TrimSpace(b.DefaultSoul)
 }
 
-// IsCustomSoul reports whether SOUL.md differs from the built-in soul.
 func (b *Brain) IsCustomSoul() bool {
 	return strings.TrimSpace(b.Soul()) != strings.TrimSpace(b.DefaultSoul)
 }
 
-// SetSoul replaces SOUL.md; the previous one is kept as SOUL.md.bak.
 func (b *Brain) SetSoul(text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -123,17 +103,15 @@ func (b *Brain) SetSoul(text string) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.soulTime = time.Time{} // read it again, whatever its timestamp says
+	b.soulTime = time.Time{}
 	if old, err := os.ReadFile(b.soulPath()); err == nil {
 		_ = writeFile(b.soulPath()+".bak", old)
 	}
 	return writeFile(b.soulPath(), []byte(text+"\n"))
 }
 
-// ResetSoul writes the built-in soul back.
 func (b *Brain) ResetSoul() error { return b.SetSoul(b.DefaultSoul) }
 
-// writeFile writes atomically with owner-only permissions.
 func writeFile(path string, data []byte) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
 	if err != nil {

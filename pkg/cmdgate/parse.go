@@ -1,13 +1,3 @@
-// Package cmdgate decides whether a shell command the agent wants to run on
-// this machine may run: a floor of commands that never run (HARDLINE), the
-// owner's deny rules, a permanent allowlist, a guardian model, the owner in
-// the chat, and a breaker that stops a job after several refusals in a row.
-//
-// Commands are parsed, not matched as raw text: a rule looks at the command
-// in command position (rm, dd, mkfs…) with its real arguments, so the same
-// words inside a quoted message (git commit -m "never rm -rf /") are
-// harmless, while quoting, escapes and empty quotes (r”m, \rm) cannot hide
-// a command, and what sh -c, bash -c, eval, $(…) and `…` run is read too.
 package cmdgate
 
 import (
@@ -15,30 +5,23 @@ import (
 	"unicode"
 )
 
-// Cmd is one simple command: its words with quotes and escapes resolved.
 type Cmd struct {
 	Words   []string
 	Redirs  []Redir
-	Heredoc bool // it reads a heredoc or a here-string
+	Heredoc bool
 }
 
-// Redir is a redirection: its operator (">", ">>", "<", "2>"…) and target.
 type Redir struct {
 	Op, Target string
 }
 
-// Pipeline is commands joined by |.
 type Pipeline []Cmd
 
-// Script is what a command line runs: its pipelines in order, and the code
-// it runs inside it ($(…), `…`, <(…), >(…)), to be read on its own.
 type Script struct {
 	Pipelines []Pipeline
 	Nested    []string
 }
 
-// invisible are characters that change nothing a shell runs but split words
-// for a reader: control bytes and zero-width marks.
 func invisible(r rune) bool {
 	switch {
 	case r == '\n' || r == '\t':
@@ -51,8 +34,6 @@ func invisible(r rune) bool {
 	return false
 }
 
-// Clean drops the invisible characters of a command (what a person sees is
-// what is checked).
 func Clean(s string) string {
 	return strings.Map(func(r rune) rune {
 		if invisible(r) {
@@ -62,7 +43,6 @@ func Clean(s string) string {
 	}, s)
 }
 
-// Parse reads a command line the way a POSIX shell splits it.
 func Parse(s string) Script {
 	p := &parser{src: []rune(Clean(s))}
 	p.run()
@@ -76,9 +56,9 @@ type parser struct {
 	pipe  Pipeline
 	cmd   Cmd
 	word  strings.Builder
-	has   bool     // the word has started (an empty "" is a word)
-	redir string   // the operator waiting for its target
-	docs  []string // heredoc delimiters waiting for the next line
+	has   bool
+	redir string
+	docs  []string
 }
 
 func (p *parser) peek(k int) rune {
@@ -123,8 +103,6 @@ func (p *parser) endPipe() {
 	p.pipe = nil
 }
 
-// nested reads $( … ) or <( … ) from the opening parenthesis on (p.i at it)
-// and returns what is inside, honouring quotes and nesting.
 func (p *parser) nested() string {
 	start := p.i + 1
 	depth := 0
@@ -151,10 +129,9 @@ func (p *parser) nested() string {
 			}
 		}
 	}
-	return string(p.src[start:]) // unbalanced: what there is
+	return string(p.src[start:])
 }
 
-// backtick reads `…` from the opening backtick on.
 func (p *parser) backtick() string {
 	start := p.i + 1
 	for p.i++; p.i < len(p.src); p.i++ {
@@ -169,8 +146,6 @@ func (p *parser) backtick() string {
 	return string(p.src[start:])
 }
 
-// skipHeredocs drops the heredoc bodies that start after a newline: they are
-// data for their command, not commands.
 func (p *parser) skipHeredocs() {
 	for len(p.docs) > 0 {
 		delim := p.docs[0]
@@ -187,7 +162,7 @@ func (p *parser) skipHeredocs() {
 			}
 		}
 	}
-	p.i-- // the loop of run steps over the last newline
+	p.i--
 }
 
 func (p *parser) run() {
@@ -195,7 +170,7 @@ func (p *parser) run() {
 		c := p.src[p.i]
 		switch {
 		case c == '\\':
-			if p.peek(1) == '\n' { // a line continuation
+			if p.peek(1) == '\n' {
 				p.i++
 				continue
 			}
@@ -257,7 +232,7 @@ func (p *parser) run() {
 		case c == ';':
 			p.endPipe()
 		case c == '&':
-			if p.peek(1) == '>' { // &> and &>>: a redirection
+			if p.peek(1) == '>' {
 				p.endWord()
 				op := "&>"
 				p.i++
@@ -284,7 +259,7 @@ func (p *parser) run() {
 		case c == '(' || c == ')' || c == '{' && !p.has && unicode.IsSpace(p.peek(1)) || c == '}' && !p.has:
 			p.endPipe()
 		case c == '>' || c == '<':
-			// A file descriptor right before it (2>, 1>>) belongs to the operator.
+
 			fd := ""
 			if p.has {
 				if w := p.word.String(); w != "" && strings.Trim(w, "0123456789") == "" {
@@ -298,7 +273,7 @@ func (p *parser) run() {
 				p.i++
 				op += string(p.src[p.i])
 			}
-			if strings.HasSuffix(op, "&") { // 2>&1: no file
+			if strings.HasSuffix(op, "&") {
 				for p.i+1 < len(p.src) && (unicode.IsDigit(p.peek(1)) || p.peek(1) == '-') {
 					p.i++
 				}

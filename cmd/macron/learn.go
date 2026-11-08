@@ -21,24 +21,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Learning from experience. A job where a step failed and another way
-// worked holds a lesson: right after it, a short model call turns its work
-// log into one general rule ("when X, do Y, because Z"), with nothing about
-// the user in it. It goes into a skill (lessons-<category>) at once, where
-// every later job finds it, and can be taken back exactly (learn_auto.go);
-// with learn_auto_adopt off it waits for an admin in the panel instead. A
-// lesson taken back or rejected is never proposed again.
-
 const (
-	settingLearn = "learn_from_jobs" // "false" turns it off
-	// lessonsPerUser and lessonsPerDay bound the lessons proposed, so nobody
-	// can flood the admins' queue (or the costs).
+	settingLearn = "learn_from_jobs"
+
 	lessonsPerUser = 3
 	lessonsPerDay  = 30
-	lessonSkill    = "lessons-" // + category
+	lessonSkill    = "lessons-"
 )
 
-// lessonCategories are the fields a lesson may be about, with how a skill of them is described.
 var lessonCategories = map[string]string{
 	"media":    "downloads, audio, video and pictures",
 	"web":      "web search, reading pages and sites",
@@ -51,13 +41,10 @@ var lessonCategories = map[string]string{
 
 func (b *Bot) learningOn() bool { return b.st.SettingBool(settingLearn, true) }
 
-// learnLimits are created once (a variable for the tests).
 var learnLimits = struct{ user, day *guard.RateLimiter }{
 	guard.NewRateLimiter(lessonsPerUser, 24*time.Hour), guard.NewRateLimiter(lessonsPerDay, 24*time.Hour),
 }
 
-// learnFrom proposes the lesson of a job that failed on the way and still
-// answered, in the background (it never holds up the user).
 func (b *Bot) learnFrom(uid int64, res *agent.Result) {
 	if res != nil && !res.Partial {
 		b.noteJobForReview()
@@ -65,8 +52,7 @@ func (b *Bot) learnFrom(uid int64, res *agent.Result) {
 	if res == nil || res.Trail == "" || res.Partial || strings.TrimSpace(res.Answer) == "" || !b.learningOn() {
 		return
 	}
-	// The personal edition also learns from a long job that went well: how
-	// it was done is worth keeping for the next time.
+
 	procedure := res.Failures == 0
 	if procedure && !(b.personal && res.Steps >= procedureSteps && len(res.ToolsUsed) >= 3) {
 		return
@@ -97,20 +83,17 @@ func (b *Bot) learnFrom(uid int64, res *agent.Result) {
 		if id, fresh, status, err := b.st.AddLesson(ctx, *x); err != nil {
 			log.Printf("learning: saving a lesson: %v", err)
 		} else if fresh && b.st.SettingBool(settingLearnAuto, true) {
-			b.adoptLesson(ctx, id, x) // straight into a skill, and the owners are told (↩️ takes it back)
+			b.adoptLesson(ctx, id, x)
 		} else if fresh {
 			log.Printf("🧠 a new lesson waits for an admin: %s (%s)", x.Title, x.Key)
 		} else if status == store.LessonApproved {
-			_ = b.rebuildLessons(ctx, x.Category) // its count goes up in the skill too
+			_ = b.rebuildLessons(ctx, x.Category)
 		}
 	}()
 }
 
-// procedureSteps is how long a job that went well is before it is worth a look.
 const procedureSteps = 6
 
-// settingLearnAuto: a lesson becomes part of the skills at once ("false"
-// asks an admin first).
 const settingLearnAuto = "learn_auto_adopt"
 
 const procedurePrompt = `You review a job an AI assistant did for its owner, and it went well, with several steps.
@@ -164,7 +147,6 @@ The job's steps (tool, short input → result):
 
 var lessonKeyRe = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+){1,5}$`)
 
-// drawLesson asks the model for the lesson of a work log (nil: there is none).
 func (b *Bot) drawLesson(ctx context.Context, trail string, used []string, procedure bool) (*store.Lesson, error) {
 	known, _ := b.st.LessonKeys(ctx, "", 30)
 	var kb strings.Builder
@@ -191,7 +173,6 @@ func (b *Bot) drawLesson(ctx context.Context, trail string, used []string, proce
 	return parseLesson(resp.Message.Content, b.redact), nil
 }
 
-// parseLesson reads the model's lesson; nil when there is none or it is not fit to keep.
 func parseLesson(reply string, redact func(string) string) *store.Lesson {
 	raw := strings.TrimSpace(reply)
 	if i, j := strings.Index(raw, "{"), strings.LastIndex(raw, "}"); i >= 0 && j > i {
@@ -208,7 +189,7 @@ func parseLesson(reply string, redact func(string) string) *store.Lesson {
 	if json.Unmarshal([]byte(raw), &v) != nil || v.None {
 		return nil
 	}
-	if agent.SecretIn(v.Title+"\n"+v.Rule) != "" { // a key, a password or a home path: never kept, not even scrubbed
+	if agent.SecretIn(v.Title+"\n"+v.Rule) != "" {
 		return nil
 	}
 	key := strings.Trim(strings.ToLower(strings.TrimSpace(v.Key)), "-")
@@ -240,8 +221,6 @@ var (
 	scrubFileRe  = regexp.MustCompile(`(?i)[^\s"'/\\]+\.(pdf|docx?|xlsx?|pptx?|csv|txt|md|zip|rar|7z|jpe?g|png|webp|gif|mp4|mkv|mov|mp3|m4a|ogg|wav|srt|json|html?)\b`)
 )
 
-// scrubLesson takes what could be about a user out of a text: links keep
-// their site, files their kind; emails, @names, phone numbers and ids go.
 func scrubLesson(s string) string {
 	s = scrubURLRe.ReplaceAllString(s, "https://$1/…")
 	s = scrubMailRe.ReplaceAllString(s, "<email>")
@@ -251,8 +230,6 @@ func scrubLesson(s string) string {
 	return scrubFileRe.ReplaceAllString(s, "<file>.$1")
 }
 
-// unsafeLessonWords are what a lesson must never be about: the instructions,
-// safety and secrecy, money and limits (a crafted job could try to teach those).
 var unsafeLessonWords = []string{"system prompt", "instructions", "ignore previous", "ignore the", "ignore your", "reveal", "jailbreak",
 	"bypass safety", "secret", "password", "api key", "admin", "free vip", "unlimited", "payment", "refund", "پرامپت", "دستورالعمل",
 	"نادیده بگیر", "رمز عبور", "ادمین", "رایگان"}
@@ -267,10 +244,8 @@ func unsafeLesson(s string) bool {
 	return false
 }
 
-// rebuildLessons writes the skill of a category from its approved lessons
-// (and removes it when none is left).
 func (b *Bot) rebuildLessons(ctx context.Context, category string) error {
-	if category == categoryAlways { // in every prompt, not in a skill
+	if category == categoryAlways {
 		b.forgetTeachings()
 		return nil
 	}
@@ -306,8 +281,6 @@ func (b *Bot) rebuildLessons(ctx context.Context, category string) error {
 	return sk.Save(name, desc, body.String(), category)
 }
 
-// applyLesson approves a lesson and writes it into its skill, keeping the
-// skill as it was before in the lesson log (undoLesson puts it back).
 func (b *Bot) applyLesson(ctx context.Context, id int64, x *store.Lesson) error {
 	before := b.shotOf(lessonSkill + x.Category)
 	if err := b.st.DecideLesson(ctx, id, store.LessonApproved); err != nil {
@@ -321,8 +294,6 @@ func (b *Bot) applyLesson(ctx context.Context, id int64, x *store.Lesson) error 
 	return err
 }
 
-// adoptLesson approves a lesson, writes it into its skill and tells the owners
-// with a button to take it back.
 func (b *Bot) adoptLesson(ctx context.Context, id int64, x *store.Lesson) {
 	if err := b.applyLesson(ctx, id, x); err != nil {
 		log.Printf("learning: %v", err)

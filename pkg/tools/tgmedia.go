@@ -12,12 +12,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// Telegram's own kinds of media: a voice message (OGG/Opus, mono, 48 kHz,
-// with a waveform in the chat), a round video message (square, at most a
-// minute) and videos small enough for the 50 MB upload limit. The file name
-// tells the bot how to send a file: "….voice.ogg" goes as a voice message,
-// "….round.mp4" as a video message; Telegram shows neither name.
-
 const (
 	VoiceSuffix = ".voice.ogg"
 	RoundSuffix = ".round.mp4"
@@ -27,7 +21,6 @@ const (
 	defaultTargetMB  = 45
 )
 
-// NativeKind tells how Telegram must receive a file: "voice", "video_note" or "".
 func NativeKind(name string) string {
 	l := strings.ToLower(name)
 	switch {
@@ -39,8 +32,6 @@ func NativeKind(name string) string {
 	return ""
 }
 
-// nativeName is the output name of a conversion: the stem asked for (or the
-// input's) with the suffix that marks the kind.
 func nativeName(out, in, suffix string) string {
 	base := sanitizeBase(out)
 	if base == "" {
@@ -101,10 +92,6 @@ func (r *Registry) mediaDone(sessionID, name, what string) (string, error) {
 	return fmt.Sprintf("Made %s: %s (%s). %s.", what, name, humanSize(info.Size()), SendNote), nil
 }
 
-// compressVideo re-encodes a video to fit targetMB: H.264 with a quality
-// target (CRF) capped by the bitrate the size allows, scaled down when that
-// bitrate is too low for full HD. A result still too big is encoded once
-// more, tighter.
 func (r *Registry) compressVideo(ctx context.Context, sessionID, in, out string, targetMB int) (string, error) {
 	info, err := r.Machine.Stat(sessionID, in)
 	if err != nil {
@@ -125,7 +112,7 @@ func (r *Registry) compressVideo(ctx context.Context, sessionID, in, out string,
 		name = strings.TrimSuffix(name, ".mp4") + "_small.mp4"
 	}
 	target := float64(targetMB) * 1024 * 1024
-	totalKbps := target * 8 / 1000 / dur * 0.94 // room for the container
+	totalKbps := target * 8 / 1000 / dur * 0.94
 	audio := 96.0
 	if totalKbps < 600 {
 		audio = 48

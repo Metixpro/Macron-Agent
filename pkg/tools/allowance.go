@@ -8,16 +8,9 @@ import (
 	"sync"
 )
 
-// What one request may make. Pictures (found, generated or edited) and
-// downloads (videos, songs, files) cost the server and the image services
-// the most, so a request gets what its tier allows: one that asks for 60
-// pictures gets a few, and the tools tell the model the rest is refused, so
-// it tells the user. Sub-agents share the request's allowance.
-
-// Allowance counts what a request has used; a zero limit is no limit.
 type Allowance struct {
-	Images    int // pictures
-	Downloads int // download_file and download_media_ytdlp files
+	Images    int
+	Downloads int
 
 	mu                sync.Mutex
 	images, downloads int
@@ -25,7 +18,6 @@ type Allowance struct {
 
 type allowanceKey struct{}
 
-// WithAllowance gives the tool calls under ctx a request's allowance.
 func WithAllowance(ctx context.Context, a *Allowance) context.Context {
 	return context.WithValue(ctx, allowanceKey{}, a)
 }
@@ -47,8 +39,6 @@ func (a *Allowance) counter(kind string) (limit int, used *int) {
 	return a.Downloads, &a.downloads
 }
 
-// take grants up to n of a kind; when it grants fewer, note says why, for
-// the model (what to tell the user).
 func take(ctx context.Context, kind string, n int) (granted int, note string) {
 	a := allowanceOf(ctx)
 	if a == nil || n <= 0 {
@@ -70,7 +60,6 @@ func take(ctx context.Context, kind string, n int) (granted int, note string) {
 	return granted, note
 }
 
-// giveBack returns what was granted and not used (a search that found fewer, a failed download).
 func giveBack(ctx context.Context, kind string, n int) {
 	a := allowanceOf(ctx)
 	if a == nil || n <= 0 {
@@ -82,7 +71,6 @@ func giveBack(ctx context.Context, kind string, n int) {
 	*used = max(*used-n, 0)
 }
 
-// firstItems keeps the first n items of a range list ("1-5,8", 3 → "1-3").
 func firstItems(items string, n int) string {
 	var out []string
 	for _, part := range strings.Split(items, ",") {
@@ -108,8 +96,6 @@ func firstItems(items string, n int) string {
 	return strings.Join(out, ",")
 }
 
-// oneImage runs a tool that makes one picture within the request's
-// allowance; a call that made none gives it back.
 func oneImage(h ToolHandler) ToolHandler {
 	return func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 		if n, note := take(ctx, kindImages, 1); n == 0 {
@@ -123,7 +109,6 @@ func oneImage(h ToolHandler) ToolHandler {
 	}
 }
 
-// oneDownload runs download_file within the request's allowance.
 func oneDownload(h ToolHandler) ToolHandler {
 	return func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 		if n, note := take(ctx, kindDownloads, 1); n == 0 {
@@ -131,7 +116,7 @@ func oneDownload(h ToolHandler) ToolHandler {
 		}
 		out, err := h(ctx, sessionID, args)
 		if first, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(out)), "\n"); err != nil || strings.Contains(first, "error") || strings.Contains(first, "failed") {
-			giveBack(ctx, kindDownloads, 1) // nothing was downloaded
+			giveBack(ctx, kindDownloads, 1)
 		}
 		return out, err
 	}

@@ -25,23 +25,13 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// search_image finds real photos: Bing Images first (everyday things, cars,
-// films, technology, anime, wallpapers), then the main pictures of the
-// Wikipedia articles about the query (in its own language: «برج میلاد»
-// finds the Persian article), Openverse (openly licensed photos) and
-// Wikimedia Commons (places, people, history). A query that is not in
-// English is asked again under the English names of those articles, since
-// the photo libraries search in English. Pictures are taken best
-// resolution first, checked to be real images of a useful size, and saved
-// as .jpg or .png (WebP is converted).
-
 const (
 	maxImageCount   = 6
 	imageMaxBytes   = 15 << 20
-	imageMinSide    = 400 // the longer side, in pixels
+	imageMinSide    = 400
 	imageGoodSide   = 1000
 	imageCandidates = 14
-	// imageFetchers pictures are downloaded at once, each within imageFetchTimeout.
+
 	imageFetchers     = 4
 	imageFetchTimeout = 15 * time.Second
 )
@@ -61,8 +51,8 @@ var (
 type imageHit struct {
 	url, title, page, source string
 	w, h                     int
-	score                    int // the query's words it carries
-	bonus                    int // a Wikipedia article named as the query is the thing itself
+	score                    int
+	bonus                    int
 }
 
 func (h imageHit) side() int { return max(h.w, h.h) }
@@ -80,10 +70,6 @@ func (r *Registry) searchImage(ctx context.Context, sessionID string, args map[s
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	// The engines are asked at once; a result counts only when its title or
-	// addresses carry the query's words (a search engine that distrusts the
-	// caller answers with anything) and nothing marks it as adult. The more
-	// of the words a result carries, the sooner it is tried.
 	var hits []imageHit
 	seen := map[string]bool{}
 	keep := func(results [][]imageHit, terms []string, strict bool) {
@@ -108,8 +94,7 @@ func (r *Registry) searchImage(ctx context.Context, sessionID string, args map[s
 		return h
 	}
 	keep(askImageEngines(ctx, query, r.bingImages, wiki, r.openverseImages, r.commonsImages), queryTerms(query), false)
-	// «برج میلاد» again as «Milad Tower», whole: the photo libraries search
-	// in English. The name comes from Wikipedia, or else from the model.
+
 	if nonLatinRe.MatchString(query) && len(hits) < count+imageCandidates/2 {
 		en := ""
 		if len(english) > 0 {
@@ -126,7 +111,7 @@ func (r *Registry) searchImage(ctx context.Context, sessionID string, args map[s
 		giveBack(ctx, kindImages, count)
 		return fmt.Sprintf("no image found for %q; try other words (English often finds more)", query), nil
 	}
-	// The best match first, then the sharpest, keeping each engine's own order among equals.
+
 	sharp := func(h imageHit) int {
 		switch {
 		case h.side() >= imageGoodSide || h.side() == 0:
@@ -152,10 +137,8 @@ func (r *Registry) searchImage(ctx context.Context, sessionID string, args map[s
 	}
 	base := outputName(strArg(args, "filename"), "photo_"+stem, imageExts, ".jpg")
 
-	// A few pictures are downloaded at once; a site that does not answer is
-	// not asked again.
 	var saved []string
-	got := map[[32]byte]bool{} // the same picture under two addresses comes once
+	got := map[[32]byte]bool{}
 	deadHost := map[string]bool{}
 	cands := hits[:min(len(hits), imageCandidates+count)]
 	for i := 0; i < len(cands) && len(saved) < count && ctx.Err() == nil; {
@@ -221,8 +204,6 @@ func (r *Registry) searchImage(ctx context.Context, sessionID string, args map[s
 	return out, nil
 }
 
-// sameName: an article's title is the query (a disambiguation in
-// parentheses aside): «حافظ» and «حافظ (شاعر)».
 func sameName(title, query string) bool {
 	norm := func(s string) string {
 		if i := strings.Index(s, " ("); i > 0 {
@@ -234,8 +215,6 @@ func sameName(title, query string) bool {
 	return t != "" && t == norm(query)
 }
 
-// englishQuery asks the model for an image search query in English (nil
-// model or no answer: "").
 func (r *Registry) englishQuery(ctx context.Context, query string) string {
 	if r.LLM == nil {
 		return ""
@@ -254,7 +233,6 @@ func (r *Registry) englishQuery(ctx context.Context, query string) string {
 	return en
 }
 
-// askImageEngines asks the engines at once; each gives its own list.
 func askImageEngines(ctx context.Context, query string, engines ...func(context.Context, string) []imageHit) [][]imageHit {
 	results := make([][]imageHit, len(engines))
 	var wg sync.WaitGroup
@@ -269,7 +247,6 @@ func askImageEngines(ctx context.Context, query string, engines ...func(context.
 	return results
 }
 
-// wikiPage is an article a Wikipedia search found.
 type wikiPage struct {
 	Index     int    `json:"index"`
 	Title     string `json:"title"`
@@ -284,10 +261,6 @@ type wikiPage struct {
 	} `json:"langlinks"`
 }
 
-// wikiImages takes the main pictures (≤2048 px) of the Wikipedia articles
-// a search for the query finds, in the query's own language (Persian and
-// Arabic script: the Persian Wikipedia), with the English titles of those
-// articles when the query is not in English.
 func (r *Registry) wikiImages(ctx context.Context, query string) (hits []imageHit, english []string) {
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
@@ -316,7 +289,7 @@ func (r *Registry) wikiImages(ctx context.Context, query string) (hits []imageHi
 		return nil, nil
 	}
 	pages := data.Query.Pages
-	slices.SortFunc(pages, func(a, b wikiPage) int { return a.Index - b.Index }) // the search's own order
+	slices.SortFunc(pages, func(a, b wikiPage) int { return a.Index - b.Index })
 	for _, p := range pages {
 		title := p.Title
 		if lang != "en" && len(p.LangLinks) > 0 && p.LangLinks[0].Title != "" {
@@ -325,7 +298,7 @@ func (r *Registry) wikiImages(ctx context.Context, query string) (hits []imageHi
 		}
 		low := strings.ToLower(p.Thumbnail.Source)
 		if p.Thumbnail.Source == "" || strings.HasSuffix(low, ".svg.png") || strings.Contains(low, "/flag_of") {
-			continue // a logo, map or flag drawn as SVG is not a photo
+			continue
 		}
 		h := imageHit{url: p.Thumbnail.Source, title: title, page: p.FullURL, source: "Wikipedia", w: p.Thumbnail.Width, h: p.Thumbnail.Height}
 		if sameName(p.Title, query) {
@@ -345,7 +318,6 @@ var (
 	adultWords = []string{"porn", "nude", "naked", "nsfw", "xxx", "sex", "erotic", "hentai", "onlyfans", "masturbat", "fetish", "lingerie", "playboy"}
 )
 
-// queryTerms are the words of a query that should show in a matching result.
 func queryTerms(q string) []string {
 	var terms []string
 	for _, w := range termSplitRe.Split(strings.ToLower(q), -1) {
@@ -357,12 +329,10 @@ func queryTerms(q string) []string {
 	return terms
 }
 
-// relevantHit: at least half the terms (one of one or two) in the title or the addresses.
 func relevantHit(h imageHit, terms []string) bool {
 	return matchedTerms(h, terms) >= (len(terms)+1)/2
 }
 
-// matchedTerms counts the terms in a result's title or addresses.
 func matchedTerms(h imageHit, terms []string) int {
 	if len(terms) == 0 {
 		return 0
@@ -377,7 +347,7 @@ func matchedTerms(h imageHit, terms []string) int {
 	}
 	n := 0
 	for _, t := range terms {
-		if words[t] || (len([]rune(t)) >= 5 && strings.Contains(hay, t)) { // short words and numbers only whole
+		if words[t] || (len([]rune(t)) >= 5 && strings.Contains(hay, t)) {
 			n++
 		}
 	}
@@ -394,8 +364,6 @@ func adultHit(h imageHit) bool {
 	return false
 }
 
-// downloadImage fetches a picture: nil when it is not one (an error page,
-// too small or too big); dead when the site did not answer at all.
 func (r *Registry) downloadImage(ctx context.Context, src string) (data []byte, dead bool) {
 	ctx, cancel := context.WithTimeout(ctx, imageFetchTimeout)
 	defer cancel()
@@ -420,8 +388,6 @@ func (r *Registry) downloadImage(ctx context.Context, src string) (data []byte, 
 	return data, false
 }
 
-// saveImage keeps a downloaded picture only when it is a real JPEG, PNG or
-// WebP of a useful size, and saves it as .jpg or .png.
 func (r *Registry) saveImage(ctx context.Context, sessionID string, data []byte, name string) (string, int, int, int64, bool) {
 	stem := strings.TrimSuffix(name, path.Ext(name))
 	switch {
@@ -432,7 +398,7 @@ func (r *Registry) saveImage(ctx context.Context, sessionID string, data []byte,
 	case len(data) > 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
 		return r.webpToJPEG(ctx, sessionID, data, stem+".jpg")
 	default:
-		return "", 0, 0, 0, false // HTML, SVG, GIF, an error page…
+		return "", 0, 0, 0, false
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || max(cfg.Width, cfg.Height) < imageMinSide {
@@ -451,7 +417,6 @@ func hostOf(raw string) string {
 	return raw
 }
 
-// webpToJPEG converts a WebP picture with ffmpeg here.
 func (r *Registry) webpToJPEG(ctx context.Context, sessionID string, data []byte, name string) (string, int, int, int64, bool) {
 	tmp := scratchDir + "/" + strings.TrimSuffix(path.Base(name), ".jpg") + ".webp"
 	if r.Machine.WriteFile(sessionID, tmp, data) != nil {
@@ -477,7 +442,6 @@ func (r *Registry) webpToJPEG(ctx context.Context, sessionID string, data []byte
 	return name, cfg.Width, cfg.Height, int64(len(out)), true
 }
 
-// bingImages reads Bing's image results page (no key needed), safe search on.
 func (r *Registry) bingImages(ctx context.Context, query string) []imageHit {
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
@@ -488,7 +452,7 @@ func (r *Registry) bingImages(ctx context.Context, query string) []imageHit {
 	}
 	req.Header.Set("User-Agent", browserUA)
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Cookie", "SRCHHPGUSR=ADLT=STRICT") // safe search, as the site keeps it
+	req.Header.Set("Cookie", "SRCHHPGUSR=ADLT=STRICT")
 	resp, err := r.HTTP.Do(req)
 	if err != nil {
 		return nil
@@ -524,7 +488,6 @@ func (r *Registry) bingImages(ctx context.Context, query string) []imageHit {
 	return hits
 }
 
-// openverseImages asks Openverse (openly licensed photos, no key needed).
 func (r *Registry) openverseImages(ctx context.Context, query string) []imageHit {
 	var data struct {
 		Results []struct {
@@ -547,7 +510,6 @@ func (r *Registry) openverseImages(ctx context.Context, query string) []imageHit
 	return hits
 }
 
-// commonsImages searches Wikimedia Commons, taking renditions of at most 2048 px.
 func (r *Registry) commonsImages(ctx context.Context, query string) []imageHit {
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
@@ -600,7 +562,7 @@ func (r *Registry) commonsImages(ctx context.Context, query string) []imageHit {
 		index[h.url] = p.Index
 		ordered = append(ordered, h)
 	}
-	for i := 1; i < len(ordered); i++ { // the search's own order
+	for i := 1; i < len(ordered); i++ {
 		for j := i; j > 0 && index[ordered[j].url] < index[ordered[j-1].url]; j-- {
 			ordered[j], ordered[j-1] = ordered[j-1], ordered[j]
 		}

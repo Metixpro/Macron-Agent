@@ -8,18 +8,6 @@ import (
 	"sync"
 )
 
-// Notes is a markdown file of short facts, one per bullet line:
-//
-//	# USER.md — what the agent knows about its owner
-//	Edit freely…
-//
-//	- Lives in Mashhad
-//	- Prefers short answers
-//
-// Only the bullet lines are facts; every other line (the title, a comment of
-// the owner, a heading) is kept as it is. A fact's number is its place among
-// the bullets, so it changes when the owner edits the file by hand: the agent
-// is always shown the numbers it has to use right now.
 type Notes struct {
 	Path  string
 	Title string
@@ -28,13 +16,11 @@ type Notes struct {
 	mu sync.Mutex
 }
 
-// Entry is one fact.
 type Entry struct {
-	ID   int // 1-based place among the bullets
+	ID   int
 	Text string
 }
 
-// Errors.
 var (
 	ErrFull    = errors.New("the notes are full")
 	ErrTooLong = errors.New("the file is too long")
@@ -69,7 +55,6 @@ func bulletText(line string) string {
 	return strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(t, "-"), "*"))
 }
 
-// List returns the facts in the file's order.
 func (n *Notes) List() ([]Entry, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -92,7 +77,6 @@ func (n *Notes) list() ([]Entry, error) {
 	return out, nil
 }
 
-// oneLine makes a fact fit a bullet.
 func oneLine(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	r := []rune(s)
@@ -102,8 +86,6 @@ func oneLine(s string) string {
 	return s
 }
 
-// Add appends a fact. A fact that is in the file already is not added twice
-// (its number is returned, existed is true).
 func (n *Notes) Add(text string) (id int, existed bool, err error) {
 	text = oneLine(text)
 	if text == "" {
@@ -134,7 +116,6 @@ func (n *Notes) Add(text string) (id int, existed bool, err error) {
 	return len(entries) + 1, false, nil
 }
 
-// Replace changes fact id; it reports false when there is no such fact.
 func (n *Notes) Replace(id int, text string) (bool, error) {
 	text = oneLine(text)
 	if text == "" {
@@ -143,7 +124,6 @@ func (n *Notes) Replace(id int, text string) (bool, error) {
 	return n.edit(id, func(string) (string, bool) { return "- " + text, true })
 }
 
-// Delete removes fact id; it reports false when there is no such fact.
 func (n *Notes) Delete(id int) (bool, error) {
 	return n.edit(id, func(string) (string, bool) { return "", false })
 }
@@ -174,7 +154,6 @@ func (n *Notes) edit(id int, f func(old string) (string, bool)) (bool, error) {
 	return false, nil
 }
 
-// Clear removes every fact (the title and the owner's other lines stay).
 func (n *Notes) Clear() (int, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -193,7 +172,6 @@ func (n *Notes) Clear() (int, error) {
 	return removed, n.write(kept)
 }
 
-// Raw is the whole file.
 func (n *Notes) Raw() string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -201,9 +179,6 @@ func (n *Notes) Raw() string {
 	return string(data)
 }
 
-// Replace the whole file (the owner sent a new one). The facts are kept
-// within the limits: more than MaxEntries bullets, or a file longer than
-// MaxFileChars, is refused.
 func (n *Notes) SetRaw(text string) error {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	if len([]rune(text)) > MaxFileChars {

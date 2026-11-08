@@ -80,7 +80,6 @@ func TestCookiePoolInThePanel(t *testing.T) {
 		}
 	}
 
-	// Picks rotate between the YouTube accounts; a blocked one rests.
 	p := h.bot.cookies
 	a, _ := p.Pick("youtube.com", nil)
 	b, _ := p.Pick("www.youtube.com", nil)

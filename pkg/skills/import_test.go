@@ -65,7 +65,6 @@ func TestImportZipWithAttachments(t *testing.T) {
 		t.Fatalf("attachment: %q %v", got, err)
 	}
 
-	// Importing again replaces the skill; nothing temporary is left behind.
 	res, err = s.ImportZip(makeZip(t, map[string]string{"arxiv/SKILL.md": "---\ndescription: Search arXiv, v2.\ncategory: science\n---\nnew"}))
 	if err != nil || len(res.Imported) != 1 {
 		t.Fatalf("%+v %v", res, err)
@@ -141,7 +140,6 @@ func makeTarGz(t *testing.T, files map[string]string, gz bool) []byte {
 	return buf.Bytes()
 }
 
-// A tar.gz of several skills brings every one, with its scripts and templates.
 func TestImportTarGzOfSeveralSkills(t *testing.T) {
 	root := t.TempDir()
 	s := open(t, root)

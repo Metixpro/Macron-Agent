@@ -17,7 +17,7 @@ func TestPersianLaysOutRightToLeft(t *testing.T) {
 
 	html := "VIP فعال است\nسطح: VIP\nلغو با /cancel"
 	h.bot.sendHTML(ctx, faUser, html, telegram.SendOptions{})
-	h.bot.sendHTML(ctx, enUser, html, telegram.SendOptions{}) // an English reader: left as it is
+	h.bot.sendHTML(ctx, enUser, html, telegram.SendOptions{})
 	h.bot.sendHTML(ctx, -100601, "VIP برای همه\nیه گروه فارسی", telegram.SendOptions{})
 	h.bot.sendHTML(ctx, -100602, "Sent to the group of علی", telegram.SendOptions{})
 	_ = h.bot.editHTML(ctx, faUser, 5, "Free رایگان است", nil)

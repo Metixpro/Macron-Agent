@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// Exercise the Telegram callback dispatcher, not just the view builders.
 func TestNewPanelNavigationAndBack(t *testing.T) {
 	h := newHarness(t)
 	withRelease(t, fakeGitHub(t, "99.0.0", false))

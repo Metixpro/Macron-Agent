@@ -7,8 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// A long read stays under the output limit (which would cut its middle out)
-// and says where to go on: the next read starts at the first line not shown.
 func TestLongReadsFitAndGoOn(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	var sb strings.Builder
@@ -38,7 +36,6 @@ func TestLongReadsFitAndGoOn(t *testing.T) {
 		t.Errorf("the range starts where the read stopped and says where to go on:\n%s", out[:200])
 	}
 
-	// One huge line (a minified file) is shortened, not the whole read.
 	if err := r.Machine.WriteFile("f", "min.js", []byte("var a=1;"+strings.Repeat("b()", 20000)+"\nend\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +69,6 @@ func TestPDFTextKeepsWholePages(t *testing.T) {
 	}
 }
 
-// A model that sends a file's content as JSON gets that JSON written.
 func TestWriteFileWithJSONContent(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	call(t, r, "w", "write_file", map[string]any{"filename": "data.json", "content": map[string]any{"name": "Ali", "tags": []string{"a&b"}}})

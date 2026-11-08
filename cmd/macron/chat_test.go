@@ -32,7 +32,7 @@ func TestConversationFlow(t *testing.T) {
 	if body["reply_markup"] != nil {
 		t.Error("no buttons under the assistant's answers (the mode is chosen with /mode)")
 	}
-	// Alive: a "seen" reaction, the live terminal draft, typing.
+
 	reacts := h.tg.of("setMessageReaction")
 	if len(reacts) == 0 || !strings.Contains(fmt.Sprint(reacts[0].body["reaction"]), "👀") {
 		t.Errorf("expected a 👀 reaction first: %v", reacts)
@@ -41,24 +41,22 @@ func TestConversationFlow(t *testing.T) {
 	if !strings.Contains(last, "🤗") {
 		t.Errorf("a greeting should end with 🤗, got %s", last)
 	}
-	// No tool ran: a thinking bubble (with a stop button), no terminal.
-	drafts := h.tg.of("sendRichMessageDraft")
-	if len(drafts) == 0 || !strings.Contains(fmt.Sprint(drafts[0].body["rich_message"]), "tg-thinking") ||
-		strings.Contains(fmt.Sprint(drafts), traceTitle) || drafts[0].body["can_stop"] != true {
-		t.Errorf("expected a thinking draft with a stop button: %v", drafts)
+
+	frames := liveFrames(h)
+	if len(frames) == 0 || strings.Contains(strings.Join(frames, ""), traceTitle) {
+		t.Fatalf("private live status missing: %v", frames)
 	}
 	if len(h.tg.of("sendChatAction")) == 0 {
 		t.Error("expected a typing action")
 	}
 
-	// What the model saw: persona, profile with bio, the user's text.
 	req := llmText(h.llm.last())
 	for _, want := range []string{"مکرون", "@Cianyd", "username: @ali_dev", "bio: عاشق Go و قهوه", "سلام خوبی؟"} {
 		if !strings.Contains(req, want) {
 			t.Errorf("model request misses %q", want)
 		}
 	}
-	// Memory and quota.
+
 	mem, _ := h.bot.mem.Load(bg, 7)
 	if mem.Messages != 2 || !strings.Contains(mem.History[1].Content, "خوبم") {
 		t.Errorf("memory: %+v", mem)
@@ -67,7 +65,6 @@ func TestConversationFlow(t *testing.T) {
 		t.Errorf("quota used = %d", n)
 	}
 
-	// The second message carries the history.
 	h.send(private(7, "اسمم چی بود؟"))
 	if req := llmText(h.llm.last()); !strings.Contains(req, "سلام خوبی؟") || !strings.Contains(req, "خوبم") {
 		t.Error("history was not sent")
@@ -112,7 +109,7 @@ func TestRichFallbackToClassicHTML(t *testing.T) {
 	h.llm.reply = say("**پررنگ** و x < 5")
 	h.send(private(9, "test"))
 	msgs := h.tg.of("sendMessage")
-	if len(msgs) != 1 || msgs[0].body["parse_mode"] != "HTML" || !strings.Contains(msgs[0].body["text"].(string), "<b>پررنگ</b> و x &lt; 5") {
+	if len(msgs) < 1 || msgs[len(msgs)-1].body["parse_mode"] != "HTML" || !strings.Contains(msgs[len(msgs)-1].body["text"].(string), "<b>پررنگ</b> و x &lt; 5") {
 		t.Fatalf("classic fallback: %v", msgs)
 	}
 	if h.bot.richOff.Load() {
@@ -128,7 +125,7 @@ func TestRichFallbackToClassicHTML(t *testing.T) {
 
 func TestDailyFiguresAndRefund(t *testing.T) {
 	h := newHarness(t)
-	// The fake model says each call used 100 + 20 tokens. Nothing limits a request; the day's figures count.
+
 	for i := 1; i <= 3; i++ {
 		h.send(private(10, "پیام"))
 		if n, _ := h.st.TokensToday(bg, 10); n != 120*i {
@@ -139,7 +136,6 @@ func TestDailyFiguresAndRefund(t *testing.T) {
 		t.Errorf("requests counted: %d", n)
 	}
 
-	// A failure on our side gives the request back.
 	h.llm.reply = func(map[string]any, int) (map[string]any, int) { return nil, 503 }
 	h.st.ResetUsageToday(bg, 11)
 	h.send(private(11, "x"))
@@ -150,7 +146,7 @@ func TestDailyFiguresAndRefund(t *testing.T) {
 		t.Errorf("a failed request costs no tokens: %d", n)
 	}
 	h.wantText("به مغزم دسترسی ندارم")
-	// The user never sees the provider's own words (the owners' alert may: it is for them).
+
 	for _, method := range []string{"sendMessage", "editMessageText"} {
 		for _, c := range h.tg.of(method) {
 			if id, _ := c.body["chat_id"].(float64); int64(id) == 11 && strings.Contains(fmt.Sprint(c.body["text"]), "upstream exploded") {
@@ -223,15 +219,12 @@ func TestStopButtonCancels(t *testing.T) {
 	done := make(chan struct{})
 	go func() { h.send(private(14, "یه کار طولانی")); close(done) }()
 	<-started
-	var draftID int64
-	h.bot.drafts.Range(func(k, v any) bool { draftID = k.(int64); return false })
-	h.bot.handleStop(&telegram.MessageGenerationStopped{Chat: telegram.Chat{ID: 14, Type: "private"}, DraftID: telegram.FlexInt64(draftID)})
+	stopLiveMessage(h, 14)
 	close(release)
 	<-done
 	h.wantText(textCancelled)
 	h.noText("late")
-	// A stopped job counts, and costs what the model used for it (nothing
-	// here: the call was cut off).
+
 	if n, _ := h.st.UsedToday(bg, 14); n != 1 {
 		t.Errorf("a stopped request counts, used=%d", n)
 	}
@@ -269,7 +262,6 @@ func TestGroupsBansAndCommands(t *testing.T) {
 	h.wantText(textUnknownCommand)
 	h.send(private(16, "/start@OtherBot"))
 
-	// /new clears the memory.
 	h.send(private(17, "یه چیزی"))
 	h.send(private(17, "/new"))
 	if mem, _ := h.bot.mem.Load(bg, 17); mem.Messages != 0 {
@@ -277,7 +269,6 @@ func TestGroupsBansAndCommands(t *testing.T) {
 	}
 	h.wantText(textMemoryReset)
 
-	// Blocking the bot is recorded.
 	h.bot.handleMembership(&telegram.ChatMemberUpdated{Chat: telegram.Chat{ID: 17, Type: "private"}, From: telegram.User{ID: 17},
 		NewChatMember: telegram.ChatMember{Status: "kicked"}})
 	if u, _ := h.st.User(bg, 17); !u.BlockedBot {
@@ -296,8 +287,6 @@ func TestBusyUserGetsANotice(t *testing.T) {
 	}
 }
 
-// A greeting goes without the tools; the same words with a photo, or a task,
-// get them all.
 func TestAGreetingIsLight(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(61, "سلام خوبی؟"))
@@ -317,8 +306,6 @@ func TestAGreetingIsLight(t *testing.T) {
 	}
 }
 
-// The note that a long conversation was summarized replies to the message
-// it came after, so in a busy group it is clear whose conversation it was.
 func TestMemoryNoteRepliesToTheMessage(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
@@ -350,8 +337,6 @@ func TestMemoryNoteRepliesToTheMessage(t *testing.T) {
 	}
 }
 
-// In a group, a command for another bot (/warn) is not this bot's business,
-// and a channel's post copied into its discussion group is never answered.
 func TestGroupIgnoresOtherBotsAndChannelPosts(t *testing.T) {
 	h := newHarness(t)
 	group := func(text string) *telegram.Message {

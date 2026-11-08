@@ -9,7 +9,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// apiShort names a wire format on a button.
 func apiShort(api string) string {
 	switch api {
 	case llm.APIAnthropic:
@@ -20,7 +19,6 @@ func apiShort(api string) string {
 	return "OpenAI"
 }
 
-// msWord writes a latency: 850ms, 1.2s.
 func msWord(l lang, ms int) string {
 	if ms < 1000 {
 		return l.num(ms) + "ms"
@@ -32,7 +30,6 @@ func msWord(l lang, ms int) string {
 	return s + "s"
 }
 
-// chunkButtons lays buttons out n to a row.
 func chunkButtons(btns []telegram.InlineKeyboardButton, n int) [][]telegram.InlineKeyboardButton {
 	var rows [][]telegram.InlineKeyboardButton
 	for len(btns) > 0 {
@@ -43,7 +40,6 @@ func chunkButtons(btns []telegram.InlineKeyboardButton, n int) [][]telegram.Inli
 	return rows
 }
 
-// tokenWord writes a number of tokens shortly: ۸۰۰، ۱۲۰ هزار، ۲٫۵ میلیون (800, 120k, 2.5M).
 func tokenWord(l lang, n int) string {
 	short := func(v float64) string {
 		s := strconv.FormatFloat(math.Round(v*10)/10, 'f', -1, 64)

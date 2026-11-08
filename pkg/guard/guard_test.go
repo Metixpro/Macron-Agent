@@ -45,7 +45,7 @@ func TestGate(t *testing.T) {
 		t.Fatal("capacity should be reached")
 	}
 	rel1()
-	rel1() // idempotent
+	rel1()
 	if _, why := g.TryAcquire("c"); why != Acquired {
 		t.Fatal("slot should be free after release")
 	}
@@ -71,7 +71,7 @@ func TestGateQueueAndReservedSlots(t *testing.T) {
 	if why != Acquired {
 		t.Fatal("High takes the reserved slot")
 	}
-	// Full: a Normal and then a High wait; the High is served first.
+
 	order := make(chan string, 2)
 	wait := func(key string, prio Priority) {
 		r, why := g.Acquire(ctx, key, prio, 5*time.Second, nil)
@@ -112,7 +112,7 @@ func TestGateQueueAndReservedSlots(t *testing.T) {
 		t.Errorf("then Normal, got %s", second)
 	}
 	r3()
-	// A wait that runs out leaves the queue.
+
 	h1, _ := g.Acquire(ctx, "x", High, 0, nil)
 	h2, _ := g.Acquire(ctx, "y", High, 0, nil)
 	h3, _ := g.Acquire(ctx, "z", High, 0, nil)

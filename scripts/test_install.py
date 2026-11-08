@@ -35,7 +35,7 @@ class InstallerTests(unittest.TestCase):
         )
 
     def test_help_works_when_piped(self):
-        # curl … | bash: $0 is "bash", so the help cannot be read from the file.
+
         result = subprocess.run(["bash", "-s", "--", "--help"], input=INSTALLER.read_text(),
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -46,7 +46,7 @@ class InstallerTests(unittest.TestCase):
         result = self.install("echo 'macron 9.9.9'", "--yes")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("updated old → 9.9.9", result.stdout)
-        self.assertIn("macron setup", result.stdout)  # no settings yet: the exact next command
+        self.assertIn("macron setup", result.stdout)
 
     def test_default_tools_survive_old_python(self):
         stubs = self.root / "stubs"
@@ -61,7 +61,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("older than 3.12", result.stderr)
         self.assertIn("uv python install", result.stdout)
-        # An explicit --tools insists.
+
         result = self.install("echo 'macron 9.9.9'", "--tools", env={"PATH": f"{stubs}:{os.environ['PATH']}"}, tools=True)
         self.assertNotEqual(result.returncode, 0)
 

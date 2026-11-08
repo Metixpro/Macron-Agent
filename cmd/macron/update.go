@@ -14,25 +14,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/updater"
 )
 
-// /update in the chat: the newest release is looked up, its changelog shown
-// with [+] update; once approved it is downloaded, checked against
-// SHA256SUMS, tried in a staging folder, put in place atomically, and the
-// service restarted from outside this process (so the answer is sent
-// first). The new process says it is back, with its version and uptime. A
-// failed step leaves the installed program as it was and says why.
-//
-// Once a day the newest release is looked up, and each new version is told
-// to the owners once («[!] vX is out — /update»); update_notice turns it off.
-
 const (
-	settingUpdateNotice   = "update_notice"     // the daily notice (on)
-	settingUpdateNotified = "update_notified"   // the last version told
-	settingUpdateChecked  = "update_checked_at" // when it was last looked up (RFC3339)
-	settingUpdatePending  = "update_pending"    // the update in flight, for the report after the restart
+	settingUpdateNotice   = "update_notice"
+	settingUpdateNotified = "update_notified"
+	settingUpdateChecked  = "update_checked_at"
+	settingUpdatePending  = "update_pending"
 	updateCheckEvery      = 24 * time.Hour
 )
 
-// restartLater restarts the service from outside (a variable for the tests).
 var restartLater = updater.RestartLater
 
 type updatePending struct {
@@ -41,7 +30,6 @@ type updatePending struct {
 	From    string `json:"from"`
 }
 
-// updateView looks the newest release up and says what is there.
 func (b *Bot) updateView(ctx context.Context, l lang, back string) panelView {
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -62,7 +50,6 @@ func (b *Bot) updateView(ctx context.Context, l lang, back string) panelView {
 	return panelView{html: html, kb: keyboard(row(b.button(l.t("[+] آپدیت کن"), "up:go:"+rel.TagName, telegram.StyleSuccess), b.back(l, back)))}
 }
 
-// handleUpdateCallback runs the update the owner approved: up:go:TAG.
 func (b *Bot) handleUpdateCallback(ctx context.Context, q *telegram.CallbackQuery, answer func(string, bool)) {
 	l := b.langOf(&q.From)
 	if !b.isOwner(q.From.ID) || q.Message == nil {
@@ -128,7 +115,6 @@ func (b *Bot) handleUpdateCallback(ctx context.Context, q *telegram.CallbackQuer
 	}()
 }
 
-// reportUpdate is said by the new process: the update it came from.
 func (b *Bot) reportUpdate(ctx context.Context) {
 	raw, ok := b.st.Setting(settingUpdatePending)
 	if !ok || raw == "" {
@@ -147,8 +133,6 @@ func (b *Bot) reportUpdate(ctx context.Context) {
 	b.sendHTML(ctx, p.Chat, l.f("[+] آپدیت شد به <b>v%s</b> · سرویس فعال · uptime %ss", esc(app.Version), l.num(int(time.Since(b.started).Seconds()))), telegram.SendOptions{})
 }
 
-// runUpdateNotices looks for a new release once a day and tells the owners
-// once per version.
 func (b *Bot) runUpdateNotices(ctx context.Context) {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()

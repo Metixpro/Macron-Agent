@@ -4,13 +4,10 @@ VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' pkg/app/app.go)
 GOFLAGS_REL := -buildvcs=false -trimpath -ldflags "-s -w"
 PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 darwin/amd64
 
-# One static program, no cgo: it runs on any machine of the same system and CPU.
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build $(GOFLAGS_REL) -o bin/macron ./cmd/macron
 
-# The release files: dist/macron-<version>-<os>-<arch>.tar.gz for each platform
-# and dist/SHA256SUMS (what «macron update» and install.sh check).
 release:
 	mkdir -p dist
 	for p in $(PLATFORMS); do \
@@ -18,6 +15,7 @@ release:
 		mkdir -p dist/$$name; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(GOFLAGS_REL) -o dist/$$name/macron ./cmd/macron || exit 1; \
 		cp README.md README.en.md config.env.example requirements-tools.txt requirements-browser-agent.txt requirements-tools.lock requirements-browser-agent.lock dist/$$name/; \
+		cp -R assets dist/$$name/; \
 		tar -C dist -czf dist/$$name.tar.gz $$name; \
 	done
 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS

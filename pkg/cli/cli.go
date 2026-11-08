@@ -1,5 +1,3 @@
-// Package cli is what the macron program does besides running the agent:
-// setting it up, checking it, keeping it alive as a service and updating it.
 package cli
 
 import (
@@ -15,18 +13,16 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
-// IO is where the commands read from and write to (replaced in tests).
 type IO struct {
 	In  *bufio.Reader
 	Out io.Writer
 	Err io.Writer
-	// Secret reads a line without showing it (a terminal), or normally.
+
 	Secret func(prompt string) (string, error)
-	// Interactive says whether a person answers (a terminal).
+
 	Interactive bool
 }
 
-// Std is the real terminal.
 func Std() *IO {
 	io := &IO{In: bufio.NewReader(os.Stdin), Out: os.Stdout, Err: os.Stderr,
 		Interactive: term.IsTerminal(int(os.Stdin.Fd()))}
@@ -46,7 +42,6 @@ func Std() *IO {
 func (io *IO) printf(format string, a ...any) { fmt.Fprintf(io.Out, format, a...) }
 func (io *IO) println(a ...any)               { fmt.Fprintln(io.Out, a...) }
 
-// ask prints a question with a default and returns the answer.
 func (io *IO) ask(question, def string) string {
 	if def != "" {
 		io.printf("%s [%s]: ", question, def)
@@ -97,8 +92,6 @@ Everything the agent is lives in one folder: %s
   config.env                    settings and keys (readable by you only)
 `
 
-// Run runs a command. It reports false when args are not a command (the
-// agent starts). code is the exit status of a command.
 func Run(args []string, io *IO) (handled bool, code int) {
 	if len(args) == 0 {
 		return false, 0
@@ -130,7 +123,7 @@ func Run(args []string, io *IO) (handled bool, code int) {
 	case "start", "run":
 		return false, 0
 	}
-	if strings.HasPrefix(cmd, "-") { // a flag of the agent: -db, -check…
+	if strings.HasPrefix(cmd, "-") {
 		return false, 0
 	}
 	io.printf("macron: unknown command %q\n\n", cmd)

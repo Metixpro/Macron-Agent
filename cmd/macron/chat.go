@@ -44,38 +44,31 @@ var (
 	errWorkspaceFull = errors.New("the workspace is full")
 )
 
-// promptOptions changes how one request is handled.
 type promptOptions struct {
-	free     bool             // does not count against the daily limit (an automatic continuation, a poll vote)
-	vote     bool             // a poll vote: on a VIP demo it takes a demo request, never a free ride
-	noReact  bool             // no reactions (m is the bot's own message)
-	about    string           // extra context for the model
-	resume   *agent.Suspended // a poll's answer: the job that asked, as it stopped
-	noMemory bool             // no conversation history, nothing remembered (scheduled tasks)
-	schedule *store.Schedule  // run as this scheduled task
-	prefix   string           // put before the answer (the title of a scheduled task)
-	noFlood  bool             // the flood limit was already checked (a message sent during a job)
-	moa      string           // a multi-model preset for this request only (moa.go)
-	pending  []*interjection  // messages that join this request at its first step
-	tier     tierID           // the tier the first round ran on (a continuation keeps it)
-	job      *jobTracker      // auto-continue: the job the first round started (see openjob.go)
-	bg       *bgRun           // run as this background task (see bgtasks.go)
+	free     bool
+	vote     bool
+	noReact  bool
+	about    string
+	resume   *agent.Suspended
+	noMemory bool
+	schedule *store.Schedule
+	prefix   string
+	noFlood  bool
+	moa      string
+	pending  []*interjection
+	tier     tierID
+	job      *jobTracker
+	bg       *bgRun
 }
 
-// errNotDone reports a request that ended without an answer (busy, quota,
-// model down…); the user was already told why.
 var errNotDone = errors.New("request not completed")
 
-// responder delivers what one request produces: as messages in the chat
-// (replying to the user's message when there is one), or, for a guest query,
-// as its single answer.
 type responder struct {
 	b       *Bot
 	m       *telegram.Message
 	guestID string
 }
 
-// notice sends a short system text (busy, limit, error…).
 func (r *responder) notice(ctx context.Context, html string) {
 	if r.guestID != "" {
 		r.b.answerGuestHTML(ctx, r.guestID, html, nil)
@@ -84,7 +77,6 @@ func (r *responder) notice(ctx context.Context, html string) {
 	r.b.sendHTML(ctx, r.m.Chat.ID, html, telegram.SendOptions{ReplyTo: r.m.MessageID})
 }
 
-// answer sends the assistant's Markdown answer.
 func (r *responder) answer(ctx context.Context, md string) {
 	if r.guestID != "" {
 		r.b.answerGuestMarkdown(ctx, r.guestID, md, r.b.langOf(r.m.From))
@@ -93,40 +85,32 @@ func (r *responder) answer(ctx context.Context, md string) {
 	r.b.sendAnswer(ctx, r.m, md)
 }
 
-// promptOutcome is what a round of a request leaves for the next one.
 type promptOutcome struct {
-	leftovers []*interjection // messages that came after the answer
-	tier      tierID          // the tier it ran on
-	job       *jobTracker     // the job as written down (nil: not tracked)
+	leftovers []*interjection
+	tier      tierID
+	job       *jobTracker
 }
 
-// answerSendBudget is the time to deliver an answer once the work is done (a
-// variable for the tests).
 var answerSendBudget = 5 * time.Minute
 
-// handlePrompt answers one request; the messages the user sent after the
-// answer was written are handled right after it. A long job does not stop
-// at a fixed budget: the agent extends it while the work makes progress
-// (see agentExtensions).
 func (b *Bot) handlePrompt(u *store.User, m *telegram.Message, text string, opt promptOptions) error {
 	if b.personal && !m.Chat.Private() {
 		return errNotDone
 	}
 	out, err := b.runPrompt(u, m, text, opt)
-	// Whatever ended it, the job never stays "running" (a no-op once it ended).
+
 	defer func() { out.job.interrupt(store.JobFailed) }()
 	b.followUp(u, out.leftovers)
 	return err
 }
 
-// runPrompt runs a request.
 func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt promptOptions) (out promptOutcome, _ error) {
 	uid := u.ID
 	admin := b.isAdmin(uid)
 	key := strconv.FormatInt(uid, 10)
 	scheduled := opt.schedule != nil
 	bg := opt.bg != nil
-	detached := scheduled || bg // runs on its own: nobody waits on it in the chat
+	detached := scheduled || bg
 	guest := m.GuestQueryID != ""
 	resp := &responder{b: b, m: m, guestID: m.GuestQueryID}
 	l := b.langOf(m.From)
@@ -143,15 +127,14 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		}
 	}
 	if !detached && !opt.vote {
-		b.noteRequest(nctx, uid, m.Chat.ID, text) // a complaint about the last answer, or the same request again
+		b.noteRequest(nctx, uid, m.Chat.ID, text)
 	}
 	st := standing{tier: tierOwner}
-	// The triage starts now, beside the queue and the checks below: its
-	// decision is ready by the time the request needs it (triage.go).
+
 	tc := b.startTriage(uid, m, text, !detached && !opt.vote)
 	var release func()
 	if detached {
-		// A scheduled or background task never blocks its owner, and waits for a free slot.
+
 		slot := fmt.Sprintf("bg-%d", opt.bg.taskID())
 		if scheduled {
 			slot = fmt.Sprintf("sched-%d", opt.schedule.ID)
@@ -169,8 +152,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		release, why = b.acquireQueued(key, resp, l)
 		switch why {
 		case guard.KeyBusy:
-			// The job that holds the key may still be starting (not yet open to
-			// messages): by now it is, and this message joins it.
+
 			if !opt.vote && b.interject(u, m, text) {
 				return promptOutcome{}, errNotDone
 			}
@@ -188,9 +170,8 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	out.tier, opt.tier = st.tier, st.tier
 	conf := b.tier(st.tier)
 	window := b.windowOf(st)
-	acc := &providers.Account{UserID: uid, Tier: string(st.tier)} // every model call of the request is metered on it
-	// The day's figures (the stats): a new request counts, and gives itself
-	// back when the agent failed on its own side; the tokens it used are added.
+	acc := &providers.Account{UserID: uid, Tier: string(st.tier)}
+
 	counted := !opt.free
 	refund := false
 	if counted {
@@ -218,18 +199,17 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 
 	maxSteps, runTimeout := b.agentBudget()
 	if bg {
-		maxSteps, runTimeout = bgBudget(maxSteps, runTimeout) // a long job, on its own
+		maxSteps, runTimeout = bgBudget(maxSteps, runTimeout)
 	}
-	// Fast mode: one round of light tools, then the answer (scheduled and
-	// background tasks always get the full agent).
+
 	mctx, mcancel := b.ctx(5 * time.Second)
 	fast := !detached && b.fastMode(mctx, uid)
 	mcancel()
 	if fast {
 		maxSteps = fastSteps
 	}
-	routed := b.route(b.jobCtx, st.tier) // the provider requests go to first
-	// A hard request goes to the tier's strong model (modelroute.go).
+	routed := b.route(b.jobCtx, st.tier)
+
 	var rt *modelRoute
 	var triaged func() (*router.Verdict, bool)
 	if tc != nil {
@@ -246,21 +226,19 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	window = rt.window(b, conf, window)
 	deep := false
 	if p, ok := b.prov.ActiveFor(routed); ok && p.Effort == llm.EffortUltra && !fast && !bg {
-		maxSteps, runTimeout, deep = maxSteps*2, runTimeout*3/2, true // the model's highest effort gets the room it needs
+		maxSteps, runTimeout, deep = maxSteps*2, runTimeout*3/2, true
 	}
 	runCtx, cancelRun := context.WithTimeout(providers.WithAccount(routed, acc), runTimeout)
 	defer cancelRun()
-	allow := &tools.Allowance{} // no cap on the pictures and downloads of a request
+	allow := &tools.Allowance{}
 	runCtx = tools.WithAllowance(runCtx, allow)
-	// A multi-model preset (/moa, or the owner's «every request»): the
-	// aggregator runs the job, the advisors' views in front of it.
+
 	if p := b.moaFor(uid, opt); p != nil && !guest && !fast {
 		mc, traced := b.moaClient(uid, *p, m.Chat.ID, b.langOf(m.From))
 		runCtx = agent.WithClient(runCtx, mc)
 		defer traced()
 	}
-	// Who the commands of this job run for (pkg/cmdgate): a job nobody
-	// watches is refused a dangerous command; the owner is asked in the chat.
+
 	switch {
 	case scheduled:
 		runCtx = cmdgate.WithOrigin(runCtx, cmdgate.OriginCron)
@@ -274,12 +252,12 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	run := newRun(uid, m, cancelRun, opt.pending, st.tier)
 	switch {
 	case bg:
-		b.bgRuns.Store(opt.bg.task.ID, run) // stopped by its own button, never by the user's next request
+		b.bgRuns.Store(opt.bg.task.ID, run)
 	case !scheduled:
 		b.runs.Store(uid, run)
 	}
 	defer func() {
-		// Messages that came after the answer are handled next (see handlePrompt).
+
 		out.leftovers = run.finish()
 		switch {
 		case bg:
@@ -296,18 +274,16 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	defer react.wait()
 	react.set(b.seenReaction(), false)
 
-	// The live card comes first: reading the message (a voice message is
-	// written down) can take a while, and the card shows it.
 	live := b.newLive(m, uid)
 	switch {
 	case bg:
 		live.detach(opt.bg.task.Title)
 		live.stopData = opt.bg.stopData()
 	case !scheduled:
-		live.stopData, live.runKey = run.stopData(), run.key // a scheduled task is not in b.runs: nothing to stop by button
+		live.stopData, live.runKey = run.stopData(), run.key
 	}
 	live.start(runCtx)
-	defer live.discard() // after the answer: removes the live message unless it became the answer
+	defer live.discard()
 
 	in, err := b.buildInput(runCtx, u, m, text, false)
 	if errors.Is(err, errTooBig) || errors.Is(err, errWorkspaceFull) {
@@ -320,7 +296,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		return say(l.t(textError))
 	}
 	if strings.TrimSpace(text) == "" && rt.upgrade(routeInput(m, in.msg.Content)) {
-		runCtx = rt.prefer(runCtx) // a voice message's words ask for the strong model
+		runCtx = rt.prefer(runCtx)
 	}
 	if opt.about != "" {
 		in.about = strings.TrimSpace(in.about + "\n" + opt.about)
@@ -331,22 +307,21 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if fast {
 		in.about = strings.TrimSpace(in.about + "\n" + fastNote)
 	}
-	// A greeting or a thank-you goes without the tools until the model asks for them.
+
 	smallTalk := in.plain && !detached && agent.IsSmallTalk(text)
-	// The triage's decision (triage.go): ready by now.
+
 	trec := b.triageDecision(tc, rt)
 	triageOK := trec != nil && trec.ok
-	// The lighter settings only outside a job: in the middle of one, the next
-	// message is more of it, however small it looks.
+
 	lighter := triageOK && !trec.job
 	if lighter && !smallTalk && in.plain && !fast && b.triageChatOn() && triageChat(trec.tri, text) {
-		smallTalk = true // a reply with the light prompt, no tools until it asks for them
+		smallTalk = true
 		trec.did(triageDidChat)
 	}
-	var unCap bool // the effort cap is lifted if the conversation turns into a job
+	var unCap bool
 	if lighter && smallTalk {
 		level := triageEffort(true)
-		runCtx, unCap = llm.WithEffortCap(runCtx, level), true // it only lowers: a failover provider too
+		runCtx, unCap = llm.WithEffortCap(runCtx, level), true
 		if p, ok := b.prov.ActiveFor(runCtx); ok && effortLowered(p.Effort, level) {
 			trec.did(triageDidEffort + level)
 		}
@@ -359,14 +334,11 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			react.clear()
 			return say(l.t(textError))
 		}
-		modernizeHistory(mc.History) // old "(sent files: …)" notes, which the model used to copy
+		modernizeHistory(mc.History)
 	}
 
-	// The job is written down as it works (see openjob.go): whatever ends it
-	// early (a stop, an error, a restart), «ادامه بده» knows which job to go
-	// on with and how far it got, instead of picking up an older message.
 	track := opt.job
-	continuing := track != nil // a job going on needs all of its conversation
+	continuing := track != nil
 	if track == nil && !opt.noMemory && !guest && !detached && !smallTalk {
 		request, base := in.memoryText, ""
 		unfinished := b.unfinishedJob(uid)
@@ -382,14 +354,13 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	out.job = track
 	defer func() {
-		track.interrupt(store.JobFailed) // a panic: never left "running" (a no-op once it ended)
+		track.interrupt(store.JobFailed)
 	}()
 
 	session := sessionFor(uid)
 	box := &outbox{}
 	files := newFileTracker(b.app.Machine, session)
-	// toolEvents reports the calls of the agent (sub 0) or of one of its
-	// sub-agents, whose files are tracked in its own workspace.
+
 	toolEvents := func(sub int, files *fileTracker) *agent.EventListener {
 		return &agent.EventListener{
 			OnToolStart: func(name, args string) {
@@ -402,7 +373,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 				live.toolEnd(sub, name, result)
 			},
 			OnToolProgress: func(name, text string, output bool) {
-				live.toolProgress(sub, name, b.redact(text), output) // secrets and server paths never show
+				live.toolProgress(sub, name, b.redact(text), output)
 			},
 		}
 	}
@@ -416,7 +387,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	listener.OnText = func(partial string) {
 		if !live.streams(partial) {
-			return // a preface or a short answer: the work shows until the answer is sent whole
+			return
 		}
 		live.setText(streamSafe(scrubFileNotes(partial)))
 	}
@@ -439,10 +410,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if fast {
 		toolFilter = fastTool
 	}
-	// Only the files the model chooses are sent (send_file, or shown in its
-	// answer). An answer that says a file was sent while none goes with it is
-	// sent back, and one that sends nothing while deliverables were made is
-	// reminded of them once (a guest reply never carries files).
+
 	var check func(string) string
 	if !guest {
 		check = fileClaimCheck(func(answer string) []string {
@@ -450,12 +418,6 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		}, func(chosen []string) []string { return files.made(chosen...) })
 	}
 
-	// The triage's choice of history and tools: where the provider does not
-	// cache prompts (or always, if the owner says so), a request that stands
-	// on its own goes with the last turns (recall_history brings the rest) and
-	// the tools it will likely use (more_tools brings the rest); a weak
-	// model's focus picks by a model triage's reading rather than by the
-	// words alone.
 	history, localTools := mc.History, b.localTools(u, m, react, box, opt)
 	focus, provID := b.focusTools(runCtx), int64(0)
 	if p, ok := b.prov.ActiveFor(runCtx); ok {
@@ -473,12 +435,12 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 				}
 			}
 		}
-		if focus && trec.tri.Groups != nil { // a local triage leaves the groups to the focus's own reading
+		if focus && trec.tri.Groups != nil {
 			focusPick = triagePick(trec.tri, trimmed > 0)
 			trec.did(triageDidFocus)
 		}
 	}
-	if trimmed > 0 { // how to get back what was left out
+	if trimmed > 0 {
 		in.about = strings.TrimSpace(in.about + "\n" + triageHint(trimmed))
 	}
 	escalate := rt.escalation()
@@ -489,7 +451,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	ownerChat := b.isOwner(uid) && m.Chat.Private() && !guest && !scheduled
 	var carry int
 	var carryCompacted bool
-	if !opt.noMemory && !guest && !bg { // a background task's context is its own
+	if !opt.noMemory && !guest && !bg {
 		cctx, ccancel := b.ctx(5 * time.Second)
 		carry, carryCompacted = b.contextCarry(cctx, uid, mc)
 		ccancel()
@@ -501,9 +463,8 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		History:   history,
 		Memory:    mc.Summary,
 		Chat:      smallTalk,
-		Earlier:   continuing, // the work of an earlier run has its receipts there
-		// The memory keeps the conversation under this; the agent only
-		// catches what grew past it since.
+		Earlier:   continuing,
+
 		HistoryTokens:    historyBudget(b.st, window),
 		ContextWindow:    window,
 		ContextCarry:     carry,
@@ -529,20 +490,20 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		ToolFilter:       toolFilter,
 		AnswerOnLastStep: fast,
 		Check:            check,
-		// The owner, in private only (a group would see what they see).
+
 		Owner:     ownerChat,
 		OwnerNote: b.ownerNote(ownerChat, conf),
-		// A model that calls tools badly starts with the ones the request needs (toolskill.go).
+
 		FocusTools: focus,
 		FocusPick:  focusPick,
 		FocusHint:  in.hint,
-		// A light model that struggles hands the rest to the strong one.
+
 		Escalate: escalate,
 	})
 	run.answered()
 	logTriage(trec)
 	if res != nil && !res.Escalated && !smallTalk && trimmed == 0 && focusPick == nil {
-		b.noteCache(provID, res.Usage) // how much this provider caches: whether trimming pays (triage.go)
+		b.noteCache(provID, res.Usage)
 	}
 	if res != nil {
 		lctx, lcancel := b.ctx(5 * time.Second)
@@ -551,11 +512,10 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	rt.record(res != nil && res.Escalated, acc)
 	live.stop()
-	// Delivering gets its own time, counted from now: a long job that used
-	// all of its time still reports back.
+
 	sendCtx, cancelSend := b.ctx(answerSendBudget)
 	defer cancelSend()
-	sendCtx, answerMsgs := collectSent(sendCtx) // the messages of this answer
+	sendCtx, answerMsgs := collectSent(sendCtx)
 
 	if err != nil {
 		react.clear()
@@ -563,8 +523,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		var kb *telegram.InlineKeyboardMarkup
 		html := ""
 		worked := res != nil && res.WorkLog != ""
-		// The job stays unfinished (with why), so «continue» or ▶️ goes on from
-		// it; it is remembered once its files went (below).
+
 		unfinished := ""
 		goOn := func(reason string) {
 			track.interrupt(reason)
@@ -581,18 +540,17 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		}
 		switch {
 		case b.jobCtx.Err() != nil:
-			// The bot is going down: the job stays "running", and the next start
-			// tells the user, with ▶️ (nothing can be sent now).
+
 			track.shutdown()
 			html = l.t(textError)
 		case run.stopped.Load():
-			// What was done stays: it is said, kept in the memory, and «continue» goes on from it.
+
 			html = l.t(textCancelled)
 			goOn(store.JobStopped)
 			if worked {
 				html = l.f(textStoppedWork, l.num(strings.Count(res.WorkLog, "\n")+1))
 			} else {
-				kb = nil // nothing done: a stop is a stop
+				kb = nil
 			}
 		case errors.Is(err, context.DeadlineExceeded):
 			html = l.t(textTimeout)
@@ -604,10 +562,9 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		case llm.IsPolicyViolation(err):
 			log.Printf("[user %d] refused by every provider's safety filter: %v", uid, err)
 			html = l.t(textPolicyViolation)
-			track.drop() // nothing to go on with
+			track.drop()
 		case errors.As(err, &api), llm.IsUnavailable(err):
-			// Not only the provider's own errors: a refused connection, a stall or an
-			// empty answer is the same to the user, the model is out of reach.
+
 			log.Printf("[user %d] model error: %v", uid, err)
 			html = l.t(textModelDown)
 			goOn(store.JobFailed)
@@ -624,19 +581,16 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		}
 		switch {
 		case bg && shutdown:
-			// The task stays "running": the next start tells its user, with 🔁.
+
 		case bg || live.replaceHTML(sendCtx, html, l == fa, kb) != nil:
-			// A background task's end is a new message: Telegram tells its user (an edit it would not).
+
 			if kb != nil {
 				b.sendHTML(sendCtx, m.Chat.ID, html, telegram.SendOptions{ReplyTo: m.MessageID, Markup: kb})
 			} else {
 				resp.notice(sendCtx, html)
 			}
 		}
-		// The files the model already chose are finished work: a job that ran
-		// out of time or failed still hands them over, as its live card said.
-		// A stop is a stop (they stay in the workspace for «continue»); a
-		// refused job, a guest's, or a background task (🔁 starts it over) sends none.
+
 		var delivered []string
 		if unfinished != "" && !run.stopped.Load() && !guest && !bg && !shutdown {
 			if chosen, held := chosenFiles(files, box, allow); len(chosen) > 0 {
@@ -649,18 +603,18 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		if unfinished != "" && !opt.noMemory {
 			b.rememberUnfinished(uid, in.memoryText, run.memo(), unfinished, res, delivered)
 		}
-		refund = refund && !run.stopped.Load() && len(delivered) == 0 // a job the user stopped, or that delivered, used its tokens
+		refund = refund && !run.stopped.Load() && len(delivered) == 0
 		return promptOutcome{}, err
 	}
 	refund = false
-	answer := textutil.PersianEzafe(scrubFileNotes(b.redact(res.Answer))) // «همه فایل‌ها», even when the model writes «همه‌ی»
-	sent, held := chosenFiles(files, box, allow)                          // what the answer shows with ![…](file) goes too (planAnswer)
-	if held > 0 {                                                         // pictures made with code and sent one by one
+	answer := textutil.PersianEzafe(scrubFileNotes(b.redact(res.Answer)))
+	sent, held := chosenFiles(files, box, allow)
+	if held > 0 {
 		answer = strings.TrimSpace(answer + "\n\n" + l.f(textPicturesHeld, l.num(held)))
 	}
 	captions := box.captionMap()
 	if guest {
-		// A guest reply is a single message: files wait in the user's workspace.
+
 		if len(sent) > 0 || len(files.placed(answer)) > 0 || len(files.made()) > 0 {
 			answer = strings.TrimSpace(withoutMediaRefs(answer) + "\n\n" + l.f(textGuestFiles, b.me.Username))
 			sent = nil
@@ -670,8 +624,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if strings.TrimSpace(answer) != "" && opt.prefix != "" {
 		answer = opt.prefix + "\n\n" + answer
 	}
-	// The files travel inside the answer (a slideshow of pictures, songs and
-	// documents under the text); what cannot follows as albums.
+
 	var shown, rest []string
 	switch {
 	case guest:
@@ -685,19 +638,19 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if q := box.question(); q != nil && res.EndedBy == toolAskUser {
 		var pollID string
 		asked, pollID = b.sendQuestion(sendCtx, u, m, q, strings.TrimSpace(answer) == "" && len(shown) == 0)
-		b.suspendFor(pollID, res.Suspended) // the vote resumes this very job
+		b.suspendFor(pollID, res.Suspended)
 	}
 	var delivered []string
 	if len(rest) > 0 {
 		delivered = b.deliverFiles(sendCtx, m, session, rest, captions)
 	}
 	if !guest {
-		box.extras.run(sendCtx) // map pins and polls the model prepared
+		box.extras.run(sendCtx)
 	}
 	react.finish(res.ToolsUsed, text)
-	b.learnFrom(uid, res) // a step failed and another way worked: a lesson for the admins to check
+	b.learnFrom(uid, res)
 	b.noteJob(m.Chat.ID, res)
-	if !m.Chat.Private() && !guest { // a reply to this answer by someone else is understood
+	if !m.Chat.Private() && !guest {
 		b.linkAnswer(m.Chat.ID, answerMsgs.in(m.Chat.ID), answerRef{askerID: uid, askerName: u.DisplayName(), question: text})
 	}
 	opt.bg.ended(run.stopped.Load(), res)
@@ -718,19 +671,19 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		userTurn += "\n\n[messages the user sent while I was working on it]\n" + added
 	}
 	stored := withoutMediaRefs(answer)
-	if note := fileNote(append(shown, delivered...)); note != "" { // only what arrived: never "sent" for a file that was lost
+	if note := fileNote(append(shown, delivered...)); note != "" {
 		stored += "\n\n" + note
 	}
 	if res.Partial && res.WorkLog != "" {
-		// The job stopped early: what was done, so "continue" picks it up.
+
 		stored += "\n\n[work log before stopping — the job is not finished]\n" + res.WorkLog
 	} else if note := workNote(res.Notes); note != "" {
-		stored += "\n\n" + note // what was done behind the answer: follow-ups understand it
+		stored += "\n\n" + note
 	}
 	if asked != "" {
 		stored = strings.TrimSpace(stored + "\n\n" + asked)
 	}
-	// The memory has time of its own: a long delivery must not cost the conversation.
+
 	memCtx, memCancel := b.memCtx()
 	defer memCancel()
 	if err := b.mem.Append(memCtx, uid, userTurn, stored); err != nil {
@@ -738,37 +691,32 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		return out, nil
 	}
 	if !guest && !bg {
-		b.saveContextCarry(memCtx, uid, res.Context, mc) // the next request's meter goes on from here
+		b.saveContextCarry(memCtx, uid, res.Context, mc)
 	}
-	// Compressing a long conversation is a model call: it never holds up the
-	// user's next message (the next request reads the memory as it is).
+
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
 		ctx, cancel := b.ctx(2 * time.Minute)
 		defer cancel()
-		compressed, err := b.mem.Tidy(providers.WithAccount(b.route(ctx, st.tier), acc), uid) // summarized by the tier's model (on Custom the user's own), on the user's costs
+		compressed, err := b.mem.Tidy(providers.WithAccount(b.route(ctx, st.tier), acc), uid)
 		if err != nil {
 			log.Printf("[user %d] compressing memory: %v", uid, err)
 		}
 		if compressed && !guest {
-			b.sendHTML(ctx, m.Chat.ID, l.t(textMemoryCompacted), telegram.SendOptions{ReplyTo: m.MessageID, Silent: true}) // on the message it was about
+			b.sendHTML(ctx, m.Chat.ID, l.t(textMemoryCompacted), telegram.SendOptions{ReplyTo: m.MessageID, Silent: true})
 		}
 	}()
 	return out, nil
 }
 
-// rememberUnfinished keeps a request that ended early in the conversation:
-// what was asked, the messages sent meanwhile, why it stopped and the steps
-// already taken, so a later «continue» (or the ▶️ button) goes on from there
-// instead of starting blind or from an older message.
 func (b *Bot) rememberUnfinished(uid int64, asked, added, reason string, res *agent.Result, delivered []string) {
 	userTurn := asked
 	if added != "" {
 		userTurn += "\n\n[messages the user sent while I was working on it]\n" + added
 	}
 	stored := "[" + unfinishedLine(reason) + "]"
-	if note := fileNote(delivered); note != "" { // only what arrived
+	if note := fileNote(delivered); note != "" {
 		stored += "\n\n" + note
 	}
 	if res != nil && res.WorkLog != "" {
@@ -781,7 +729,6 @@ func (b *Bot) rememberUnfinished(uid int64, asked, added, reason string, res *ag
 	}
 }
 
-// unfinishedLine is how the memory says why a request ended early.
 func unfinishedLine(reason string) string {
 	switch reason {
 	case store.JobStopped:
@@ -792,7 +739,6 @@ func unfinishedLine(reason string) string {
 	return "an error stopped this request before I finished it (not the user's doing)"
 }
 
-// partialReason is why a job that answered early is unfinished.
 func partialReason(stop string) string {
 	switch stop {
 	case "time", "idle":
@@ -800,7 +746,7 @@ func partialReason(stop string) string {
 	case "failed", "repeat":
 		return store.JobFailed
 	}
-	return store.JobBudget // steps or tokens
+	return store.JobBudget
 }
 
 func (b *Bot) recordStat(kind, name string, failed bool, prompt, completion int) {
@@ -811,30 +757,25 @@ func (b *Bot) recordStat(kind, name string, failed bool, prompt, completion int)
 	}
 }
 
-// ---------------------------------------------------------------- understanding the message
-
 type promptInput struct {
 	msg        llm.Message
 	about      string
-	hint       string // what came with the message (attachments, a reply, a forward): what its tools are chosen by
-	memoryText string // how the user turn is remembered
-	plain      bool   // only words: nothing attached, forwarded or shared
+	hint       string
+	memoryText string
+	plain      bool
 }
 
-// buildInput reads the message. In a continuation round its files are the
-// ones saved by the first round (not downloaded again over the changes made to them).
 func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message, text string, continuation bool) (*promptInput, error) {
 	l := b.langOf(m.From)
 	vision := b.prov.VisionFor(ctx)
 	session := sessionFor(u.ID)
 	var (
 		about  []string
-		notes  []string // remembered alongside the text
+		notes  []string
 		images []string
 	)
 	text = strings.TrimSpace(text)
 
-	// The user and the chat, and what the model remembers about them.
 	about = append(about, b.profileAbout(ctx, u, m)...)
 	if facts := b.factsAbout(ctx, u.ID, !m.Chat.Private()); facts != "" {
 		about = append(about, facts)
@@ -846,7 +787,6 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 		}
 	}
 
-	// Attachments, and the rest of what came with the message.
 	withMessage := len(about)
 	lead := "The user sent"
 	if continuation {
@@ -886,8 +826,6 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 		notes = append(notes, "[forwarded from "+o.Describe()+"]")
 	}
 
-	// The message being replied to (a rich answer of the bot's is read from
-	// its blocks; one from another chat shows its media and the quoted part).
 	if r := m.Replied(); r != nil {
 		who := "another user"
 		switch {
@@ -906,7 +844,7 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 		if m.RepliedInChat() == nil && r.Chat.ID != 0 && r.Chat.ID != m.Chat.ID && r.Chat.Title != "" {
 			who += " in «" + r.Chat.Title + "»"
 		}
-		body := strings.TrimSpace(telegram.UnmarkRTL(r.Body())) // without the direction marks of the bot's own lines
+		body := strings.TrimSpace(telegram.UnmarkRTL(r.Body()))
 		quote := ""
 		if m.Quote != nil {
 			quote = strings.TrimSpace(m.Quote.Text)
@@ -925,7 +863,7 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 			line += "\nIt is a poll: «" + r.Poll.Question + "»"
 		}
 		if r.From != nil && r.From.ID == b.me.ID {
-			if s := b.replyToAnswer(m, u.ID); s != "" { // whose answer it was, in a group
+			if s := b.replyToAnswer(m, u.ID); s != "" {
 				line += "\n" + s
 			}
 		}
@@ -934,8 +872,7 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 		if quote != "" {
 			quoted = quote
 		}
-		// Files in the replied message go into the workspace too, so "remove
-		// the watermark from this" works on a photo sent earlier.
+
 		if ratt, err := b.attach(ctx, session, r, vision, leadReplied, false); err == nil && ratt != nil {
 			plain = false
 			line += "\n" + ratt.about
@@ -952,7 +889,7 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 			" (you cannot see stories; ask what it shows if the request depends on it).")
 	}
 
-	if files := b.workspaceAbout(session); files != "" { // files and project folders kept from earlier requests
+	if files := b.workspaceAbout(session); files != "" {
 		about = append(about, files)
 	}
 
@@ -967,16 +904,11 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 	return &promptInput{msg: msg, about: strings.Join(about, "\n"), hint: strings.Join(about[withMessage:], "\n"), memoryText: memoryText, plain: plain}, nil
 }
 
-// recentFiles is how many of the workspace's newest files each request
-// names, and recentFolders how many of its folders (projects).
 const (
 	recentFiles   = 12
 	recentFolders = 10
 )
 
-// workspaceAbout names the newest files of the user's workspace (what the
-// bot made for them, what they sent), so "that file", «همون عکس» or
-// "convert it" finds its file at once, without a search or a question.
 func (b *Bot) workspaceAbout(session string) string {
 	var files, folders []string
 	more := 0
@@ -1005,7 +937,6 @@ func (b *Bot) workspaceAbout(session string) string {
 	return strings.Join(lines, "\n")
 }
 
-// bytesWord is a size for the model ("3.2 MB").
 func bytesWord(n int64) string {
 	switch {
 	case n >= 1<<30:
@@ -1018,7 +949,6 @@ func bytesWord(n int64) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// ageWord is how long ago, for the model ("5 min", "3 h").
 func ageWord(d time.Duration) string {
 	switch {
 	case d < time.Minute:
@@ -1031,7 +961,6 @@ func ageWord(d time.Duration) string {
 	return fmt.Sprintf("%d days", int(d.Hours()/24))
 }
 
-// profileAbout describes the user; the bio is refreshed at most once a day.
 func (b *Bot) profileAbout(ctx context.Context, u *store.User, m *telegram.Message) []string {
 	if m.Chat.Private() && (u.ProfileCheckedAt == nil || time.Since(*u.ProfileCheckedAt) > 24*time.Hour) {
 		if info, err := b.api.GetChat(ctx, u.ID); err == nil {
@@ -1077,20 +1006,13 @@ func (b *Bot) profileAbout(ctx context.Context, u *store.User, m *telegram.Messa
 	return lines
 }
 
-// attachment is what a message carries, saved in the workspace.
 type attachment struct {
-	about       string   // for the model
-	note        string   // remembered in the conversation
-	images      []string // data URLs the model sees
-	placeholder string   // the user's text when they sent no caption
+	about       string
+	note        string
+	images      []string
+	placeholder string
 }
 
-// attach saves the photo, file or media of m into the workspace and describes
-// it; it returns nil when m carries none. lead starts the sentence ("The user
-// sent"). With fresh the file is always downloaded (a new upload replaces an
-// older file of the same name); otherwise a file already saved is reused, so
-// replying to an old message does not undo the changes made to it since.
-// leadReplied introduces what a replied message holds (attach tells it apart by it).
 const leadReplied = "That replied message contains"
 
 func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, vision bool, lead string, fresh bool) (*attachment, error) {
@@ -1168,7 +1090,7 @@ func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, v
 			note: "[the user sent a sticker " + s.Emoji + "]", placeholder: s.Emoji}
 		if vision {
 			var url, desc string
-			if s.IsAnimated { // Lottie: only Telegram's thumbnail can be shown
+			if s.IsAnimated {
 				url, desc = b.framePreview(ctx, session, "", 0, s.Thumbnail, true)
 			} else {
 				url, desc = b.framePreview(ctx, session, name, 3, s.Thumbnail, !s.IsVideo)
@@ -1202,9 +1124,7 @@ func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, v
 		if moving != nil && vision {
 			preview, desc = b.framePreview(ctx, session, name, moving.Duration, moving.Thumbnail, false)
 		}
-		// A replied message: its words are what it holds, not the request. One
-		// the bot sent itself (its own voice or round video) is not listened
-		// to again: it knows what it said, and the card shows no «listening».
+
 		replied := lead == leadReplied
 		own := replied && m.From != nil && (m.From.ID == b.me.ID || (m.ViaBot != nil && m.ViaBot.ID == b.me.ID))
 		switch {
@@ -1229,13 +1149,10 @@ func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, v
 	return nil, nil
 }
 
-// memCtx is the time to write a turn to the memory: its own, so a shutdown
-// during the files' upload before it does not lose the turn.
 func (b *Bot) memCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(b.jobCtx), 30*time.Second)
 }
 
-// aOrAn puts the article before a word: "an audio file", "a video".
 func aOrAn(w string) string {
 	if w != "" && strings.ContainsRune("aeiouAEIOU", rune(w[0])) {
 		return "an " + w
@@ -1259,9 +1176,6 @@ func mediaInfo(m *telegram.Message) (fileID, kind, name string) {
 	}
 }
 
-// songNote tells the model where the words of a song it made are, when a
-// replied audio message is one (its name starts with Macron_AI_-_): never
-// transcribed with a speech tool, they were kept.
 func songNote(m *telegram.Message, name string) string {
 	if m.Audio == nil || !strings.HasPrefix(name, "Macron_AI_-_") {
 		return ""
@@ -1270,9 +1184,6 @@ func songNote(m *telegram.Message, name string) string {
 		".txt in the workspace (read_file it; also in the mp3's tags), so never transcribe it with a speech tool."
 }
 
-// msgTag names files after their message. A user's workspace is shared by
-// their private chat and their groups, where message ids repeat, so group
-// files also carry a piece of the chat id.
 func msgTag(m *telegram.Message) string {
 	if m.Chat.Private() || m.Chat.ID == 0 {
 		return strconv.FormatInt(m.MessageID, 10)
@@ -1284,7 +1195,6 @@ func msgTag(m *telegram.Message) string {
 	return fmt.Sprintf("%d_g%04d", m.MessageID, id%10000)
 }
 
-// fetch downloads a Telegram file into memory.
 func (b *Bot) fetch(ctx context.Context, fileID string, max int64) ([]byte, error) {
 	var buf bytes.Buffer
 	if _, err := b.api.Download(ctx, fileID, &buf, max); err != nil {
@@ -1296,7 +1206,6 @@ func (b *Bot) fetch(ctx context.Context, fileID string, max int64) ([]byte, erro
 	return buf.Bytes(), nil
 }
 
-// saveIncoming streams a Telegram file into the user's workspace.
 func (b *Bot) saveIncoming(ctx context.Context, session, fileID, name string, size int64) (int64, error) {
 	limit, room := b.api.DownloadLimit(), b.app.Machine.FreeSpace()
 	switch {
@@ -1305,7 +1214,7 @@ func (b *Bot) saveIncoming(ctx context.Context, session, fileID, name string, si
 	case size > room:
 		return 0, errWorkspaceFull
 	}
-	full := room < limit // a file the size doesn't tell can still not fit
+	full := room < limit
 	limit = min(limit, room)
 	f, err := b.app.Machine.Create(session, name)
 	if err != nil {
@@ -1326,7 +1235,6 @@ func (b *Bot) saveIncoming(ctx context.Context, session, fileID, name string, si
 	return n, nil
 }
 
-// fileRefusal says why a file the user sent was not taken.
 func (b *Bot) fileRefusal(l lang, err error) string {
 	if errors.Is(err, errWorkspaceFull) {
 		return l.t(textWorkspaceFull)
@@ -1334,7 +1242,6 @@ func (b *Bot) fileRefusal(l lang, err error) string {
 	return l.f(textFileTooBig, sizeWord(l, b.api.DownloadLimit()))
 }
 
-// sizeWord writes a limit the way people say it: «۲۰ مگابایت», «۲ گیگابایت».
 func sizeWord(l lang, n int64) string {
 	if mb := n >> 20; mb >= 1000 && mb%1000 == 0 {
 		return l.f("%s گیگابایت", l.num(int(mb/1000)))
@@ -1375,16 +1282,12 @@ func sizeText(n int64) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// ---------------------------------------------------------------- request-scoped tools
-
-// outbox collects what the model hands to the user during a turn: files
-// (send_file) and a question (ask_user).
 type outbox struct {
 	mu       sync.Mutex
 	names    []string
-	captions map[string]string // file → the caption the model wrote for it
+	captions map[string]string
 	ask      *pollQuestion
-	extras   extras // what follows the answer (map pins, polls) and its effect
+	extras   extras
 }
 
 func (o *outbox) question() *pollQuestion {
@@ -1407,7 +1310,6 @@ func (o *outbox) add(name, caption string) {
 	}
 }
 
-// captionMap returns the captions by file name.
 func (o *outbox) captionMap() map[string]string {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -1418,39 +1320,34 @@ func (o *outbox) captionMap() map[string]string {
 	return out
 }
 
-// list returns the chosen files in the order they were chosen.
 func (o *outbox) list() []string {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return append([]string(nil), o.names...)
 }
 
-// workspaceName accepts "x", "./x" and "/workspace/x".
 func workspaceName(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, machine.MountPoint+"/")
 	return strings.TrimPrefix(s, "./")
 }
 
-// localTools are the tools that exist only for this request. A guest reply
-// is one message (no files, polls or scheduling into a chat the bot is not
-// in); a scheduled task runs unattended (no polls, no new schedules).
 func (b *Bot) localTools(u *store.User, m *telegram.Message, react *reactor, box *outbox, opt promptOptions) []agent.LocalTool {
 	guest, scheduled, bg := m.GuestQueryID != "", opt.schedule != nil, opt.bg != nil
 	out := b.requestTools(u, m, react, box, b.prov.VisionFor(b.route(context.Background(), opt.tier)))
-	if m.Chat.Private() && !guest { // plugins, MCP servers: the owner's private chat only
+	if m.Chat.Private() && !guest {
 		out = append(out, b.pluginsTool(u, m)...)
 	}
 	if !guest && !scheduled && !bg {
-		out = append(out, b.backgroundTool(u, m)) // a long job can go on by itself
+		out = append(out, b.backgroundTool(u, m))
 		if b.isOwner(u.ID) && m.Chat.Private() {
-			out = append(out, b.kanbanTool(u, m)) // the owner's board of jobs
+			out = append(out, b.kanbanTool(u, m))
 		}
 	}
 	if guest || scheduled || bg {
 		drop := map[string]bool{toolAskUser: true, toolSchedule: true, toolListSchedules: true, toolCancelSchedule: true}
 		if guest {
-			// The bot is not in the chat: one text reply, nothing else.
+
 			for _, name := range []string{toolSendFile, toolDice, toolLocation, toolCreatePoll, toolEffect, toolChatInfo} {
 				drop[name] = true
 			}
@@ -1537,7 +1434,7 @@ func (b *Bot) requestTools(u *store.User, m *telegram.Message, react *reactor, b
 		if s := b.groupLogFor(fctx, m.Chat.ID); s.hours > 0 {
 			out = append(out, b.groupHistoryTool(u, m, s.hours))
 		}
-		if b.moderator(fctx, m) { // the group's admins and the bot's: moderation in plain words
+		if b.moderator(fctx, m) {
 			out = append(out, b.groupAdminTool(m))
 		}
 	}
@@ -1581,8 +1478,6 @@ func (b *Bot) requestTools(u *store.User, m *telegram.Message, react *reactor, b
 	return out
 }
 
-// ---------------------------------------------------------------- reactions
-
 type reactor struct {
 	b       *Bot
 	chatID  int64
@@ -1592,8 +1487,8 @@ type reactor struct {
 	mu      sync.Mutex
 	current string
 	chosen  bool
-	queue   []reaction    // asked for and not sent yet, in order
-	sending chan struct{} // closed when the queue is sent (nil: idle)
+	queue   []reaction
+	sending chan struct{}
 }
 
 type reaction struct {
@@ -1605,9 +1500,6 @@ func (b *Bot) newReactor(m *telegram.Message) *reactor {
 	return &reactor{b: b, chatID: m.Chat.ID, msgID: m.MessageID, enabled: b.st.SettingBool(store.SettingReactions, true)}
 }
 
-// set asks for a reaction. It never waits for Telegram (the 👀 used to delay
-// every request by a round trip): one goroutine sends a message's reactions
-// in the order they were asked for.
 func (r *reactor) set(emoji string, big bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1639,14 +1531,12 @@ func (r *reactor) send(done chan struct{}) {
 		cancel()
 		if err != nil && !telegram.IsUnreachable(err) {
 			r.mu.Lock()
-			r.enabled = false // some groups restrict reactions; never let that disturb the conversation
+			r.enabled = false
 			r.mu.Unlock()
 		}
 	}
 }
 
-// wait lets the reactions asked for reach Telegram before the message's
-// handler returns (bounded: a slow Telegram never holds the next request).
 func (r *reactor) wait() {
 	r.mu.Lock()
 	done := r.sending
@@ -1659,7 +1549,6 @@ func (r *reactor) wait() {
 	}
 }
 
-// on reports whether reactions can be set.
 func (r *reactor) on() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1668,7 +1557,6 @@ func (r *reactor) on() bool {
 
 func (r *reactor) clear() { r.set("", false) }
 
-// choose is called when the model picks a reaction itself.
 func (r *reactor) choose(emoji string) {
 	r.mu.Lock()
 	r.chosen = true
@@ -1677,7 +1565,6 @@ func (r *reactor) choose(emoji string) {
 	r.set(e, e == "🔥" || e == "🎉" || e == "❤")
 }
 
-// finish replaces the "seen" reaction when the model did not choose one.
 func (r *reactor) finish(tools []string, text string) {
 	r.mu.Lock()
 	chosen := r.chosen
@@ -1720,11 +1607,8 @@ func guessReaction(tools []string, text string) string {
 	return ""
 }
 
-// minAgentSteps is the smallest step budget the admin can set.
 const minAgentSteps = 5
 
-// agentBudget is how many tool rounds and how much time one request gets: the
-// admin panel's settings, else the server's -max-steps and -run-timeout.
 func (b *Bot) agentBudget() (steps int, timeout time.Duration) {
 	steps, timeout = b.app.Agent.MaxSteps, b.runTimeout
 	if n := b.st.SettingInt(store.SettingAgentSteps, 0); n > 0 {

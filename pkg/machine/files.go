@@ -16,28 +16,22 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// FileEntry describes one entry of a workspace listing.
 type FileEntry struct {
-	Name    string    `json:"name"` // slash-separated, relative to the workspace
+	Name    string    `json:"name"`
 	Size    int64     `json:"size"`
 	ModTime time.Time `json:"mod_time"`
 	IsDir   bool      `json:"is_dir"`
 	Symlink bool      `json:"symlink,omitempty"`
 }
 
-// Errors returned by file operations.
 var (
 	ErrNotRegular = errors.New("not a regular file")
-	// ErrNoSpace is a disk with nothing left to write on.
+
 	ErrNoSpace = errors.New("no space left on the disk")
-	// ErrOutsideWorkspace is a name that cannot be a path (empty, or with a NUL byte).
+
 	ErrOutsideWorkspace = errors.New("not a usable path")
 )
 
-// absPath resolves a name: relative names and /workspace/… are in the
-// session's work folder, ~ is the user's home, any other absolute path is
-// that very path on this machine. The files are the owner's: nothing keeps
-// the agent inside its work folder, as nothing keeps its commands.
 func (s *Machine) absPath(sessionID, name string) (string, error) {
 	if name == "" || strings.ContainsRune(name, 0) {
 		return "", fmt.Errorf("%w: %q", ErrOutsideWorkspace, name)
@@ -60,15 +54,11 @@ func (s *Machine) absPath(sessionID, name string) (string, error) {
 	return filepath.Clean(p), nil
 }
 
-// Modes of what is made on the machine: readable by the services that need
-// to read it (a web server's config, a script to run).
 const (
 	fileMode = 0o644
 	dirMode  = 0o755
 )
 
-// OpenRoot opens the session's work folder as an os.Root (for the tools that
-// walk a project inside it). The caller must Close it.
 func (s *Machine) OpenRoot(sessionID string) (*os.Root, error) {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -77,7 +67,6 @@ func (s *Machine) OpenRoot(sessionID string) (*os.Root, error) {
 	return os.OpenRoot(ws)
 }
 
-// Stat describes a file or folder (a link is followed).
 func (s *Machine) Stat(sessionID, name string) (fs.FileInfo, error) {
 	abs, err := s.absPath(sessionID, name)
 	if err != nil {
@@ -86,14 +75,12 @@ func (s *Machine) Stat(sessionID, name string) (fs.FileInfo, error) {
 	return os.Stat(abs)
 }
 
-// Open opens a regular file for reading. FIFOs, devices and directories are
-// rejected.
 func (s *Machine) Open(sessionID, name string) (*os.File, fs.FileInfo, error) {
 	abs, err := s.absPath(sessionID, name)
 	if err != nil {
 		return nil, nil, err
 	}
-	// O_NONBLOCK so a FIFO cannot hang the bot.
+
 	f, err := os.OpenFile(abs, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, nil, err
@@ -110,7 +97,6 @@ func (s *Machine) Open(sessionID, name string) (*os.File, fs.FileInfo, error) {
 	return f, info, nil
 }
 
-// ReadFile reads at most max bytes; truncated reports whether more existed.
 func (s *Machine) ReadFile(sessionID, name string, max int64) (data []byte, truncated bool, err error) {
 	f, _, err := s.Open(sessionID, name)
 	if err != nil {
@@ -127,7 +113,6 @@ func (s *Machine) ReadFile(sessionID, name string, max int64) (data []byte, trun
 	return data, false, nil
 }
 
-// ReadTail reads the last max bytes of a file; cut reports whether it had more.
 func (s *Machine) ReadTail(sessionID, name string, max int64) (data []byte, cut bool, err error) {
 	f, info, err := s.Open(sessionID, name)
 	if err != nil {
@@ -144,8 +129,6 @@ func (s *Machine) ReadTail(sessionID, name string, max int64) (data []byte, cut 
 	return data, cut, err
 }
 
-// Create creates or truncates a regular file (parents are created). An
-// existing file keeps its mode and owner.
 func (s *Machine) Create(sessionID, name string) (*os.File, error) {
 	abs, err := s.absPath(sessionID, name)
 	if err != nil {
@@ -157,7 +140,6 @@ func (s *Machine) Create(sessionID, name string) (*os.File, error) {
 	return os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
 }
 
-// WriteFile writes data to name.
 func (s *Machine) WriteFile(sessionID, name string, data []byte) error {
 	f, err := s.Create(sessionID, name)
 	if err != nil {
@@ -170,7 +152,6 @@ func (s *Machine) WriteFile(sessionID, name string, data []byte) error {
 	return f.Close()
 }
 
-// RemoveAll deletes a file or a folder tree (links are removed, never followed).
 func (s *Machine) RemoveAll(sessionID, name string) error {
 	abs, err := s.absPath(sessionID, name)
 	if err != nil {
@@ -179,7 +160,6 @@ func (s *Machine) RemoveAll(sessionID, name string) error {
 	return os.RemoveAll(abs)
 }
 
-// Rename moves a file or folder, replacing the target.
 func (s *Machine) Rename(sessionID, from, to string) error {
 	a, err := s.absPath(sessionID, from)
 	if err != nil {
@@ -192,7 +172,6 @@ func (s *Machine) Rename(sessionID, from, to string) error {
 	return os.Rename(a, b)
 }
 
-// Remove deletes a file or an empty folder.
 func (s *Machine) Remove(sessionID, name string) error {
 	abs, err := s.absPath(sessionID, name)
 	if err != nil {
@@ -201,7 +180,6 @@ func (s *Machine) Remove(sessionID, name string) error {
 	return os.Remove(abs)
 }
 
-// MkdirAll creates a folder and its parents.
 func (s *Machine) MkdirAll(sessionID, name string) error {
 	abs, err := s.absPath(sessionID, name)
 	if err != nil {
@@ -210,8 +188,6 @@ func (s *Machine) MkdirAll(sessionID, name string) error {
 	return os.MkdirAll(abs, dirMode)
 }
 
-// List returns the entries of the workspace, depth-first up to maxEntries and
-// maxDepth. It never follows symlinks.
 func (s *Machine) List(sessionID string, maxDepth, maxEntries int) ([]FileEntry, error) {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -249,7 +225,6 @@ func (s *Machine) List(sessionID string, maxDepth, maxEntries int) ([]FileEntry,
 	return out, err
 }
 
-// ListFiles returns the regular, non-symlink files directly inside the workspace.
 func (s *Machine) ListFiles(sessionID string) ([]FileEntry, error) {
 	entries, err := s.List(sessionID, 1, 10000)
 	if err != nil {
@@ -264,12 +239,8 @@ func (s *Machine) ListFiles(sessionID string) ([]FileEntry, error) {
 	return files, nil
 }
 
-// untracked folders hold caches and dependencies, never a run's outputs.
 var untracked = map[string]bool{"__pycache__": true, "node_modules": true, "venv": true, "site-packages": true}
 
-// TrackedFiles returns the regular, non-symlink files of the workspace down
-// to depth levels (1 = the root only), skipping hidden folders (.git, .cache…),
-// caches and dependencies: where the outputs of a run land (out/, build/…).
 func (s *Machine) TrackedFiles(sessionID string, depth, maxFiles int) ([]FileEntry, error) {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -304,9 +275,6 @@ func (s *Machine) TrackedFiles(sessionID string, depth, maxFiles int) ([]FileEnt
 	return out, err
 }
 
-// Recent returns the newest files and folders directly in a session's
-// workspace, newest first, without creating the workspace or counting as a
-// use of it (its files keep their expiry). Hidden ones and links are left out.
 func (s *Machine) Recent(sessionID string, n int) []FileEntry {
 	dir := s.topWorkspace(sessionID)
 	if sub := SubPath(sessionID); sub != "" {
@@ -334,7 +302,6 @@ func (s *Machine) Recent(sessionID string, n int) []FileEntry {
 	return out
 }
 
-// FreeSpace is how many bytes the disk of the work folders has left.
 func (s *Machine) FreeSpace() int64 {
 	var st unix.Statfs_t
 	if err := unix.Statfs(s.BaseDir, &st); err != nil {

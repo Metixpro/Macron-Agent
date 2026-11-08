@@ -26,16 +26,10 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// Spotify streams are encrypted, so a Spotify link is read for its facts
-// (title, artists, album, exact length, cover) and the same recording is
-// found on YouTube or SoundCloud: candidates are scored by how well their
-// title and artist match and must be within a few seconds of Spotify's
-// length. The file then gets Spotify's cover and tags.
-
 const (
-	spotifyMaxDelta  = 8.0 // seconds a match may differ from Spotify's length
-	spotifyMaxTracks = 5   // album or playlist songs per call
-	spotifyTries     = 4   // candidates downloaded before giving up
+	spotifyMaxDelta  = 8.0
+	spotifyMaxTracks = 5
+	spotifyTries     = 4
 	spotifyCoverFile = ".spotify_cover.jpg"
 	spotifyTagged    = ".spotify_tagged.mp3"
 	spotifyUA        = "TelegramBot (like TwitterBot)"
@@ -63,14 +57,14 @@ type spotifyTrack struct {
 	ID, Title, Album, Year, Cover string
 	Artists                       []string
 	Number                        int
-	Duration                      float64 // seconds
+	Duration                      float64
 }
 
 type spotifyEntity struct {
 	Name        string                  `json:"name"`
 	Title       string                  `json:"title"`
 	Subtitle    string                  `json:"subtitle"`
-	Duration    float64                 `json:"duration"` // milliseconds
+	Duration    float64                 `json:"duration"`
 	Artists     []struct{ Name string } `json:"artists"`
 	ReleaseDate *struct {
 		ISO string `json:"isoString"`
@@ -96,7 +90,6 @@ func (e *spotifyEntity) name() string {
 	return e.Title
 }
 
-// cover is the largest picture of the item.
 func (e *spotifyEntity) cover() string {
 	best, width := "", 0
 	for _, im := range e.VisualIdentity.Image {
@@ -124,7 +117,7 @@ func (r *Registry) spotifyGet(ctx context.Context, rawURL string, limit int64) (
 	if err != nil {
 		return "", nil, err
 	}
-	req.Header.Set("User-Agent", spotifyUA) // link previews get the full facts
+	req.Header.Set("User-Agent", spotifyUA)
 	req.Header.Set("Accept-Language", "en")
 	resp, err := r.HTTP.Do(req)
 	if err != nil {
@@ -138,7 +131,6 @@ func (r *Registry) spotifyGet(ctx context.Context, rawURL string, limit int64) (
 	return string(body), resp.Request.URL, err
 }
 
-// spotifyTarget reads the kind and id of a link, opening short links.
 func (r *Registry) spotifyTarget(ctx context.Context, u *url.URL) (kind, id string, err error) {
 	if m := spotifyPathRe.FindStringSubmatch(u.Path); m != nil {
 		return m[1], m[2], nil
@@ -159,7 +151,6 @@ func (r *Registry) spotifyTarget(ctx context.Context, u *url.URL) (kind, id stri
 	return "", "", errors.New("the short link does not lead to a Spotify song, album or playlist")
 }
 
-// spotifyEntityOf reads the data of an item from its embed page.
 func (r *Registry) spotifyEntityOf(ctx context.Context, kind, id string) (*spotifyEntity, error) {
 	page, _, err := r.spotifyGet(ctx, spotifyBase+"/embed/"+kind+"/"+id, 4<<20)
 	if err != nil {
@@ -190,8 +181,6 @@ func (r *Registry) spotifyEntityOf(ctx context.Context, kind, id string) (*spoti
 	return &e, nil
 }
 
-// spotifyTrackOf gathers a song's facts: the embed page has the title,
-// artists, length and cover; the song page adds the album and track number.
 func (r *Registry) spotifyTrackOf(ctx context.Context, id string) (spotifyTrack, error) {
 	e, err := r.spotifyEntityOf(ctx, "track", id)
 	if err != nil {
@@ -216,7 +205,7 @@ func (r *Registry) spotifyTrackOf(ctx context.Context, id string) (spotifyTrack,
 				meta[m[1]] = html.UnescapeString(m[2])
 			}
 		}
-		// "Ed Sheeran · ÷ (Deluxe) · Song · 2017"
+
 		parts := strings.Split(meta["og:description"], " · ")
 		for i := 2; i < len(parts); i++ {
 			if parts[i] == "Song" {
@@ -240,7 +229,6 @@ type songCandidate struct {
 	duration, delta, score    float64
 }
 
-// songWords splits a title into folded words without accents.
 func songWords(s string) []string {
 	var b strings.Builder
 	for _, r := range norm.NFD.String(textutil.Fold(s)) {
@@ -257,8 +245,6 @@ func songWords(s string) []string {
 
 var fillerWords = map[string]bool{"the": true, "a": true, "and": true, "of": true, "feat": true, "ft": true, "x": true, "with": true}
 
-// versionWords mark another recording of a song; a candidate holding one the
-// Spotify title lacks is not the song.
 var versionWords = []string{"live", "cover", "remix", "karaoke", "instrumental", "slowed", "sped up", "speed up", "8d", "nightcore",
 	"reverb", "acoustic", "mashup", "bootleg", "flip", "extended", "1 hour", "loop", "reaction", "tutorial", "piano version",
 	"کاور", "ریمیکس", "بی کلام", "بیکلام", "اجرای زنده", "لایو"}
@@ -290,14 +276,10 @@ func coverage(want []string, have map[string]bool) float64 {
 	return float64(hit) / float64(n)
 }
 
-// noiseWords say nothing about which recording a title is.
 var noiseWords = map[string]bool{"official": true, "video": true, "audio": true, "lyric": true, "lyrics": true, "music": true, "hd": true,
 	"hq": true, "4k": true, "visualizer": true, "mv": true, "clip": true, "topic": true, "vevo": true, "remastered": true, "remaster": true,
 	"explicit": true, "song": true, "new": true, "آهنگ": true, "جدید": true, "موزیک": true, "ویدیو": true, "رسمی": true, "متن": true}
 
-// precision is the share of a candidate's title words that belong to the
-// song (its title and artists); a mashup or another song scores low. Words
-// in another script than the song's are translations and not counted.
 func precision(title string, song map[string]bool) float64 {
 	latin := func(w string) bool { return w[0] < utf8.RuneSelf }
 	scripts := map[bool]bool{}
@@ -320,8 +302,6 @@ func precision(title string, song map[string]bool) float64 {
 	return float64(hit) / float64(n)
 }
 
-// rate scores how surely a candidate is the Spotify recording; false means
-// it is not (another song, or its length is off by more than spotifyMaxDelta).
 func (c *songCandidate) rate(t spotifyTrack) bool {
 	words := songWords(c.title + " " + c.channel)
 	have := wordSet(words)
@@ -361,8 +341,6 @@ func wordSet(words []string) map[string]bool {
 	return m
 }
 
-// songCandidates searches YouTube and SoundCloud at once and keeps the
-// results that match, best first.
 func (r *Registry) songCandidates(ctx context.Context, sessionID string, d *DownloaderInfo, t spotifyTrack) (cands []songCandidate, seen int) {
 	title := strings.TrimSpace(featRe.ReplaceAllString(t.Title, ""))
 	queries := []string{"ytsearch6:" + t.Artists[0] + " - " + title, "scsearch8:" + t.Artists[0] + " " + title}
@@ -412,7 +390,6 @@ func (r *Registry) searchSongs(ctx context.Context, sessionID string, d *Downloa
 	return out
 }
 
-// songName is a file name for "Artist - Title" that is safe for yt-dlp's template.
 func songName(t spotifyTrack) string {
 	var b strings.Builder
 	for _, r := range t.Artists[0] + " - " + t.Title {
@@ -427,7 +404,6 @@ func songName(t spotifyTrack) string {
 	return textutil.TruncateRunes(name, 90, "")
 }
 
-// spotifySong finds, downloads and tags one Spotify song.
 func (r *Registry) spotifySong(ctx context.Context, sessionID string, d *DownloaderInfo, t spotifyTrack) (dlFile, []string, error) {
 	cands, seen := r.songCandidates(ctx, sessionID, d, t)
 	if len(cands) == 0 {
@@ -490,7 +466,6 @@ func (r *Registry) spotifySong(ctx context.Context, sessionID string, d *Downloa
 	return dlFile{}, notes, errors.New(reason)
 }
 
-// tagSong writes Spotify's tags and cover into an MP3 (the stream is copied).
 func (r *Registry) tagSong(ctx context.Context, sessionID string, f dlFile, t spotifyTrack) (dlFile, bool) {
 	if !strings.EqualFold(path.Ext(f.name), ".mp3") {
 		return f, false
@@ -528,7 +503,6 @@ func (r *Registry) tagSong(ctx context.Context, sessionID string, f dlFile, t sp
 	return f, cover
 }
 
-// saveCover downloads Spotify's cover next to the song.
 func (r *Registry) saveCover(ctx context.Context, sessionID, rawURL string) bool {
 	u, err := netclient.ValidateURL(rawURL)
 	if rawURL == "" || err != nil {
@@ -553,7 +527,6 @@ func (r *Registry) saveCover(ctx context.Context, sessionID, rawURL string) bool
 	return err == nil && len(data) > 0 && r.Machine.WriteFile(sessionID, spotifyCoverFile, data) == nil
 }
 
-// expandItems lists the numbers of a range list ("1-3,5" → 1 2 3 5).
 func expandItems(s string) []int {
 	var out []int
 	for _, part := range strings.Split(s, ",") {
@@ -572,7 +545,6 @@ func expandItems(s string) []int {
 	return out
 }
 
-// spotify downloads a Spotify song, or chosen songs of an album or playlist.
 func (r *Registry) spotify(ctx context.Context, sessionID string, u *url.URL, q dlRequest, d *DownloaderInfo) string {
 	kind, id, err := r.spotifyTarget(ctx, u)
 	if err != nil {
@@ -634,7 +606,6 @@ func (r *Registry) spotify(ctx context.Context, sessionID string, u *url.URL, q 
 	return r.report(ctx, sessionID, dlRequest{audio: true}, d, res)
 }
 
-// spotifyList shows the songs of an album or playlist so the model can pick.
 func spotifyList(kind string, e *spotifyEntity) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Spotify %s «%s»", kind, e.name())

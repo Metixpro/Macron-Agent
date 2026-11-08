@@ -9,16 +9,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// What the server itself decides: the queue, and how long the files live.
-
 const (
 	queueWait          = 10 * time.Minute
 	scheduledQueueWait = 2 * time.Minute
 )
 
-// acquireQueued takes the owner's slot. A job of theirs that is just ending
-// is waited for a moment; when every slot is busy (a scheduled job, a group)
-// the request waits in line, and they see it until it starts.
 func (b *Bot) acquireQueued(key string, resp *responder, l lang) (func(), guard.Reason) {
 	release, why := b.gate.TryAcquire(key)
 	for i := 0; why == guard.KeyBusy && i < 6; i++ {
@@ -43,7 +38,7 @@ func (b *Bot) acquireQueued(key string, resp *responder, l lang) (func(), guard.
 			ctx, cancel := b.ctx(10 * time.Second)
 			defer cancel()
 			html := l.f("⏳ الان سرم شلوغه و توی صف هستی (%s نفر جلوتر از تو). به‌محض اینکه جا باز بشه، شروع می‌کنم.", l.num(ahead))
-			if g != nil { // a guest: the placeholder says it
+			if g != nil {
 				g.progress(ctx, html, l == fa, true)
 				return
 			}
@@ -59,7 +54,6 @@ func (b *Bot) acquireQueued(key string, resp *responder, l lang) (func(), guard.
 	return release, why
 }
 
-// acquireScheduled takes a slot for a scheduled task, waiting in line.
 func (b *Bot) acquireScheduled(key string) (func(), error) {
 	release, why := b.gate.Acquire(b.jobCtx, key, guard.Normal, scheduledQueueWait, nil)
 	if why != guard.Acquired {
@@ -68,12 +62,8 @@ func (b *Bot) acquireScheduled(key string) (func(), error) {
 	return release, nil
 }
 
-// ---------------------------------------------------------------- files
-
-// filesTTL is how long the workspace files live (0: forever).
 func (b *Bot) filesTTL() time.Duration { return b.workFiles }
 
-// durationWord writes a lifetime: ۲۴ ساعت، ۷ روز.
 func durationWord(l lang, d time.Duration) string {
 	if d <= 0 {
 		return l.t("همیشه")
@@ -84,7 +74,6 @@ func durationWord(l lang, d time.Duration) string {
 	return l.f("%s ساعت", l.num(max(int(d.Hours()), 1)))
 }
 
-// keptFor says how long files are kept: «تا ۷ روز نگه داشته می‌شن».
 func keptFor(l lang, d time.Duration) string {
 	if d <= 0 {
 		return l.t("همیشه نگه داشته می‌شن")

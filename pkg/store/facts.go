@@ -8,18 +8,13 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------- long-term memory
-
-// MaxFacts is how many facts are kept per user; MaxFactChars is the size of one.
 const (
 	MaxFacts     = 60
 	MaxFactChars = 300
 )
 
-// ErrTooManyFacts is returned when a user's memory is full.
 var ErrTooManyFacts = errors.New("memory is full")
 
-// Fact is something lasting the assistant remembers about a user.
 type Fact struct {
 	ID        int64
 	UserID    int64
@@ -28,7 +23,6 @@ type Fact struct {
 	UpdatedAt time.Time
 }
 
-// Facts returns a user's facts, oldest first.
 func (s *Store) Facts(ctx context.Context, userID int64) ([]Fact, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, fact, created_at, updated_at FROM user_facts WHERE user_id = ? ORDER BY id LIMIT ?`,
 		userID, MaxFacts*2)
@@ -47,7 +41,6 @@ func (s *Store) Facts(ctx context.Context, userID int64) ([]Fact, error) {
 	return out, rows.Err()
 }
 
-// AddFact saves a fact; an identical one is not saved twice (its id is returned).
 func (s *Store) AddFact(ctx context.Context, userID int64, text string) (id int64, existed bool, err error) {
 	text = truncate(strings.TrimSpace(text), MaxFactChars)
 	facts, err := s.Facts(ctx, userID)
@@ -71,7 +64,6 @@ func (s *Store) AddFact(ctx context.Context, userID int64, text string) (id int6
 	return id, false, err
 }
 
-// UpdateFact replaces the text of one of the user's facts.
 func (s *Store) UpdateFact(ctx context.Context, userID, id int64, text string) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE user_facts SET fact = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
 		truncate(strings.TrimSpace(text), MaxFactChars), s.Now(), id, userID)
@@ -82,7 +74,6 @@ func (s *Store) UpdateFact(ctx context.Context, userID, id int64, text string) (
 	return n > 0, err
 }
 
-// DeleteFact removes one of the user's facts.
 func (s *Store) DeleteFact(ctx context.Context, userID, id int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM user_facts WHERE id = ? AND user_id = ?`, id, userID)
 	if err != nil {
@@ -92,7 +83,6 @@ func (s *Store) DeleteFact(ctx context.Context, userID, id int64) (bool, error) 
 	return n > 0, err
 }
 
-// ClearFacts removes everything remembered about a user.
 func (s *Store) ClearFacts(ctx context.Context, userID int64) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM user_facts WHERE user_id = ?`, userID)
 	if err != nil {
@@ -101,15 +91,10 @@ func (s *Store) ClearFacts(ctx context.Context, userID int64) (int64, error) {
 	return res.RowsAffected()
 }
 
-// ---------------------------------------------------------------- per-user preferences
-
-// PrefFactsOff turns the long-term memory off for a user.
 const PrefFactsOff = "facts_off"
 
-// PrefMode is the user's answer mode: "fast", or unset for deep mode.
 const PrefMode = "mode"
 
-// UserPref returns a user's preference ("" when unset).
 func (s *Store) UserPref(ctx context.Context, userID int64, name string) (string, error) {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM user_prefs WHERE user_id = ? AND name = ?`, userID, name).Scan(&v)
@@ -119,7 +104,6 @@ func (s *Store) UserPref(ctx context.Context, userID int64, name string) (string
 	return v, err
 }
 
-// SetUserPref stores a preference; "" deletes it.
 func (s *Store) SetUserPref(ctx context.Context, userID int64, name, value string) error {
 	if value == "" {
 		_, err := s.db.ExecContext(ctx, `DELETE FROM user_prefs WHERE user_id = ? AND name = ?`, userID, name)
@@ -130,7 +114,4 @@ func (s *Store) SetUserPref(ctx context.Context, userID int64, name, value strin
 	return err
 }
 
-// PrefContextMeter is where the user's context meter stood after their last
-// request, and how often their conversation had been compacted then
-// ("tokens/compressions").
 const PrefContextMeter = "ctx_meter"

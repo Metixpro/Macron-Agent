@@ -14,11 +14,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// When the GitHub API turns the server away (60 calls an hour without a
-// token, shared by everyone on its address), github_inspect reads what
-// GitHub serves to everyone: the raw README, the releases and commits
-// feeds, and the repository's page.
-
 var (
 	errGitHubLimit = errors.New("GitHub API rate limit reached — try again later")
 	githubAPIURL   = "https://api.github.com"
@@ -46,7 +41,6 @@ func (r *Registry) githubWeb(ctx context.Context, rawURL string, limit int64) ([
 	return io.ReadAll(io.LimitReader(resp.Body, limit))
 }
 
-// githubRawReadme reads the README of the default branch.
 func (r *Registry) githubRawReadme(ctx context.Context, repo string) (string, error) {
 	var last error
 	for _, name := range []string{"README.md", "readme.md", "Readme.md", "README.rst", "README.txt", "README"} {
@@ -80,8 +74,6 @@ func htmlToLine(s string) string {
 	return textutil.CollapseSpace(html.UnescapeString(tagRe.ReplaceAllString(s, " ")))
 }
 
-// githubFeed reads the releases or the commits of a repository from its
-// Atom feed.
 func (r *Registry) githubFeed(ctx context.Context, repo, kind string) (string, error) {
 	b, err := r.githubWeb(ctx, githubWebURL+"/"+repo+"/"+kind+".atom", 2<<20)
 	if err != nil {
@@ -124,7 +116,6 @@ var (
 	ghArchivedRe = regexp.MustCompile(`This repository has been archived`)
 )
 
-// githubPage reads a repository's summary from its page.
 func (r *Registry) githubPage(ctx context.Context, repo string) (string, error) {
 	b, err := r.githubWeb(ctx, githubWebURL+"/"+repo, 4<<20)
 	if err != nil {
@@ -143,7 +134,7 @@ func (r *Registry) githubPage(ctx context.Context, repo string) (string, error) 
 	if m := ghDescRe.FindStringSubmatch(page); m != nil {
 		desc = strings.TrimSuffix(html.UnescapeString(m[1]), " - "+repo)
 		if strings.HasPrefix(desc, "Contribute to "+repo) {
-			desc = "" // GitHub's filler for a repository without one
+			desc = ""
 		}
 	}
 	var langs []string

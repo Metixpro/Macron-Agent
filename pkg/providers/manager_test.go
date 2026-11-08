@@ -34,7 +34,7 @@ type fakeProvider struct {
 	calls  atomic.Int32
 	mu     sync.Mutex
 	last   map[string]any
-	body   string // the error text (default "down")
+	body   string
 }
 
 func (f *fakeProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,20 +104,18 @@ func TestActiveSwitchAndFailover(t *testing.T) {
 		t.Fatalf("%+v %v", resp, err)
 	}
 
-	// Switch the active provider.
 	s.SetSetting(ctx, store.SettingActiveProvider, "0")
 	s.SetSetting(ctx, store.SettingActiveProvider, itoa(bID))
 	if resp, _ := m.Complete(ctx, ask); resp.Provider != "beta" || m.SupportsVision() {
 		t.Fatalf("switch: %+v", resp)
 	}
 
-	// beta fails → alpha takes over.
 	b.status.Store(503)
 	resp, err = m.Complete(ctx, ask)
 	if err != nil || resp.Provider != "alpha" {
 		t.Fatalf("failover: %+v %v", resp, err)
 	}
-	if b.calls.Load() < 2 { // first call worked, then the failed attempt(s)
+	if b.calls.Load() < 2 {
 		t.Errorf("beta should have been tried first")
 	}
 	p, _ := s.Provider(ctx, bID)
@@ -125,14 +123,12 @@ func TestActiveSwitchAndFailover(t *testing.T) {
 		t.Errorf("failure not recorded: %+v", p)
 	}
 
-	// Failover can be disabled.
 	s.SetSetting(ctx, store.SettingFailover, "false")
 	if _, err := m.Complete(ctx, ask); err == nil {
 		t.Fatal("without failover the active provider's error must surface")
 	}
 	s.SetSetting(ctx, store.SettingFailover, "true")
 
-	// All down → last error.
 	a.status.Store(500)
 	if _, err := m.Complete(ctx, ask); err == nil {
 		t.Fatal("expected an error when every provider fails")
@@ -140,7 +136,6 @@ func TestActiveSwitchAndFailover(t *testing.T) {
 	a.status.Store(0)
 	b.status.Store(0)
 
-	// A disabled provider is never used, even when selected.
 	p.Enabled = false
 	s.UpdateProvider(ctx, *p)
 	m.Reload(ctx)
@@ -158,7 +153,7 @@ func TestClientErrorsDoNotFailOverForBadRequestsAfterStreaming(t *testing.T) {
 	if !failoverWorthy(&llm.APIError{Status: 401}) || !failoverWorthy(&llm.APIError{Status: 503}) || failoverWorthy(&llm.APIError{Status: 422}) {
 		t.Error("failoverWorthy classification")
 	}
-	// Streamed text is cumulative, so another provider can simply start over.
+
 	if !failoverWorthy(llm.ErrPartialStream) {
 		t.Error("a broken stream fails over too")
 	}
@@ -173,7 +168,7 @@ func TestRateLimitFailsOverAtOnceAndCoolsDown(t *testing.T) {
 	m, _ := New(ctx, s, nil, nil)
 	ask := llm.Request{Messages: []llm.Message{{Role: "user", Content: "hi"}}}
 
-	a.status.Store(429) // rate limited, no Retry-After
+	a.status.Store(429)
 	start := time.Now()
 	resp, err := m.Complete(ctx, ask)
 	if err != nil || resp.Provider != "beta" {
@@ -182,13 +177,13 @@ func TestRateLimitFailsOverAtOnceAndCoolsDown(t *testing.T) {
 	if took := time.Since(start); took > 900*time.Millisecond || a.calls.Load() != 1 {
 		t.Errorf("no waiting or retrying on the limited provider: %v, %d calls", took, a.calls.Load())
 	}
-	// While it cools down, the limited provider is not even tried first.
+
 	a.status.Store(0)
 	before := a.calls.Load()
 	if resp, _ := m.Complete(ctx, ask); resp.Provider != "beta" || a.calls.Load() != before {
 		t.Errorf("a rate-limited active provider waits behind healthy ones: %+v", resp)
 	}
-	// Overloaded too: the last provider still answers.
+
 	b.status.Store(503)
 	if resp, err := m.Complete(ctx, ask); err != nil || resp.Provider != "alpha" {
 		t.Errorf("a cooling provider is still better than giving up: %+v %v", resp, err)
@@ -202,7 +197,7 @@ func TestBrokenStreamFailsOverAndRestartsTheText(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"half an ans\"}}]}\n\n"))
 		w.(http.Flusher).Flush()
-		panic(http.ErrAbortHandler) // the connection dies mid-answer
+		panic(http.ErrAbortHandler)
 	}))
 	defer broken.Close()
 	good := &fakeProvider{name: "good"}
@@ -244,7 +239,7 @@ func TestCooldownSkipsBrokenProvider(t *testing.T) {
 	if !cooling {
 		t.Fatal("beta should be cooling down")
 	}
-	// The active provider is still tried first (admin's choice), but alpha answers.
+
 	if resp, err := m.Complete(ctx, ask); err != nil || resp.Provider != "alpha" {
 		t.Fatalf("%+v %v", resp, err)
 	}
@@ -322,7 +317,7 @@ func TestSafetyRefusalFailsOverWithoutHurtingTheProvider(t *testing.T) {
 			t.Error("refusals must not bench a healthy provider")
 		}
 	}
-	// When every provider refuses, the caller can tell.
+
 	b.status.Store(400)
 	b2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "blocked by the safety filter", http.StatusForbidden)
@@ -353,12 +348,12 @@ func TestPreferredProviderPerRequest(t *testing.T) {
 	if p, _ := m.ActiveFor(pctx); p.ID != vipID || m.ActiveID() == vipID {
 		t.Errorf("the panel's active provider stays: %+v", p)
 	}
-	// The preferred one fails: the others take over.
+
 	vip.status.Store(503)
 	if resp, err := m.Complete(pctx, ask); err != nil || resp.Provider != "free" {
 		t.Fatalf("failover: %+v %v", resp, err)
 	}
-	// A disabled or unknown preference falls back to the active provider.
+
 	if p, _ := m.ActiveFor(Prefer(ctx, 9999)); p.Name != "free" {
 		t.Errorf("unknown: %+v", p)
 	}
@@ -367,10 +362,6 @@ func TestPreferredProviderPerRequest(t *testing.T) {
 	}
 }
 
-// When the first provider says the conversation is too long and the next one
-// is only busy, the caller hears about the length (it can shorten the
-// conversation; waiting would not help), and a request refused as invalid does
-// not count against the provider's health.
 func TestTheTellingErrorWins(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
@@ -398,10 +389,6 @@ func TestTheTellingErrorWins(t *testing.T) {
 	}
 }
 
-// Groq's way of a per-minute allowance too small for the request is a 413
-// «Request too large … on tokens per minute (TPM)». It is not the model's
-// window: the next provider takes the request at once, and the limited one is
-// left alone for a minute instead of failing every request first.
 func TestATooLargeRequestFailsOverAndASizeRateLimitCoolsDown(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
@@ -423,8 +410,6 @@ func TestATooLargeRequestFailsOverAndASizeRateLimitCoolsDown(t *testing.T) {
 		t.Errorf("the provider with a per-minute limit is not tried again for a minute: %+v (%d calls)", resp, a.calls.Load())
 	}
 
-	// A real overflow (a smaller window) goes on to a provider with a bigger one too,
-	// and when none takes it, the overflow is what the caller hears.
 	a2, _ := addProvider(t, s, "gamma", 5, true)
 	a2.status.Store(413)
 	a2.mu.Lock()

@@ -1,4 +1,3 @@
-// Package telegram is a minimal Telegram Bot API client.
 package telegram
 
 import (
@@ -22,11 +21,10 @@ import (
 )
 
 const (
-	// MaxMessageChars is Telegram's hard limit for one text message.
 	MaxMessageChars = 4096
-	// MaxUploadBytes is the limit for files uploaded by bots.
+
 	MaxUploadBytes = 50 << 20
-	// MaxPhotoBytes is the limit for sendPhoto; larger images go as documents.
+
 	MaxPhotoBytes = 10 << 20
 
 	defaultBase = "https://api.telegram.org"
@@ -34,21 +32,17 @@ const (
 
 type Bot struct {
 	Token        string
-	APIURL       string // https://api.telegram.org/bot<TOKEN>
-	fileBase     string // https://api.telegram.org
+	APIURL       string
+	fileBase     string
 	HTTPClient   *http.Client
-	UploadClient *http.Client // no overall timeout: uploads are bounded by the context
+	UploadClient *http.Client
 
-	local     bool      // a local Bot API server (see SetLocal)
-	localWarn sync.Once // its files could not be read from disk
+	local     bool
+	localWarn sync.Once
 
-	// OnSent, when set, hears every message the bot sends or edits (its chat
-	// and id, with the context of the request), so a reaction to one of them
-	// can be told from a reaction to a user's own message.
 	OnSent func(ctx context.Context, chatID, messageID int64)
 }
 
-// APIError is an error answer from Telegram.
 type APIError struct {
 	Code        int
 	Description string
@@ -59,19 +53,16 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("telegram api error %d: %s", e.Code, e.Description)
 }
 
-// IsParseError reports a rejected HTML/entity payload.
 func IsParseError(err error) bool {
 	var api *APIError
 	return errors.As(err, &api) && api.Code == http.StatusBadRequest && strings.Contains(api.Description, "can't parse entities")
 }
 
-// IsNotModified reports an edit that would not change the message.
 func IsNotModified(err error) bool {
 	var api *APIError
 	return errors.As(err, &api) && strings.Contains(api.Description, "message is not modified")
 }
 
-// IsUnreachable reports that the user blocked the bot or the chat is gone.
 func IsUnreachable(err error) bool {
 	var api *APIError
 	return errors.As(err, &api) && (api.Code == http.StatusForbidden ||
@@ -80,7 +71,6 @@ func IsUnreachable(err error) bool {
 
 func NewBot(token string) *Bot { return NewBotWithBase(token, defaultBase) }
 
-// NewBotWithBase lets tests (or a local Bot API server) replace api.telegram.org.
 func NewBotWithBase(token, base string) *Bot {
 	base = strings.TrimRight(base, "/")
 	return &Bot{
@@ -88,7 +78,7 @@ func NewBotWithBase(token, base string) *Bot {
 		APIURL:     base + "/bot" + token,
 		fileBase:   base,
 		HTTPClient: &http.Client{Timeout: 60 * time.Second},
-		// An upload may take minutes to send; the answer then comes or the request is given up.
+
 		UploadClient: &http.Client{Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           (&net.Dialer{Timeout: 20 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
@@ -99,7 +89,6 @@ func NewBotWithBase(token, base string) *Bot {
 	}
 }
 
-// scrub removes the bot token from transport errors, whose text contains the request URL.
 func (b *Bot) scrub(err error) error {
 	if err == nil {
 		return nil
@@ -153,7 +142,7 @@ func (b *Bot) decode(resp *http.Response, out any) error {
 			MessageID int64 `json:"message_id"`
 			Chat      *Chat `json:"chat"`
 		}
-		var sent []sentMsg // an album is a list
+		var sent []sentMsg
 		if ar.Result[0] == '{' {
 			var one sentMsg
 			if json.Unmarshal(ar.Result, &one) == nil {
@@ -178,7 +167,6 @@ func (b *Bot) decode(resp *http.Response, out any) error {
 	return nil
 }
 
-// call performs a JSON API call, retrying once when Telegram asks to slow down.
 func (b *Bot) call(ctx context.Context, method string, payload, out any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -218,10 +206,6 @@ func (b *Bot) GetMe(ctx context.Context) (*User, error) {
 	return &u, nil
 }
 
-// GetUpdates long-polls for updates. Each update is decoded on its own: one
-// update with an unexpected field type must not fail the whole batch, or the
-// poller would re-fetch the same offset forever. An undecodable update is
-// returned with only its UpdateID set so the caller still advances past it.
 func (b *Bot) GetUpdates(ctx context.Context, offset int64, timeout int) ([]Update, error) {
 	var raw []json.RawMessage
 	err := b.call(ctx, "getUpdates", map[string]any{
@@ -233,7 +217,6 @@ func (b *Bot) GetUpdates(ctx context.Context, offset int64, timeout int) ([]Upda
 	return decodeUpdates(raw), nil
 }
 
-// AllowedUpdates are the update kinds the bot subscribes to.
 var AllowedUpdates = []string{"message", "edited_message", "callback_query", "my_chat_member", "stopped_message_generation", "poll_answer",
 	"guest_message", "pre_checkout_query", "message_reaction"}
 
@@ -248,8 +231,7 @@ func decodeUpdates(raw []json.RawMessage) []Update {
 			if json.Unmarshal(r, &id) != nil {
 				continue
 			}
-			// A field that does not fit (a new one of Telegram's, an odd value)
-			// must not lose the message: it is left out, the rest is read.
+
 			fixed, dropped, lerr := lenientUpdate(r)
 			if lerr != nil {
 				log.Printf("telegram: skipping update %d: %v", id.UpdateID, err)
@@ -264,8 +246,6 @@ func decodeUpdates(raw []json.RawMessage) []Update {
 	return updates
 }
 
-// lenientUpdate reads an update the strict way could not, leaving out the
-// fields of its messages that do not decode (and naming them).
 func lenientUpdate(r json.RawMessage) (Update, []string, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(r, &top); err != nil {
@@ -294,7 +274,7 @@ func lenientUpdate(r json.RawMessage) (Update, []string, error) {
 			top["callback_query"], _ = json.Marshal(cq)
 		}
 	}
-	for k, v := range top { // whatever else still does not fit
+	for k, v := range top {
 		var probe Update
 		one, _ := json.Marshal(map[string]json.RawMessage{k: v})
 		if json.Unmarshal(one, &probe) != nil {
@@ -308,9 +288,6 @@ func lenientUpdate(r json.RawMessage) (Update, []string, error) {
 	return u, dropped, err
 }
 
-// cleanMessage drops the fields of a message (and of the one it replies
-// to) that do not decode; false when one it cannot do without (its id, its
-// chat) is among them: then the whole message goes.
 func cleanMessage(raw json.RawMessage, path string, dropped *[]string) (json.RawMessage, bool) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
@@ -341,23 +318,18 @@ func cleanMessage(raw json.RawMessage, path string, dropped *[]string) (json.Raw
 	return out, true
 }
 
-// DeleteWebhook removes a webhook, which would otherwise make getUpdates fail with a conflict.
 func (b *Bot) DeleteWebhook(ctx context.Context) error {
 	return b.call(ctx, "deleteWebhook", map[string]any{"drop_pending_updates": false}, nil)
 }
 
-// SetMyCommands registers the "/" command menu for everyone.
 func (b *Bot) SetMyCommands(ctx context.Context, cmds []BotCommand) error {
 	return b.SetMyCommandsScoped(ctx, cmds, nil)
 }
 
-// SetMyCommandsScoped registers commands for a scope (nil = default scope).
 func (b *Bot) SetMyCommandsScoped(ctx context.Context, cmds []BotCommand, scope *BotCommandScope) error {
 	return b.SetMyCommandsFor(ctx, cmds, scope, "")
 }
 
-// SetMyCommandsFor registers commands for a scope and the users of one app
-// language ("" = everyone without a list of their own).
 func (b *Bot) SetMyCommandsFor(ctx context.Context, cmds []BotCommand, scope *BotCommandScope, languageCode string) error {
 	p := map[string]any{"commands": cmds}
 	if scope != nil {
@@ -382,8 +354,6 @@ func (b *Bot) send(ctx context.Context, chatID int64, text, parseMode string, op
 	return &m, nil
 }
 
-// SendHTML sends Telegram HTML. If Telegram rejects the markup, the message is
-// re-sent as plain text, so the user never ends up with nothing.
 func (b *Bot) SendHTML(ctx context.Context, chatID int64, html string, opts SendOptions) (*Message, error) {
 	m, err := b.send(ctx, chatID, html, "HTML", opts)
 	if IsParseError(err) {
@@ -392,27 +362,21 @@ func (b *Bot) SendHTML(ctx context.Context, chatID int64, html string, opts Send
 	return m, err
 }
 
-// SendMessage sends HTML with an optional keyboard.
 func (b *Bot) SendMessage(ctx context.Context, chatID int64, html string, kb *InlineKeyboardMarkup) (*Message, error) {
 	return b.SendHTML(ctx, chatID, html, SendOptions{Markup: kb})
 }
 
-// SendText sends plain text without any parsing.
 func (b *Bot) SendText(ctx context.Context, chatID int64, text string) (*Message, error) {
 	return b.send(ctx, chatID, text, "", SendOptions{})
 }
 
-// SendHTMLChunks splits a long HTML message and sends the parts in order; the
-// keyboard is attached to the last one.
 func (b *Bot) SendHTMLChunks(ctx context.Context, chatID int64, html string, kb *InlineKeyboardMarkup) error {
 	_, err := b.SendHTMLParts(ctx, chatID, html, SendOptions{Markup: kb})
 	return err
 }
 
-// SendHTMLParts sends a long HTML text as consecutive messages: the first one
-// replies to opts.ReplyTo, the last one carries opts.Markup. It returns the sent messages.
 func (b *Bot) SendHTMLParts(ctx context.Context, chatID int64, html string, opts SendOptions) ([]*Message, error) {
-	if !ValidHTML(html) { // e.g. overlapping emphasis from the model: send readable text, not an API error
+	if !ValidHTML(html) {
 		html = EscapeHTML(textutil.StripHTML(html))
 	}
 	chunks := SplitHTML(html, 3800)
@@ -434,7 +398,6 @@ func (b *Bot) SendHTMLParts(ctx context.Context, chatID int64, html string, opts
 	return sent, nil
 }
 
-// EditMessageText edits an HTML message (plain-text fallback, "not modified" is not an error).
 func (b *Bot) EditMessageText(ctx context.Context, chatID, messageID int64, text string, kb *InlineKeyboardMarkup) error {
 	edit := func(t, mode string) error {
 		payload := map[string]any{"chat_id": chatID, "message_id": messageID, "text": t,
@@ -471,7 +434,6 @@ func (b *Bot) DeleteMessage(ctx context.Context, chatID, messageID int64) error 
 	return b.call(ctx, "deleteMessage", map[string]any{"chat_id": chatID, "message_id": messageID}, nil)
 }
 
-// File is an upload source: the content is streamed, never buffered in memory.
 type File struct {
 	Name   string
 	Reader io.Reader
@@ -508,13 +470,10 @@ func (b *Bot) SendVideoOpts(ctx context.Context, chatID int64, f File, caption s
 	return b.upload(ctx, "sendVideo", "video", chatID, f, caption, map[string]string{"supports_streaming": "true"}, opts)
 }
 
-// SendVoiceOpts sends an OGG/Opus file as a voice message.
 func (b *Bot) SendVoiceOpts(ctx context.Context, chatID int64, f File, caption string, opts SendOptions) error {
 	return b.upload(ctx, "sendVoice", "voice", chatID, f, caption, nil, opts)
 }
 
-// SendVideoNoteOpts sends a square MP4 of at most a minute as a round video
-// message (they take no caption).
 func (b *Bot) SendVideoNoteOpts(ctx context.Context, chatID int64, f File, length int, opts SendOptions) error {
 	extra := map[string]string{}
 	if length > 0 {
@@ -538,7 +497,6 @@ type namedFile struct {
 	file  File
 }
 
-// uploadMany streams a multipart request with several files (albums).
 func (b *Bot) uploadMany(ctx context.Context, method string, chatID int64, fields map[string]any, files []namedFile) error {
 	all := map[string]any{"chat_id": fmt.Sprint(chatID)}
 	for k, v := range fields {
@@ -547,8 +505,6 @@ func (b *Bot) uploadMany(ctx context.Context, method string, chatID int64, field
 	return b.postForm(ctx, method, all, files, nil)
 }
 
-// postForm streams a multipart request: the fields (strings as they are,
-// the rest as JSON) and the files.
 func (b *Bot) postForm(ctx context.Context, method string, fields map[string]any, files []namedFile, out any) error {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)

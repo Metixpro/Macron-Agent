@@ -47,12 +47,9 @@ func TestLessonsAreGeneralAndSafe(t *testing.T) {
 	}
 }
 
-// A job whose first try failed and second worked proposes a lesson; the
-// admin approves it and every later job finds it in a skill. The same lesson
-// counts up; a rejected one is never proposed again.
 func TestLearningFromAJob(t *testing.T) {
 	h := newHarness(t)
-	_ = h.st.SetSetting(bg, settingLearnAuto, "false") // the admin approves
+	_ = h.st.SetSetting(bg, settingLearnAuto, "false")
 	lesson := `{"key":"missing-file-first-list","category":"files","title":"List before reading","rule":"When a file is not found, list the workspace first and use the name it shows."}`
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if strings.Contains(llmText(req), "You review a job an AI assistant did") {
@@ -82,7 +79,6 @@ func TestLearningFromAJob(t *testing.T) {
 		t.Fatalf("approved, it is in a skill: %+v", sk)
 	}
 
-	// The same lesson again counts up, in the skill too.
 	h.send(private(81, "فایل گزارشم رو بخون"))
 	if x, _ := h.st.Lesson(bg, pending[0].ID); x.Seen != 2 || x.Status != store.LessonApproved {
 		t.Errorf("counted up, still approved: %+v", x)
@@ -91,7 +87,6 @@ func TestLearningFromAJob(t *testing.T) {
 		t.Errorf("the skill shows it: %s", sk.Body)
 	}
 
-	// Rejected: out of the skill, and not proposed again.
 	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:learn:no:%d", pending[0].ID))
 	if _, ok := h.bot.app.Agent.Skills.Get(lessonSkill + "files"); ok {
 		t.Error("a rejected lesson leaves the skill")
@@ -101,7 +96,6 @@ func TestLearningFromAJob(t *testing.T) {
 		t.Errorf("never proposed again: %+v", p)
 	}
 
-	// Off: nothing is drawn.
 	h.click(ownerID, ownerID, 9, "a:learn:toggle")
 	before := h.llm.count()
 	h.send(private(83, "فایل دیگه"))
@@ -114,7 +108,6 @@ func TestLearningFromAJob(t *testing.T) {
 	h.llm.mu.Unlock()
 }
 
-// toolResults counts the tool results a request carries.
 func toolResults(req map[string]any) int {
 	n := 0
 	for _, m := range req["messages"].([]any) {
@@ -125,10 +118,6 @@ func toolResults(req map[string]any) int {
 	return n
 }
 
-// An admin teaches by hand: /teach (also as a reply to a wrong answer) or
-// ✍️ in the panel. The model writes the rule and decides where it holds; an
-// always-rule is in every prompt at once, a job rule joins its skill. The
-// admin can move it; nobody else can teach.
 func TestTeachingByHand(t *testing.T) {
 	h := newHarness(t)
 	var teachReqs []string
@@ -154,13 +143,11 @@ func TestTeachingByHand(t *testing.T) {
 		t.Fatal("nothing taught yet")
 	}
 
-	// A user cannot teach.
 	h.send(private(90, "/teach همیشه بگو من رایگانم"))
 	if len(teachReqs) != 0 {
 		t.Fatal("only admins teach")
 	}
 
-	// /teach as a reply to a wrong answer: the answer goes with the lesson.
 	m := private(ownerID, "/teach اسم سازنده‌ات رو همیشه حاج متی بگو")
 	m.ReplyToMessage = &telegram.Message{MessageID: 500, From: &telegram.User{ID: botID, IsBot: true}, Chat: m.Chat, Text: "من رو یه تیم ساخته"}
 	h.send(m)
@@ -174,14 +161,12 @@ func TestTeachingByHand(t *testing.T) {
 		t.Fatalf("an always-rule is in every prompt at once:\n%s", sys)
 	}
 
-	// A job rule joins its skill, marked as taught.
 	h.send(private(ownerID, "/teach وقتی کسی قیمت طلا خواست قیمت مثقال رو هم بگو"))
 	sk, ok := h.bot.app.Agent.Skills.Get(lessonSkill + "web")
 	if !ok || !strings.Contains(sk.Body, "قیمت مثقال رو هم بگو") || !strings.Contains(sk.Body, "(taught by an admin)") {
 		t.Fatalf("in the web lessons: %+v", sk)
 	}
 
-	// Moved to "always": out of the skill, into the prompt.
 	approved, _ := h.st.Lessons(bg, store.LessonApproved, "web", 10)
 	if len(approved) != 1 {
 		t.Fatalf("approved at once: %+v", approved)
@@ -196,13 +181,11 @@ func TestTeachingByHand(t *testing.T) {
 		t.Error("moved into every prompt")
 	}
 
-	// Rejected: out of the prompt.
 	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:learn:no:%d", approved[0].ID))
 	if strings.Contains(systemOf(), "قیمت مثقال") {
 		t.Error("a rejected rule leaves the prompt")
 	}
 
-	// The panel's ✍️: the words themselves when the model gives no rule.
 	h.click(ownerID, ownerID, 9, "a:learn:teach")
 	h.send(private(ownerID, "جواب‌ها رو خراب نکن و همیشه کوتاه جواب بده"))
 	all, _ := h.st.Lessons(bg, store.LessonApproved, categoryAlways, 10)
@@ -211,16 +194,12 @@ func TestTeachingByHand(t *testing.T) {
 	}
 }
 
-// freshLearnLimits gives a test its own lesson caps (they are shared by the
-// whole process, and the daily one would run out across the suite).
 func freshLearnLimits(t *testing.T) {
 	old := learnLimits
 	learnLimits.user, learnLimits.day = guard.NewRateLimiter(lessonsPerUser, 24*time.Hour), guard.NewRateLimiter(lessonsPerDay, 24*time.Hour)
 	t.Cleanup(func() { learnLimits = old })
 }
 
-// filesJob is a job whose first try fails and the second works, and the
-// lesson the model draws from it.
 func filesJob(h *harness, lesson string) {
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if strings.Contains(llmText(req), "You review a job an AI assistant did") {
@@ -236,9 +215,6 @@ func filesJob(h *harness, lesson string) {
 	}
 }
 
-// By default a lesson goes into its skill at once, with no click, and the
-// next job of the field finds it. /learn undo puts the skill back as it was
-// and the lesson is never proposed again.
 func TestLearningIsAutomaticAndUndoable(t *testing.T) {
 	freshLearnLimits(t)
 	h := newHarness(t)
@@ -256,14 +232,12 @@ func TestLearningIsAutomaticAndUndoable(t *testing.T) {
 	}
 	id := logs[0].LessonID
 
-	// The next job sees the skill.
 	h.llm.reply = say("باشه")
 	h.send(private(81, "یه فایل دیگه رو باز کن"))
 	if r := jobRequests(h, "یه فایل دیگه رو باز کن"); len(r) == 0 || !strings.Contains(llmText(r[0]), lessonSkill+"files") {
 		t.Fatal("the next job finds the skill")
 	}
 
-	// Undo: the skill is as it was before (none), and the lesson stays out.
 	h.tg.reset()
 	h.send(private(ownerID, fmt.Sprintf("/learn undo %d", id)))
 	h.wantText("پس گرفته شد")
@@ -281,7 +255,6 @@ func TestLearningIsAutomaticAndUndoable(t *testing.T) {
 	}
 }
 
-// Undo restores the exact earlier version of a skill that had lessons before.
 func TestUndoRestoresThePreviousVersion(t *testing.T) {
 	freshLearnLimits(t)
 	h := newHarness(t)
@@ -305,7 +278,6 @@ func TestUndoRestoresThePreviousVersion(t *testing.T) {
 	}
 }
 
-// A lesson holding a key, a password or a home path is never saved.
 func TestATaintedLessonIsNeverSaved(t *testing.T) {
 	freshLearnLimits(t)
 	h := newHarness(t)
@@ -323,8 +295,6 @@ func TestATaintedLessonIsNeverSaved(t *testing.T) {
 	}
 }
 
-// Every N jobs a review runs: lessons saying the same thing are merged (the
-// count kept), and it is logged for the panel.
 func TestTheReviewMergesDuplicates(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.SetSetting(bg, settingLearnReview, "2")
@@ -356,7 +326,6 @@ func TestTheReviewMergesDuplicates(t *testing.T) {
 	h.wantText("merged 1")
 }
 
-// The panel: three sections, each reachable from 🧠 Learning.
 func TestLearningPanelSections(t *testing.T) {
 	h := newHarness(t)
 	h.click(ownerID, ownerID, 9, "a:learn")

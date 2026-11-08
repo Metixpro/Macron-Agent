@@ -10,8 +10,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/plugins"
 )
 
-// An MCP server added from the chat lands in the usual mcp_servers.json form,
-// beside the servers already there, readable by the owner alone.
 func TestMCPFileIsEditedInPlace(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_servers.json")
 	one := plugins.ServerConfig{ID: "files", Command: "npx", Args: []string{"-y", "server-filesystem", "/home"}, Env: map[string]string{"TOKEN": "t-1"}}
@@ -47,7 +45,6 @@ func TestMCPFileIsEditedInPlace(t *testing.T) {
 	}
 }
 
-// A file written by hand with the servers at the top keeps its shape.
 func TestMCPFileWithServersAtTheTop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_servers.json")
 	_ = os.WriteFile(path, []byte(`{"git": {"command": "uvx", "args": ["mcp-server-git"]}}`), 0o600)

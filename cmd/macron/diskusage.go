@@ -7,20 +7,14 @@ import (
 	"time"
 )
 
-// What the users' workspaces take is found by walking every file, which on
-// a busy server (thousands of workspaces, build caches, installed
-// packages) takes minutes: the walk runs in the background and the panels
-// show its last result at once.
-
 const usageFresh = 10 * time.Minute
 
-// diskUsage is the last measure of a folder.
 type diskUsage struct {
 	Size   int64
 	Files  int
-	At     time.Time     // when it finished (zero: never)
-	Took   time.Duration // how long it took
-	Walked bool          // a measure is running now
+	At     time.Time
+	Took   time.Duration
+	Walked bool
 }
 
 type usageCache struct {
@@ -28,8 +22,6 @@ type usageCache struct {
 	last diskUsage
 }
 
-// get returns the last measure and starts a new one in the background when
-// it is older than maxAge and none is running.
 func (c *usageCache) get(root string, maxAge time.Duration, measure func(string) (int64, int)) diskUsage {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -46,7 +38,6 @@ func (c *usageCache) get(root string, maxAge time.Duration, measure func(string)
 	return c.last
 }
 
-// dirUsage walks a folder, counting its regular files and their bytes.
 func dirUsage(root string) (size int64, files int) {
 	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil || !d.Type().IsRegular() {

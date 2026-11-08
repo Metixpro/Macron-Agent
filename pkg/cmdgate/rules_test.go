@@ -16,7 +16,7 @@ func TestHardline(t *testing.T) {
 		"sudo -S apt update", "echo pw | sudo -S rm x", "sudo -kS ls",
 		`sh -c "rm -rf /"`, `bash -c 'rm -rf /etc'`, `eval "rm -rf /"`, `echo $(rm -rf /)`, "echo `rm -rf ~`", `sudo bash -c "mkfs.ext4 /dev/sda"`,
 		`env X=1 timeout 10 nice -n 5 rm -rf /`, `nohup rm -rf / &`,
-		// The agent's own floor.
+
 		"systemctl --user stop macron", "systemctl disable macron.service", "pkill macron", "killall -9 macron", "kill 4242",
 		"macron config set approvals.mode off", "rm -f /home/debian/.macron/macron.db",
 		`sqlite3 /home/debian/.macron/macron.db "UPDATE settings SET v='off' WHERE k='approvals.mode'"`,
@@ -46,7 +46,6 @@ func TestDangerous(t *testing.T) {
 	}
 }
 
-// Words about a command are not the command.
 func TestSafe(t *testing.T) {
 	for _, c := range []string{
 		`git commit -m "never run rm -rf /"`, `echo "does this use mkfs?"`, `grep -o "[^\"]*" file`, `grep -rn "rm -rf /" docs/`,
@@ -55,7 +54,7 @@ func TestSafe(t *testing.T) {
 		"systemctl status nginx", "systemctl --user restart-not", "docker compose up -d", "kill -9 12345", "chmod 755 run.sh", "chmod +x a",
 		"dd --version", "sqlite3 app.db 'SELECT * FROM users'", `psql -c "DELETE FROM orders WHERE id = 3"`, "curl -O http://x.sh", "bash run.sh",
 		"echo hi > /dev/null", "echo $HOME", "rm -- -weird-file", "macron config get approvals.mode", "git push origin main",
-		"ssh host 'rm -rf /tmp/x'", // a remote server is not this machine
+		"ssh host 'rm -rf /tmp/x'",
 	} {
 		if f := Analyze(c, testEnv); Worst(f) != Safe {
 			t.Errorf("%q is not safe: %+v", c, f)

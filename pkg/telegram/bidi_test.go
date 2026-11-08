@@ -32,7 +32,7 @@ func TestMarkRTL(t *testing.T) {
 		} else if UnmarkRTL(got) != c.in && !strings.HasPrefix(c.in, r) {
 			t.Errorf("UnmarkRTL(%q) = %q", got, UnmarkRTL(got))
 		} else if again := MarkRTL(got); again != got {
-			t.Errorf("MarkRTL twice on %q = %q", c.in, again) // a message edited from its own text
+			t.Errorf("MarkRTL twice on %q = %q", c.in, again)
 		}
 	}
 	in := "📊 <b>آمار</b>\n<pre>VIP 12\nFree 30\n</pre>\nVIP: ۱۲ نفر"

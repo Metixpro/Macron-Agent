@@ -25,12 +25,12 @@ func TestClassicTraceIgnoresRemovedDisplaySettings(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "فایل‌ها بررسی شد"}, 0
 	}
 	h.send(private(ownerID, "فایل‌های پوشه را بررسی کن"))
-	var frames strings.Builder
-	for _, m := range h.tg.of("sendRichMessageDraft") {
-		frames.WriteString(fmt.Sprint(m.body["rich_message"]))
+	frames := strings.Join(liveFrames(h), "\n")
+	if !strings.Contains(frames, "<pre><code") || !strings.Contains(frames, "Files") {
+		t.Fatalf("classic trace missing: %s", frames)
 	}
-	if !strings.Contains(frames.String(), "```bash") || !strings.Contains(frames.String(), "Files") {
-		t.Fatalf("classic trace missing: %s", frames.String())
+	if len(h.tg.of("sendRichMessageDraft")) != 0 {
+		t.Fatal("private chat used a draft instead of a live message")
 	}
 	h.noText("گزارش کار")
 }

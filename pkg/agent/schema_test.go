@@ -34,15 +34,12 @@ func TestCheckSchema(t *testing.T) {
 	}
 }
 
-// A sub-agent's report is held to the output_schema its main agent gave: a
-// report that does not match is sent back once with what is wrong, and the
-// main agent gets the checked JSON.
 func TestDelegateHoldsTheReportToItsSchema(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("d1", ToolDelegate,
 			`{"goal":"price of gold","output_schema":{"type":"object","required":["price","unit"],"properties":{"price":{"type":"number"},"unit":{"type":"string"}}}}`)}},
-		llm.Message{Role: "assistant", Content: "Gold is about 2400 dollars."},                           // the sub-agent, no JSON
-		llm.Message{Role: "assistant", Content: "```json\n{\"price\": 2400, \"unit\": \"usd/oz\"}\n```"}, // corrected
+		llm.Message{Role: "assistant", Content: "Gold is about 2400 dollars."},
+		llm.Message{Role: "assistant", Content: "```json\n{\"price\": 2400, \"unit\": \"usd/oz\"}\n```"},
 		llm.Message{Role: "assistant", Content: "طلا حدود ۲۴۰۰ دلاره"},
 	)
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Role: "user", Content: "قیمت طلا"}, MaxSteps: 3})
@@ -64,8 +61,6 @@ func TestDelegateHoldsTheReportToItsSchema(t *testing.T) {
 	}
 }
 
-// A job that stopped to ask the user resumes with the answer: its own
-// conversation with the model, tool results included, and its plan.
 func TestASuspendedJobResumes(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("p1", ToolPlan, `{"items":[{"text":"پیدا کردن","status":"in_progress"},{"text":"ساختن","status":"pending"}]}`),

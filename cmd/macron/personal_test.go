@@ -25,7 +25,6 @@ func TestPersonalEditionAnswersItsOwnerOnly(t *testing.T) {
 	h := personalHarness(t)
 	h.llm.reply = say("سلام صاحب‌خونه")
 
-	// A stranger gets nothing: no reply, no model call, no trace of the bot.
 	h.dispatch(telegram.Update{UpdateID: 1, Message: private(555, "سلام")})
 	h.dispatch(telegram.Update{UpdateID: 2, Message: private(555, "/start")})
 	h.dispatch(telegram.Update{UpdateID: 3, Message: private(555, "/memory")})
@@ -36,7 +35,6 @@ func TestPersonalEditionAnswersItsOwnerOnly(t *testing.T) {
 		t.Fatalf("a stranger was answered: %d telegram calls %d model calls; %v", len(h.tg.calls), h.llm.count(), h.tg.allText())
 	}
 
-	// The owner is answered, and the stranger's attempt did not change that.
 	h.dispatch(telegram.Update{UpdateID: 6, Message: private(ownerID, "سلام")})
 	h.wantText("سلام صاحب‌خونه")
 }
@@ -77,7 +75,6 @@ func TestPersonalEditionSpeaksForItself(t *testing.T) {
 	h.noText("/plan")
 	h.noText("/invite")
 
-	// The panel of one owner: nothing about users, sales, broadcasts or groups.
 	h.tg.reset()
 	h.send(private(ownerID, "/admin"))
 	panel := lastOf(h, "sendMessage")
@@ -97,7 +94,6 @@ func TestPersonalEditionSpeaksForItself(t *testing.T) {
 		}
 	}
 
-	// Its own command menu.
 	cmds := map[string]bool{}
 	for _, c := range h.bot.userCommands(fa) {
 		cmds[c.Command] = true

@@ -53,7 +53,7 @@ func TestTelegramMedia(t *testing.T) {
 	if info, err := r.Machine.Stat("tg", "clip_small.mp4"); err != nil || info.Size() > 20*1024*1024*103/100 {
 		t.Errorf("fits the target: %v %v\n%s", info.Size(), err, out)
 	}
-	// The names models use; the result named after the input; a GIF with its own palette.
+
 	for action, file := range map[string]string{"gif": "clip.gif", "mp3": "clip.mp3", "cut": "clip_cut.mp4"} {
 		out := call(t, r, "tg", "media_convert", map[string]any{"input_file": "clip.mp4", "action": action, "duration": "3"})
 		if !strings.Contains(out, "File: "+file) {
@@ -69,7 +69,6 @@ func TestTelegramMedia(t *testing.T) {
 	}
 }
 
-// bigRegistryUnsafe has room for media and runs commands on the host.
 func bigRegistryUnsafe(t *testing.T) *Registry {
 	t.Helper()
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})

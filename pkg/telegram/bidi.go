@@ -7,19 +7,10 @@ import (
 )
 
 const (
-	rlm = "‏" // right-to-left mark
-	lrm = "‎" // left-to-right mark
+	rlm = "‏"
+	lrm = "‎"
 )
 
-// MarkRTL lays a right-to-left HTML message out the way it reads. Telegram
-// takes a line's direction from its first letter, so a Persian line that
-// opens with a Latin word ("VIP تا ۳۰ آبان") or holds no letter at all
-// ("💰 ۲۰ ⭐") would sit on the left and read backwards: such a line starts
-// with a right-to-left mark. A command, a mention or a tag inside Persian
-// ("لغو با /reminders") would show its sign on the wrong side ("reminders/"):
-// it gets a left-to-right mark that keeps the sign with its word. Lines with
-// Latin letters and no right-to-left ones (a link, a code, an English
-// sentence) keep their direction, and <pre> blocks are left alone.
 func MarkRTL(html string) string {
 	lines := strings.Split(html, "\n")
 	pre := false
@@ -33,7 +24,6 @@ func MarkRTL(html string) string {
 	return strings.Join(lines, "\n")
 }
 
-// preAfter reports whether a <pre> block is open after a line.
 func preAfter(line string, open bool) bool {
 	o, c := strings.LastIndex(line, "<pre"), strings.LastIndex(line, "</pre>")
 	switch {
@@ -45,16 +35,15 @@ func preAfter(line string, open bool) bool {
 	return open
 }
 
-// markLine marks one line (see MarkRTL).
 func markLine(line string) string {
 	var (
-		first   rune // the first strong direction: 'R', 'L', or 0 for none yet
-		rtl     bool // a right-to-left letter
-		shows   bool // anything visible
+		first   rune
+		rtl     bool
+		shows   bool
 		head    []rune
-		signs   []int // where a left-to-right mark keeps a sign with its word
-		prev    rune  // the rune before
-		lastEnd int   // the byte after it: a mark goes there, before any tags
+		signs   []int
+		prev    rune
+		lastEnd int
 	)
 	for i := 0; i < len(line); {
 		switch line[i] {
@@ -86,7 +75,7 @@ func markLine(line string) string {
 		}
 		switch {
 		case first == 0 && isBidiMark(r):
-			first = 'X' // the line already says its direction
+			first = 'X'
 		case isRTLLetter(r):
 			rtl = true
 			if first == 0 {
@@ -134,5 +123,4 @@ func isLink(s string) bool {
 
 var marks = strings.NewReplacer(rlm, "", lrm, "")
 
-// UnmarkRTL removes the marks MarkRTL adds, from a message read back.
 func UnmarkRTL(s string) string { return marks.Replace(s) }

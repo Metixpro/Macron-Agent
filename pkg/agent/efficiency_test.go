@@ -26,7 +26,7 @@ func TestCLIRequestBudgetAndCustomPersonality(t *testing.T) {
 	if !strings.Contains(sys, "CUSTOM_PERSONALITY") || !strings.Contains(sys, "Ground rules") {
 		t.Fatal("personality or ground rules lost")
 	}
-	// Task/clock data must not contaminate the stable system prefix.
+
 	if strings.Contains(sys, "Inspect the Python project") || strings.Contains(sys, "2026-10-18") {
 		t.Fatal("volatile data in system prefix")
 	}

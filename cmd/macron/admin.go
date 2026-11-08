@@ -21,10 +21,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// statsQueryTime bounds each database part of the stats panel.
 const statsQueryTime = 15 * time.Second
 
-// adminInput is a pending multi-step admin dialog ("send me the API key…").
 type adminInput struct {
 	kind     string
 	target   int64
@@ -54,7 +52,6 @@ func (b *Bot) pending(adminID int64) *adminInput {
 	return in
 }
 
-// panelView is one screen of the panel.
 type panelView struct {
 	html string
 	kb   *telegram.InlineKeyboardMarkup
@@ -64,14 +61,12 @@ func (b *Bot) back(l lang, to string) telegram.InlineKeyboardButton {
 	return b.button(l.t("⬅️ برگشت"), to, "")
 }
 
-// openPanel sends a fresh panel message (from /settings).
 func (b *Bot) openPanel(ctx context.Context, m *telegram.Message) {
 	b.inputs.Delete(m.From.ID)
 	v := b.viewHome(ctx, m.From.ID)
 	b.sendHTML(ctx, m.Chat.ID, v.html, telegram.SendOptions{Markup: v.kb})
 }
 
-// showNew sends a panel screen as a new message (after the admin typed something).
 func (b *Bot) showNew(ctx context.Context, chatID int64, v panelView) {
 	b.sendHTML(ctx, chatID, v.html, telegram.SendOptions{Markup: v.kb})
 }
@@ -118,7 +113,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		answer(l.t("لغو شد"), false)
 		show(b.viewHome(ctx, admin))
 
-	// ----- stats
 	case "stats":
 		answer("", false)
 		show(b.viewStats(ctx, l))
@@ -129,13 +123,12 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		answer("", false)
 		show(b.viewTop(ctx, l))
 
-	// ----- the server
 	case "sys", "syschart", "sysal":
 		b.handleSysCallback(ctx, l, section, parts, chatID, admin, answer, show)
-	case "ssh": // Old server-panel buttons return to the current server view.
+	case "ssh":
 		answer("", false)
 		show(b.viewServer(l, "1h"))
-	// ----- the downloader
+
 	case "dl":
 		switch arg(2) {
 		case "update":
@@ -158,7 +151,7 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 			tctx, tcancel := b.ctx(5 * time.Minute)
 			defer tcancel()
 			b.sendHTML(tctx, chatID, b.testCookies(tctx, l), telegram.SendOptions{})
-			b.showNew(tctx, chatID, b.viewDownloader(l)) // the test takes longer than the button's context
+			b.showNew(tctx, chatID, b.viewDownloader(l))
 			return
 		case "delck":
 			_ = b.st.DeleteCookie(ctx, argInt(3))
@@ -168,7 +161,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		}
 		show(b.viewDownloader(l))
 
-	// ----- web search (treg.to)
 	case "sr":
 		switch arg(2) {
 		case "token":
@@ -186,7 +178,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		}
 		show(b.viewSearch(l))
 
-	// ----- the soul (SOUL.md)
 	case "soul":
 		switch arg(2) {
 		case "get":
@@ -208,7 +199,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		}
 		show(b.viewSoul(l))
 
-	// ----- settings
 	case "st":
 		switch arg(2) {
 		case "remoji":
@@ -279,7 +269,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		answer("", false)
 		show(b.updateView(ctx, l, "a:home"))
 
-	// ----- the agent and its tools
 	case "ai", "stt":
 		answer("", false)
 		show(b.viewAgent(l))
@@ -287,7 +276,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 	case "learn":
 		b.handleLearnPanel(ctx, l, admin, parts, answer, show, ask)
 
-	// ----- other sections
 	case "pv":
 		b.handleProviderPanel(ctx, q, parts, answer, show, ask)
 	case "rt":
@@ -310,7 +298,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 	}
 }
 
-// handleAdminInput consumes a message that answers a pending dialog.
 func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 	l := b.langOf(m.From)
 	in := b.pending(m.From.ID)
@@ -325,7 +312,7 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 		return true
 	}
 	if strings.HasPrefix(text, "/") && in.kind != "bc_msg" && in.kind != "user_msg" && in.kind != "plg_mcp" && in.kind != "plg_env" {
-		b.inputs.Delete(m.From.ID) // another command: abandon the dialog
+		b.inputs.Delete(m.From.ID)
 		return false
 	}
 	done := func(v panelView) {
@@ -335,7 +322,7 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 
 	switch in.kind {
 	case "sr_token":
-		_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // a token is a password: never leave it in the chat
+		_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 		token := strings.TrimSpace(m.Text)
 		if token == "" || strings.ContainsAny(token, " \n\t") || len(token) > 300 {
 			b.reply(m, l.t("این شبیه توکن نیست؛ دوباره بفرست."))
@@ -362,7 +349,7 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 			}
 			cookies = string(data)
 		}
-		_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // cookies are a login: never leave them in the chat
+		_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 		domains := tools.CookieDomains(cookies)
 		if !looksLikeCookies(cookies) || len(domains) == 0 {
 			b.reply(m, l.t("این فرمت cookies.txt (Netscape) نیست؛ دوباره بفرست."))
@@ -508,13 +495,8 @@ func uptime(l lang, d time.Duration) string {
 	return l.f("%d ساعت و %d دقیقه", int(d.Hours()), int(d.Minutes())%60)
 }
 
-// ---------------------------------------------------------------- home
-
-// ---------------------------------------------------------------- stats
-
 func (b *Bot) viewStats(ctx context.Context, l lang) panelView {
-	// Each part has its own time: a slow table or disk never leaves the
-	// button without an answer.
+
 	var (
 		o      *store.Overview
 		err    error
@@ -605,7 +587,6 @@ func (b *Bot) viewTop(ctx context.Context, l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(row(b.back(l, "a:stats")))}
 }
 
-// sendChart renders the 14-day activity chart here and sends it.
 func (b *Bot) sendChart(ctx context.Context, chatID, admin int64) {
 	l := b.lang(admin)
 	series, err := b.st.DailySeries(ctx, 14)
@@ -638,16 +619,10 @@ func (b *Bot) sendChart(ctx context.Context, chatID, admin int64) {
 	_ = b.api.SendPhoto(ctx, chatID, telegram.File{Name: "stats.png", Reader: f}, caption)
 }
 
-// ---------------------------------------------------------------- users
-
 const usersPerPage = 8
 
-// ---------------------------------------------------------------- settings and admins
-
-// reactionEmojis are the reactions offered for a message that was read.
 var reactionEmojis = []string{"👀", "👍", "✍", "🫡", "🤔", "⚡"}
 
-// seenReaction is the reaction a message gets when it is read.
 func (b *Bot) seenReaction() string {
 	if v, ok := b.st.Setting(store.SettingReactionEmoji); ok {
 		for _, e := range reactionEmojis {
@@ -659,8 +634,6 @@ func (b *Bot) seenReaction() string {
 	return reactionEmojis[0]
 }
 
-// viewSettings is the settings page: the reactions, nothing else (how the
-// work is shown lives in 🦾 the agent and its tools → 🖥 showing the work).
 func (b *Bot) viewSettings(l lang) panelView {
 	on := b.st.SettingBool(store.SettingReactions, true)
 	html := l.f("⚙️ <b>تنظیمات</b>\n\n😍 ری‌اکشن روی پیام‌ها: %s\nایموجی پیش‌فرض (وقتی پیام خونده شد): %s", onOff(l, on), b.seenReaction())
@@ -683,7 +656,6 @@ func (b *Bot) viewSettings(l lang) panelView {
 	)}
 }
 
-// viewShowWork controls progress visibility.
 func (b *Bot) viewShowWork(l lang) panelView {
 	rows := [][]telegram.InlineKeyboardButton{row(b.button(l.t("🖥 ترمینال زنده"), "a:st:trace:ws", ""))}
 	if b.st.SettingBool(store.SettingPremiumEmoji, false) {
@@ -693,7 +665,6 @@ func (b *Bot) viewShowWork(l lang) panelView {
 	return panelView{html: l.f("🖥 <b>نمایش کار</b>\n\nنمایش مراحل: %s", onOff(l, b.st.SettingBool(store.SettingLiveTrace, true))), kb: keyboard(rows...)}
 }
 
-// autoName says how far a job goes on by itself.
 func autoName(l lang, n int) string {
 	switch n {
 	case autoForever:
@@ -704,8 +675,6 @@ func autoName(l lang, n int) string {
 	return l.f("⏩ تا %d تمدید", n)
 }
 
-// viewAgent is everything about how the agent works: its budget, how much
-// of the conversation it gets, its soul, skills, plugins and tools.
 func (b *Bot) viewAgent(l lang) panelView {
 	ctxTokens := b.historyTokens()
 	ctxMode := l.t("خودکار")
@@ -741,13 +710,11 @@ func (b *Bot) viewAgent(l lang) panelView {
 	)}
 }
 
-// menuLangs are the command menus: English by default, Persian for Persian apps.
 var menuLangs = []struct {
 	l    lang
 	code string
 }{{en, ""}, {fa, "fa"}}
 
-// registerCommands sets the command menus of users, groups and admins.
 func (b *Bot) registerCommands(ctx context.Context) error {
 	var first error
 	for _, m := range menuLangs {
@@ -755,7 +722,7 @@ func (b *Bot) registerCommands(ctx context.Context) error {
 			first = err
 		}
 		if b.personal {
-			// Clear old group/default menus; the personal menu belongs in private chats.
+
 			_ = b.api.SetMyCommandsFor(ctx, nil, nil, m.code)
 			_ = b.api.SetMyCommandsFor(ctx, nil, &telegram.BotCommandScope{Type: "all_group_chats"}, m.code)
 			_ = b.api.SetMyCommandsFor(ctx, b.userCommands(m.l), &telegram.BotCommandScope{Type: "all_private_chats"}, m.code)
@@ -767,8 +734,6 @@ func (b *Bot) registerCommands(ctx context.Context) error {
 	return first
 }
 
-// registerAdminCommands shows /settings in the command menu of every admin
-// (/admin still works, unlisted).
 func (b *Bot) registerAdminCommands(ctx context.Context) {
 	ids, _ := b.st.Admins(ctx)
 	for id := range b.owner {
@@ -783,7 +748,6 @@ func (b *Bot) registerAdminCommands(ctx context.Context) {
 	}
 }
 
-// groupCommands is the command menu inside groups.
 func groupCommands(l lang) []telegram.BotCommand {
 	return []telegram.BotCommand{
 		{Command: "recap", Description: l.t("چی از دستم رفت؟ (خلاصه گفتگو)")},
@@ -796,12 +760,8 @@ func groupCommands(l lang) []telegram.BotCommand {
 
 func (b *Bot) userCommands(l lang) []telegram.BotCommand { return personalCommands(l) }
 
-// ---------------------------------------------------------------- the soul (SOUL.md)
-
 const maxSoulRunes = 30000
 
-// The soul is the file SOUL.md in the agent's home folder (pkg/brain): the
-// owner may edit it with any editor; this panel is the same thing from Telegram.
 func (b *Bot) soulSource(l lang) string {
 	if b.brain.IsCustomSoul() {
 		return l.f("سفارشی (%s کاراکتر)", humanInt(len([]rune(b.brain.Soul()))))

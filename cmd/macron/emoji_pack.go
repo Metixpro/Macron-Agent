@@ -10,17 +10,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// A whole premium emoji pack at once: the admin sends its link
-// (t.me/addemoji/NAME) and each of its emoji takes the place of the ordinary
-// emoji its creator gave it. The pack wins over earlier mappings of the same
-// emoji; inside the pack the first one of an emoji counts.
-
 var (
 	packLinkRe = regexp.MustCompile(`(?i)(?:t(?:elegram)?\.me/add(?:emoji|stickers)/|tg://addemoji\?set=)([A-Za-z0-9_]{1,64})`)
 	packNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
 )
 
-// packName reads a pack's name from its link or as it is ("" if neither).
 func packName(s string) string {
 	s = strings.TrimSpace(s)
 	if m := packLinkRe.FindStringSubmatch(s); m != nil {
@@ -32,16 +26,14 @@ func packName(s string) string {
 	return ""
 }
 
-// packImport counts what an import did.
 type packImport struct{ added, replaced, same, twice int }
 
-// importEmojiPack maps each emoji of a custom emoji set to its premium emoji.
 func (b *Bot) importEmojiPack(ctx context.Context, set *telegram.StickerSet) (packImport, error) {
 	existing, err := b.st.PremiumEmoji(ctx)
 	if err != nil {
 		return packImport{}, err
 	}
-	have, variants := map[string]string{}, map[string][]string{} // by emoji.Key: its premium emoji, the spellings stored
+	have, variants := map[string]string{}, map[string][]string{}
 	for e, id := range existing {
 		k := emoji.Key(e)
 		have[k] = id
@@ -68,7 +60,7 @@ func (b *Bot) importEmojiPack(ctx context.Context, set *telegram.StickerSet) (pa
 		default:
 			r.added++
 		}
-		for _, v := range variants[k] { // "❤" and "❤️" are one emoji: the older spelling would win
+		for _, v := range variants[k] {
 			_ = b.st.DeletePremiumEmoji(ctx, v)
 		}
 		if err := b.st.SetPremiumEmoji(ctx, s.Emoji, s.CustomEmojiID); err != nil {
@@ -80,7 +72,6 @@ func (b *Bot) importEmojiPack(ctx context.Context, set *telegram.StickerSet) (pa
 	return r, nil
 }
 
-// handleEmojiPackInput imports the pack whose link an admin sent.
 func (b *Bot) handleEmojiPackInput(ctx context.Context, m *telegram.Message, done func(panelView)) bool {
 	l := b.langOf(m.From)
 	name := packName(m.Text)

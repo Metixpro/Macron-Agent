@@ -19,9 +19,9 @@ if FONT:
 
 
 def native_shaping():
-    # Matplotlib 3.11 lays out Persian itself (joined, right to left); older
-    # versions draw isolated letters left to right and need it done for them.
-    # Three joined letters are narrower than the same three apart.
+
+
+
     try:
         import arabic_reshaper
         from matplotlib.ft2font import FT2Font
@@ -163,7 +163,7 @@ elif kind in ("line", "area"):
     ax.margins(x=0.03, y=0.12)
     if kind == "area" and min(min(s["values"]) for s in series) >= 0:
         ax.set_ylim(bottom=0)
-else:  # bar, hbar, stacked_bar
+else:
     horizontal = kind == "hbar"
     stacked = kind == "stacked_bar"
     k = len(series)

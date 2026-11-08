@@ -99,9 +99,6 @@ func (f *fakeEngines) engine() *Engine {
 	return e
 }
 
-// The engines are asked at once and their lists merged: what both found
-// comes first and once (www., a final slash and utm_ do not make another
-// page), no site takes more than two of the top places.
 func TestSearchMergesTheEngines(t *testing.T) {
 	f := newFakeEngines(t)
 	e := f.engine()
@@ -129,15 +126,12 @@ func TestSearchMergesTheEngines(t *testing.T) {
 		t.Errorf("engines %v, the longer snippet kept: %+v", rep.Engines, rep.Results[0])
 	}
 
-	// The same search a moment later is answered from memory.
 	before := f.bing.Load()
 	if _, err := e.SearchWith(context.Background(), "golang generics", SearchOptions{Limit: 5}); err != nil || f.bing.Load() != before {
 		t.Errorf("cached: %v %d", err, f.bing.Load()-before)
 	}
 }
 
-// An engine that answers with unrelated pages (it distrusts the server) is
-// not used and rests; one that keeps failing rests too.
 func TestSearchLeavesOutAnEngineThatAnswersWithAnything(t *testing.T) {
 	f := newFakeEngines(t)
 	f.bingBody = func() string {
@@ -159,7 +153,6 @@ func TestSearchLeavesOutAnEngineThatAnswersWithAnything(t *testing.T) {
 		t.Errorf("status: %+v", st)
 	}
 
-	// A Persian query's English results are not judged by its words.
 	lists := []engineResult{{engine: webEngine{name: "x", weight: 1}, res: []SearchResult{
 		{Title: "Milad Tower", URL: "https://a.example/1"}, {Title: "Milad Tower tour", URL: "https://b.example/2"}, {Title: "Tehran", URL: "https://c.example/3"}}}}
 	dropUnrelated(lists, "برج میلاد", func(string) { t.Error("not junk") })
@@ -168,7 +161,6 @@ func TestSearchLeavesOutAnEngineThatAnswersWithAnything(t *testing.T) {
 	}
 }
 
-// One engine answering is enough: a slow one is left out after a short grace.
 func TestSearchDoesNotWaitForASlowEngine(t *testing.T) {
 	f := newFakeEngines(t)
 	f.bingDelay = 1500 * time.Millisecond
@@ -182,8 +174,6 @@ func TestSearchDoesNotWaitForASlowEngine(t *testing.T) {
 	}
 }
 
-// News: the newest first, from the feeds, with their outlets, links and
-// dates; older than the time asked for is left out.
 func TestNewsSearch(t *testing.T) {
 	f := newFakeEngines(t)
 	rep, err := f.engine().SearchWith(context.Background(), "dollar", SearchOptions{Limit: 5, News: true, Time: "week"})
@@ -199,8 +189,6 @@ func TestNewsSearch(t *testing.T) {
 	}
 }
 
-// A quick answer: DuckDuckGo's instant answer with its facts, else the
-// Wikipedia article a short query names.
 func TestQuickAnswer(t *testing.T) {
 	f := newFakeEngines(t)
 	e := f.engine()

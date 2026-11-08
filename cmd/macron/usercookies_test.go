@@ -61,7 +61,6 @@ func TestUserCookies(t *testing.T) {
 		t.Error("cookies are stored encrypted")
 	}
 
-	// A new cookie of the same site replaces the old one; bad ones are refused.
 	add(502, ytCookie("secret-two", later))
 	if list, _ = h.st.UserCookies(ctx, user); len(list) != 1 || !strings.Contains(list[0].Data, "secret-two") {
 		t.Fatalf("replaced: %+v", list)
@@ -80,7 +79,6 @@ func TestUserCookies(t *testing.T) {
 		t.Fatalf("youtube and instagram: %+v", list)
 	}
 
-	// Only the user's own downloads get them.
 	if got := h.bot.cookies.user(sessionFor(user)); len(got) != 2 || !strings.HasPrefix(got[0].ID, tools.UserCookiePrefix) {
 		t.Errorf("user cookies: %+v", got)
 	}
@@ -88,13 +86,11 @@ func TestUserCookies(t *testing.T) {
 		t.Error("another user's downloads never get them")
 	}
 
-	// A message without the dialog goes to the model, not into the cookies.
 	h.send(private(user, ytCookie("not-asked", later)))
 	if list, _ = h.st.UserCookies(ctx, user); len(list) != 2 {
 		t.Error("cookies are saved only when asked for")
 	}
 
-	// Buttons: someone else cannot press them; delete; in a group, a pointer to the private chat.
 	h.tg.reset()
 	h.click(user+1, user+1, 900, fmt.Sprintf("ck:d:%s:%d", uid, list[0].ID))
 	if list, _ = h.st.UserCookies(ctx, user); len(list) != 2 {
@@ -124,7 +120,7 @@ func TestCookiesFromLinks(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	h.bot.cookies.http = srv.Client() // the test server is on the loopback
+	h.bot.cookies.http = srv.Client()
 
 	h.click(ownerID, ownerID, 900, "a:dl:links")
 	h.tg.reset()
@@ -142,7 +138,6 @@ func TestCookiesFromLinks(t *testing.T) {
 		t.Errorf("a linked cookie is marked: %s", text)
 	}
 
-	// Blocked: it rests and is fetched again from its link; new cookies are ready at once.
 	version.Store(1)
 	_, _ = h.st.DB().Exec("UPDATE dl_cookies SET fetched_at = ? WHERE id = ?", time.Now().UTC().Add(-time.Hour), list[0].ID)
 	p := h.bot.cookies
@@ -165,7 +160,7 @@ func TestCookiesFromLinks(t *testing.T) {
 	if list[0].Resting(h.st.Now()) {
 		t.Error("fresh cookies do not rest")
 	}
-	// Unchanged content only records the fetch.
+
 	if changed, err := p.refresh(ctx, list[0]); err != nil || changed {
 		t.Errorf("unchanged: %v %v", changed, err)
 	}

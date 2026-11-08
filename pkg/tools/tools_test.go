@@ -111,8 +111,6 @@ func TestExecuteRobustness(t *testing.T) {
 	}
 }
 
-// The agent lives on the machine: its file tools reach any path, not only the
-// work folder. Names that are not paths at all are refused.
 func TestFileToolsReachTheWholeMachine(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	outside := t.TempDir()
@@ -134,7 +132,7 @@ func TestFileToolsReachTheWholeMachine(t *testing.T) {
 	if out := call(t, r, "tg-1", "write_file", map[string]any{"filename": "a\x00b", "content": "x"}); !strings.Contains(out, "error") {
 		t.Errorf("a name with a NUL byte is not a path: %s", out)
 	}
-	// Relative names stay in the conversation's own work folder.
+
 	ws1, _ := r.Machine.Workspace("tg-1")
 	call(t, r, "tg-1", "write_file", map[string]any{"filename": "mine.txt", "content": "here"})
 	if b, _ := os.ReadFile(filepath.Join(ws1, "mine.txt")); string(b) != "here" {
@@ -204,7 +202,7 @@ func TestArgumentHelpers(t *testing.T) {
 
 func TestGitHubInspectValidation(t *testing.T) {
 	r := newRegistry(t, true, nil)
-	// Used to panic with a nil request on malformed repo strings.
+
 	for _, repo := range []string{"a/%zz", "", "no-slash", "../../etc", "../..", "./.", "a/..", "../b", "a/b c", "a/b?x=1", "https://evil.com/a/b/../../x"} {
 		out := call(t, r, "s", "github_inspect", map[string]any{"repo": repo})
 		if !strings.Contains(out, "error") && !strings.Contains(out, "GitHub") {
@@ -280,7 +278,7 @@ func TestDownloadFile(t *testing.T) {
 			w.Header().Set("Content-Length", fmt.Sprint(500<<20))
 			w.Write([]byte("x"))
 		case "/stream":
-			w.(http.Flusher).Flush() // no Content-Length: size is only known while streaming
+			w.(http.Flusher).Flush()
 			for i := 0; i < 20; i++ {
 				w.Write(make([]byte, 1<<20))
 			}
@@ -319,14 +317,11 @@ func TestDownloadFile(t *testing.T) {
 	}
 }
 
-// The agent lives on its owner's machine: a service on localhost (a dev
-// server, a panel, a database's HTTP port) is as reachable for its tools as
-// it is for any program there.
 func TestDownloadAndFetchReachLocalServices(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("metadata")) }))
 	defer srv.Close()
 	sb, _ := machine.New(machine.Config{BaseDir: t.TempDir()})
-	r := NewRegistry(sb, search.NewEngine(nil), nil, Options{}) // default clients
+	r := NewRegistry(sb, search.NewEngine(nil), nil, Options{})
 	if out := call(t, r, "s", "web_fetch", map[string]any{"url": srv.URL}); !strings.Contains(out, "metadata") {
 		t.Errorf("web_fetch of a local service: %s", out)
 	}
@@ -373,8 +368,6 @@ func TestMediaToolInputValidation(t *testing.T) {
 	}
 }
 
-// ---- real machine + python + ffmpeg integration ------------------------------
-
 func isPNG(t *testing.T, r *Registry, session, name string) bool {
 	t.Helper()
 	data, _, err := r.Machine.ReadFile(session, name, 16)
@@ -398,7 +391,7 @@ func TestChartQRPDF(t *testing.T) {
 			t.Errorf("%s chart: %s", kind, out)
 		}
 	}
-	// Several series, Persian digits and units, a light theme.
+
 	for _, kind := range []string{"bar", "stacked_bar", "line", "area", "hbar"} {
 		out := call(t, r, "g", "generate_chart", map[string]any{"chart_type": kind, "title": "فروش ۱۴۰۵", "labels": []string{"مهر", "آبان", "آذر"},
 			"series": []any{map[string]any{"name": "تهران", "values": []any{1.2e6, "2,500,000", "۳۱۰۰۰۰۰"}}, map[string]any{"name": "مشهد", "values": []any{9e5, 1.1e6, 1.5e6}}},
@@ -408,7 +401,6 @@ func TestChartQRPDF(t *testing.T) {
 		}
 	}
 
-	// A title containing quotes/newlines used to be spliced into Python source.
 	evil := `x"); import os; os.system("touch /workspace/pwned"); ("`
 	call(t, r, "g", "generate_chart", map[string]any{"title": evil, "labels": []string{"a"}, "values": []float64{1}})
 	call(t, r, "g", "generate_qr", map[string]any{"data": evil})
@@ -442,7 +434,7 @@ EOF`})
 	if out := call(t, r, "f", "media_convert", map[string]any{"input_file": "tone.wav", "output_file": "cut.wav", "action": "trim", "start_time": "00:00:01", "duration": "1"}); !strings.Contains(out, "converted") {
 		t.Fatalf("trim: %s", out)
 	}
-	// ffmpeg option injection through the time fields must be refused.
+
 	if out := call(t, r, "f", "media_convert", map[string]any{"input_file": "tone.wav", "output_file": "x.wav", "action": "trim", "start_time": "0 -i /etc/passwd"}); !strings.Contains(out, "error") {
 		t.Fatalf("injection through start_time: %s", out)
 	}
@@ -467,8 +459,6 @@ func TestBashToolRuns(t *testing.T) {
 		t.Fatalf("bash result: %s", out)
 	}
 }
-
-// ---- deep research with a fake search engine and fake LLM -------------------
 
 func TestDeepResearchPipeline(t *testing.T) {
 	var llmCalls atomic.Int32
@@ -558,15 +548,13 @@ func TestWriteFileInParts(t *testing.T) {
 	if string(data) != "line 1\nline 2\n" || string(other) != "first" {
 		t.Errorf("files: %q %q", data, other)
 	}
-	// Without append the file is replaced.
+
 	call(t, r, "parts", "write_file", map[string]any{"filename": "big.py", "content": "fresh"})
 	if data, _, _ := r.Machine.ReadFile("parts", "big.py", 1<<20); string(data) != "fresh" {
 		t.Errorf("replace: %q", data)
 	}
 }
 
-// Without API calls left, github_inspect reads GitHub's public pages: the
-// repository page, the releases and commits feeds, the raw README.
 func TestGitHubInspectWithoutTheAPI(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -619,7 +607,7 @@ func TestGitHubInspectWithoutTheAPI(t *testing.T) {
 
 func TestBinaryHint(t *testing.T) {
 	persian := []byte(strings.Repeat("سلام دنیا، این یک متن فارسی است.\n", 400))
-	if h := binaryHint("notes.txt", persian[:8191]); h != "" { // cut inside a letter
+	if h := binaryHint("notes.txt", persian[:8191]); h != "" {
 		t.Errorf("Persian text is text: %s", h)
 	}
 	if h := binaryHint("a.go", []byte("package main\n\nfunc main() {}\n")); h != "" {

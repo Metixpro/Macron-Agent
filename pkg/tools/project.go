@@ -25,11 +25,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Tools for working on real projects with many files: a map of the project,
-// code search, definitions, exact edits, importing (an archive or a GitHub
-// repository) and packing the result. They work on the workspace through
-// os.Root, so nothing can reach outside it.
-
 const (
 	ToolProjectTree = "project_tree"
 	ToolSearchCode  = "search_code"
@@ -40,17 +35,15 @@ const (
 	ToolImportRepo  = "import_repo"
 	ToolPackFiles   = "pack_files"
 
-	maxScanFiles     = 20000    // files looked at by one search or map
-	maxScanFileBytes = 2 << 20  // larger files are not searched
-	maxEditBytes     = 20 << 20 // files edit_file and read_file ranges work on
-	maxReadLines     = 2000     // lines per read_file range
+	maxScanFiles     = 20000
+	maxScanFileBytes = 2 << 20
+	maxEditBytes     = 20 << 20
+	maxReadLines     = 2000
 	maxArchiveFiles  = 50000
 	maxArchiveBytes  = 2 << 30
 	maxImportBytes   = 300 << 20
 )
 
-// skippedDirs hold dependencies, builds and caches: maps and searches skip
-// them unless asked to look inside.
 var skippedDirs = map[string]bool{
 	".git": true, ".hg": true, ".svn": true, "node_modules": true, "vendor": true, "bower_components": true,
 	".venv": true, "venv": true, "env": false, "__pycache__": true, ".mypy_cache": true, ".pytest_cache": true, ".tox": true,
@@ -139,9 +132,6 @@ func (r *Registry) registerProjectTools() {
 		}, nil, r.packFiles)
 }
 
-// ---------------------------------------------------------------- walking
-
-// cleanPath turns a tool argument into a workspace-relative path ("." = root).
 func cleanPath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	p = strings.TrimPrefix(p, "/workspace")
@@ -155,9 +145,6 @@ func cleanPath(p string) (string, error) {
 	return p, nil
 }
 
-// walk visits the files and folders under start in lexical order, never
-// following symlinks. Dependency, build and cache folders below start are
-// reported with skipped=true and not entered, unless includeSkipped.
 func walk(fsys fs.FS, start string, includeSkipped bool, fn func(p string, d fs.DirEntry, skipped bool) error) error {
 	return fs.WalkDir(fsys, start, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -187,7 +174,6 @@ func (r *Registry) projectFS(sessionID string) (fs.FS, func(), error) {
 	return root.FS(), func() { root.Close() }, nil
 }
 
-// isBinary sniffs the start of a file for NUL bytes (text in any encoding passes).
 func isBinary(b []byte) bool {
 	if len(b) > 8000 {
 		b = b[:8000]
@@ -208,10 +194,6 @@ func readSmall(fsys fs.FS, p string, max int64) ([]byte, bool) {
 	return data, err == nil
 }
 
-// ---------------------------------------------------------------- globs
-
-// globRegexp turns a glob into a regular expression over slash paths: *
-// stays inside a folder, ** crosses folders, ? is one character, {a,b} picks.
 func globRegexp(glob string) (*regexp.Regexp, error) {
 	var sb strings.Builder
 	sb.WriteString("^")
@@ -247,8 +229,6 @@ func globRegexp(glob string) (*regexp.Regexp, error) {
 	return regexp.Compile(sb.String())
 }
 
-// globMatcher matches a glob against the path relative to the search root,
-// or against the file name alone when the glob has no folder in it.
 func globMatcher(glob string) (func(rel string) bool, error) {
 	glob = strings.TrimPrefix(strings.TrimSpace(glob), "./")
 	if glob == "" {
@@ -270,8 +250,6 @@ func relTo(start, p string) string {
 	}
 	return strings.TrimPrefix(strings.TrimPrefix(p, start), "/")
 }
-
-// ---------------------------------------------------------------- project_tree
 
 var langByExt = map[string]string{
 	".go": "Go", ".py": "Python", ".js": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript", ".jsx": "JavaScript",
@@ -415,8 +393,6 @@ func capList(list []string, n int) []string {
 	return append(list[:n:n], fmt.Sprintf("%d more", len(list)-n))
 }
 
-// ---------------------------------------------------------------- search_code
-
 func (r *Registry) searchCode(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 	pattern := rawStrArg(args, "pattern")
 	if pattern == "" {
@@ -535,8 +511,6 @@ func (r *Registry) searchCode(ctx context.Context, sessionID string, args map[st
 	return head + ":\n" + out.String(), nil
 }
 
-// countLines counts lines the way editors do: a final newline ends the last
-// line instead of starting a new one.
 func countLines(s string) int {
 	if s == "" {
 		return 0
@@ -551,8 +525,6 @@ func clipLine(s string) string {
 	}
 	return s
 }
-
-// ---------------------------------------------------------------- find_files
 
 func (r *Registry) findFiles(_ context.Context, sessionID string, args map[string]any) (string, error) {
 	glob := strArg(args, "pattern")
@@ -603,8 +575,6 @@ func (r *Registry) findFiles(_ context.Context, sessionID string, args map[strin
 	}
 	return s, nil
 }
-
-// ---------------------------------------------------------------- code_outline
 
 var outlineRules = func() map[string][]*regexp.Regexp {
 	re := func(ps ...string) []*regexp.Regexp {
@@ -716,9 +686,6 @@ func clipDef(line string) string {
 	return line
 }
 
-// ---------------------------------------------------------------- read_file ranges
-
-// readLines shows lines from..to (1-based, inclusive) of a file with their numbers.
 func (r *Registry) readLines(sessionID, name string, from, to int) string {
 	data, truncated, err := r.Machine.ReadFile(sessionID, name, maxEditBytes)
 	if err != nil {
@@ -747,7 +714,7 @@ func (r *Registry) readLines(sessionID, name string, from, to int) string {
 	if from > total {
 		return fmt.Sprintf("%s has %d lines; start_line %d is past the end.", name, total, from)
 	}
-	// What fits under the output limit is shown; the rest is read on from the next line.
+
 	var body strings.Builder
 	width, used, long := len(fmt.Sprint(to)), 0, 0
 	for i := from; i <= to; i++ {
@@ -776,8 +743,6 @@ func (r *Registry) readLines(sessionID, name string, from, to int) string {
 	}
 	return sb.String()
 }
-
-// ---------------------------------------------------------------- edit_file
 
 type textEdit struct {
 	old, new string
@@ -824,11 +789,11 @@ func (r *Registry) editFile(ctx context.Context, sessionID string, args map[stri
 			return fmt.Sprintf("error: edit %d has an empty old_text; nothing was changed", i+1), nil
 		}
 		old, repl := e.old, e.new
-		if crlf && !strings.Contains(old, "\r\n") { // the file uses Windows line ends
+		if crlf && !strings.Contains(old, "\r\n") {
 			old, repl = strings.ReplaceAll(old, "\n", "\r\n"), strings.ReplaceAll(repl, "\n", "\r\n")
 		}
 		n := strings.Count(text, old)
-		if n == 0 { // the right lines, with other spaces or tabs?
+		if n == 0 {
 			if start, end, fixed, ok := fuzzyEdit(text, e.old, e.new); ok {
 				line := strings.Count(text[:start], "\n") + 1
 				text = text[:start] + fixed + text[end:]
@@ -859,11 +824,6 @@ func (r *Registry) editFile(ctx context.Context, sessionID string, args map[stri
 		r.syntaxNote(ctx, sessionID, name), nil
 }
 
-// fuzzyEdit finds old in text line by line, ignoring the spaces and tabs
-// around and inside each line (a model often gets the indentation or a
-// trailing space wrong). With exactly one match, it returns the byte range of
-// those lines and repl indented the way the file is (tabs or spaces, its
-// depth), with the file's line ends.
 func fuzzyEdit(text, old, repl string) (start, end int, fixed string, ok bool) {
 	oldLines, top, bottom := trimBlankLines(strings.Split(strings.ReplaceAll(old, "\r\n", "\n"), "\n"))
 	if len(oldLines) == 0 {
@@ -889,7 +849,7 @@ func fuzzyEdit(text, old, repl string) (start, end int, fixed string, ok bool) {
 		}
 		if same {
 			if found >= 0 {
-				return 0, 0, "", false // more than one place: not safe to guess
+				return 0, 0, "", false
 			}
 			found = i
 		}
@@ -905,7 +865,6 @@ func fuzzyEdit(text, old, repl string) (start, end int, fixed string, ok bool) {
 		eol, cr = "\r\n", "\r"
 	}
 
-	// The model's indentation → the file's, learnt from the lines that matched.
 	indent := map[string]string{}
 	var oldLeads, fileLeads []string
 	for j, l := range oldLines {
@@ -920,7 +879,7 @@ func fuzzyEdit(text, old, repl string) (start, end int, fixed string, ok bool) {
 	}
 	tabs := strings.Contains(strings.Join(fileLeads, ""), "\t")
 	unit, fileUnit := indentUnit(oldLeads), indentUnit(fileLeads)
-	convert := func(ws string) string { // extra depth, in the model's steps → the file's
+	convert := func(ws string) string {
 		if strings.Contains(ws, "\t") {
 			if tabs {
 				return ws
@@ -947,7 +906,7 @@ func fuzzyEdit(text, old, repl string) (start, end int, fixed string, ok bool) {
 		lead := leadingWS(l)
 		rest := l[len(lead):]
 		if i < len(oldLines) && strings.TrimSpace(oldLines[i]) != "" && lead == leadingWS(oldLines[i]) {
-			newLines[i] = leadingWS(strings.TrimSuffix(matched[i], "\r")) + rest // the same line, changed in place
+			newLines[i] = leadingWS(strings.TrimSuffix(matched[i], "\r")) + rest
 			continue
 		}
 		if f, ok := indent[lead]; ok {
@@ -973,12 +932,10 @@ func fuzzyEdit(text, old, repl string) (start, end int, fixed string, ok bool) {
 	return start, end, fixed, true
 }
 
-// wsKey is a line without its spaces and tabs' exact shape.
 func wsKey(line string) string { return strings.Join(strings.Fields(line), " ") }
 
 func leadingWS(line string) string { return line[:len(line)-len(strings.TrimLeft(line, " \t"))] }
 
-// trimBlankLines drops the blank lines at both ends and says how many.
 func trimBlankLines(lines []string) (kept []string, top, bottom int) {
 	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
 		lines, top = lines[1:], top+1
@@ -989,7 +946,6 @@ func trimBlankLines(lines []string) (kept []string, top, bottom int) {
 	return lines, top, bottom
 }
 
-// indentUnit is the step between indentation depths in spaces (4 when unclear).
 func indentUnit(leads []string) int {
 	unit := 0
 	for _, a := range leads {
@@ -1005,7 +961,6 @@ func indentUnit(leads []string) int {
 	return unit
 }
 
-// editSummary shows one change as - and + lines (shortened).
 func editSummary(line, count int, e textEdit) string {
 	var sb strings.Builder
 	if count > 1 {
@@ -1030,7 +985,6 @@ func editSummary(line, count int, e textEdit) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// nearMiss points at lines that look like the start of old_text, to help the model copy it exactly.
 func nearMiss(text, old string) string {
 	first := ""
 	for _, l := range strings.Split(old, "\n") {
@@ -1071,9 +1025,6 @@ func occurrenceLines(text, old string, max int) []string {
 	return out
 }
 
-// ---------------------------------------------------------------- archives
-
-// archiveKind is how a file name says to read it.
 func archiveKind(name string) string {
 	lower := strings.ToLower(name)
 	switch {
@@ -1088,7 +1039,7 @@ func archiveKind(name string) string {
 	}
 	for _, ext := range externalExts {
 		if strings.HasSuffix(lower, ext) {
-			return "ext" // read by an archiver here (archive.go)
+			return "ext"
 		}
 	}
 	return ""
@@ -1104,7 +1055,6 @@ func archiveBase(name string) string {
 	return name + "_files"
 }
 
-// tarReader opens a tar archive (compressed or not) from the start of f.
 func tarReader(f *os.File, kind string) (*tar.Reader, error) {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return nil, err
@@ -1128,7 +1078,6 @@ type entryName struct {
 	dir  bool
 }
 
-// unsafeName: an absolute path or one that climbs out with "..".
 func unsafeName(name string) bool {
 	name = strings.ReplaceAll(name, "\\", "/")
 	if strings.HasPrefix(name, "/") || (len(name) > 1 && name[1] == ':') {
@@ -1142,7 +1091,6 @@ func unsafeName(name string) bool {
 	return false
 }
 
-// commonTop is the single top-level folder every entry is inside ("" if none).
 func commonTop(entries []entryName) string {
 	top := ""
 	for _, e := range entries {
@@ -1155,7 +1103,7 @@ func commonTop(entries []entryName) string {
 		}
 		first, rest, _ := strings.Cut(n, "/")
 		if rest == "" && !e.dir {
-			return "" // a file at the top
+			return ""
 		}
 		if top == "" {
 			top = first
@@ -1166,7 +1114,6 @@ func commonTop(entries []entryName) string {
 	return top
 }
 
-// extractor writes archive entries into a workspace folder within limits.
 type extractor struct {
 	r       *Registry
 	session string
@@ -1240,10 +1187,6 @@ func (r *Registry) extractArchive(ctx context.Context, sessionID string, args ma
 	return r.extract(ctx, sessionID, name, dest, password), nil
 }
 
-// extract unpacks a workspace archive into dest. Only regular files and
-// folders are written (no links or devices), each through the workspace root,
-// within the free space and a file count; the modification times are now's,
-// so the 24-hour cleanup counts from the import.
 func (r *Registry) extract(ctx context.Context, sessionID, name, dest, password string) string {
 	kind := archiveKind(name)
 	if kind == "" {
@@ -1301,7 +1244,7 @@ func (r *Registry) extract(ctx context.Context, sessionID, name, dest, password 
 			}
 		}
 	} else {
-		// Two passes: the names first (for the top folder), then the files.
+
 		tr, err := tarReader(f, kind)
 		if err != nil {
 			return "error: " + err.Error()
@@ -1345,7 +1288,7 @@ func (r *Registry) extract(ctx context.Context, sessionID, name, dest, password 
 					}
 				}
 			default:
-				x.skipped++ // links and special files
+				x.skipped++
 			}
 		}
 	}
@@ -1362,8 +1305,6 @@ func (r *Registry) extract(ctx context.Context, sessionID, name, dest, password 
 	}
 	return s + " Map it with project_tree."
 }
-
-// ---------------------------------------------------------------- import_repo
 
 var (
 	githubRe = regexp.MustCompile(`^(?:https?://)?(?:www\.)?github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?(?:/(?:tree|commit|releases/tag)/([^?#]+))?/?(?:[?#].*)?$`)
@@ -1462,9 +1403,4 @@ func (r *Registry) importRepo(ctx context.Context, sessionID string, args map[st
 	return fmt.Sprintf("Imported %s (%s download). %s", raw, humanSize(n), msg), nil
 }
 
-// ---------------------------------------------------------------- pack_files
-
-// IsArchive reports a file extract_archive can unpack.
 func IsArchive(name string) bool { return archiveKind(name) != "" }
-
-// ---------------------------------------------------------------- project dependencies

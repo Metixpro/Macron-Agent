@@ -12,24 +12,16 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Hybrid search: right after a search, the top pages are read at the same
-// time, briefly, and the paragraphs that best match the query go with each
-// result. The model usually has enough to answer without reading the pages
-// one by one with web_fetch.
-
 const (
-	// PassagePages is how many top results are read.
 	PassagePages    = 3
 	passagesPerPage = 3
-	passageRunes    = 750 // per result
+	passageRunes    = 750
 	minParagraph    = 60
 	maxParagraph    = 700
 )
 
-// passageBudget is how long reading the pages may take; slower ones are skipped.
 var passageBudget = 6 * time.Second
 
-// AddPassages reads the first n results and fills their Passages.
 func (e *Engine) AddPassages(ctx context.Context, query string, results []SearchResult, n int) {
 	if n <= 0 || len(results) == 0 {
 		return
@@ -56,7 +48,6 @@ func (e *Engine) AddPassages(ctx context.Context, query string, results []Search
 	wg.Wait()
 }
 
-// keyPassages picks the paragraphs that match the query best, in page order.
 func keyPassages(text string, terms []string) []string {
 	type para struct {
 		text  string
@@ -77,7 +68,7 @@ func keyPassages(text string, terms []string) []string {
 			paras = append(paras, para{text: p, pos: i})
 			continue
 		}
-		// Distinct terms count most; a few repeats help; very long text is diluted.
+
 		score := float64(len(seen))*3 + float64(min(hits, 6)) - float64(len([]rune(p)))/1500
 		paras = append(paras, para{text: p, pos: i, score: score})
 	}
@@ -88,7 +79,7 @@ func keyPassages(text string, terms []string) []string {
 	sort.SliceStable(sorted, func(a, b int) bool { return sorted[a].score > sorted[b].score })
 	var picked []para
 	if sorted[0].score == 0 {
-		// Nothing matches the words of the query: the page's lead paragraph.
+
 		for _, p := range paras {
 			if len([]rune(p.text)) >= 120 {
 				picked = append(picked, p)
@@ -96,7 +87,7 @@ func keyPassages(text string, terms []string) []string {
 			}
 		}
 	} else {
-		// Only paragraphs close to the best match: one shared word is not enough.
+
 		budget, floor := passageRunes, sorted[0].score/2
 		for _, p := range sorted {
 			if p.score <= 0 || p.score < floor || len(picked) == passagesPerPage || budget <= 0 {
@@ -115,8 +106,6 @@ func keyPassages(text string, terms []string) []string {
 	return out
 }
 
-// paragraphs splits readable text into paragraphs of a useful size: short
-// lines (menus, buttons) are dropped, long ones cut.
 func paragraphs(text string) []string {
 	var out []string
 	for _, block := range strings.Split(text, "\n") {
@@ -130,7 +119,6 @@ func paragraphs(text string) []string {
 	return out
 }
 
-// stopWords are words that say nothing about the subject.
 var stopWords = map[string]bool{
 	"و": true, "در": true, "به": true, "از": true, "که": true, "این": true, "آن": true, "را": true, "با": true, "است": true,
 	"برای": true, "یک": true, "چی": true, "چیه": true, "چه": true, "کجا": true, "کی": true, "چطور": true, "چگونه": true,
@@ -140,7 +128,6 @@ var stopWords = map[string]bool{
 	"which": true, "who": true, "when": true, "why": true, "does": true, "do": true, "it": true, "its": true, "be": true,
 }
 
-// queryTerms are the words of the query worth looking for.
 func queryTerms(q string) []string {
 	var out []string
 	seen := map[string]bool{}
@@ -158,8 +145,6 @@ func queryTerms(q string) []string {
 	return out
 }
 
-// stem drops a plural ending, so a word matches its other forms too
-// («generics» finds «generic», «قیمت‌ها» finds «قیمت»).
 func stem(w string) string {
 	n := len([]rune(w))
 	switch {
@@ -173,8 +158,6 @@ func stem(w string) string {
 	return w
 }
 
-// normalize folds case, Arabic letter forms, digits and the zero-width
-// non-joiner, so «قیمت‌ها» matches «قيمت ها».
 var normalizer = strings.NewReplacer("ي", "ی", "ك", "ک", "ة", "ه", "‌", " ", "أ", "ا", "إ", "ا", "ۀ", "ه")
 
 func normalize(s string) string {

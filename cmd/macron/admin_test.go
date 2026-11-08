@@ -39,7 +39,7 @@ func TestPanelAccess(t *testing.T) {
 			t.Errorf("the personal panel has no %s: %s", gone, kb)
 		}
 	}
-	// A normal user clicking an admin button gets nothing.
+
 	h.tg.reset()
 	h.click(55, 55, 1, "a:stats")
 	if len(h.tg.of("editMessageText")) != 0 {
@@ -54,7 +54,7 @@ func TestStatsScreens(t *testing.T) {
 	h.tg.reset()
 	h.click(ownerID, ownerID, 9, "a:stats")
 	h.wantText("آمار کامل")
-	h.wantText("امروز: <b>2</b>") // two users so far
+	h.wantText("امروز: <b>2</b>")
 	h.click(ownerID, ownerID, 9, "a:top")
 	h.wantText("فعال‌ترین کاربرهای امروز")
 }
@@ -63,7 +63,7 @@ func TestSettingsScreen(t *testing.T) {
 	h := newHarness(t)
 	h.click(ownerID, ownerID, 9, "a:st:ctx")
 	h.wantText("خودکار")
-	h.send(private(ownerID, "1500")) // under the least that makes sense
+	h.send(private(ownerID, "1500"))
 	h.wantText("یه عدد بین")
 	h.send(private(ownerID, "12000"))
 	if h.st.SettingInt(store.SettingHistoryTokens, 0) != 12000 || h.bot.historyTokens() != 12000 {
@@ -74,7 +74,7 @@ func TestSettingsScreen(t *testing.T) {
 	if h.st.SettingBool(store.SettingReactions, true) {
 		t.Fatal("reactions toggle")
 	}
-	// /cancel leaves a dialog.
+
 	h.click(ownerID, ownerID, 9, "a:st:ctx")
 	h.send(private(ownerID, "/cancel"))
 	if h.bot.pending(ownerID) != nil {
@@ -114,10 +114,9 @@ func TestProviderWizardSwitchAndDelete(t *testing.T) {
 	if len(ps) != 2 || ps[1].Name != "backup" || ps[1].APIKey != "sk-backup-key-9999" || ps[1].Model != "model-b" || ps[1].BaseURL != llmURL {
 		t.Fatalf("saved provider: %+v", ps)
 	}
-	h.noText("sk-backup-key-9999") // the key is never echoed back
+	h.noText("sk-backup-key-9999")
 	h.wantText("sk-…9999")
 
-	// Switch the active provider.
 	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:pv:%d:activate", ps[1].ID))
 	if h.bot.prov.ActiveID() != ps[1].ID {
 		t.Fatal("switch active provider")
@@ -126,11 +125,11 @@ func TestProviderWizardSwitchAndDelete(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(h.llm.last()["model"]), "model-b") {
 		t.Errorf("requests must go to the new provider: %v", h.llm.last()["model"])
 	}
-	// Test button.
+
 	h.tg.reset()
 	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:pv:%d:test", ps[1].ID))
 	h.wantText("جواب داد")
-	// Disable, then delete with confirmation.
+
 	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:pv:%d:toggle", ps[1].ID))
 	if h.bot.prov.ActiveID() == ps[1].ID {
 		t.Error("a disabled provider is not used")
@@ -142,7 +141,6 @@ func TestProviderWizardSwitchAndDelete(t *testing.T) {
 		t.Error("delete provider")
 	}
 
-	// A failing test offers to save anyway.
 	h.click(ownerID, ownerID, 9, "a:pv:add")
 	h.send(private(ownerID, "broken"))
 	h.send(private(ownerID, "http://127.0.0.1:1/v1"))
@@ -213,7 +211,6 @@ func TestPremiumEmojiMappingAndUse(t *testing.T) {
 		t.Fatalf("mappings: %v", got)
 	}
 
-	// Enabled: answers and buttons use premium emoji.
 	h.click(ownerID, ownerID, 9, "a:st:premium:em")
 	if !h.st.SettingBool(store.SettingPremiumEmoji, false) {
 		t.Fatal("toggle premium emoji")
@@ -234,7 +231,6 @@ func TestPremiumEmojiMappingAndUse(t *testing.T) {
 		t.Errorf("buttons must carry icon_custom_emoji_id: %s", kb)
 	}
 
-	// If Telegram refuses custom emoji, plain emoji are sent instead.
 	h.tg.reset()
 	h.tg.fail["sendRichMessage"] = 400
 	h.tg.desc["sendRichMessage"] = "Bad Request: custom emoji not allowed"
@@ -244,7 +240,6 @@ func TestPremiumEmojiMappingAndUse(t *testing.T) {
 	}
 	delete(h.tg.fail, "sendRichMessage")
 
-	// Delete one and clear all.
 	h.click(ownerID, ownerID, 9, "a:em:del")
 	h.send(private(ownerID, "😀"))
 	if got, _ := h.st.PremiumEmoji(bg); got["😀"] != "" {
@@ -258,7 +253,7 @@ func TestPremiumEmojiMappingAndUse(t *testing.T) {
 
 func TestPremiumEmojiDuplicatesAreSkippedAndCleaned(t *testing.T) {
 	h := newHarness(t)
-	// Stored mappings: a selector twin is extra; different emojis may share a premium emoji.
+
 	h.st.SetPremiumEmoji(bg, "❤️", "10000")
 	h.st.SetPremiumEmoji(bg, "😎", "20000")
 	h.st.DB().Exec("UPDATE premium_emoji SET created_at = STRFTIME('%Y-%m-%d %H:%M:%f', created_at, '-1 minute')")
@@ -270,7 +265,6 @@ func TestPremiumEmojiDuplicatesAreSkippedAndCleaned(t *testing.T) {
 		t.Fatalf("the oldest mapping of each emoji stays; a shared premium emoji too: %v", got)
 	}
 
-	// A message with extras: they are skipped, the rest is added.
 	h.click(ownerID, ownerID, 9, "a:em:add")
 	h.send(private(ownerID, "🔥 30000\n❤ 40000\n🌟 20000\n🔥 50000\n🎉 60000"))
 	h.wantText("2 تا ایموجی ذخیره شد")
@@ -282,7 +276,7 @@ func TestPremiumEmojiDuplicatesAreSkippedAndCleaned(t *testing.T) {
 	if len(got) != 5 || got["🔥"] != "30000" || got["🎉"] != "60000" || got["❤️"] != "10000" || got["🌟"] != "" {
 		t.Fatalf("mappings: %v", got)
 	}
-	// Only extras: nothing to retry, the dialog ends.
+
 	h.tg.reset()
 	h.send(private(ownerID, "🔥 70000"))
 	if _, waiting := h.bot.inputs.Load(int64(ownerID)); waiting {
@@ -290,9 +284,6 @@ func TestPremiumEmojiDuplicatesAreSkippedAndCleaned(t *testing.T) {
 	}
 }
 
-// The admin sets a provider's temperature in the panel: a number, «-» for
-// the default; out of range is refused (Claude takes 0–1). The model
-// requests carry it.
 func TestProviderTemperature(t *testing.T) {
 	h := newHarness(t)
 	ps, _ := h.st.Providers(bg)
@@ -324,8 +315,6 @@ func TestProviderTemperature(t *testing.T) {
 	}
 }
 
-// Every section of the panel has one door, and its back button leads to the
-// hub that door is in.
 func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	h := newHarness(t)
 	callbacks := func(c tgCall) (doors []string, back string) {
@@ -362,7 +351,7 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 		}
 		for _, d := range doors {
 			if d == hub || d == "a:home" || strings.Count(d, ":") > 1 && !strings.HasSuffix(d, ":0") && d != "a:sys:1h" {
-				continue // its own actions
+				continue
 			}
 			if w, ok := where[d]; ok && w != hub {
 				t.Errorf("%s has two doors: in %s and in %s", d, w, hub)
@@ -378,7 +367,7 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	for hub, children := range hubs {
 		for _, c := range children {
 			if strings.Count(c, ":") > 1 && c != "a:sys:1h" {
-				continue // a setting, not a section
+				continue
 			}
 			h.click(ownerID, ownerID, 9, c)
 			if _, back := callbacks(lastOf(h, "editMessageText")); back != hub {
@@ -388,9 +377,6 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	}
 }
 
-// The settings page is the reactions and nothing else; how the work is shown
-// lives once, in 🦾 the agent → 🖥 showing the work, and premium emoji is
-// not in the panel until it is turned on outside it.
 func TestSettingsIsReactionsOnly(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(ownerID, "/admin"))
@@ -411,7 +397,7 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 	if h.bot.seenReaction() != reactionEmojis[3] {
 		t.Fatalf("default reaction %q", h.bot.seenReaction())
 	}
-	h.click(ownerID, ownerID, 9, "a:st:remoji:99") // not offered
+	h.click(ownerID, ownerID, 9, "a:st:remoji:99")
 	if h.bot.seenReaction() != reactionEmojis[3] {
 		t.Fatal("an emoji that is not offered")
 	}
@@ -424,7 +410,6 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 		t.Fatal("reactions toggle")
 	}
 
-	// Showing the work: one page, under the agent.
 	h.click(ownerID, ownerID, 9, "a:ws")
 	ws := lastOf(h, "editMessageText")
 	for _, want := range []string{"a:st:trace:ws"} {
@@ -458,9 +443,6 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 	}
 }
 
-// /settings opens the panel in the owner's private chat; /admin still works
-// but is not in the menu. In a group /settings is not the group's settings:
-// it says so once, and /groupsettings is the group's.
 func TestSettingsCommand(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(ownerID, "/settings"))

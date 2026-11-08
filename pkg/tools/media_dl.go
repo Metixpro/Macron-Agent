@@ -20,44 +20,30 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/netclient"
 )
 
-// Media downloads from YouTube, Instagram, TikTok, X, Facebook, SoundCloud,
-// Aparat, Reddit, Twitch, Vimeo, public Telegram posts and the other sites
-// yt-dlp knows, built to end with a file the user can play:
-//
-//   - formats Telegram plays inline (H.264/AAC MP4; MP3 with its tags and
-//     cover), at most 720p by default so the result fits in a message;
-//   - when a site pushes back, a ladder of retries (other player clients,
-//     any format, IPv4), and gallery-dl for image posts;
-//   - a result over Telegram's limit (50 MB, or 2000 MB through a local Bot API server) is split into parts (long videos,
-//     or when asked) or re-encoded to fit;
-//   - playlists and carousels (up to 10 items) and clips of long videos.
-
 const (
 	ToolDownloadMedia = "download_media_ytdlp"
 
-	dlTimeout        = 7 * time.Minute  // the downloads of a tool call
-	dlPostTimeout    = 12 * time.Minute // then making the files fit (re-encoding, burning subtitles in): a budget of its own
+	dlTimeout        = 7 * time.Minute
+	dlPostTimeout    = 12 * time.Minute
 	dlAttemptTimeout = 4 * time.Minute
 	dlMaxItems       = 10
 	dlMarker         = "WAZEFILE"
-	dlCookiesFile    = ".dl_cookies.txt" // where older versions kept the cookies (cleaned up)
+	dlCookiesFile    = ".dl_cookies.txt"
 	cookiesName      = "cookies.txt"
 )
 
 var (
-	dlFitBytes  int64 = 47 << 20 // what an oversized file is squeezed into
-	dlSendLimit int64 = 50 << 20 // Telegram's upload limit for bots
+	dlFitBytes  int64 = 47 << 20
+	dlSendLimit int64 = 50 << 20
 )
 
-// DownloaderInfo describes the download tools found on the server.
 type DownloaderInfo struct {
-	YtDlp     []string // command: a binary, or python3 -m yt_dlp
+	YtDlp     []string
 	Version   string
-	JSRuntime string // passed with --js-runtimes when deno is missing
+	JSRuntime string
 	GalleryDL string
 	FFmpeg    bool
-	// POTProvider: a PO-token provider (bgutil) answers on 127.0.0.1:4416,
-	// which lets YouTube work from servers it would otherwise refuse.
+
 	POTProvider bool
 	flags       map[string]bool
 }
@@ -76,7 +62,6 @@ func (r *Registry) downloaderInfo() *DownloaderInfo {
 	return r.dl.info
 }
 
-// DownloaderStatus reports the download tools (detected again).
 func (r *Registry) DownloaderStatus() DownloaderInfo {
 	r.dl.mu.Lock()
 	r.dl.info = nil
@@ -111,8 +96,7 @@ func (r *Registry) detectDownloader() *DownloaderInfo {
 			d.flags[f] = strings.Contains(help, f)
 		}
 	}
-	// Newer yt-dlp needs a JavaScript runtime for YouTube; name it with its
-	// path, so it is found here whatever its PATH is.
+
 	if deno := find("deno"); deno != "" {
 		d.JSRuntime = "deno:" + deno
 	} else if node := find("node"); node != "" {
@@ -159,13 +143,12 @@ type dlRequest struct {
 	section  string
 	items    string
 	base     string
-	tries    int  // attempts of the retry ladder (default 3)
-	split    bool // send a file over the limit in parts rather than re-encoded
+	tries    int
+	split    bool
 	subs     string
 	subLangs string
 }
 
-// countItems counts the items of a range list ("1-5,8" → 6).
 func countItems(s string) int {
 	n := 0
 	for _, part := range strings.Split(s, ",") {
@@ -187,15 +170,12 @@ func isYouTube(host string) bool {
 	return host == "youtu.be" || host == "youtube.com" || strings.HasSuffix(host, ".youtube.com")
 }
 
-// youTubeBlocked: YouTube served the page but refused the media (no PO token,
-// a bot check, a datacenter IP).
 func youTubeBlocked(e string) bool {
 	return containsAny(e, "403", "po token", "sign in to confirm", "not a bot", "sabr")
 }
 
 var titleNoise = regexp.MustCompile(`(?i)[\(\[](official|lyric|lyrics|audio|video|music video|hd|4k|visualizer|live)[^\)\]]*[\)\]]|\|.*$`)
 
-// mediaTitle reads a video's title (and artist) without downloading it.
 func (r *Registry) mediaTitle(ctx context.Context, sessionID string, d *DownloaderInfo, target string) string {
 	argv := append(append([]string(nil), d.YtDlp...), "--ignore-config", "--no-colors", "--skip-download", "--no-playlist",
 		"--socket-timeout", "20", "--print", "%(artist|)s\t%(track,title|)s", "--", target)
@@ -233,7 +213,7 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 	if m := spotifyURIRe.FindStringSubmatch(q.target); m != nil {
 		q.target = "https://open.spotify.com/" + m[1] + "/" + m[2]
 	}
-	// Only real http(s) URLs or search pseudo-URLs; never anything that could be read as an option.
+
 	if searchRe.MatchString(q.target) {
 		q.audio = strArg(args, "format") != "video"
 	} else {
@@ -281,7 +261,6 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 		}
 	}
 
-	// A request gets as many files as its plan allows: a playlist's items count one by one.
 	want := 1
 	if q.items != "" {
 		want = countItems(q.items)
@@ -293,7 +272,7 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 	if granted < want {
 		q.items = firstItems(q.items, granted)
 	}
-	// What did not download gives its share back; the limit's note goes with what did.
+
 	kept := false
 	defer func() {
 		if !kept {
@@ -332,7 +311,7 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 
 	res := r.fetch(ctx, sessionID, q, d, host)
 	if len(res.files) == 0 && q.audio && isYouTube(host) && youTubeBlocked(res.err) && ctx.Err() == nil {
-		// YouTube refuses many servers; the same song is usually on SoundCloud.
+
 		if title := r.mediaTitle(ctx, sessionID, d, q.target); title != "" {
 			alt := q
 			alt.target, alt.tries = "scsearch1:"+title, 1
@@ -342,7 +321,7 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 			}
 		}
 	}
-	if len(res.files) == 0 { // nothing came: its share goes back (see kept)
+	if len(res.files) == 0 {
 		if q.subs == "only" && !containsAny(res.err, "error:") {
 			return "error: this video has no " + q.subLangs + " subtitles, not even automatic ones. Tell the user; other languages can be asked with sub_langs.", nil
 		}
@@ -352,8 +331,7 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 		}
 		return explainDownloadError(res.err, res.cookies), nil
 	}
-	// The files are here: what follows gets its own time, so a long
-	// download never leaves the re-encoding a context that already ran out.
+
 	ctx, cancelPost := context.WithTimeout(parent, dlPostTimeout)
 	defer cancelPost()
 	if q.subs == "file" || q.subs == "burn" {
@@ -369,16 +347,13 @@ func (r *Registry) downloadMedia(ctx context.Context, sessionID string, args map
 	return withNote(r.report(ctx, sessionID, q, d, res)), nil
 }
 
-// dlResult is what one yt-dlp download produced.
 type dlResult struct {
 	files   []dlFile
 	err     string
 	notes   []string
-	cookies bool // some cookie fits the site
+	cookies bool
 }
 
-// fetch runs yt-dlp with the ladder of retries, rotating the cookies of the
-// site when it blocks one.
 func (r *Registry) fetch(ctx context.Context, sessionID string, q dlRequest, d *DownloaderInfo, host string) dlResult {
 	before := r.rootSnapshot(sessionID)
 	cookies := r.cookieSlot(sessionID, cookieHost(q.target, host))
@@ -391,8 +366,7 @@ func (r *Registry) fetch(ctx context.Context, sessionID string, q dlRequest, d *
 	for attempt := 0; attempt < tries && ctx.Err() == nil; {
 		actx, acancel := context.WithTimeout(ctx, dlAttemptTimeout)
 		argv := d.args(q, attempt, cookies.path())
-		// The report of each file is collected on its own: progress lines may
-		// fill the captured output, never push the report out of it.
+
 		reports := &lineCollector{prefix: dlMarker + "\t"}
 		tee := io.Writer(reports)
 		if hasProgress(ctx) {
@@ -431,8 +405,6 @@ func (r *Registry) fetch(ctx context.Context, sessionID string, q dlRequest, d *
 	return out
 }
 
-// dropLeftovers removes what a download left besides its files (thumbnails,
-// parts of a failed attempt), so only the result reaches the user.
 func (r *Registry) dropLeftovers(sessionID string, before map[string]string, files []dlFile) {
 	keep := map[string]bool{}
 	for _, f := range files {
@@ -445,7 +417,6 @@ func (r *Registry) dropLeftovers(sessionID string, before map[string]string, fil
 	}
 }
 
-// report fits the files for Telegram and describes them to the model.
 func (r *Registry) report(ctx context.Context, sessionID string, q dlRequest, d *DownloaderInfo, res dlResult) string {
 	fitted := make([][]dlFile, len(res.files))
 	n := 0
@@ -485,7 +456,6 @@ func (r *Registry) report(ctx context.Context, sessionID string, q dlRequest, d 
 	return strings.TrimSpace(sb.String())
 }
 
-// args builds the yt-dlp command of one attempt; later attempts are more lenient.
 func (d *DownloaderInfo) args(q dlRequest, attempt int, cookies string) []string {
 	a := append([]string(nil), d.YtDlp...)
 	a = append(a, "--ignore-config", "--no-colors", "--no-mtime", "--no-cache-dir",
@@ -496,7 +466,7 @@ func (d *DownloaderInfo) args(q dlRequest, attempt int, cookies string) []string
 	if name == "" {
 		name = "%(title).80B"
 	}
-	number := "%(playlist_autonumber& - {}|)s" // items of a playlist or a carousel
+	number := "%(playlist_autonumber& - {}|)s"
 	if searchRe.MatchString(q.target) {
 		number = ""
 	}
@@ -524,7 +494,7 @@ func (d *DownloaderInfo) args(q dlRequest, attempt int, cookies string) []string
 		a = append(a, "--download-sections", "*"+q.section)
 	}
 	a = append(a, d.subtitleArgs(q)...)
-	// Playlists and channels: skip the login check of YouTube's tab pages.
+
 	a = append(a, "--extractor-args", "youtubetab:skip=authcheck")
 	switch attempt {
 	case 1:
@@ -550,10 +520,9 @@ type dlFile struct {
 	height                int
 	size                  int64
 	note                  string
-	about                 string // more details for the model
+	about                 string
 }
 
-// parseDownloads reads the files yt-dlp reported (one marker line each).
 func (r *Registry) parseDownloads(sessionID, stdout string) []dlFile {
 	var out []dlFile
 	seen := map[string]bool{}
@@ -562,7 +531,7 @@ func (r *Registry) parseDownloads(sessionID, stdout string) []dlFile {
 		if len(f) < 6 || f[0] != dlMarker {
 			continue
 		}
-		name := path.Base(f[1]) // every file is written to the workspace root
+		name := path.Base(f[1])
 		if seen[name] {
 			continue
 		}
@@ -608,7 +577,6 @@ func containsAny(s string, words ...string) bool {
 	return false
 }
 
-// retryable: the site pushed back or the network hiccuped, not "this does not exist".
 func retryable(e string) bool {
 	if geoBlocked(e) {
 		return false
@@ -624,10 +592,8 @@ func imagePostError(e string) bool {
 	return containsAny(e, "unsupported url", "no video formats found", "no video could be found", "there's no video", "there is no video")
 }
 
-// ytdlpBoilerRe is yt-dlp's request to report a bug, which only takes room.
 var ytdlpBoilerRe = regexp.MustCompile(`(?is);?\s*please report this issue on\s.*$`)
 
-// explainDownloadError turns yt-dlp's error into advice for the model.
 func explainDownloadError(e string, haveCookies bool) string {
 	short := tail(strings.TrimSpace(ytdlpBoilerRe.ReplaceAllString(lastLine(e), "")), 300)
 	switch {
@@ -662,9 +628,6 @@ func explainDownloadError(e string, haveCookies bool) string {
 	return "error: the download failed: " + short
 }
 
-// fitForTelegram makes a file over Telegram's limit sendable. Long videos
-// (and any file when the user asked for parts) are split with the streams
-// copied; shorter ones are re-encoded to fit. Each way falls back on the other.
 func (r *Registry) fitForTelegram(ctx context.Context, sessionID string, f dlFile, d *DownloaderInfo, split bool) []dlFile {
 	if f.size <= dlSendLimit || !d.FFmpeg {
 		if f.size > dlSendLimit {
@@ -704,7 +667,6 @@ func (r *Registry) fitForTelegram(ctx context.Context, sessionID string, f dlFil
 	return []dlFile{c}
 }
 
-// compress re-encodes a file to fit Telegram.
 func (r *Registry) compress(ctx context.Context, sessionID string, f dlFile) (dlFile, bool) {
 	dur := f.duration
 	totalKbps := int(float64(dlFitBytes) * 8 / dur / 1000)
@@ -754,7 +716,6 @@ func (r *Registry) compress(ctx context.Context, sessionID string, f dlFile) (dl
 	return f, true
 }
 
-// galleryDL downloads the photos (and videos) of a post with gallery-dl.
 func (r *Registry) galleryDL(ctx context.Context, sessionID string, q dlRequest, d *DownloaderInfo) (string, error) {
 	items := q.items
 	if items == "" {
@@ -799,24 +760,16 @@ func (r *Registry) galleryDL(ctx context.Context, sessionID string, q dlRequest,
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// cookieSlot is the cookie a download uses, written to a private folder
-// outside the workspace (the user's code and files never reach it) while it
-// runs, and replaced by the next one when the site blocks it.
-//
-// The order follows tg-ytdlp-bot: the user's own cookies first, then the
-// shared pool (least recently used first; a blocked one rests), then none
-// (a bad cookie can cause the login wall itself). One user's downloads go
-// through at most cookieRotationsPerHour cookies an hour.
 type cookieSlot struct {
 	r        *Registry
 	session  string
 	host     string
-	user     []Cookie // the user's own cookies for the site
+	user     []Cookie
 	cookie   Cookie
-	refused  int // 403s met: another account is tried once
+	refused  int
 	have     bool
-	any      bool // some cookie fits this site (used or resting)
-	dropped  bool // the cookies failed: the last try goes without any
+	any      bool
+	dropped  bool
 	tried    map[string]bool
 	rotation int
 	notes    []string
@@ -829,7 +782,7 @@ func (r *Registry) cookieSlot(sessionID, host string) *cookieSlot {
 	s := &cookieSlot{r: r, session: sessionID, host: host, tried: map[string]bool{}}
 	if r.userCookies != nil && host != "" {
 		now := time.Now()
-		for _, c := range r.userCookies(machine.ParentSession(sessionID)) { // a sub-agent downloads for its user
+		for _, c := range r.userCookies(machine.ParentSession(sessionID)) {
 			if CookieFits(c, host) && !CookieExpired(c, host, now) {
 				s.user = append(s.user, c)
 			}
@@ -840,7 +793,6 @@ func (r *Registry) cookieSlot(sessionID, host string) *cookieSlot {
 	return s
 }
 
-// next takes the next ready cookie for the site and writes it out.
 func (s *cookieSlot) next() bool {
 	s.have = false
 	if s.host == "" {
@@ -879,7 +831,6 @@ func (s *cookieSlot) next() bool {
 
 func (s *cookieSlot) active() bool { return s.have }
 
-// path is the cookie file as the command sees it ("" without a cookie).
 func (s *cookieSlot) path() string {
 	if !s.have || s.secret == nil {
 		return ""
@@ -887,7 +838,6 @@ func (s *cookieSlot) path() string {
 	return s.secret.path(s.r.Machine, cookiesName)
 }
 
-// drop stops using a cookie: the file is gone before the next command runs.
 func (s *cookieSlot) drop() {
 	s.have = false
 	if s.secret != nil {
@@ -903,9 +853,6 @@ func (s *cookieSlot) good() {
 	}
 }
 
-// rotate reacts to a failure: a blocked account rests and the next one is
-// tried; a private item is tried with the next account. It reports whether
-// the download should be retried at once.
 func (s *cookieSlot) rotate(e string) bool {
 	if !s.have || geoBlocked(e) {
 		return false
@@ -913,7 +860,7 @@ func (s *cookieSlot) rotate(e string) bool {
 	blocked, private := cookieBlocked(e), privateForAccount(e)
 	if !blocked && !private && forbidden(e) && s.refused == 0 {
 		s.refused++
-		private = true // another account, once; a second 403 is not the cookie's
+		private = true
 	}
 	if !blocked && !private {
 		return false
@@ -935,8 +882,6 @@ func (s *cookieSlot) rotate(e string) bool {
 	return s.next()
 }
 
-// withoutCookies is gallery-dl's last try after the cookies hit a login
-// wall: none at all (yt-dlp's ladder goes on without them by itself).
 func (s *cookieSlot) withoutCookies(e string) bool {
 	if s.dropped || !s.any || !cookieBlocked(e) {
 		return false
@@ -952,5 +897,5 @@ func (s *cookieSlot) clear() {
 	if s.secret != nil {
 		s.secret.close()
 	}
-	_ = s.r.Machine.Remove(s.session, dlCookiesFile) // left by an older version
+	_ = s.r.Machine.Remove(s.session, dlCookiesFile)
 }

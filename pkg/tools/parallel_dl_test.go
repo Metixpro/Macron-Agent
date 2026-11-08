@@ -35,10 +35,10 @@ func TestDownloadFileInParallelParts(t *testing.T) {
 				w.Header().Set("Content-Length", fmt.Sprint(end-start+1))
 				w.WriteHeader(http.StatusPartialContent)
 				w.Write(data[start : start+(end-start+1)/2])
-				panic(http.ErrAbortHandler) // the connection drops halfway
+				panic(http.ErrAbortHandler)
 			}
 			http.ServeContent(w, r, "big.bin", mod, bytes.NewReader(data))
-		case "/first-only.bin": // honours the first range, then sends the whole file
+		case "/first-only.bin":
 			if rg == "bytes=0-" {
 				http.ServeContent(w, r, "x.bin", mod, bytes.NewReader(data))
 				return

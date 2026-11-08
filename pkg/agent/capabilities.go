@@ -6,17 +6,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// capability is one thing the assistant can do, in the user's terms, and
-// the tools that make it possible (any of them is enough).
 type capability struct {
 	line  string
 	tools []string
 }
 
-// capabilities is what can be offered, built from the tools a request has
-// (a service that is off or fast mode take some
-// away), so the assistant never promises what is not there. SOUL.md holds
-// the personality only.
 var capabilities = []capability{
 	{"🔎 search the web and read sites and news, with sources", []string{"web_search", "web_fetch"}},
 	{"🧠 deep, multi-step research with a full cited report", []string{"deep_research"}},
@@ -42,7 +36,6 @@ var capabilities = []capability{
 	{"🛡 moderate this group for its admins: ban, mute, restrict media or links, warn, clean up messages, pin, lock, promote with chosen rights and titles, invite links", []string{"group_admin"}},
 }
 
-// capabilityList is the part of the instructions that says what is offered.
 func capabilityList(offers func(string) bool) string {
 	var sb strings.Builder
 	sb.WriteString("What you can do right now (offer and promise only these; when something asked for is not here, say so plainly " +

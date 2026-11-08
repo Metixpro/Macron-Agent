@@ -12,15 +12,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Self-correction: a call with an unknown tool, broken JSON or missing
-// arguments is not an error that ends the request. The problem goes back to
-// the model as the tool's result, worded so it can fix the call in its next
-// step. Small, unambiguous mistakes (code fences, trailing commas, Python
-// literals, a missing closing brace, double-encoded JSON) are repaired
-// silently.
-
-// prepareCall checks a call against the tool definitions. It returns the
-// arguments to use, or a message for the model explaining what to fix.
 func prepareCall(name, raw string, defs map[string]llm.ToolDef) (args string, problem string) {
 	def, ok := defs[name]
 	if !ok {
@@ -43,7 +34,6 @@ func prepareCall(name, raw string, defs map[string]llm.ToolDef) (args string, pr
 	return args, ""
 }
 
-// repairArgs returns the arguments as a compact JSON object.
 func repairArgs(raw string) (string, error) {
 	s := strings.TrimSpace(unfence(strings.TrimSpace(raw)))
 	if s == "" || s == "null" {
@@ -63,7 +53,6 @@ func repairArgs(raw string) (string, error) {
 	return string(b), nil
 }
 
-// decodeObject accepts an object, or a JSON string that holds one.
 func decodeObject(s string) (map[string]any, error) {
 	var v any
 	if err := json.Unmarshal([]byte(s), &v); err != nil {
@@ -72,7 +61,7 @@ func decodeObject(s string) (map[string]any, error) {
 	switch x := v.(type) {
 	case map[string]any:
 		return x, nil
-	case string: // double-encoded
+	case string:
 		var inner map[string]any
 		if err := json.Unmarshal([]byte(x), &inner); err == nil {
 			return inner, nil
@@ -107,8 +96,6 @@ func plainJSONError(err error) error {
 
 var trailingCommaRe = regexp.MustCompile(`,(\s*[}\]])`)
 
-// repairJSON fixes the mistakes models make most: trailing commas, Python
-// literals, single-quoted strings and missing closing brackets.
 func repairJSON(s string) (string, error) {
 	t := strings.TrimSpace(s)
 	if t == "" {
@@ -127,7 +114,6 @@ func repairJSON(s string) (string, error) {
 	return t, nil
 }
 
-// replaceOutsideStrings swaps whole words that are not inside JSON strings.
 func replaceOutsideStrings(s string, words map[string]string) string {
 	var out strings.Builder
 	inStr, esc := false, false
@@ -173,8 +159,6 @@ func isWordByte(c byte) bool {
 	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// closeBrackets appends the closers of brackets left open (outside strings),
-// and closes a string cut off at the end.
 func closeBrackets(s string) string {
 	var stack []byte
 	inStr, esc := false, false
@@ -213,7 +197,6 @@ func closeBrackets(s string) string {
 	return s
 }
 
-// required lists the required parameters of a tool.
 func required(def llm.ToolDef) []string {
 	var out []string
 	switch r := def.Parameters["required"].(type) {
@@ -242,7 +225,6 @@ func missingRequired(args string, def llm.ToolDef) []string {
 	return missing
 }
 
-// exampleArgs shows the expected shape: {"query": "<string>", "limit": <integer>}.
 func exampleArgs(def llm.ToolDef) string {
 	props, _ := def.Parameters["properties"].(map[string]any)
 	if len(props) == 0 {
@@ -295,16 +277,6 @@ func placeholder(p any) string {
 	return "<value>"
 }
 
-// ---------------------------------------------------------------- tool catalog
-
-// toolCatalog describes the tools in the system prompt, so a model can call
-// them by text when native function calling is missing (or a gateway dropped
-// the tools array):
-//
-//   - web_search(query*: string, limit: integer) — Search the web for …
-//
-// Without list only the way to call them is there: a model that calls tools
-// natively has their definitions already, and a list would repeat them all.
 func toolCatalog(defs []llm.Tool, list bool) string {
 	if len(defs) == 0 {
 		return ""

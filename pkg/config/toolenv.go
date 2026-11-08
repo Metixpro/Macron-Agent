@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// ActivateToolEnv makes the installer's private Python environment available to
-// subprocesses, including when systemd starts the binary without a login shell.
 func ActivateToolEnv() {
 	if os.Getenv("PLAYWRIGHT_BROWSERS_PATH") == "" {
 		browsers := HomePath("browsers")

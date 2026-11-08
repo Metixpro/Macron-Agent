@@ -13,11 +13,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// apply_patch: a unified diff (git diff's format) changes many files in one
-// call, new and deleted ones too, all or none (git apply, as a plain patch
-// tool: the paths are relative to the folder given, whatever repository it
-// is in). The code files it touched get a syntax check, as after edit_file.
-
 const ToolApplyPatch = "apply_patch"
 
 var patchPathRe = regexp.MustCompile(`(?m)^(?:---|\+\+\+) (\S+)`)
@@ -51,9 +46,7 @@ func (r *Registry) applyPatch(ctx context.Context, sessionID string, args map[st
 		return "error: " + friendlyFSError(err), nil
 	}
 	defer func() { _ = r.Machine.Remove(sessionID, name) }()
-	// As written first; then with the line counts taken from the lines
-	// themselves (a model's are often off), then hunks without context
-	// lines too. When none applies, the errors are the strictest one's.
+
 	script := `cd "$1" || exit 1
 export GIT_DIR=/nonexistent
 for how in "" "--recount" "--recount --unidiff-zero"; do
@@ -76,8 +69,6 @@ exec git apply --verbose -p"$2" "$3"`
 	return fmt.Sprintf("%s\nApplied to %d files: %s%s", out, len(files), strings.Join(files, ", "), strings.Join(notes, "")), nil
 }
 
-// patchFiles reads a patch's files and its strip level: 1 when every path
-// has git's a/ and b/, else 0.
 func patchFiles(patch string) (strip string, files []string) {
 	strip = "1"
 	seen := map[string]bool{}

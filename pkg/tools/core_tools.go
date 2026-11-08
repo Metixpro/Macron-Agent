@@ -22,12 +22,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// maxDownloadBytes is the largest download_file (more through a local Bot API server, see SetSendLimit).
 var maxDownloadBytes int64 = 100 << 20
 
 const (
 	maxWriteBytes  = 2 << 20
-	maxAppendBytes = 20 << 20 // a file built with append
+	maxAppendBytes = 20 << 20
 	maxReadBytes   = 32 << 10
 )
 
@@ -125,7 +124,7 @@ func (r *Registry) webSearch(ctx context.Context, _ string, args map[string]any)
 		}
 		return fmt.Sprintf("search error: %v. Try other words, or again in a moment.", err), nil
 	}
-	if len(rep.Results) < 2 && strings.ContainsAny(q, `"«»`) { // an exact phrase found little: once more without it
+	if len(rep.Results) < 2 && strings.ContainsAny(q, `"«»`) {
 		if loose, _ := r.Search.SearchWith(ctx, strings.NewReplacer(`"`, "", "«", "", "»", "").Replace(q), opt); loose != nil && len(loose.Results) > len(rep.Results) {
 			rep = loose
 		}
@@ -142,7 +141,6 @@ func (r *Registry) webSearch(ctx context.Context, _ string, args map[string]any)
 	return formatSearch(rep, time.Now()), nil
 }
 
-// formatSearch writes a search's report for the model.
 func formatSearch(rep *search.SearchReport, now time.Time) string {
 	var sb strings.Builder
 	if a := rep.Answer; a != nil {
@@ -188,7 +186,6 @@ func siteName(raw string) string {
 	return raw
 }
 
-// ageText writes how long ago something was: "3 hours ago".
 func ageText(d time.Duration) string {
 	switch {
 	case d < 0:
@@ -207,7 +204,7 @@ func (r *Registry) webFetch(ctx context.Context, _ string, args map[string]any) 
 	if target == "" {
 		return "error: url is required", nil
 	}
-	text, err := r.Search.FetchPage(ctx, target, intArg(args, "max_chars", 8000, 500, readShowRunes)) // more would lose its middle
+	text, err := r.Search.FetchPage(ctx, target, intArg(args, "max_chars", 8000, 500, readShowRunes))
 	if err != nil {
 		return fmt.Sprintf("fetch error: %v", err), nil
 	}
@@ -245,8 +242,7 @@ func (r *Registry) downloadFile(ctx context.Context, sessionID string, args map[
 	if limit <= 0 {
 		return "error: the disk is full", nil
 	}
-	// tooBig says which limit a file is over: the user's free storage or the
-	// download limit (size 0: not known before the download).
+
 	tooBig := func(size int64) string {
 		file := "the file"
 		if size > 0 {
@@ -264,9 +260,9 @@ func (r *Registry) downloadFile(ctx context.Context, sessionID string, args map[
 	if err != nil {
 		return fmt.Sprintf("create request failed: %v", err), nil
 	}
-	req.Header.Set("Range", "bytes=0-") // a 206 answer means the file can come in parallel parts
+	req.Header.Set("Range", "bytes=0-")
 	resp, err := r.HTTP.Do(req)
-	if err == nil && resp.StatusCode == http.StatusForbidden { // a browser that does not look like one
+	if err == nil && resp.StatusCode == http.StatusForbidden {
 		resp.Body.Close()
 		ctx = asDownloadTool(ctx)
 		if req, err = newGet(ctx, u.String()); err == nil {
@@ -274,7 +270,7 @@ func (r *Registry) downloadFile(ctx context.Context, sessionID string, args map[
 			resp, err = r.HTTP.Do(req)
 		}
 	}
-	if err == nil && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable { // some servers say so for empty files
+	if err == nil && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
 		resp.Body.Close()
 		req.Header.Del("Range")
 		resp, err = r.HTTP.Do(req)
@@ -349,10 +345,9 @@ func (r *Registry) downloadFile(ctx context.Context, sessionID string, args map[
 	return msg, nil
 }
 
-// streamAgain downloads the file again in one plain stream.
 func (r *Registry) streamAgain(ctx context.Context, f *os.File, rawURL string, limit int64) (int64, int, error) {
 	if c := counterOf(ctx); c != nil {
-		c.Store(0) // starting over
+		c.Store(0)
 	}
 	if err := f.Truncate(0); err != nil {
 		return 0, 1, err
@@ -444,7 +439,6 @@ func (r *Registry) writeFile(ctx context.Context, sessionID string, args map[str
 	return fmt.Sprintf("File %q saved (%s)", name, humanSize(int64(len(content)))) + note, nil
 }
 
-// readManyMax is how many files one read_file call reads.
 const readManyMax = 20
 
 func (r *Registry) readFile(ctx context.Context, sessionID string, args map[string]any) (string, error) {
@@ -467,18 +461,16 @@ func (r *Registry) readFile(ctx context.Context, sessionID string, args map[stri
 	}
 	text, cut := fitText(strings.ToValidUTF8(string(data), "�"), readShowRunes)
 	if truncated || cut {
-		// The next read starts at the first line not shown whole.
+
 		text = strings.TrimRight(text, "\n") + fmt.Sprintf("\n... [truncated: lines 1-%d shown — read on with start_line=%d, or find things with search_code]",
 			max(strings.Count(text, "\n"), 1), strings.Count(text, "\n")+1)
 	}
 	return text, nil
 }
 
-// binaryHint: a file that is not text is not read as text (it would be
-// noise); the model is told which tool reads it.
 func binaryHint(name string, data []byte) string {
 	head := data[:min(len(data), 8192)]
-	invalid := len(head) - len(bytes.ToValidUTF8(head, nil)) // a character cut at the end is a few bytes
+	invalid := len(head) - len(bytes.ToValidUTF8(head, nil))
 	if !bytes.Contains(head, []byte{0}) && invalid*20 <= len(head) && !looksBinary(head) {
 		return ""
 	}
@@ -504,7 +496,6 @@ func binaryHint(name string, data []byte) string {
 	return fmt.Sprintf("%s is not a text file (%s, %s); read_file shows text only. Use %s.", name, kind, humanSize(int64(len(data))), use)
 }
 
-// looksBinary: many control characters, as in a compressed or encoded file.
 func looksBinary(b []byte) bool {
 	ctrl := 0
 	for _, c := range b {
@@ -537,7 +528,6 @@ func (r *Registry) listFiles(_ context.Context, sessionID string, _ map[string]a
 	return sb.String(), nil
 }
 
-// friendlyFSError hides host paths from error text.
 func friendlyFSError(err error) string {
 	switch {
 	case errors.Is(err, machine.ErrOutsideWorkspace):
@@ -549,13 +539,11 @@ func friendlyFSError(err error) string {
 	}
 	var pe *fs.PathError
 	if errors.As(err, &pe) {
-		return pe.Err.Error() // e.g. "no such file or directory", without the host path
+		return pe.Err.Error()
 	}
 	return textutil.OneLine(err.Error())
 }
 
-// readMany reads several files in one call, each within its share of what a
-// call may return.
 func (r *Registry) readMany(ctx context.Context, sessionID, first string, list []any) string {
 	var names []string
 	seen := map[string]bool{}

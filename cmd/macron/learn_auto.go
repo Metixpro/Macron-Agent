@@ -17,24 +17,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// Learning without a click: a lesson goes into its skill at once, and the
-// safety a manual approval gave is kept another way:
-//
-//   - the caps (lessonsPerUser, lessonsPerDay) still bound what is learned;
-//   - each adoption keeps the skill as it was, so «/learn undo <id>» (or ↩️)
-//     puts it back exactly, and a lesson taken back is never proposed again;
-//   - nothing the user wrote goes in as it is: a separate model call writes a
-//     general rule, which is scrubbed and checked for secrets, home paths and
-//     the owner's ids (agent.SecretIn) before anything is saved;
-//   - every learnReviewEvery jobs a review merges duplicate lessons and flags
-//     skills nobody reads.
-
 const (
-	settingLearnReview     = "learn_review_interval" // jobs between two reviews (0: never)
+	settingLearnReview     = "learn_review_interval"
 	settingLearnJobs       = "learn_jobs_since_review"
 	learnReviewDefault     = 25
-	learnNudgeEvery        = 15  // rounds between two reminders to save a skill (agent.Request.SkillNudgeEvery)
-	lessonDuplicateAt      = 0.6 // word overlap from which two lessons of a field are one
+	learnNudgeEvery        = 15
+	lessonDuplicateAt      = 0.6
 	lessonUnusedAfter      = 30 * 24 * time.Hour
 	lessonLogPage          = 8
 	learnReviewMaxFlagged  = 10
@@ -42,14 +30,12 @@ const (
 	learnReviewStepTimeout = 30 * time.Second
 )
 
-// skillShot is a skill as it is, kept in the lesson log.
 type skillShot struct {
 	Description string `json:"description"`
 	Body        string `json:"body"`
 	Category    string `json:"category"`
 }
 
-// shotOf is the skill's text now ("" when there is none).
 func (b *Bot) shotOf(name string) string {
 	sk := b.app.Agent.Skills
 	if sk == nil {
@@ -63,7 +49,6 @@ func (b *Bot) shotOf(name string) string {
 	return string(raw)
 }
 
-// restoreShot puts a skill back as a shot kept it ("" removes it).
 func (b *Bot) restoreShot(name, shot string) error {
 	sk := b.app.Agent.Skills
 	if sk == nil {
@@ -82,8 +67,6 @@ func (b *Bot) restoreShot(name, shot string) error {
 	return sk.Save(name, s.Description, s.Body, s.Category)
 }
 
-// lessonPrivate are the strings a lesson must never hold: the owners' ids
-// and this machine's home folders.
 func (b *Bot) lessonPrivate() []string {
 	var out []string
 	for id := range b.owner {
@@ -96,15 +79,10 @@ func (b *Bot) lessonPrivate() []string {
 	return out
 }
 
-// lessonLeaks reports what in a lesson must not be kept ("" when it is clean).
 func (b *Bot) lessonLeaks(x *store.Lesson) string {
 	return agent.SecretIn(x.Title+"\n"+x.Rule+"\n"+x.Tools, b.lessonPrivate()...)
 }
 
-// undoLesson takes a lesson back: its skill returns to what it was before
-// the lesson went in (when nothing changed it since; otherwise it is written
-// again without the lesson), and the lesson is rejected, so the same lesson
-// is never proposed again.
 func (b *Bot) undoLesson(ctx context.Context, id int64) (*store.Lesson, error) {
 	x, err := b.st.Lesson(ctx, id)
 	if err != nil {
@@ -137,13 +115,10 @@ func (b *Bot) undoLesson(ctx context.Context, id int64) (*store.Lesson, error) {
 	return x, nil
 }
 
-// learnReviewEvery is how many jobs go between two reviews (0: never).
 func (b *Bot) learnReviewEvery() int {
 	return max(b.st.SettingInt(settingLearnReview, learnReviewDefault), 0)
 }
 
-// noteJobForReview counts a finished job; every learnReviewEvery of them the
-// review runs in the background.
 func (b *Bot) noteJobForReview() {
 	every := b.learnReviewEvery()
 	if every == 0 || !b.learningOn() {
@@ -168,9 +143,6 @@ func (b *Bot) noteJobForReview() {
 	}()
 }
 
-// reviewLessons merges lessons of a field that say the same thing (the one
-// learned more often stays, with both counts), rewrites the skills that
-// changed, and flags the skills nobody has read. It is logged.
 func (b *Bot) reviewLessons(ctx context.Context) (store.LessonLog, error) {
 	list, err := b.st.Lessons(ctx, store.LessonApproved, "", 500)
 	if err != nil {
@@ -184,7 +156,7 @@ func (b *Bot) reviewLessons(ctx context.Context) (store.LessonLog, error) {
 	changed := map[string]bool{}
 	for field, xs := range byField {
 		gone := map[int64]bool{}
-		for i := range xs { // most learned first (Lessons' order)
+		for i := range xs {
 			if gone[xs[i].ID] {
 				continue
 			}
@@ -233,7 +205,6 @@ func (b *Bot) reviewLessons(ctx context.Context) (store.LessonLog, error) {
 	return entry, err
 }
 
-// lessonOverlap is how much two lessons share their words (0 to 1).
 func lessonOverlap(a, b store.Lesson) float64 {
 	words := func(s string) map[string]bool {
 		out := map[string]bool{}
@@ -259,7 +230,6 @@ func lessonOverlap(a, b store.Lesson) float64 {
 	return float64(both) / float64(len(x)+len(y)-both)
 }
 
-// learnCommand: «/learn» opens 🧠 Learning; «/learn undo <id>» takes a lesson back.
 func (b *Bot) learnCommand(ctx context.Context, m *telegram.Message, l lang, args string) {
 	f := strings.Fields(args)
 	if len(f) == 0 {

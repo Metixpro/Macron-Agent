@@ -20,29 +20,14 @@ import (
 	"time"
 )
 
-// The picture studio: generate_image's first engine, a service that draws a
-// picture from a prompt in one of its styles and one of its picture shapes.
-// Everything is one POST with JSON, {"action": "styles" | "aspects" |
-// "generate", "api_key": …}, and every answer is JSON. A generate answers with
-// links to two pictures; they are downloaded at once and the links never reach
-// the model or the user. The key is the admin's: it comes from the panel or
-// the environment (SetImageKey), never from the source.
-
-// ErrImageKey is a key the studio does not accept.
 var ErrImageKey = errors.New("the image service did not accept its key")
 
-// studioRefused is the studio saying no to this prompt, whatever the key: a
-// second try or another prompt of the same kind will not change it.
 var errStudioRefused = errors.New("the image service refused the request")
 
-// SetImageKey gives the studio's key (read on every call, so a key set in the
-// admin panel works at once). Call it before serving.
 func (r *Registry) SetImageKey(key func() string) { r.imageKey = key }
 
-// SetImageAPI points generate_image's first engine at a service ("" = none).
 func (r *Registry) SetImageAPI(url string) { r.imageAPI = url }
 
-// ImageKey is the studio's key in use ("" = none).
 func (r *Registry) ImageKey() string { return r.studioKey() }
 
 func (r *Registry) studioKey() string {
@@ -52,28 +37,20 @@ func (r *Registry) studioKey() string {
 	return strings.TrimSpace(r.imageKey())
 }
 
-// StudioReady reports whether generate_image has its first engine.
 func (r *Registry) StudioReady() bool { return r.imageAPI != "" && r.studioKey() != "" }
 
-// StudioStyles lists the styles the studio draws in.
 func (r *Registry) StudioStyles(ctx context.Context) []StudioStyle {
 	list, _ := r.studioCatalog(ctx)
 	return list
 }
 
-// StudioStyle is one of the studio's styles.
 type StudioStyle struct {
 	ID   string `json:"id"`
-	Name string `json:"name"` // in Persian
+	Name string `json:"name"`
 }
 
-// studioShapes are the picture shapes the studio draws (its "aspects"); the
-// list it answers replaces them when it can be read.
 var studioShapes = []string{"1:1", "4:5", "16:9", "9:16", "4:3", "3:4", "2:1", "21:9", "32:9", "5:4"}
 
-// studioStyleIDs are the styles known without asking (the service's list at
-// the time of writing): a name is checked against them when the service
-// cannot be reached, and the model reads them in an error.
 var studioStyleIDs = strings.Fields(`anime realistic oil_painting watercolor sketch pixel 3d_render cyberpunk steampunk fantasy gothic
 cartoon comic glitch vaporwave impressionist expressionist cubist surrealist popart minimalist baroque rococo renaissance abstract
 graffiti vector isometric low_poly chalk pastel charcoal mosaic origami lego collage mandala calligraphy henna polaroid infrared
@@ -81,7 +58,6 @@ thermal underwater microscopic telescopic night_vision xray sonar radar hologram
 tilt_shift macro bokeh long_exp double_exp hdr night_mode portrait landscape street architecture food fashion product automotive
 sports wildlife macro_insect astro aerial`)
 
-// styleAliases are the names models and people use for a style.
 var styleAliases = map[string]string{
 	"photo": "realistic", "photograph": "realistic", "photorealistic": "realistic", "photo_realistic": "realistic", "realism": "realistic",
 	"real": "realistic", "natural": "realistic", "cinematic": "realistic",
@@ -111,17 +87,15 @@ type styleCache struct {
 	list       []StudioStyle
 	shapes     []string
 	fetched    time.Time
-	retryAfter time.Time // the service could not be read: not again before this
+	retryAfter time.Time
 }
 
 const (
 	styleCacheFor   = 6 * time.Hour
 	styleRetryAfter = 2 * time.Minute
-	styleReadFor    = 8 * time.Second // reading the lists never holds a picture back for long
+	styleReadFor    = 8 * time.Second
 )
 
-// studioCatalog is the studio's styles and shapes, read from the service now
-// and then; the built-in lists stand in when it cannot be reached.
 func (r *Registry) studioCatalog(ctx context.Context) ([]StudioStyle, []string) {
 	c := &r.styles
 	c.mu.Lock()
@@ -162,7 +136,6 @@ func builtinStyles() []StudioStyle {
 	return out
 }
 
-// normStyle writes a style the way ids are written: lower case, "_" between words.
 func normStyle(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = strings.NewReplacer(" ", "_", "-", "_", "/", "_", ".", "").Replace(s)
@@ -170,12 +143,9 @@ func normStyle(s string) string {
 	return strings.Trim(s, "_")
 }
 
-// matchStyle finds the studio's style a name stands for: its id, its Persian
-// name, an alias, or the one style the name contains ("cyberpunk_city" →
-// cyberpunk). ok is false for a name that means none of them (or several).
 func matchStyle(raw string, list []StudioStyle) (id string, ok bool) {
 	if strings.TrimSpace(raw) == "" {
-		return "", true // the studio's own default
+		return "", true
 	}
 	n := normStyle(raw)
 	for _, s := range list {
@@ -190,8 +160,7 @@ func matchStyle(raw string, list []StudioStyle) (id string, ok bool) {
 			}
 		}
 	}
-	// A name that contains one style ("cyberpunk_city"), or several of which one
-	// holds the others ("macro_insect_photo" has macro_insect and macro).
+
 	var hits []string
 	for _, s := range list {
 		if len(s.ID) >= 4 && strings.Contains(n, s.ID) {
@@ -210,7 +179,7 @@ func matchStyle(raw string, list []StudioStyle) (id string, ok bool) {
 			return hits[0], true
 		}
 	}
-	// A prefix of exactly one id ("cyber" → cyberpunk).
+
 	if len(n) >= 4 {
 		var pre []string
 		for _, s := range list {
@@ -225,7 +194,6 @@ func matchStyle(raw string, list []StudioStyle) (id string, ok bool) {
 	return "", false
 }
 
-// styleHelp lists the styles for a model that asked for one that does not exist.
 func styleHelp(list []StudioStyle) string {
 	ids := make([]string, len(list))
 	for i, s := range list {
@@ -234,7 +202,6 @@ func styleHelp(list []StudioStyle) string {
 	return strings.Join(ids, ", ")
 }
 
-// normShape writes a ratio as "W:H" ("16/9", "16x9", "16 : 9" → "16:9").
 func normShape(s string) (w, h int, ok bool) {
 	s = strings.NewReplacer("/", ":", "x", ":", "X", ":", "×", ":", "؛", ":", " ", "").Replace(strings.TrimSpace(s))
 	a, b, found := strings.Cut(s, ":")
@@ -249,8 +216,6 @@ func normShape(s string) (w, h int, ok bool) {
 	return w, h, true
 }
 
-// nearestShape is the shape in the list closest to the one asked for ("" →
-// "1:1"): by the ratio of the two sides, so 5:3 lands on 16:9, not on 3:4.
 func nearestShape(want string, shapes []string) string {
 	w, h, ok := normShape(want)
 	if !ok {
@@ -273,7 +238,6 @@ func nearestShape(want string, shapes []string) string {
 	return best
 }
 
-// studioCall asks the studio something and returns its "data".
 func (r *Registry) studioCall(ctx context.Context, action string, extra map[string]any) (json.RawMessage, error) {
 	body := map[string]any{"action": action, "api_key": r.studioKey()}
 	for k, v := range extra {
@@ -329,8 +293,6 @@ func (r *Registry) studioCall(ctx context.Context, action string, extra map[stri
 	return nil, errors.New(msg)
 }
 
-// CheckImageKey asks the studio whether a key is good (it lists the styles:
-// nothing is drawn).
 func (r *Registry) CheckImageKey(ctx context.Context, key string) (styles int, err error) {
 	saved := r.imageKey
 	r.imageKey = func() string { return key }
@@ -349,8 +311,6 @@ func (r *Registry) CheckImageKey(ctx context.Context, key string) (styles int, e
 	return len(got), nil
 }
 
-// imageViaStudio draws the picture and saves it as name; with n=2 the studio's
-// second picture is saved next to it (name_2.jpg). It returns the files made.
 func (r *Registry) imageViaStudio(ctx context.Context, sessionID, prompt, style, ratio, name string, n int) ([]savedImage, error) {
 	extra := map[string]any{"prompt": prompt, "aspect": ratio}
 	if style != "" {
@@ -384,7 +344,7 @@ func (r *Registry) imageViaStudio(ctx context.Context, sessionID, prompt, style,
 			if firstErr == nil {
 				firstErr = err
 			}
-			continue // the other one may still be good
+			continue
 		}
 		saved = append(saved, savedImage{name: file, size: size})
 	}
@@ -399,14 +359,11 @@ type savedImage struct {
 	size int64
 }
 
-// secondName is the name of the nth option next to name ("fox.jpg" → "fox_2.jpg").
 func secondName(name string, n int) string {
 	ext := path.Ext(name)
 	return fmt.Sprintf("%s_%d%s", strings.TrimSuffix(name, ext), n, ext)
 }
 
-// downloadStudioImage fetches one of the studio's pictures into the workspace,
-// in the format its name says, cut to the exact shape asked.
 func (r *Registry) downloadStudioImage(ctx context.Context, sessionID, link, name, ratio string) (int64, error) {
 	dctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -437,15 +394,13 @@ func (r *Registry) downloadStudioImage(ctx context.Context, sessionID, link, nam
 	return n, nil
 }
 
-// fitImage makes a saved picture match its name (the studio answers JPEG; a
-// ".png" name gets a PNG) and, if the shape is not exactly right, cuts it.
 func (r *Registry) fitImage(sessionID, name, ratio string) {
 	if strings.EqualFold(path.Ext(name), ".png") {
 		if f, _, err := r.Machine.Open(sessionID, name); err == nil {
 			head := make([]byte, 3)
 			_, _ = io.ReadFull(f, head)
 			f.Close()
-			if bytes.Equal(head, []byte{0xff, 0xd8, 0xff}) { // a JPEG under a PNG name
+			if bytes.Equal(head, []byte{0xff, 0xd8, 0xff}) {
 				r.reencode(sessionID, name)
 			}
 		}
@@ -453,7 +408,6 @@ func (r *Registry) fitImage(sessionID, name, ratio string) {
 	r.cropToRatio(sessionID, name, ratio)
 }
 
-// reencode rewrites a picture in the format of its name.
 func (r *Registry) reencode(sessionID, name string) {
 	f, _, err := r.Machine.Open(sessionID, name)
 	if err != nil {
@@ -485,8 +439,6 @@ func (r *Registry) reencode(sessionID, name string) {
 	_ = err
 }
 
-// styledPrompt adds the style to a prompt for an engine that has no styles
-// of its own (the fallbacks): "a fox" + anime → "a fox, anime style".
 func styledPrompt(prompt, style string) string {
 	if style == "" || style == "realistic" {
 		return prompt

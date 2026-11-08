@@ -7,15 +7,12 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------- groups and channels
-
-// BotChat is a group or channel the bot was added to.
 type BotChat struct {
 	ChatID      int64
-	Type        string // group | supergroup | channel
+	Type        string
 	Title       string
 	Username    string
-	Status      string // member | administrator | left | kicked
+	Status      string
 	Members     int
 	AddedBy     int64
 	AddedByName string
@@ -24,12 +21,8 @@ type BotChat struct {
 	UpdatedAt   time.Time
 }
 
-// Active reports whether the bot is still in the chat.
 func (c BotChat) Active() bool { return c.Status != "left" && c.Status != "kicked" }
 
-// SaveChatJoin records that the bot joined (or was promoted in) a chat. Every
-// assignment of the update sees the row as it was, so the IIFs read the old
-// status.
 func (s *Store) SaveChatJoin(ctx context.Context, c BotChat) error {
 	now := s.Now()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO bot_chats
@@ -47,7 +40,6 @@ func (s *Store) SaveChatJoin(ctx context.Context, c BotChat) error {
 	return err
 }
 
-// SaveChatLeave records that the bot left or was removed from a chat.
 func (s *Store) SaveChatLeave(ctx context.Context, chatID int64, status, title string) error {
 	now := s.Now()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO bot_chats (chat_id, type, title, status, left_at, updated_at) VALUES (?, '', ?, ?, ?, ?)
@@ -57,8 +49,6 @@ func (s *Store) SaveChatLeave(ctx context.Context, chatID int64, status, title s
 	return err
 }
 
-// TouchChat keeps the title of a chat fresh and registers chats the bot was
-// added to before it kept records (status member).
 func (s *Store) TouchChat(ctx context.Context, chatID int64, typ, title, username string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO bot_chats (chat_id, type, title, username, status, updated_at) VALUES (?, ?, ?, ?, 'member', ?)
 		ON CONFLICT DO UPDATE SET type = excluded.type, title = excluded.title, username = excluded.username,
@@ -67,7 +57,6 @@ func (s *Store) TouchChat(ctx context.Context, chatID int64, typ, title, usernam
 	return err
 }
 
-// Chats lists the known chats, most recently changed first.
 func (s *Store) Chats(ctx context.Context, limit int) ([]BotChat, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT chat_id, type, title, username, status, members, added_by, added_by_name, joined_at, left_at, updated_at
 		FROM bot_chats ORDER BY (status IN ('left', 'kicked')), updated_at DESC LIMIT ?`, limit)
@@ -87,7 +76,6 @@ func (s *Store) Chats(ctx context.Context, limit int) ([]BotChat, error) {
 	return out, rows.Err()
 }
 
-// Chat returns one chat.
 func (s *Store) Chat(ctx context.Context, chatID int64) (*BotChat, error) {
 	var c BotChat
 	err := s.db.QueryRowContext(ctx, `SELECT chat_id, type, title, username, status, members, added_by, added_by_name, joined_at, left_at, updated_at
@@ -102,8 +90,6 @@ func (s *Store) Chat(ctx context.Context, chatID int64) (*BotChat, error) {
 	return &c, nil
 }
 
-// ChatCounts returns how many chats the bot is in, how many it left, and the
-// members of the active ones.
 func (s *Store) ChatCounts(ctx context.Context) (active, left, members int, err error) {
 	err = s.db.QueryRowContext(ctx, `SELECT
 		COALESCE(SUM(status NOT IN ('left', 'kicked')), 0),

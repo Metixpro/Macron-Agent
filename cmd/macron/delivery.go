@@ -26,14 +26,11 @@ var (
 	otherExt = map[string]bool{".pdf": true, ".zip": true, ".csv": true, ".gif": true, ".xlsx": true, ".docx": true, ".pptx": true}
 )
 
-// fileSig identifies a file version, so overwritten files are noticed too.
 type fileSig struct {
 	size    int64
 	modNano int64
 }
 
-// trackDepth is how deep new files are looked for: a script's outputs often
-// land in out/ or build/ (or out/charts/).
 const (
 	trackDepth    = 3
 	trackMaxFiles = 5000
@@ -48,61 +45,42 @@ func snapshot(sb *machine.Machine, sessionID string) map[string]fileSig {
 	return out
 }
 
-// hiddenFile is a dot file or an editor backup, in any folder.
 func hiddenFile(name string) bool {
 	base := path.Base(name)
 	return strings.HasPrefix(base, ".") || strings.HasSuffix(base, "~")
 }
 
-// The model decides what reaches the chat: the files it hands over with
-// send_file and the ones it shows in its answer (![caption](file), see
-// planAnswer). Nothing is sent by itself, so a picture searched just to look
-// at, a download fetched to work with, frames and drafts stay in the
-// workspace.
-//
-// deliverableTools make deliverables by nature (a picture, a song, a voice, a
-// chart, a PDF…): when the model chose nothing to send, what they made is
-// pointed out to it once (it may well be the result).
 var deliverableTools = map[string]bool{
 	"generate_image": true, tools.ToolEditImage: true, "search_image": true, "text_to_speech": true, "generate_chart": true, "generate_qr": true,
 	"download_file": true, "download_media_ytdlp": true, "media_convert": true, "pdf_tool": true, "deep_research": true, "split_video": true,
 	"create_motion_graphic": true, "generate_music_synth": true, tools.ToolSong: true,
 }
 
-// fileTracker attributes the files of the workspace (down to trackDepth) to
-// the tool call that created or changed them. Calls may overlap (a sub-agent
-// works while a picture is made): a call that had the workspace to itself
-// owns every change it saw; one that shared it owns the files its result
-// names ("- File: sunset.png"), and the rest stays work in progress.
 type fileTracker struct {
 	sb      *machine.Machine
 	session string
 	mu      sync.Mutex
-	calls   map[string][]*trackedCall // tool → its calls in progress, oldest first
-	auto    []string                  // made by deliverableTools
-	scratch []string                  // made by everything else
+	calls   map[string][]*trackedCall
+	auto    []string
+	scratch []string
 }
 
-// workspaceCalls counts the tool calls in each workspace across all runs:
-// a scheduled task and a live job of the same user share one, so a call
-// owns every change only when no call of either was going on.
 var workspaceCalls = struct {
 	sync.Mutex
-	started map[string]int // calls started so far
-	running map[string]int // calls in progress
+	started map[string]int
+	running map[string]int
 }{started: map[string]int{}, running: map[string]int{}}
 
 type trackedCall struct {
 	before map[string]fileSig
-	alone  bool // nothing else ran when it started…
-	seq    int  // …and started was this: nothing else started since if it still is
+	alone  bool
+	seq    int
 }
 
 func newFileTracker(sb *machine.Machine, session string) *fileTracker {
 	return &fileTracker{sb: sb, session: session, calls: map[string][]*trackedCall{}}
 }
 
-// start and end bracket a tool call.
 func (t *fileTracker) start(tool string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -127,7 +105,7 @@ func (t *fileTracker) end(tool, result string) {
 	workspaceCalls.Lock()
 	alone := c.alone && workspaceCalls.started[t.session] == c.seq
 	if workspaceCalls.running[t.session]--; workspaceCalls.running[t.session] <= 0 {
-		delete(workspaceCalls.running, t.session) // nothing kept for workspaces at rest
+		delete(workspaceCalls.running, t.session)
 		delete(workspaceCalls.started, t.session)
 	}
 	workspaceCalls.Unlock()
@@ -143,7 +121,7 @@ func (t *fileTracker) end(tool, result string) {
 	}
 	sort.Strings(changed)
 	for _, name := range changed {
-		if deliverableTools[tool] && (alone || names(result, name)) && !(tool == tools.ToolSong && strings.HasSuffix(name, ".txt")) { // a song's lyrics file stays beside it
+		if deliverableTools[tool] && (alone || names(result, name)) && !(tool == tools.ToolSong && strings.HasSuffix(name, ".txt")) {
 			t.auto = appendNew(t.auto, name)
 		} else {
 			t.scratch = appendNew(t.scratch, name)
@@ -151,9 +129,6 @@ func (t *fileTracker) end(tool, result string) {
 	}
 }
 
-// adopt takes over what a sub-agent's tools made, once its files were handed
-// over to this workspace (moved: their name there → their name here), as if
-// the agent had made them.
 func (t *fileTracker) adopt(sub *fileTracker, moved map[string]string) {
 	sub.mu.Lock()
 	auto, scratch := append([]string(nil), sub.auto...), append([]string(nil), sub.scratch...)
@@ -172,8 +147,6 @@ func (t *fileTracker) adopt(sub *fileTracker, moved map[string]string) {
 	}
 }
 
-// names reports whether a tool's result names a file ("- File: out/a.png"),
-// not just ends with its name ("data.png" does not name "a.png").
 func names(result, name string) bool {
 	for i := 0; ; {
 		j := strings.Index(result[i:], name)
@@ -197,7 +170,6 @@ func appendNew(list []string, name string) []string {
 	return append(list, name)
 }
 
-// deliveries are the files handed over with send_file that still exist.
 func (t *fileTracker) deliveries(explicit []string) []string {
 	var out []string
 	for _, n := range explicit {
@@ -208,7 +180,6 @@ func (t *fileTracker) deliveries(explicit []string) []string {
 	return out
 }
 
-// placed are the workspace files the answer shows with ![caption](file).
 func (t *fileTracker) placed(answer string) []string {
 	var out []string
 	inFence := false
@@ -228,8 +199,6 @@ func (t *fileTracker) placed(answer string) []string {
 	return out
 }
 
-// made are the deliverables made in this request that still exist and were
-// not handed over (unsent: what was).
 func (t *fileTracker) made(unsent ...string) []string {
 	t.mu.Lock()
 	list := append([]string(nil), t.auto...)
@@ -252,9 +221,6 @@ func (t *fileTracker) exists(name string) bool {
 	return err == nil && fi.Mode().IsRegular() && fi.Size() > 0
 }
 
-// deliverFiles uploads files, at most maxFilesPerReply per call. Several
-// photos and videos (or several songs, or several documents) go as one album
-// instead of a stream of messages. It returns the files that arrived.
 func (b *Bot) deliverFiles(ctx context.Context, m *telegram.Message, sessionID string, names []string, captions map[string]string) []string {
 	extra := 0
 	if len(names) > maxFilesPerReply {
@@ -263,7 +229,7 @@ func (b *Bot) deliverFiles(ctx context.Context, m *telegram.Message, sessionID s
 	}
 	opts := telegram.SendOptions{}.InTopic(m)
 	if !m.Chat.Private() {
-		opts.ReplyTo = m.MessageID // in a group, everyone sees whose file it is
+		opts.ReplyTo = m.MessageID
 	}
 	delivered, ok := b.sendBatch(ctx, m.Chat.ID, sessionID, names, captions, opts)
 	if ok && extra > 0 {
@@ -274,15 +240,10 @@ func (b *Bot) deliverFiles(ctx context.Context, m *telegram.Message, sessionID s
 	return delivered
 }
 
-// uploadBudget is the time one upload may take: a few minutes, more for a
-// big file (a local Bot API server takes up to 2000 MB).
 func uploadBudget(size int64) time.Duration {
 	return min(max(3*time.Minute, 2*time.Minute+time.Duration(size/(40<<20))*time.Minute), 60*time.Minute)
 }
 
-// uploadCtx gives an upload its own time: what the answer took before it
-// never cuts a big file off. A stop (the parent cancelled) or the bot
-// shutting down still ends it.
 func (b *Bot) uploadCtx(parent context.Context, size int64) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), uploadBudget(size))
 	stopParent := context.AfterFunc(parent, func() {
@@ -294,11 +255,8 @@ func (b *Bot) uploadCtx(parent context.Context, size int64) (context.Context, co
 	return ctx, func() { stopParent(); stopJob(); cancel() }
 }
 
-// cancelled reports a delivery the user (or a shutdown) stopped, not one whose time ran out.
 func cancelled(ctx context.Context) bool { return errors.Is(ctx.Err(), context.Canceled) }
 
-// sendBatch sends files as albums where possible. It returns the files that
-// arrived; false means the chat is unreachable (or the delivery was stopped).
 func (b *Bot) sendBatch(ctx context.Context, chatID int64, sessionID string, names []string, captions map[string]string, opts telegram.SendOptions) ([]string, bool) {
 	var delivered []string
 	one := func(name string) bool {
@@ -313,7 +271,7 @@ func (b *Bot) sendBatch(ctx context.Context, chatID int64, sessionID string, nam
 		case err == nil:
 			delivered = append(delivered, name)
 			return true
-		case errors.Is(err, errNotSent): // too big for the chat: the user was told
+		case errors.Is(err, errNotSent):
 			return true
 		case telegram.IsUnreachable(err) || cancelled(ctx):
 			return false
@@ -341,15 +299,12 @@ func (b *Bot) sendBatch(ctx context.Context, chatID int64, sessionID string, nam
 	return delivered, true
 }
 
-// album is a run of files that can travel together.
 type album struct {
-	kind  string // visual | audio | document
+	kind  string
 	names []string
-	types []string // photo, video, audio or document per file
+	types []string
 }
 
-// albumGroups splits files into albums by kind (keeping their order of
-// appearance), at most 10 files each.
 func (b *Bot) albumGroups(sessionID string, names []string) []album {
 	var groups []album
 	index := map[string]int{}
@@ -361,7 +316,7 @@ func (b *Bot) albumGroups(sessionID string, names []string) []album {
 		ext := strings.ToLower(filepath.Ext(name))
 		kind, typ := "document", "document"
 		switch {
-		case tools.NativeKind(name) != "": // voice and round video messages travel alone
+		case tools.NativeKind(name) != "":
 			groups = append(groups, album{kind: "native", names: []string{name}, types: []string{tools.NativeKind(name)}})
 			continue
 		case imageExt[ext] && size <= telegram.MaxPhotoBytes:
@@ -383,7 +338,6 @@ func (b *Bot) albumGroups(sessionID string, names []string) []album {
 	return groups
 }
 
-// sendAlbum sends a group as one album; false means "send them one by one".
 func (b *Bot) sendAlbum(ctx context.Context, chatID int64, sessionID string, g album, captions map[string]string, opts telegram.SendOptions) bool {
 	var items []telegram.MediaItem
 	defer func() {
@@ -422,12 +376,10 @@ func (b *Bot) sendAlbum(ctx context.Context, chatID int64, sessionID string, g a
 	return true
 }
 
-// audioNames reads "Artist - Title.mp3" (as downloads are named); other
-// names are just the title.
 func audioNames(base string) (title, performer string) {
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
 	stem = strings.TrimSpace(strings.TrimSuffix(stem, " (compressed)"))
-	// A name made by a tool, where spaces became underscores: "Macron_AI_-_My_song".
+
 	if a, t, ok := strings.Cut(stem, "_-_"); ok && strings.TrimSpace(a) != "" && strings.TrimSpace(t) != "" {
 		return strings.TrimSpace(strings.ReplaceAll(t, "_", " ")), strings.TrimSpace(strings.ReplaceAll(a, "_", " "))
 	}
@@ -437,7 +389,6 @@ func audioNames(base string) (title, performer string) {
 	return stem, "Macron"
 }
 
-// captionHTML turns the model's Markdown caption into a Telegram HTML caption.
 func captionHTML(md string) string {
 	if strings.TrimSpace(md) == "" {
 		return ""
@@ -445,21 +396,18 @@ func captionHTML(md string) string {
 	return telegram.MarkdownToHTML(md)
 }
 
-// errNotSent: the file was not sent and the user was told why (too big for the chat).
 var errNotSent = errors.New("not sent: too big for the chat")
 
-// sendFile streams one workspace file using the most suitable Telegram
-// method, with an optional Markdown caption.
 func (b *Bot) sendFile(ctx context.Context, chatID int64, sessionID, name, caption string, opts telegram.SendOptions) error {
 	open := func() (telegram.File, func(), int64, error) {
-		// Open refuses symlinks leaving the workspace, FIFOs and devices.
+
 		f, info, err := b.app.Machine.Open(sessionID, name)
 		if err != nil {
 			return telegram.File{}, nil, 0, err
 		}
 		return telegram.File{Name: filepath.Base(name), Reader: f}, func() { f.Close() }, info.Size(), nil
 	}
-	_, closeFn, size, err := open() // validate and measure
+	_, closeFn, size, err := open()
 	if err != nil {
 		return err
 	}
@@ -501,7 +449,7 @@ func (b *Bot) sendFile(ctx context.Context, chatID int64, sessionID, name, capti
 	case tools.NativeKind(name) == "video_note":
 		_ = b.api.SendChatAction(ctx, chatID, "upload_video_note")
 		err = attempt(func(f telegram.File) error { return b.api.SendVideoNoteOpts(ctx, chatID, f, 480, opts) })
-		if err == nil && html != "" { // a round video message has no caption of its own
+		if err == nil && html != "" {
 			b.sendHTML(ctx, chatID, html, opts)
 		}
 	case audioExt[ext]:

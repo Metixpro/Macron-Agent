@@ -111,14 +111,14 @@ func TestResponsesAPIStreamedWithToolCalls(t *testing.T) {
 	if got["temperature"] != nil {
 		t.Errorf("a reasoning model gets no temperature unless one was chosen: %v", got["temperature"])
 	}
-	if got["instructions"] != "You are a helpful assistant.\n\n[memory] earlier: the user likes Go" { // the system notes that lead the conversation
+	if got["instructions"] != "You are a helpful assistant.\n\n[memory] earlier: the user likes Go" {
 		t.Errorf("instructions: %v", got["instructions"])
 	}
 	wire, _ := json.Marshal(got["input"])
 	for _, want := range []string{
 		`{"content":[{"text":"hi","type":"input_text"}],"role":"user"}`,
 		`{"content":[{"text":"hello!","type":"output_text"}],"role":"assistant"}`,
-		`{"content":[{"text":"[context] name: Ali","type":"input_text"}],"role":"user"}`, // a note in the middle is a user item
+		`{"content":[{"text":"[context] name: Ali","type":"input_text"}],"role":"user"}`,
 		`{"image_url":"data:image/png;base64,AAAA","type":"input_image"}`,
 		`{"arguments":"{\"file\":\"a.png\"}","call_id":"call_0","name":"view_image","type":"function_call"}`,
 		`{"call_id":"call_0","output":"a cat","type":"function_call_output"}`,
@@ -153,19 +153,19 @@ func TestResponsesAPIWholeAnswerAndTheOtherShapes(t *testing.T) {
 		_ = json.Unmarshal(body, &last)
 		w.Header().Set("Content-Type", "application/json")
 		switch calls.Add(1) {
-		case 1: // a whole answer, as the API gives it
+		case 1:
 			fmt.Fprint(w, `{"id":"resp_1","object":"response","status":"completed","model":"gpt-5.2","output":[
 				{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"hmm"}]},
 				{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"سلام! ","annotations":[]},{"type":"output_text","text":"چطوری؟"}]},
 				{"type":"function_call","id":"fc_1","call_id":"call_9","name":"list_files","arguments":""}],
 				"usage":{"input_tokens":50,"output_tokens":7,"input_tokens_details":{"cached_tokens":10}}}`)
-		case 2: // cut off
+		case 2:
 			fmt.Fprint(w, `{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"message","content":[{"type":"output_text","text":"long long"}]}]}`)
-		case 3: // a gateway that answers /responses in the chat-completions shape
+		case 3:
 			fmt.Fprint(w, okBody())
-		case 4: // an error inside a 200
+		case 4:
 			fmt.Fprint(w, `{"status":"failed","error":{"code":"rate_limit_exceeded","message":"slow down"}}`)
-		case 5: // nothing at all
+		case 5:
 			fmt.Fprint(w, `{"status":"completed","output":[]}`)
 		}
 	}))
@@ -210,19 +210,19 @@ func TestResponsesAPIStreamErrorsAndGatewayHabits(t *testing.T) {
 		_ = json.Unmarshal(raw, &b)
 		bodies = append(bodies, b)
 		switch mode.Load() {
-		case 0: // an error event before any text
+		case 0:
 			responsesSSE(w, `{"type":"response.created","response":{}}`, `{"type":"error","code":"server_error","message":"upstream exploded"}`)
-		case 1: // an error after some text: a partial stream
+		case 1:
 			responsesSSE(w, `{"type":"response.output_text.delta","delta":"half an ans"}`, `{"type":"response.failed","response":{"error":{"code":"server_error","message":"cut"}}}`)
-		case 2: // a gateway that names the event only on its event: line, and sends the final answer at the end
+		case 2:
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprint(w, "event: response.completed\ndata: {\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"all at once\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
-		case 3: // [DONE] with text and no completed event
+		case 3:
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\ndata: [DONE]\n\n")
-		case 4: // the stream just stops
+		case 4:
 			responsesSSE(w, `{"type":"response.output_text.delta","delta":"half"}`)
-		case 5: // a gateway that does not take "store"
+		case 5:
 			if _, has := b["store"]; has {
 				w.WriteHeader(http.StatusBadRequest)
 				fmt.Fprint(w, `{"error":{"message":"Unknown parameter: 'store'."}}`)
@@ -285,7 +285,7 @@ func TestResponsesAPITemperatureAndEffort(t *testing.T) {
 	req := Request{Messages: []Message{{Role: "user", Content: "hi"}}}
 
 	c := responsesClient(srv.URL)
-	c.Model = "gpt-4.1" // a model that does not reason: the usual temperature, no effort
+	c.Model = "gpt-4.1"
 	c.Effort = EffortHigh
 	if _, err := c.Complete(context.Background(), req); err != nil {
 		t.Fatal(err)
@@ -307,8 +307,6 @@ func TestResponsesAPITemperatureAndEffort(t *testing.T) {
 	}
 }
 
-// NoStream asks for the whole answer even where the caller shows text as it
-// arrives; the text then comes once, when it is complete, and an error brings none.
 func TestNoStreamAsksForTheWholeAnswer(t *testing.T) {
 	for _, api := range []string{APIOpenAI, APIResponses, APIAnthropic} {
 		var got map[string]any
@@ -358,8 +356,6 @@ func TestNoStreamAsksForTheWholeAnswer(t *testing.T) {
 	}
 }
 
-// A refused connection, a stall, an empty or unreadable answer all mean "the
-// model is out of reach"; a refusal of the request itself does not.
 func TestIsUnavailable(t *testing.T) {
 	var mode atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -394,9 +390,6 @@ func TestIsUnavailable(t *testing.T) {
 	}
 }
 
-// kie.ai's Responses gateway (a Codex upstream) answers with server-sent events
-// even to a request that did not ask for a stream. These are its real answers
-// (a one-word reply, and an upstream failure), read both ways.
 func TestResponsesGatewayThatAlwaysStreams(t *testing.T) {
 	ok, _ := os.ReadFile("testdata/kie_responses_ok.sse")
 	failed, _ := os.ReadFile("testdata/kie_responses_failed.sse")
@@ -415,7 +408,6 @@ func TestResponsesGatewayThatAlwaysStreams(t *testing.T) {
 	c.Model = "gpt-6.1-sol"
 	req := Request{Messages: []Message{{Role: "user", Content: "Reply with exactly one word: pong"}}, MaxTokens: 20, FailFast: true}
 
-	// Asked for whole: the stream is read, the text reaches no callback, the result is whole.
 	body.Store(ok)
 	resp, err := c.Complete(context.Background(), req)
 	if err != nil {
@@ -427,25 +419,25 @@ func TestResponsesGatewayThatAlwaysStreams(t *testing.T) {
 	if asked[0] {
 		t.Error("the request did not ask for a stream")
 	}
-	// Asked for a stream: the same, with the text through the callback.
+
 	var got []string
 	req.OnDelta = func(s string) { got = append(got, s) }
 	if resp, err = c.Complete(context.Background(), req); err != nil || resp.Message.Content != "pong" || len(got) == 0 || got[len(got)-1] != "pong" {
 		t.Errorf("streamed: %+v %v %q", resp, err, got)
 	}
-	// Streaming switched off in the panel: whole again, and the text is handed over once at the end.
+
 	c.NoStream, got = true, nil
 	if resp, err = c.Complete(context.Background(), req); err != nil || resp.Message.Content != "pong" || len(got) != 1 {
 		t.Errorf("no stream: %+v %v %q", resp, err, got)
 	}
-	// The upstream's own failure is an error with its words, not a parse error.
+
 	body.Store(failed)
 	c.NoStream, req.OnDelta = false, nil
 	var api *APIError
 	if _, err = c.Complete(context.Background(), req); !errors.As(err, &api) || !strings.Contains(api.Body, "Service temporarily unavailable") || !api.Temporary() {
 		t.Errorf("a failure inside the stream: %v", err)
 	}
-	// The same stream under another content type.
+
 	body.Store(ok)
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -458,7 +450,6 @@ func TestResponsesGatewayThatAlwaysStreams(t *testing.T) {
 	}
 }
 
-// The other two formats read a stream that answers a whole-answer request too.
 func TestAnyFormatReadsAStreamItWasNotAskedFor(t *testing.T) {
 	for api, stream := range map[string]string{
 		APIOpenAI:    "data: {\"choices\":[{\"delta\":{\"content\":\"hel\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\ndata: [DONE]\n\n",
@@ -478,9 +469,6 @@ func TestAnyFormatReadsAStreamItWasNotAskedFor(t *testing.T) {
 	}
 }
 
-// TestLiveResponses talks to a real Responses gateway when
-// WAZE_TEST_RESPONSES_KEY is set (its address and model from
-// WAZE_TEST_RESPONSES_URL and _MODEL; the key only ever from the environment).
 func TestLiveResponses(t *testing.T) {
 	key := os.Getenv("WAZE_TEST_RESPONSES_KEY")
 	if key == "" {
@@ -534,10 +522,6 @@ func TestLiveResponses(t *testing.T) {
 	t.Logf("after the tool: %q", resp.Message.Content)
 }
 
-// kie.ai refuses a request before running it with {"code": 402, "msg": "…"},
-// often under HTTP 200: that is an error of the kind it names (credits out,
-// a bad key, too many calls, maintenance), in all three wire formats, and not
-// an «empty or unreadable answer».
 func TestGatewayErrorEnvelope(t *testing.T) {
 	cases := []struct {
 		body   string
@@ -555,7 +539,7 @@ func TestGatewayErrorEnvelope(t *testing.T) {
 		for _, tc := range cases {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprint(w, tc.body) // HTTP 200, as the docs say it may be
+				fmt.Fprint(w, tc.body)
 			}))
 			c := fastClient(srv.URL + "/v1")
 			c.API = api
@@ -571,7 +555,7 @@ func TestGatewayErrorEnvelope(t *testing.T) {
 			}
 		}
 	}
-	// An ordinary answer that happens to carry other fields is not an error.
+
 	for _, body := range []string{`{"choices":[{"message":{"role":"assistant","content":"hello"}}],"code":200,"msg":"success"}`, `{"choices":[{"message":{"role":"assistant","content":"hello"}}]}`} {
 		if envelopeError([]byte(body)) != nil {
 			t.Errorf("not an envelope: %s", body)
@@ -579,7 +563,6 @@ func TestGatewayErrorEnvelope(t *testing.T) {
 	}
 }
 
-// A whole answer is asked for out loud, since some gateways stream unless told not to.
 func TestWholeAnswersSayStreamFalse(t *testing.T) {
 	for _, api := range []string{APIResponses, APIAnthropic} {
 		var got map[string]any

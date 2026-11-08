@@ -24,20 +24,13 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Long documents. A book or a booklet of hundreds of pages does not fit in
-// the model's context, so document_reader extracts the text once, page by
-// page, keeps it next to the file (.docindex/) and answers three questions:
-// what is in it (outline), where is something discussed (search: BM25 over
-// overlapping passages, with Persian and Arabic spelling variants folded
-// together) and what do pages N–M say (read).
-
 const (
 	ToolDocumentReader = "document_reader"
 
 	docIndexDir     = ".docindex"
 	docMaxBytes     = 200 << 20
 	docMaxPages     = 3000
-	docPartChars    = 3000 // one "part" of a document that has no pages
+	docPartChars    = 3000
 	docTextMaxBytes = 50 << 20
 	chunkTarget     = 900
 	chunkMax        = 1400
@@ -49,12 +42,10 @@ const (
 	docExtractLimit = 5 * time.Minute
 )
 
-// docExts are the formats document_reader understands.
 var docExts = map[string]bool{".pdf": true, ".docx": true, ".epub": true, ".txt": true, ".md": true, ".markdown": true,
 	".html": true, ".htm": true, ".xhtml": true, ".csv": true, ".tsv": true, ".json": true, ".log": true, ".srt": true, ".vtt": true, ".xml": true,
 	".xlsx": true, ".xlsm": true, ".pptx": true, ".db": true, ".sqlite": true, ".sqlite3": true}
 
-// sqliteExts are database files: document_reader describes them, query_data queries them.
 var sqliteExts = map[string]bool{".db": true, ".sqlite": true, ".sqlite3": true}
 
 type docOutlineItem struct {
@@ -63,13 +54,12 @@ type docOutlineItem struct {
 	Level int    `json:"level"`
 }
 
-// docFile is the extracted text of a document, stored as JSON in .docindex/.
 type docFile struct {
 	Name       string           `json:"name"`
 	Size       int64            `json:"size"`
 	ModTime    int64            `json:"mtime"`
 	Title      string           `json:"title"`
-	Paged      bool             `json:"paged"` // real pages (PDF); otherwise parts of ~3000 characters
+	Paged      bool             `json:"paged"`
 	TotalPages int              `json:"total_pages"`
 	Pages      []string         `json:"pages"`
 	Outline    []docOutlineItem `json:"outline"`
@@ -83,7 +73,7 @@ func (d *docFile) unit() string {
 }
 
 type docChunk struct {
-	page   int // 1-based
+	page   int
 	text   string
 	folded string
 	terms  map[string]int
@@ -104,7 +94,6 @@ type docCacheEntry struct {
 	lastAccessed time.Time
 }
 
-// docCache keeps the latest indexes in memory; one build per file at a time.
 type docCache struct {
 	mu       sync.Mutex
 	entries  []*docCacheEntry
@@ -158,15 +147,12 @@ func docIndexName(name string) string {
 	return docIndexDir + "/" + hex.EncodeToString(sum[:8]) + ".json"
 }
 
-// cleanDocName accepts "x.pdf", "./x.pdf" and "/workspace/x.pdf".
 func cleanDocName(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "/workspace/")
 	return strings.TrimPrefix(s, "./")
 }
 
-// openDocument returns the index of a workspace document, building it on the
-// first use. note tells the model what happened ("indexed 412 pages").
 func (r *Registry) openDocument(ctx context.Context, sessionID, name string) (idx *docIndex, note string, problem string) {
 	info, err := r.Machine.Stat(sessionID, name)
 	switch {
@@ -192,7 +178,6 @@ func (r *Registry) openDocument(ctx context.Context, sessionID, name string) (id
 		return idx, "", ""
 	}
 
-	// Extracted earlier (another process, or before a restart)?
 	var doc *docFile
 	if data, truncated, err := r.Machine.ReadFile(sessionID, docIndexName(name), docMaxBytes); err == nil && !truncated {
 		var d docFile
@@ -209,7 +194,7 @@ func (r *Registry) openDocument(ctx context.Context, sessionID, name string) (id
 		}
 		doc.Name, doc.Size, doc.ModTime = name, size, mtime
 		if data, err := json.Marshal(doc); err == nil {
-			_ = r.Machine.WriteFile(sessionID, docIndexName(name), data) // a cache: losing it only costs time
+			_ = r.Machine.WriteFile(sessionID, docIndexName(name), data)
 		}
 		note = fmt.Sprintf("(indexed now: %d %ss in %s)", len(doc.Pages), doc.unit(), time.Since(started).Round(100*time.Millisecond))
 	}
@@ -218,7 +203,6 @@ func (r *Registry) openDocument(ctx context.Context, sessionID, name string) (id
 	return idx, note, ""
 }
 
-// extractDocument reads the text of a document, page by page (PDF) or in parts.
 func (r *Registry) extractDocument(ctx context.Context, sessionID, name, ext string) (*docFile, string) {
 	if ext == ".pdf" {
 		out := docIndexName(name)
@@ -302,9 +286,6 @@ func (r *Registry) extractDocument(ctx context.Context, sessionID, name, ext str
 	return d, ""
 }
 
-// sqliteOverview describes a SQLite database, a part per table: the tables
-// and views with their row counts, then each table's schema, columns, keys
-// and first rows. The file is opened read-only, here.
 func (r *Registry) sqliteOverview(ctx context.Context, sessionID, name string) (*docFile, string) {
 	out := docIndexName(name)
 	res, err := r.runScript(ctx, sessionID, "sqlite_info.py", map[string]any{"path": "./" + name, "out": "./" + out, "sample": 5}, docExtractLimit)
@@ -326,15 +307,12 @@ func (r *Registry) sqliteOverview(ctx context.Context, sessionID, name string) (
 	return &d, ""
 }
 
-// heading is a title found at a character offset of the text.
 type heading struct {
 	title  string
 	offset int
 	level  int
 }
 
-// splitParts cuts text into parts of about docPartChars at paragraph
-// boundaries and places the headings on their parts.
 func splitParts(text string, headings []heading) ([]string, []docOutlineItem) {
 	var parts []string
 	var starts []int
@@ -348,7 +326,7 @@ func splitParts(text string, headings []heading) ([]string, []docOutlineItem) {
 		cur.Reset()
 		start = offset
 	}
-	used := 0 // runes in cur
+	used := 0
 	for _, para := range strings.SplitAfter(text, "\n") {
 		for para != "" {
 			n := utf8.RuneCountInString(para)
@@ -358,9 +336,9 @@ func splitParts(text string, headings []heading) ([]string, []docOutlineItem) {
 				cur.WriteString(para)
 				offset, used, para = offset+len(para), used+n, ""
 			case n <= docPartChars || room < 300:
-				flush() // starts a fresh part
+				flush()
 				used = 0
-			default: // a huge paragraph: fill this part, cut at a space
+			default:
 				cut := cutAt(para, room)
 				cur.WriteString(para[:cut])
 				offset += cut
@@ -377,13 +355,12 @@ func splitParts(text string, headings []heading) ([]string, []docOutlineItem) {
 	}
 	var outline []docOutlineItem
 	for _, h := range headings {
-		i := sort.Search(len(starts), func(i int) bool { return starts[i] > h.offset }) // first part after the heading
+		i := sort.Search(len(starts), func(i int) bool { return starts[i] > h.offset })
 		outline = append(outline, docOutlineItem{Title: h.title, Page: max(i, 1), Level: h.level})
 	}
 	return parts, outline
 }
 
-// cutAt returns a byte offset near n runes, preferring a space.
 func cutAt(s string, n int) int {
 	i, count := 0, 0
 	for i < len(s) && count < n {
@@ -396,8 +373,6 @@ func cutAt(s string, n int) int {
 	}
 	return i
 }
-
-// ---------------------------------------------------------------- DOCX and EPUB
 
 func docxText(r io.ReaderAt, size int64) (string, []heading, error) {
 	zr, err := zip.NewReader(r, size)
@@ -476,7 +451,6 @@ func docxText(r io.ReaderAt, size int64) (string, []heading, error) {
 	return sb.String(), headings, nil
 }
 
-// headingLevel reads Word styles like "Heading1", "heading 2" or "Title".
 func headingLevel(style string) int {
 	style = strings.ReplaceAll(style, " ", "")
 	if style == "title" {
@@ -584,8 +558,6 @@ func firstLine(s string) string {
 	return s
 }
 
-// ---------------------------------------------------------------- search
-
 var stopwords = func() map[string]bool {
 	words := strings.Fields(`و در به از که این را با است برای آن یک تا هم بر شود شده می ای یا اما اگر هر نیز باید بود کرد کند کنند دارد
 		بین پس چه چون همه خود او ما شما آنها نه ولی بی پیش روی زیر وی همین آنچه چنین شد کنیم کرده های ها هست نیست
@@ -599,14 +571,12 @@ var stopwords = func() map[string]bool {
 	return m
 }()
 
-// stem strips common plural and inflection endings (a light stemmer; the
-// original word is indexed too, so a wrong stem only adds a little noise).
 func stem(t string) string {
 	r := []rune(t)
 	if len(r) < 4 {
 		return t
 	}
-	if r[0] < 0x80 { // English
+	if r[0] < 0x80 {
 		switch {
 		case strings.HasSuffix(t, "ies") && len(r) > 4:
 			return t[:len(t)-3] + "y"
@@ -632,7 +602,6 @@ func stem(t string) string {
 	return t
 }
 
-// terms splits folded text into search terms (words and their stems).
 func terms(folded string) []string {
 	var out []string
 	for _, w := range strings.FieldsFunc(folded, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
@@ -670,10 +639,9 @@ func buildDocIndex(d *docFile) *docIndex {
 	return idx
 }
 
-// chunkText cuts a page into overlapping passages of about chunkTarget characters.
 func chunkText(page string) []string {
 	var out, cur []string
-	size, fresh := 0, 0 // fresh: lines not yet in a passage
+	size, fresh := 0, 0
 	flush := func() {
 		if fresh > 0 {
 			out = append(out, strings.Join(cur, "\n"))
@@ -683,13 +651,13 @@ func chunkText(page string) []string {
 			last = cur[len(cur)-1]
 		}
 		cur, size, fresh = nil, 0, 0
-		if last != "" && utf8.RuneCountInString(last) < 250 { // overlap: the next passage starts with the last line
+		if last != "" && utf8.RuneCountInString(last) < 250 {
 			cur, size = []string{last}, utf8.RuneCountInString(last)
 		}
 	}
 	for _, l := range strings.Split(page, "\n") {
 		l = strings.Join(strings.Fields(l), " ")
-		for utf8.RuneCountInString(l) > chunkMax { // a very long line
+		for utf8.RuneCountInString(l) > chunkMax {
 			cut := cutAt(l, chunkTarget)
 			cur, fresh = append(cur, l[:cut]), fresh+1
 			flush()
@@ -713,8 +681,6 @@ type docHit struct {
 	score float64
 }
 
-// search ranks passages with BM25, favouring those that contain the whole
-// phrase and more of the distinct query words.
 func (idx *docIndex) search(query string, k int) []docHit {
 	fq := textutil.Fold(query)
 	seen := map[string]bool{}
@@ -771,8 +737,6 @@ func (idx *docIndex) search(query string, k int) []docHit {
 	}
 	return hits
 }
-
-// ---------------------------------------------------------------- the tool
 
 func (r *Registry) registerDocumentTools() {
 	r.add(ToolDocumentReader,

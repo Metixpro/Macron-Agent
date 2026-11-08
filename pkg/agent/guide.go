@@ -6,9 +6,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// toolTip is a line of guidance on choosing tools: a prompt carries it when
-// one of its tools is offered (the main agent, a sub-agent with a few
-// toolsets, fast mode), never for a tool that is not there.
 type toolTip struct {
 	tools []string
 	line  string
@@ -37,7 +34,6 @@ var toolTips = []toolTip{
 	{[]string{"web_search"}, "Quick facts and news → web_search; when its results settle the question, answer from them. Otherwise read the one or two best pages with web_fetch, in one turn."},
 }
 
-// choosingTools is the prompt's guidance on the tools that are offered.
 func choosingTools(offers func(string) bool) string {
 	var sb strings.Builder
 	for _, t := range toolTips {
@@ -54,7 +50,6 @@ func choosingTools(offers func(string) bool) string {
 	return "\nChoosing tools:\n" + sb.String()
 }
 
-// codeProjects is the playbook for projects of many files.
 func codeProjects(offers func(string) bool) string {
 	if !offers(tools.ToolProjectTree) {
 		return ""

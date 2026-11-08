@@ -2,11 +2,11 @@ import asyncio
 import shutil
 import tempfile
 
-# browser-use, an autonomous browser agent, on this machine's Chromium. The
-# pages reach the internet directly; the model only through the bot's bridge (a socket that answers with the user's own model:
-# no key is ever here). browser-use reads its settings when imported, so
-# nothing of it phones home or downloads anything (there is no network here
-# anyway), and its logs go to stderr: the answer is the last stdout line.
+
+
+
+
+
 
 ANSWER = sys.stdout
 sys.stdout = sys.stderr
@@ -28,13 +28,13 @@ try:
     from browser_use import Agent, BrowserProfile, BrowserSession
     from browser_use.browser.profile import ProxySettings
     from browser_use.llm.openai.chat import ChatOpenAI
-except Exception as e:  # noqa: BLE001 (any import failure means it is not usable)
+except Exception as e:
     answer({"error": f"browser-use is not installed on the server ({type(e).__name__})"})
     sys.exit(0)
 
-STATE = inside(".browser/state.json")  # the cookies, shared with the browser tool
+STATE = inside(".browser/state.json")
 LAST = inside(".browser/url")
-FS = inside(".browser/agent")  # browser-use's own notes
+FS = inside(".browser/agent")
 DL = inside(".browser/downloads")
 os.makedirs(os.path.dirname(STATE), exist_ok=True)
 if CFG.get("new_session"):
@@ -53,7 +53,7 @@ Type a password, a card number or personal data only when the task itself gives 
 
 def proxy():
     if CFG.get("offline"):
-        return ProxySettings(server="http://127.0.0.1:9", bypass="<-loopback>")  # nowhere: offline
+        return ProxySettings(server="http://127.0.0.1:9", bypass="<-loopback>")
     return None
 
 
@@ -70,7 +70,7 @@ def summary(history, error):
         for a in (mo.action if mo else []) or []:
             try:
                 acts += list(a.model_dump(exclude_unset=True, exclude_none=True).keys())
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         err = next((r.error for r in item.result or [] if r.error), "")
         steps.append({"step": i + 1, "url": (item.state.url if item.state else "") or "", "goal": first_line(mo.next_goal if mo else "", 160),
@@ -141,7 +141,7 @@ async def main():
         history = await asyncio.wait_for(agent.run(max_steps=int(CFG.get("max_steps") or 20)), timeout=max(deadline - time.monotonic(), 30) + 60)
     except asyncio.TimeoutError:
         error = "time ran out"
-    except Exception as e:  # noqa: BLE001 (report it; the work so far still counts)
+    except Exception as e:
         error = first_line(e, 300) or type(e).__name__
     if history is None:
         history = getattr(agent, "history", None) or getattr(getattr(agent, "state", None), "history", None)
@@ -159,18 +159,18 @@ async def main():
                 shot = "browser-agent.png"
                 await session.take_screenshot(path=inside(shot))
                 files_out.append(shot)
-    except Exception:  # noqa: BLE001 (the browser may be gone)
+    except Exception:
         pass
     try:
         state = await session.export_storage_state()
         if state and state.get("cookies") is not None:
             with open(STATE, "w") as f:
                 json.dump(state, f)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     try:
         await session.kill()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     result["files"] = files_out + keep_downloads()
     answer(result)

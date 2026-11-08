@@ -7,15 +7,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// secretDir holds what one command of the server needs and the files of the
-// conversation should not carry (the cookies of a logged-in account): it
-// lives outside every work folder and only its owner can open it.
 type secretDir struct {
 	dir string
 }
 
 func newSecretDir() (*secretDir, error) {
-	dir, err := os.MkdirTemp("", "waze-secret-") // 0700
+	dir, err := os.MkdirTemp("", "waze-secret-")
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +25,6 @@ func (s *secretDir) write(name string, data []byte) error {
 
 func (s *secretDir) remove(name string) { _ = os.Remove(filepath.Join(s.dir, name)) }
 
-// path is where the command finds the file.
 func (s *secretDir) path(_ *machine.Machine, name string) string {
 	return s.dir + "/" + name
 }

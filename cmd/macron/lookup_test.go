@@ -34,7 +34,7 @@ func TestLookupTargets(t *testing.T) {
 	if lt, _ := resolveTarget(fw, "", botID); lt.id != 5555 {
 		t.Errorf("a forwarded message's author by default: %+v", lt)
 	}
-	// A reply to the bot's own answer names nobody: the asker by default.
+
 	onBot := group(43, "آمار منو بده")
 	onBot.ReplyToMessage = &telegram.Message{MessageID: 10, From: &telegram.User{ID: botID, IsBot: true, Username: "WazeBot"}, Chat: onBot.Chat, Text: "…"}
 	if lt, _ := resolveTarget(onBot, "", botID); lt.id != 43 {
@@ -42,12 +42,8 @@ func TestLookupTargets(t *testing.T) {
 	}
 }
 
-// botID is the harness bot's id.
 const botID = 42
 
-// «مکرون آمار اینو دربیار» on someone's message: the tool tells the model
-// what Telegram shows, the account's age and the person's place in the group;
-// the bot's own records only to its admins and the person themself.
 func TestLookupTool(t *testing.T) {
 	h := newHarness(t)
 	h.tg.mu.Lock()
@@ -74,7 +70,6 @@ func TestLookupTool(t *testing.T) {
 		t.Error("no records for someone the bot does not know")
 	}
 
-	// A user the bot knows: their records go to an admin, not to another member.
 	h.send(private(55, "سلام"))
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if n == 0 {
@@ -98,7 +93,6 @@ func TestLookupTool(t *testing.T) {
 		t.Errorf("another member does not:\n%s", result)
 	}
 
-	// A public channel by its username.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if n == 0 {
 			return toolCall(toolLookup, `{"target":"@our_channel"}`), 0

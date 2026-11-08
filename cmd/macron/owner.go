@@ -7,8 +7,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/app"
 )
 
-// ownerNote tells the model, for its owner, what serves them now (the
-// provider and model in use, the version): what the owner may ask about.
 func (b *Bot) ownerNote(owner bool, conf tierConf) string {
 	if !owner {
 		return ""

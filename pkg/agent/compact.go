@@ -13,47 +13,29 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Every step sends the whole conversation to the model again, so a long job
-// fills the model's context window. The agent measures how full it is (the
-// provider's real token counts, with an estimate in between) and, past a
-// threshold, first shortens old tool outputs (free), then folds the earlier
-// conversation and the middle of the job (everything between the user's
-// request and the latest rounds) into a structured summary the model writes,
-// as Hermes does. A compaction aims at half the threshold, so the next one is
-// far away, and never repeats before the context has grown again. The meter
-// the user sees only goes down at a compaction, which is announced.
-
 const (
-	// DefaultContextWindow is assumed for a model the table does not know.
 	DefaultContextWindow = 256000
-	// compactAt is the share of the window that starts a compaction,
-	// whatever its size: a 256k model at 192k, a 1M one at 750k (each plan's
-	// window is its own: a smaller one costs less per step).
+
 	compactAt = 0.75
-	// compactTo is the share of the threshold a compaction aims at.
+
 	compactTo = 0.5
-	// tailShare caps the verbatim tail; the room left under the target sizes it
-	// (at least minTailRounds rounds: the latest calls and their results).
+
 	tailShare     = 0.20
 	minTailRounds = 1
-	// summaryReserve is the room kept for the summary itself.
+
 	summaryReserve = 3000
-	// recompactGap: after a compaction, the next one waits until the context
-	// grew by this share of the window (no compaction after compaction).
+
 	recompactGap = 0.15
-	// historyShare bounds the earlier conversation on a small model.
+
 	historyShare = 0.25
-	// summaryWords is the target size of a compaction summary.
+
 	summaryWords = 900
-	// imageTokens is what one picture costs, roughly.
+
 	imageTokens = 1200
 )
 
-// summaryPrefix starts the message that replaces the compacted steps.
 const summaryPrefix = "[context summary]"
 
-// contextWindows maps model names to their context windows; the longest
-// matching key wins (after the Hermes model table).
 var contextWindows = map[string]int{
 	"claude-fable": 1000000, "claude-opus-5": 1000000, "claude-sonnet-5": 1000000, "claude-opus-4-6": 1000000, "claude-sonnet-4-6": 1000000,
 	"claude-opus-4.6": 1000000, "claude-sonnet-4.6": 1000000, "claude-haiku": 200000, "claude": 200000,
@@ -66,11 +48,10 @@ var contextWindows = map[string]int{
 	"kimi": 262144, "glm-5": 204800, "glm": 128000, "minimax-m3": 1000000, "minimax": 204800,
 }
 
-// ContextWindow guesses a model's context window from its name.
 func ContextWindow(model string) int {
 	m := strings.ToLower(model)
 	if i := strings.LastIndex(m, "/"); i >= 0 {
-		m = m[i+1:] // "anthropic/claude-sonnet-5"
+		m = m[i+1:]
 	}
 	best, n := "", 0
 	for k, v := range contextWindows {
@@ -84,9 +65,6 @@ func ContextWindow(model string) int {
 	return n
 }
 
-// ContextWindowKnown reports whether a model's name says what its window is.
-// An unknown name (a router's combo of models, «deep», «auto») gets
-// DefaultContextWindow, which may be far more than the smallest model behind it.
 func ContextWindowKnown(model string) bool {
 	m := strings.ToLower(model)
 	if i := strings.LastIndex(m, "/"); i >= 0 {
@@ -100,13 +78,10 @@ func ContextWindowKnown(model string) bool {
 	return false
 }
 
-// compactTokens is the context size that starts a compaction.
 func compactTokens(window int) int {
 	return int(float64(window) * compactAt)
 }
 
-// estimateText approximates tokens without a tokenizer: about 4 characters
-// per token for Latin text, 2 for Persian and other scripts.
 func estimateText(s string) int {
 	ascii, other := 0, 0
 	for _, r := range s {
@@ -142,30 +117,15 @@ func estimateTokens(msgs []llm.Message) int {
 	return n
 }
 
-// contextMeter tracks how full the context is. The provider's prompt token
-// count is the truth; between two answers the estimate is scaled by how far
-// off it was last time.
-//
-// The meter belongs to the conversation, not to one request: a request goes
-// on from where the last one left it (carry), as the conversation does,
-// although what the earlier requests' tools returned is no longer sent.
-// That part (offset) goes, announced as old outputs trimmed, when the meter
-// reaches the compaction threshold; a conversation compacted in between
-// (memory) is announced when the next request starts.
 type contextMeter struct {
 	window      int
-	fixed       bool // the window was configured, not guessed from the model
-	real, guess int  // the last prompt: tokens the provider counted, and the estimate of it
-	floor       int  // the context right after the last compaction (0: none yet)
-	shown       int  // what the listener was told last
-	// After an overflow the window is learned: below the size that
-	// overflowed (ceiling), above the largest prompt that went through
-	// (fits), and moved up between the two as bigger prompts get through.
+	fixed       bool
+	real, guess int
+	floor       int
+	shown       int
+
 	ceiling, fits int
-	// carry is where the conversation's meter stood after the last request,
-	// carryCompacted that the conversation was compacted since; input is the
-	// size of the new message; offset what the meter shows above the context
-	// that is sent (set at the first report, based).
+
 	carry          int
 	carryCompacted bool
 	input          int
@@ -173,7 +133,6 @@ type contextMeter struct {
 	based          bool
 }
 
-// overflowed learns that a prompt of used tokens did not fit.
 func (m *contextMeter) overflowed(used int) {
 	if m.ceiling == 0 || used < m.ceiling {
 		m.ceiling = used
@@ -181,16 +140,13 @@ func (m *contextMeter) overflowed(used int) {
 	m.window, m.fixed = max(int(float64(m.ceiling)*0.9), 16000), true
 }
 
-// report tells the listener how full the context is. The number never goes
-// down on its own (old outputs shortened in passing, an estimate corrected):
-// only a compaction, announced with compacted, lowers it.
 func (m *contextMeter) report(l *EventListener, used int) {
 	if !m.based {
 		m.based = true
 		switch {
 		case m.carry <= 0:
 		case m.carryCompacted:
-			if l.OnCompact != nil { // the conversation was folded since the last request
+			if l.OnCompact != nil {
 				l.OnCompact(m.carry, used, m.limit(), true)
 			}
 		default:
@@ -199,8 +155,7 @@ func (m *contextMeter) report(l *EventListener, used int) {
 	}
 	shown := used + m.offset
 	if m.offset > 0 && shown >= compactTokens(m.window) {
-		// The earlier requests' tool outputs are not sent any more: the
-		// meter lets them go the way a compaction does.
+
 		if l.OnCompact != nil {
 			l.OnCompact(max(shown, m.shown), used, m.limit(), false)
 		}
@@ -212,12 +167,8 @@ func (m *contextMeter) report(l *EventListener, used int) {
 	}
 }
 
-// limit is what the meter fills up to: where a compaction starts. The bar
-// is full when the context is compacted, never compacted while half empty
-// (a 1M model is compacted at 750k: its bar is full there).
 func (m *contextMeter) limit() int { return compactTokens(m.window) }
 
-// compacted announces that room was made, then shows the new size.
 func (m *contextMeter) compacted(l *EventListener, before, after int, summarized bool) {
 	if l.OnCompact != nil {
 		l.OnCompact(max(before, m.shown), after, m.limit(), summarized)
@@ -226,10 +177,9 @@ func (m *contextMeter) compacted(l *EventListener, before, after int, summarized
 	m.report(l, after)
 }
 
-// layout locates the parts of the conversation that compaction treats differently.
 type layout struct {
-	histFrom, histTo int // the earlier conversation (folded by a compaction)
-	input            int // the user's request (always kept)
+	histFrom, histTo int
+	input            int
 }
 
 func (m *contextMeter) observe(model string, promptTokens int, sent []llm.Message) {
@@ -245,7 +195,6 @@ func (m *contextMeter) observe(model string, promptTokens int, sent []llm.Messag
 	}
 }
 
-// ratio is how much the provider's count exceeds the estimate.
 func (m *contextMeter) ratio() float64 {
 	if m.real > 0 && m.guess > 0 {
 		return min(max(float64(m.real)/float64(m.guess), 0.5), 2.0)
@@ -257,16 +206,10 @@ func (m *contextMeter) used(msgs []llm.Message) int {
 	return int(float64(estimateTokens(msgs)) * m.ratio())
 }
 
-// due reports whether the context is past the threshold and has grown since
-// the last compaction (one that could not get under the threshold does not
-// run again at every step).
 func (m *contextMeter) due(used int) bool {
 	return used > compactTokens(m.window) && (m.floor == 0 || used > m.floor+int(float64(m.window)*recompactGap))
 }
 
-// trimToolTokens shortens old tool outputs after index from, oldest first,
-// until the conversation fits budget estimated tokens. The latest results are
-// never touched. It reports whether it changed anything.
 func trimToolTokens(msgs []llm.Message, from, budget int) bool {
 	total := estimateTokens(msgs)
 	protected := len(msgs) - countTrailingTools(msgs)
@@ -284,7 +227,6 @@ func trimToolTokens(msgs []llm.Message, from, budget int) bool {
 	return changed
 }
 
-// keepTail keeps the last n runes of s.
 func keepTail(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
@@ -293,19 +235,10 @@ func keepTail(s string, n int) string {
 	return "…" + string(r[len(r)-n:])
 }
 
-// DefaultHistoryTokens is how much of the earlier conversation a request
-// carries when nobody says otherwise: a sliding window of the latest turns.
-// What is older lives in the memory's summary.
 const DefaultHistoryTokens = 8000
 
-// promptRoom is what a request needs besides the earlier conversation: the
-// instructions and tools, the memory's summary, the message and the answer.
 const promptRoom = 40000
 
-// FillHistoryTokens is how much of the earlier conversation fills the
-// context window up to where a compaction starts (leaving the prompt its
-// room): the conversation is kept word for word until then. A small
-// model's window still gets a quarter of it.
 func FillHistoryTokens(window int) int {
 	if window <= 0 {
 		window = DefaultContextWindow
@@ -314,13 +247,6 @@ func FillHistoryTokens(window int) int {
 	return max(limit-promptRoom, int(float64(window)*historyShare))
 }
 
-// historyCap bounds the earlier conversation of a request. The memory keeps
-// the conversation under kept tokens by folding the oldest turns into its
-// summary now and then (halfway down at once), so the start of the
-// conversation stays the same from one request to the next and the
-// providers' caches keep it; this cap only catches what grew past it since
-// (a long exchange not yet folded), with room to spare, never past where
-// the window fills.
 func historyCap(window, kept int) int {
 	if kept <= 0 {
 		kept = DefaultHistoryTokens
@@ -328,8 +254,6 @@ func historyCap(window, kept int) int {
 	return min(kept*3/2, FillHistoryTokens(window))
 }
 
-// fitHistory drops the oldest turns of the earlier conversation that do not
-// fit in budget tokens (the summary in [memory] still covers them).
 func fitHistory(history []llm.Message, budget int) []llm.Message {
 	total := estimateTokens(history)
 	dropped := 0
@@ -349,9 +273,6 @@ func fitHistory(history []llm.Message, budget int) []llm.Message {
 	return history
 }
 
-// tailStart finds where the verbatim tail begins: at an assistant turn (or a
-// plain user message), never between a tool call and its results, keeping at
-// least minRounds rounds and about budget tokens.
 func tailStart(msgs []llm.Message, from, budget, minRounds int) int {
 	start, rounds, total := len(msgs), 0, 0
 	for i := len(msgs) - 1; i > from; i-- {
@@ -400,9 +321,6 @@ The next steps, in order.
 
 Be concrete: file names, commands, numbers, results. At most about %d words. Write only the summary, in English, with no preface.`
 
-// compact folds the earlier conversation and the steps between the user's
-// request and the verbatim tail into one summary message, aiming at half the
-// threshold. It reports whether it changed anything.
 func (a *Agent) compact(ctx context.Context, messages []llm.Message, lay layout, meter *contextMeter, work *workLog) ([]llm.Message, layout, bool) {
 	ratio := meter.ratio()
 	target := int(float64(compactTokens(meter.window)) * compactTo / ratio)
@@ -413,7 +331,7 @@ func (a *Agent) compact(ctx context.Context, messages []llm.Message, lay layout,
 	if len(history)+len(middle) < 2 {
 		return messages, lay, false
 	}
-	limit := min(240000, int(float64(meter.window)*0.8)) // the summarizer's own input must fit the window
+	limit := min(240000, int(float64(meter.window)*0.8))
 	var tr strings.Builder
 	if len(history) > 0 {
 		var hb strings.Builder
@@ -461,10 +379,6 @@ func (a *Agent) compact(ctx context.Context, messages []llm.Message, lay layout,
 	return out, kept, true
 }
 
-// shrinkHard is the last way to fit a request that overflows after a
-// compaction could not make room: the earlier conversation goes (the memory's
-// summary still covers it), so do all pictures but the request's, old tool
-// outputs, and the end of a huge request.
 func shrinkHard(messages []llm.Message, lay *layout) []llm.Message {
 	out := append(append([]llm.Message(nil), messages[:lay.histFrom]...), messages[lay.histTo:]...)
 	lay.input -= lay.histTo - lay.histFrom
@@ -501,7 +415,6 @@ func renderTurn(sb *strings.Builder, m llm.Message) {
 	sb.WriteByte('\n')
 }
 
-// ContextBar draws a meter short enough for a phone: "▰▰▰▱▱▱▱▱ 31%".
 func ContextBar(used, window int) string {
 	if window <= 0 {
 		return ""
@@ -511,7 +424,6 @@ func ContextBar(used, window int) string {
 	return strings.Repeat("▰", full) + strings.Repeat("▱", 8-full) + fmt.Sprintf(" %d%%", pct)
 }
 
-// HumanTokens writes 82000 as "82k".
 func HumanTokens(n int) string {
 	switch {
 	case n >= 1000000:
@@ -522,9 +434,6 @@ func HumanTokens(n int) string {
 	return fmt.Sprint(n)
 }
 
-// compactNow makes room down to the target: old tool outputs are shortened
-// first (free); if that is not enough, the conversation is compacted. Either
-// way the next one waits for recompactGap, and the listener hears of it.
 func (a *Agent) compactNow(ctx context.Context, messages []llm.Message, lay *layout, meter *contextMeter, work *workLog, res *Result,
 	req Request, l *EventListener) []llm.Message {
 	before, target := meter.used(messages), int(float64(compactTokens(meter.window))*compactTo)
@@ -538,7 +447,7 @@ func (a *Agent) compactNow(ctx context.Context, messages []llm.Message, lay *lay
 	}
 	out, kept, ok := a.compact(ctx, messages, *lay, meter, work)
 	if !ok {
-		meter.floor = meter.used(messages) // nothing to fold: wait until it grows
+		meter.floor = meter.used(messages)
 		return messages
 	}
 	*lay = kept

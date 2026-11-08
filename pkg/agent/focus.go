@@ -12,15 +12,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// Focused tools, for a weaker model. Sixty tool definitions are a lot to
-// choose from: a strong model takes the right one, a weak one takes a wrong
-// one, mixes their parameters up or calls none. A request marked FocusTools
-// is offered the tools its words point to (and a core every job may need),
-// plus more_tools: a model that needs something else calls it and every tool
-// is there from its next step. Nothing becomes impossible; the choice is
-// only smaller to start with.
-
-// ToolMoreTools ends the focus: every tool from the next step.
 const ToolMoreTools = "more_tools"
 
 var moreToolsDef = llm.Tool{Type: "function", Function: llm.ToolDef{Name: ToolMoreTools,
@@ -34,7 +25,6 @@ const noticeFocused = "[tools] For this request you have the tools it most likel
 	"parameters, one step at a time, and read each result before the next step. If the job needs a tool that is not in your list, " +
 	"call " + ToolMoreTools + " first."
 
-// focusCore is offered to every focused request.
 var focusCore = []string{"web_search", "web_fetch", tools.ToolRunCode, "bash_execute", "read_file", "write_file", "list_files",
 	"send_file", "ask_user", "react_to_message", "remember", ToolPlan}
 
@@ -43,7 +33,6 @@ type focusGroup struct {
 	tools []string
 }
 
-// focusGroups are the tools a request's words (or what came with it) point to.
 var focusGroups = []focusGroup{
 	{regexp.MustCompile(`(?i)youtu|instagram|tiktok|aparat|soundcloud|spotify|twitter|x\.com/|t\.me/|ویدیو|ویدئو|فیلم|کلیپ|آهنگ|اهنگ|موزیک|موسیقی|دانلود|music|song|video|download|mp3|mp4|podcast|پادکست|a video|an audio`),
 		[]string{tools.ToolDownloadMedia, "search_music", "download_file", "media_convert", tools.ToolSplitVideo}},
@@ -84,8 +73,6 @@ var focusGroups = []focusGroup{
 		[]string{ToolDelegate}},
 }
 
-// toolGroupInfo names focusGroups, in their order, for a triage that asks
-// about each group by its description (cmd/macron/triage.go).
 var toolGroupInfo = []struct{ key, about string }{
 	{"media", "download, convert, split videos, music or audio"},
 	{"images", "make, find, edit or look at pictures"},
@@ -107,9 +94,6 @@ var toolGroupInfo = []struct{ key, about string }{
 	{"parallel", "split a big job among parallel sub-agents"},
 }
 
-// MaxTools is the most tools one call carries: OpenAI's limit, which many
-// gateways hold every model to («'tools': maximum number of items is 128»).
-// A provider that says it takes fewer is believed (toolLimitFrom).
 const MaxTools = 128
 
 func (a *Agent) toolLimit() int {
@@ -121,8 +105,6 @@ func (a *Agent) toolLimit() int {
 
 var toolLimitRe = regexp.MustCompile(`(?i)(?:maximum number of items is|at most|no more than|maximum of|up to|limit of)\s*(\d{1,4})`)
 
-// toolLimitFrom reads a provider's refusal of too many tools: the most it
-// takes (0: not such a refusal).
 func toolLimitFrom(err error) int {
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "tools") {
 		return 0
@@ -135,9 +117,6 @@ func toolLimitFrom(err error) int {
 	return n
 }
 
-// capTools keeps at most limit tools: those first marks ahead (the request's
-// own and those it already used), then the rest in their order. Calls to a
-// tool left out still run, if the model knows it.
 func capTools(tools []llm.Tool, limit int, first func(string) bool) []llm.Tool {
 	if len(tools) <= limit {
 		return tools
@@ -156,17 +135,13 @@ func capTools(tools []llm.Tool, limit int, first func(string) bool) []llm.Tool {
 	return out
 }
 
-// FocusCore are the tools every focused request gets.
 func FocusCore() []string { return append([]string(nil), focusCore...) }
 
-// ToolGroup is a group of tools a request may need: its name, what it is
-// for, and its tools.
 type ToolGroup struct {
 	Key, About string
 	Tools      []string
 }
 
-// ToolGroups are the groups of tools (the same as focus picks from).
 func ToolGroups() []ToolGroup {
 	out := make([]ToolGroup, len(focusGroups))
 	for i, g := range focusGroups {
@@ -175,8 +150,6 @@ func ToolGroups() []ToolGroup {
 	return out
 }
 
-// focusPicked is focusTools with the tools a classifier that read the
-// request picked (FocusPick) added: what the words point to stays.
 func focusPicked(defs []llm.Tool, text string, picked []string) []llm.Tool {
 	want := focusWant(defs, text)
 	for _, n := range picked {
@@ -191,7 +164,6 @@ func focusPicked(defs []llm.Tool, text string, picked []string) []llm.Tool {
 	return out
 }
 
-// toolsTokens estimates what tool definitions cost a call.
 func toolsTokens(defs []llm.Tool) int {
 	n := 0
 	for _, d := range defs {
@@ -201,9 +173,6 @@ func toolsTokens(defs []llm.Tool) int {
 	return n / 3
 }
 
-// focusText is what a request's tools are chosen by: the message, what came
-// with it, and the user's turns just before with the tools used for them (a
-// "go on" or «اینم انجام بده» means the same tools as before).
 func focusText(req Request) string {
 	var sb strings.Builder
 	sb.WriteString(req.Input.Content)
@@ -223,11 +192,8 @@ func focusText(req Request) string {
 	return sb.String()
 }
 
-// focusTools picks the tools for a request's text, in their order.
 func focusTools(defs []llm.Tool, text string) []llm.Tool { return focusPicked(defs, text, nil) }
 
-// focusWant are the core, the groups the words point to and any tool the
-// conversation names.
 func focusWant(defs []llm.Tool, text string) map[string]bool {
 	want := map[string]bool{}
 	for _, n := range focusCore {
@@ -240,7 +206,7 @@ func focusWant(defs []llm.Tool, text string) map[string]bool {
 			}
 		}
 	}
-	for _, d := range defs { // a tool named in the conversation (its own name, or a plugin's)
+	for _, d := range defs {
 		if n := d.Function.Name; len(n) > 4 && strings.Contains(text, n) {
 			want[n] = true
 		}
@@ -248,7 +214,6 @@ func focusWant(defs []llm.Tool, text string) map[string]bool {
 	return want
 }
 
-// moreTools is the tool that ends the focus.
 func (a *Agent) moreTools(off *atomic.Bool) LocalTool {
 	return LocalTool{Def: moreToolsDef, Handler: func(ctx context.Context, _ map[string]any) (ToolOutput, error) {
 		off.Store(true)
@@ -256,15 +221,13 @@ func (a *Agent) moreTools(off *atomic.Bool) LocalTool {
 	}}
 }
 
-// CallQuality is how well a model called tools during a request.
 type CallQuality struct {
-	Calls   int // tool calls
-	Fixed   int // calls with a tool or a parameter named wrong (repaired)
-	Refused int // calls that could not run as written (sent back to fix)
-	Stalled int // replies that announced or denied work instead of calling a tool
+	Calls   int
+	Fixed   int
+	Refused int
+	Stalled int
 }
 
-// Problems are the slips among them.
 func (q CallQuality) Problems() int { return q.Fixed + q.Refused + q.Stalled }
 
 func (r *Result) quality(provider string, f func(*CallQuality)) {
@@ -276,7 +239,6 @@ func (r *Result) quality(provider string, f func(*CallQuality)) {
 	r.CallQuality[provider] = q
 }
 
-// slips counts the problems of the request's calls, all providers together.
 func (r *Result) slips() int {
 	n := 0
 	for _, q := range r.CallQuality {

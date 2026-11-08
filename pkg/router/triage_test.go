@@ -39,7 +39,6 @@ func TestLocalTriageReadsTheWords(t *testing.T) {
 	}
 }
 
-// A local triage is never sure enough for the bot's no-tools chat (it needs 0.7).
 func TestLocalTriageIsCautious(t *testing.T) {
 	for _, s := range []string{"سلام", "ممنون", "hi", "thanks a lot"} {
 		if tr := Local(TriageInput{Input: Input{Text: s}}); tr.KindConf >= 0.7 {

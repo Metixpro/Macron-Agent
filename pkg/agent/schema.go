@@ -10,12 +10,6 @@ import (
 	"strings"
 )
 
-// A sub-agent's report can be held to a contract: the JSON Schema its main
-// agent gives (delegate_task's output_schema). The common part of JSON
-// Schema is checked: type, properties, required, additionalProperties: false,
-// items, enum, const, min/max items, length and value.
-
-// checkSchema reports what in v does not match the schema (none: it matches).
 func checkSchema(schema map[string]any, v any) []string {
 	var errs []string
 	checkAt(schema, v, "$", &errs)
@@ -171,8 +165,6 @@ func num(v any) (float64, bool) {
 	return f, ok
 }
 
-// reportJSON finds the JSON a report ends with: the last ```json block, the
-// whole report, or the last object or array in it.
 var jsonFenceRe = regexp.MustCompile("(?s)```(?:json)?[ \\t]*\\n(.*?)```")
 
 func reportJSON(report string) (any, bool) {
@@ -185,7 +177,7 @@ func reportJSON(report string) (any, bool) {
 	if json.Unmarshal([]byte(strings.TrimSpace(report)), &v) == nil {
 		return v, true
 	}
-	for i := len(report) - 1; i >= 0; i-- { // the last value that parses to the end of its brackets
+	for i := len(report) - 1; i >= 0; i-- {
 		if report[i] != '{' && report[i] != '[' {
 			continue
 		}
@@ -199,7 +191,6 @@ func reportJSON(report string) (any, bool) {
 	return nil, false
 }
 
-// schemaOf reads an output_schema argument (an object, or JSON in a string).
 func schemaOf(arg any) map[string]any {
 	switch x := arg.(type) {
 	case map[string]any:

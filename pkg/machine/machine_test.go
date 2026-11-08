@@ -75,7 +75,7 @@ func TestSweepExpiresOldFiles(t *testing.T) {
 	for _, p := range []string{filepath.Join(ws1, "old.mp3"), filepath.Join(ws1, "dir", "old.pdf"), filepath.Join(ws2, "old.png")} {
 		_ = os.Chtimes(p, past, past)
 	}
-	// An old symlink is removed, its target outside the workspace is not touched.
+
 	target := filepath.Join(t.TempDir(), "keep")
 	_ = os.WriteFile(target, []byte("host"), 0o600)
 	_ = os.Symlink(target, filepath.Join(ws1, "link"))
@@ -100,7 +100,6 @@ func TestSweepExpiresOldFiles(t *testing.T) {
 		t.Fatal("the symlink target outside the workspace was deleted")
 	}
 
-	// Busy workspaces are left alone.
 	_ = s.WriteFile("busy", "old.txt", []byte("x"))
 	wsb, _ := s.Workspace("busy")
 	_ = os.Chtimes(filepath.Join(wsb, "old.txt"), past, past)
@@ -122,8 +121,6 @@ func TestMergedOutputKeepsTerminalOrder(t *testing.T) {
 	}
 }
 
-// A command that prints a lot keeps its start and its end (the error of a
-// build, the result line of a script), with a mark where the middle went.
 func TestLongOutputKeepsTheEnd(t *testing.T) {
 	w := &capWriter{max: 1000}
 	w.Write([]byte("START\n"))
@@ -164,8 +161,6 @@ func TestSubSessionsLiveInsideTheirParent(t *testing.T) {
 	}
 }
 
-// A command runs on the machine: in the work folder, with the user's own
-// environment minus the agent's secrets, with no limits of its own.
 func TestCommandsRunOnTheMachine(t *testing.T) {
 	s := newTestMachine(t)
 	ws, _ := s.Workspace("tg-9")

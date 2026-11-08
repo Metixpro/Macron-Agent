@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// The agent starts a server in the background, reaches it from its next
-// commands, reads its log and stops it.
 func TestBackgroundServerFromTheTools(t *testing.T) {
 	r := newRegistry(t, false, nil)
 	if !r.Has(ToolShellJobs) {
@@ -111,7 +109,7 @@ func TestApplyPatch(t *testing.T) {
 	if _, err := r.Machine.Stat("pt", "proj/old.txt"); err == nil {
 		t.Error("a deleted file")
 	}
-	// A hunk that does not match changes nothing, even in the other files.
+
 	bad := "--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-def nope():\n+def x():\n--- a/util.py\n+++ b/util.py\n@@ -1 +1 @@\n-def twice(x):\n+def thrice(x):\n"
 	out = call(t, r, "pt", ToolApplyPatch, map[string]any{"patch": bad, "path": "proj"})
 	if !strings.Contains(out, "Nothing was changed") {
@@ -120,7 +118,7 @@ func TestApplyPatch(t *testing.T) {
 	if b, _, _ := r.Machine.ReadFile("pt", "proj/util.py", 1000); !strings.Contains(string(b), "twice") {
 		t.Errorf("all or nothing: %s", b)
 	}
-	// Paths without a/ and b/, and nothing outside the workspace.
+
 	out = call(t, r, "pt", ToolApplyPatch, map[string]any{"patch": "--- proj/util.py\n+++ proj/util.py\n@@ -1 +1 @@\n-def twice(x):\n+def double(x):\n"})
 	if !strings.Contains(out, "Applied to 1 files") {
 		t.Errorf("plain paths: %s", out)
@@ -130,9 +128,6 @@ func TestApplyPatch(t *testing.T) {
 	}
 }
 
-// TestDevToolsGitJavaGoModules: git commits work here (it has a
-// name to commit with), run_code runs Java source files, and a Go file in a
-// module runs as its whole package.
 func TestDevToolsGitJavaGoModules(t *testing.T) {
 	r := newRegistry(t, false, nil)
 	s := "devfix"

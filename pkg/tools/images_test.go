@@ -64,7 +64,7 @@ func TestSearchImage(t *testing.T) {
 				card("pumpkin.jpg", "Pumpkin carving ideas", "4000&#215;3000") + card("nsfw.jpg", "Tesla model nude", "4000&#215;3000") +
 				card("big.jpg", "Big \ue000Tesla\ue001 Model 3", "1200&#215;800") + card("pic.webp", "tesla-model-3 webp", "900&#215;600") + "</html>"))
 		case "/openverse/":
-			if req.URL.Query().Get("q") == "Milad Tower" { // the second search, under the article's English name
+			if req.URL.Query().Get("q") == "Milad Tower" {
 				_, _ = w.Write([]byte(fmt.Sprintf(`{"results":[{"url":"%[1]s/img/shanghai.jpg","title":"Shanghai Tower","width":1500,"height":1000,"license":"by"},
 					{"url":"%[1]s/img/milad2.jpg","title":"Milad Tower at dusk","foreign_landing_url":"https://flickr.example/2","width":1500,"height":1000,"license":"by"}]}`, srv.URL)))
 				return
@@ -77,7 +77,7 @@ func TestSearchImage(t *testing.T) {
 		case "/commons":
 			_, _ = w.Write([]byte(`{"query":{"pages":{}}}`))
 		case "/wiki/fa":
-			// «برج میلاد»: the article itself and one that only mentions it.
+
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"query":{"pages":[
 				{"index":2,"title":"برج میلاد","fullurl":"https://fa.wikipedia.org/wiki/milad","thumbnail":{"source":"%[1]s/img/milad.jpg","width":1500,"height":1000},"langlinks":[{"lang":"en","title":"Milad Tower"}]},
 				{"index":1,"title":"فهرست برج‌های تهران","fullurl":"https://fa.wikipedia.org/wiki/list","thumbnail":{"source":"%[1]s/img/flag_of_x.svg.png","width":1500,"height":1000}}]}}`, srv.URL)))
@@ -127,8 +127,7 @@ func TestSearchImage(t *testing.T) {
 	if out := call(t, r, "img", "search_image", map[string]any{"query": "nothing at all"}); !strings.Contains(out, "no image found") {
 		t.Errorf("nothing found: %s", out)
 	}
-	// A Persian name: the Wikipedia article's own picture first, then the
-	// photo libraries under its English name, all of whose words must match.
+
 	out = call(t, r, "img", "search_image", map[string]any{"query": "برج میلاد", "count": 3})
 	lines = strings.Split(out, "\n")
 	if len(lines) < 3 || !strings.Contains(lines[1], "photo_milad_tower_") || !strings.Contains(lines[1], "Wikipedia: برج میلاد (Milad Tower)") ||

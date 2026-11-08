@@ -21,7 +21,6 @@ func TestForwardedMessagesReachTheModelWithTheirOrigin(t *testing.T) {
 		t.Errorf("memory note: %q", mem.History[0].Content)
 	}
 
-	// A reply to a message someone forwarded from a hidden user.
 	r := private(60, "این چی می‌گه؟")
 	r.ReplyToMessage = &telegram.Message{MessageID: 5, From: &telegram.User{ID: 99, FirstName: "Sara", Username: "sara"},
 		Chat: r.Chat, Text: "متن فوروارد شده", ForwardSenderName: "Mina"}

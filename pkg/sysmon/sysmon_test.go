@@ -21,7 +21,7 @@ func TestParseCPU(t *testing.T) {
 	if len(cores) != 2 {
 		t.Fatalf("cores: %v", cores)
 	}
-	// busy = user+nice+system+irq+softirq+steal; waiting for the disk is idle
+
 	if all.total != 4705+150+3120+87500+600+100 || all.busy != 4705+150+3120+100 {
 		t.Errorf("all: %+v", all)
 	}
@@ -71,7 +71,7 @@ docker0: 8888 1 0 0 0 0 0 0 8888 1 0 0 0 0 0 0
 	if rx, tx := parseNet(net); rx != 5100 || tx != 7200 {
 		t.Errorf("only the real interfaces count: %d %d", rx, tx)
 	}
-	// A process name may hold spaces and parentheses.
+
 	st, ok := parseProcStat("1234 (Web Content (x)) S 1 1234 1234 0 -1 4194560 100 0 0 0 250 50 0 0 20 0 7 0 100 1000000 2048 18446744073709551615")
 	if !ok || st.name != "Web Content (x)" || st.ticks != 300 || st.threads != 7 || st.rssPages != 2048 {
 		t.Errorf("proc stat: %+v %v", st, ok)
@@ -81,7 +81,6 @@ docker0: 8888 1 0 0 0 0 0 0 8888 1 0 0 0 0 0 0
 	}
 }
 
-// fakeProc is a /proc whose numbers the test moves.
 type fakeProc struct {
 	t    *testing.T
 	root string
@@ -126,7 +125,7 @@ func TestSamplerRatesTopAndHistory(t *testing.T) {
 	}
 	for i := 1; i <= 8; i++ {
 		clock = clock.Add(15 * time.Second)
-		busy := uint64(1000 + i*600) // 60% busy
+		busy := uint64(1000 + i*600)
 		f.set(busy, uint64(9000+i*400), 400000+uint64(i)*10000, 1_000_000+uint64(i)*150_000, 500_000+uint64(i)*30_000, uint64(i)*1500, uint64(i)*30)
 		s.Sample()
 	}
@@ -174,13 +173,13 @@ func TestServiceCgroup(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(cg, "cpu.stat"), []byte("usage_usec 1000000\nuser_usec 800000\n"), 0o644)
 	s.Sample()
 	clock = clock.Add(10 * time.Second)
-	_ = os.WriteFile(filepath.Join(cg, "cpu.stat"), []byte("usage_usec 26000000\n"), 0o644) // 25 s of CPU in 10 s
+	_ = os.WriteFile(filepath.Join(cg, "cpu.stat"), []byte("usage_usec 26000000\n"), 0o644)
 	f.set(200, 1800, 100000, 0, 0, 0, 0)
 	svc := s.Sample().Service
 	if !svc.Cgroup || svc.Mem != 2<<30 || svc.MemMax != 8<<30 || svc.MemHigh != 0 || svc.Cores < 2.49 || svc.Cores > 2.51 {
 		t.Errorf("the service's cgroup (its programs included): %+v", svc)
 	}
-	// The root cgroup is the whole machine, not the service.
+
 	_ = os.WriteFile(filepath.Join(f.root, "self", "cgroup"), []byte("0::/\n"), 0o644)
 	if svc := s.Sample().Service; svc.Cgroup {
 		t.Errorf("the root cgroup is not the service: %+v", svc)
@@ -206,13 +205,13 @@ func TestAlertsFireOnceRepeatAndRecover(t *testing.T) {
 	}
 	f.set(busy, idle, mem, 0, 0, 0, 0)
 	s.Sample()
-	for i := 0; i < 30; i++ { // 7 minutes at 20%: nothing to tell
+	for i := 0; i < 30; i++ {
 		step(20, 100000)
 	}
 	if len(got) != 0 {
 		t.Fatalf("calm: %+v", got)
 	}
-	for i := 0; i < 10; i++ { // two and a half minutes at 99%: the 5-minute mean is not over yet
+	for i := 0; i < 10; i++ {
 		step(99, 100000)
 	}
 	if len(got) != 0 {
@@ -236,7 +235,7 @@ func TestAlertsFireOnceRepeatAndRecover(t *testing.T) {
 	if len(got) != 2 || !got[1].Recovered || got[1].Kind != AlertCPU {
 		t.Errorf("and one note when it is over: %+v", got)
 	}
-	// Memory has its own window; a limit of 0 is off.
+
 	got = nil
 	for i := 0; i < 10; i++ {
 		step(10, 950000)
@@ -246,7 +245,7 @@ func TestAlertsFireOnceRepeatAndRecover(t *testing.T) {
 	}
 	lim.RAM = 0
 	got = nil
-	for i := 0; i < 80; i++ { // the three hours' repeat does not fire on an off limit
+	for i := 0; i < 80; i++ {
 		step(10, 950000)
 	}
 	if len(got) != 0 {
@@ -272,7 +271,6 @@ func TestDiskAlert(t *testing.T) {
 	}
 }
 
-// The real /proc of this machine reads without errors (Linux only).
 func TestRealProc(t *testing.T) {
 	if _, err := os.Stat("/proc/stat"); err != nil {
 		t.Skip("no /proc")

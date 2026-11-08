@@ -25,8 +25,6 @@ import (
 
 const ownerID = 1000
 
-// ---- fake Telegram ----------------------------------------------------------
-
 type tgCall struct {
 	method string
 	body   map[string]any
@@ -36,15 +34,15 @@ type fakeTG struct {
 	mu      sync.Mutex
 	calls   []tgCall
 	nextID  int64
-	members map[string]string // "chat:user" → status
-	fail    map[string]int    // method → HTTP status to return
+	members map[string]string
+	fail    map[string]int
 	desc    map[string]string
-	files   map[string][]byte // file_id → content
-	blocked map[int64]bool    // users that blocked the bot
-	sets    map[string]string // custom emoji set → its stickers (JSON)
+	files   map[string][]byte
+	blocked map[int64]bool
+	sets    map[string]string
 
-	refuseRichFiles bool // sendRichMessage with uploaded files fails (older servers)
-	// reject returns a description to answer a call with 400 Bad Request.
+	refuseRichFiles bool
+
 	reject func(method string, body map[string]any) string
 }
 
@@ -72,7 +70,7 @@ func (f *fakeTG) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseMultipartForm(32 << 20)
 		for k, v := range r.MultipartForm.Value {
 			body[k] = v[0]
-			if k == "rich_message" || k == "reply_parameters" { // JSON objects, like in a JSON request
+			if k == "rich_message" || k == "reply_parameters" {
 				var obj map[string]any
 				if json.Unmarshal([]byte(v[0]), &obj) == nil {
 					body[k] = obj
@@ -125,7 +123,7 @@ func (f *fakeTG) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		st := f.members[key]
 		f.mu.Unlock()
-		if strings.HasPrefix(st, "{") { // the whole member, as Telegram sends it
+		if strings.HasPrefix(st, "{") {
 			fmt.Fprintf(w, `{"ok":true,"result":%s}`, st)
 			return
 		}
@@ -134,7 +132,7 @@ func (f *fakeTG) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		rights := ""
 		switch st {
-		case "administrator", "creator": // "administrator-limited" is an admin without rights
+		case "administrator", "creator":
 			rights = `,"can_restrict_members":true,"can_delete_messages":true,"can_pin_messages":true,"can_change_info":true,"can_invite_users":true,"can_promote_members":true`
 		case "administrator-limited":
 			st = "administrator"
@@ -196,19 +194,19 @@ func (f *fakeTG) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"sendRichMessageDraft", "setMessageReaction", "sendChatAction", "deleteMessage", "answerCallbackQuery", "setMyCommands",
 		"deleteWebhook", "editMessageReplyMarkup", "leaveChat", "stopPoll", "answerPreCheckoutQuery", "refundStarPayment":
 		fmt.Fprint(w, `{"ok":true,"result":true}`)
-	case "answerGuestQuery": // SentGuestMessage: the reply can be edited later
+	case "answerGuestQuery":
 		fmt.Fprintf(w, `{"ok":true,"result":{"inline_message_id":"im-%v"}}`, body["guest_query_id"])
 	default:
 		if body["inline_message_id"] != nil && strings.HasPrefix(method, "edit") {
-			fmt.Fprint(w, `{"ok":true,"result":true}`) // a message sent through the bot: Telegram answers True
+			fmt.Fprint(w, `{"ok":true,"result":true}`)
 			return
 		}
 		chat := fmt.Sprint(body["chat_id"])
 		if f, ok := body["chat_id"].(float64); ok {
-			chat = fmt.Sprintf("%d", int64(f)) // %v would print -1.009999e+06
+			chat = fmt.Sprintf("%d", int64(f))
 		}
 		if mid, ok := body["message_id"].(float64); ok && strings.HasPrefix(method, "edit") {
-			id = int64(mid) // an edited message keeps its id
+			id = int64(mid)
 		}
 		fmt.Fprintf(w, `{"ok":true,"result":{"message_id":%d,"chat":{"id":%s,"type":"private"},"date":1}}`, id, chat)
 	}
@@ -244,7 +242,6 @@ func (f *fakeTG) reset() {
 	f.mu.Unlock()
 }
 
-// texts returns the visible text of everything the bot sent (classic and rich).
 func (f *fakeTG) texts() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -253,7 +250,7 @@ func (f *fakeTG) texts() []string {
 		switch c.method {
 		case "sendMessage", "editMessageText":
 			if t, ok := c.body["text"].(string); ok {
-				out = append(out, telegram.UnmarkRTL(t)) // the visible text, without direction marks
+				out = append(out, telegram.UnmarkRTL(t))
 			}
 			if rm, ok := c.body["rich_message"].(map[string]any); ok {
 				out = append(out, fmt.Sprint(rm["markdown"], rm["html"]))
@@ -269,21 +266,18 @@ func (f *fakeTG) texts() []string {
 
 func (f *fakeTG) allText() string { return strings.Join(f.texts(), "\n---\n") }
 
-// ---- fake LLM ---------------------------------------------------------------
-
 type fakeLLM struct {
 	mu       sync.Mutex
 	requests []map[string]any
 	reply    func(req map[string]any, n int) (map[string]any, int)
-	cached   int // prompt tokens each answer says it read from the cache
-	// triage answers a model triage's prompt (triage.go) apart from the
-	// requests above, so a test's counts stay those of the work itself.
+	cached   int
+
 	triage    func(req map[string]any) (map[string]any, int)
-	triageLog []string // the triage prompts it was sent
+	triageLog []string
 }
 
 func (f *fakeLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/audio/") { // no speech to text: the tests that need it bring their own
+	if strings.HasPrefix(r.URL.Path, "/audio/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -310,7 +304,7 @@ func (f *fakeLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if status != 0 {
 		body := "upstream exploded"
 		if e, ok := msg["error"].(string); ok {
-			body = e // the provider's own error text
+			body = e
 		}
 		http.Error(w, body, status)
 		return
@@ -342,8 +336,6 @@ func toolCall(name, args string) map[string]any {
 	return map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"id": "c1", "type": "function",
 		"function": map[string]any{"name": name, "arguments": args}}}}
 }
-
-// ---- harness ----------------------------------------------------------------
 
 type harness struct {
 	t   *testing.T
@@ -378,7 +370,7 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(llmSrv.Close)
 
 	ctx := context.Background()
-	_ = st.SetSetting(ctx, store.SettingAutoContinue, "-1") // a fixed budget; the tests that need extensions turn them on
+	_ = st.SetSetting(ctx, store.SettingAutoContinue, "-1")
 	if _, err := st.AddProvider(ctx, store.Provider{Name: "main", BaseURL: llmSrv.URL, APIKey: "sk-provider-secret-1234", Model: "m",
 		Priority: 10, Enabled: true, Vision: true}); err != nil {
 		t.Fatal(err)
@@ -405,20 +397,20 @@ func newHarness(t *testing.T) *harness {
 		gate: guard.NewGate(10), flood: guard.NewRateLimiter(1000, time.Minute), runTimeout: 30 * time.Second,
 		jobCtx: context.Background(), started: time.Now(), brain: br,
 	}
-	b.app.Agent.Teachings = b.teachings // as in main
-	b.readsAll.Store(true)              // privacy mode off: groupsight_test.go turns it on
-	b.api.OnSent = b.noteSent           // as in main
+	b.app.Agent.Teachings = b.teachings
+	b.readsAll.Store(true)
+	b.api.OnSent = b.noteSent
 	b.reloadEmoji(ctx)
-	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))     // as in main
-	a.Registry.SetImageEditKey(imageEditKey(st, cfg.ImageEditKey)) // as in main
-	a.Registry.SetImageKey(imageGenKey(st, cfg.ImageKey))          // as in main
-	a.Registry.SetMusicKey(musicKey(st, cfg.MusicKey))             // as in main
-	b.cookies = newCookiePool(st, "")                              // as in main
+	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))
+	a.Registry.SetImageEditKey(imageEditKey(st, cfg.ImageEditKey))
+	a.Registry.SetImageKey(imageGenKey(st, cfg.ImageKey))
+	a.Registry.SetMusicKey(musicKey(st, cfg.MusicKey))
+	b.cookies = newCookiePool(st, "")
 	a.Registry.SetCookiePool(b.cookies)
 	a.Registry.SetUserCookies(b.cookies.user)
-	a.Registry.SetSkillWriter(b.sessionAdmin) // as in main
-	a.Registry.Gate = b.newCommandGate()      // as in main
-	// Tests never reach the real web: an empty search engine, no reader.
+	a.Registry.SetSkillWriter(b.sessionAdmin)
+	a.Registry.Gate = b.newCommandGate()
+
 	noWeb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("<html></html>")) }))
 	t.Cleanup(noWeb.Close)
 	a.Search.SetEndpoints(noWeb.URL+"/lite/", noWeb.URL+"/html/")
@@ -442,7 +434,6 @@ func (h *harness) click(userID, chatID, msgID int64, data string) {
 	h.bot.wg.Wait()
 }
 
-// clickAsync presses a button without waiting for background work it starts.
 func (h *harness) clickAsync(userID, chatID, msgID int64, data string) {
 	h.bot.handleCallback(&telegram.CallbackQuery{ID: "q", From: telegram.User{ID: userID}, Data: data,
 		Message: &telegram.Message{MessageID: msgID, Chat: telegram.Chat{ID: chatID, Type: "private"}}})
@@ -465,4 +456,42 @@ func (h *harness) noText(sub string) {
 func llmText(req map[string]any) string {
 	b, _ := json.Marshal(req["messages"])
 	return string(b)
+}
+
+func liveFrames(h *harness) []string {
+	h.tg.mu.Lock()
+	defer h.tg.mu.Unlock()
+	var out []string
+	for _, c := range h.tg.calls {
+		if c.method == "sendRichMessageDraft" {
+			out = append(out, fmt.Sprint(c.body["rich_message"]))
+			continue
+		}
+		if (c.method == "sendMessage" || c.method == "editMessageText") && strings.Contains(fmt.Sprint(c.body["reply_markup"]), "run:stop:") {
+			out = append(out, telegram.UnmarkRTL(fmt.Sprint(c.body["text"])))
+		}
+	}
+	return out
+}
+
+func stopLiveMessage(h *harness, uid int64) {
+	h.t.Helper()
+	v, ok := h.bot.runs.Load(uid)
+	if !ok {
+		h.t.Fatal("no active job")
+	}
+	data := v.(*activeRun).stopData()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, method := range []string{"sendMessage", "editMessageText"} {
+			for _, c := range h.tg.of(method) {
+				if hasButton(buttons(c), "→ "+data) {
+					h.click(uid, uid, 77, data)
+					return
+				}
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.t.Fatal("live message has no stop keyboard")
 }

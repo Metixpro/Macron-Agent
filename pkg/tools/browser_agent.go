@@ -23,30 +23,19 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// browser_agent: browser-use, an autonomous browser agent, on the same
-// Chromium as the browser tool. The model is told the goal; it
-// looks at the page (its elements and a screenshot), acts, and looks again,
-// step after step, until it is done. Its model is the user's own (the
-// request's provider, routing and metering), reached through llmBridge: a
-// socket that answers in the OpenAI shape, so no key is written anywhere.
-
 const (
 	ToolBrowserAgent  = "browser_agent"
 	agentStepsDefault = 20
 	agentStepsMax     = 50
-	agentRunsAtOnce   = 2 // browser agents running at once (each holds a Chromium for minutes)
+	agentRunsAtOnce   = 2
 	bridgeBodyMax     = 24 << 20
-	bridgeImagesKept  = 4         // the newest screenshots a call keeps
-	bridgeImageMax    = 6 << 20   // one screenshot's data URL
-	bridgeTokensMax   = 1_500_000 // billable tokens one run may spend at most
+	bridgeImagesKept  = 4
+	bridgeImageMax    = 6 << 20
+	bridgeTokensMax   = 1_500_000
 )
 
-// agentPythons are where browser-use may be: its own virtualenv (install.sh
-// puts it there, under /usr so the machine sees it, apart from the system's
-// libraries, whose versions it would otherwise pin), or the system Python.
 var agentPythons = []string{"/usr/local/share/waze/browser-use/bin/python3", "/usr/share/waze/browser-use/bin/python3", "python3"}
 
-// findAgentPython is the first Python the machine runs browser-use with ("" none).
 func (r *Registry) findAgentPython() string {
 	pys := agentPythons
 	if env := os.Getenv("WAZE_BROWSER_USE_PYTHON"); env != "" {
@@ -66,7 +55,6 @@ with tempfile.TemporaryDirectory() as config:
 	return ""
 }
 
-// registerBrowserAgent adds browser_agent when browser-use is installed.
 func (r *Registry) registerBrowserAgent() {
 	if r.browser == nil || r.LLM == nil {
 		return
@@ -89,7 +77,6 @@ func (r *Registry) registerBrowserAgent() {
 		}, []string{"task"}, r.browserAgent)
 }
 
-// agentDomainRe is a site browser-use may be held to: a host, *.host, or one with an http(s) scheme.
 var agentDomainRe = regexp.MustCompile(`^(?:https?://)?(?:\*\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$`)
 
 type agentReport struct {
@@ -162,7 +149,6 @@ func (r *Registry) browserAgent(ctx context.Context, sessionID string, args map[
 	return rep.text(bridge.spent()), nil
 }
 
-// text is the report for the model.
 func (rep *agentReport) text(calls int, usage llm.Usage) string {
 	var sb strings.Builder
 	switch {
@@ -215,14 +201,8 @@ func (rep *agentReport) text(calls int, usage llm.Usage) string {
 	return strings.TrimSpace(sb.String())
 }
 
-// ---------------------------------------------------------------- the model bridge
-
-// llmBridge answers the browser agent's model calls with the request's own
-// client. It takes only chat completions, with the run's token, a body of
-// limited size and at most so many calls and tokens; it never streams and
-// never says which provider, model or address answered.
 type llmBridge struct {
-	ctx      context.Context // the tool call's: its provider, routing, metering, progress and end
+	ctx      context.Context
 	llm      llm.ChatClient
 	token    string
 	maxCalls int
@@ -232,8 +212,8 @@ type llmBridge struct {
 	calls    int
 	steps    int
 	usage    llm.Usage
-	noImages bool          // the model refused a screenshot: the rest go without
-	busy     chan struct{} // calls at once
+	noImages bool
+	busy     chan struct{}
 }
 
 func newLLMBridge(ctx context.Context, client llm.ChatClient, steps int) (*llmBridge, error) {
@@ -245,14 +225,12 @@ func newLLMBridge(ctx context.Context, client llm.ChatClient, steps int) (*llmBr
 		busy: make(chan struct{}, 2)}, nil
 }
 
-// spent is what the run's model calls used.
 func (b *llmBridge) spent() (int, llm.Usage) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.calls, b.usage
 }
 
-// serve listens on a unix socket until stop.
 func (b *llmBridge) serve(path string) (stop func(), err error) {
 	_ = os.Remove(path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -331,7 +309,6 @@ func (b *llmBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// take counts a call against the run's limits (false: none are left).
 func (b *llmBridge) take() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -348,10 +325,6 @@ func (b *llmBridge) add(u llm.Usage) {
 	b.mu.Unlock()
 }
 
-// complete answers one call: the model's reply, the JSON object alone when the
-// agent asked for one (a weak model's prose, code fence or tool-call tags
-// taken off, or one correction asked for). A failure is a status and a
-// message that says nothing of the provider.
 func (b *llmBridge) complete(ctx context.Context, wire []bridgeMessage) (text, finish string, usage llm.Usage, status int, msg string) {
 	b.mu.Lock()
 	noImages := b.noImages
@@ -370,7 +343,7 @@ func (b *llmBridge) complete(ctx context.Context, wire []bridgeMessage) (text, f
 	resp, err := ask(msgs)
 	if err != nil && images && !errors.Is(err, errBridgeSpent) && refusedInput(err) {
 		b.mu.Lock()
-		b.noImages = true // a model that cannot see: it goes on with the page's text
+		b.noImages = true
 		b.mu.Unlock()
 		msgs, _, _ = bridgeMessages(wire, true)
 		resp, err = ask(msgs)
@@ -389,7 +362,7 @@ func (b *llmBridge) complete(ctx context.Context, wire []bridgeMessage) (text, f
 	if wantJSON {
 		obj, ok := agentJSON(text)
 		if !ok {
-			// One correction, as the agent would get it, but without spending a step.
+
 			fix := append(msgs[:len(msgs):len(msgs)], llm.Message{Role: "assistant", Content: firstRunes(text, 4000)},
 				llm.Message{Role: "user", Content: "That was not the JSON object. Reply again with only the JSON object of <json_schema>: " +
 					"start with { and end with }, every action inside its \"action\" list, no tool-call tags and no words around it."})
@@ -411,14 +384,11 @@ func (b *llmBridge) complete(ctx context.Context, wire []bridgeMessage) (text, f
 
 var errBridgeSpent = errors.New("the run's model budget is spent")
 
-// refusedInput reports whether the provider turned the request itself down
-// (a model without vision answers so to a screenshot).
 func refusedInput(err error) bool {
 	var api *llm.APIError
 	return errors.As(err, &api) && (api.Status == 400 || api.Status == 413 || api.Status == 415 || api.Status == 422)
 }
 
-// progress tells whoever watches the step the agent takes next.
 func (b *llmBridge) progress(obj string) {
 	var out struct {
 		NextGoal string `json:"next_goal"`
@@ -434,9 +404,6 @@ func (b *llmBridge) progress(obj string) {
 	ReportStatus(b.ctx, strings.TrimSpace(fmt.Sprintf("%d/%d · %s", min(n, b.maxSteps), b.maxSteps, firstRunes(goal, 70))))
 }
 
-// bridgeMessages turns the OpenAI-shaped messages into the client's: text and
-// screenshots (data URLs only, the newest few; none when noImages). wantJSON
-// is whether the system prompt asks for a JSON object.
 func bridgeMessages(wire []bridgeMessage, noImages bool) (msgs []llm.Message, images, wantJSON bool) {
 	type part struct {
 		Type     string `json:"type"`
@@ -446,7 +413,7 @@ func bridgeMessages(wire []bridgeMessage, noImages bool) (msgs []llm.Message, im
 		} `json:"image_url"`
 	}
 	kept := 0
-	keep := make([]bool, len(wire)) // which messages keep their pictures: the newest
+	keep := make([]bool, len(wire))
 	for i := len(wire) - 1; i >= 0; i-- {
 		var parts []part
 		if json.Unmarshal(wire[i].Content, &parts) == nil {
@@ -512,7 +479,6 @@ func slicesHasImage(parts []llm.Part) bool {
 
 var screenshotRe = regexp.MustCompile(`^data:image/(?:png|jpeg|webp|gif);base64,`)
 
-// screenshotURL accepts a picture sent inline, never a link the provider would fetch.
 func screenshotURL(u string) bool { return len(u) <= bridgeImageMax && screenshotRe.MatchString(u) }
 
 var thinkRe = regexp.MustCompile(`(?s)<(think|thinking|reasoning)>.*?</(?:think|thinking|reasoning)>`)
@@ -526,18 +492,12 @@ func firstRunes(s string, n int) string {
 	return string([]rune(s)[:n]) + "…"
 }
 
-// ---------------------------------------------------------------- reading the agent's JSON
-
 var (
 	xmlFuncRe  = regexp.MustCompile(`(?s)<function=([A-Za-z_][\w.-]*)>(.*?)(?:</function>|$)`)
 	xmlParamRe = regexp.MustCompile(`(?s)<parameter=([A-Za-z_]\w*)>\s*(.*?)\s*(?:</parameter>|$)`)
 	agentTagRe = regexp.MustCompile(`(?s)<[^<>]{1,80}>`)
 )
 
-// agentJSON finds the agent's JSON object in a reply: the reply itself, the
-// first object in it that parses (after prose, inside a code fence), or the
-// actions a weak model wrote as tool calls ({"name", "arguments"} or
-// <function=…><parameter=…>), wrapped into the object the agent reads.
 func agentJSON(s string) (string, bool) {
 	s = strings.TrimSpace(s)
 	if strings.HasPrefix(s, "{") && json.Valid([]byte(s)) {
@@ -594,8 +554,6 @@ func agentJSON(s string) (string, bool) {
 	return first, first != ""
 }
 
-// actionsFrom wraps tool calls ({"name": …, "arguments"|"parameters": …})
-// into the agent's object.
 func actionsFrom(calls []map[string]any, prose string) (string, bool) {
 	var actions []any
 	for _, c := range calls {
@@ -631,7 +589,6 @@ func actionsFrom(calls []map[string]any, prose string) (string, bool) {
 	return string(out), err == nil
 }
 
-// paramValue is a parameter written as text: a number, a boolean, JSON, or the text.
 func paramValue(s string) any {
 	if n, err := strconv.ParseFloat(s, 64); err == nil {
 		return n

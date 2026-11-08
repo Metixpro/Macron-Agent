@@ -37,8 +37,6 @@ func toolNames(req map[string]any) []string {
 	return names
 }
 
-// A greeting costs a fraction of a task: the light prompt, no tools but the
-// one that brings them, and a short piece of the conversation.
 func TestAGreetingGoesWithoutTheTools(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: "سلام رفیق 👋"})
 	var history []llm.Message
@@ -61,12 +59,11 @@ func TestAGreetingGoesWithoutTheTools(t *testing.T) {
 		t.Fatalf("the light prompt: %s", sys)
 	}
 	raw, _ := json.Marshal(req)
-	if len(raw) > 45000 { // the light prompt and the recent turns (chatHistoryTokens), not the whole window
+	if len(raw) > 45000 {
 		t.Errorf("a greeting sends %d bytes", len(raw))
 	}
 }
 
-// When the message needs the tools after all, it starts over with all of them.
 func TestAConversationCanAskForTheTools(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall("u1", toolUseTools, `{}`)}},
@@ -86,11 +83,8 @@ func TestAConversationCanAskForTheTools(t *testing.T) {
 	}
 }
 
-// What the tools found stays whole while a job's outputs are small (what step
-// two found is what the answer is made of); past the budget the oldest are
-// shortened once, never the last rounds, a skill or a report.
 func TestEarlierOutputsStayWholeUntilTheJobGrows(t *testing.T) {
-	page := strings.Repeat("خط طولانی از یه صفحه وب\n", 400) // ~9.6K runes
+	page := strings.Repeat("خط طولانی از یه صفحه وب\n", 400)
 	round := func(id, name string) []llm.Message {
 		return []llm.Message{{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall(id, name, "{}")}},
 			{Role: "tool", ToolCallID: id, Name: name, Content: page}}
@@ -99,7 +93,7 @@ func TestEarlierOutputsStayWholeUntilTheJobGrows(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		messages = append(messages, round(fmt.Sprint(i), "web_fetch")...)
 	}
-	trimStaleToolOutputs(messages) // 5 pages, ~48K runes: under the budget
+	trimStaleToolOutputs(messages)
 	for i, m := range messages {
 		if m.Role == "tool" && m.Content != page {
 			t.Fatalf("output %d was shortened while the job is small", i)
@@ -109,7 +103,7 @@ func TestEarlierOutputsStayWholeUntilTheJobGrows(t *testing.T) {
 	for i := 6; i <= 9; i++ {
 		messages = append(messages, round(fmt.Sprint(i), "web_fetch")...)
 	}
-	trimStaleToolOutputs(messages) // 10 outputs, ~96K runes: the oldest pages go down to the budget
+	trimStaleToolOutputs(messages)
 	var cut []int
 	for i, m := range messages {
 		if m.Role == "tool" && m.Content != page {
@@ -180,9 +174,6 @@ func TestASubAgentWorksWithAFewToolsAndAShortPrompt(t *testing.T) {
 	}
 }
 
-// The instructions never repeat the tools as a text list (every call carries
-// their definitions); the way to call by text stays, and the system prompt is
-// the same from the first request on, so the providers' caches keep it.
 func TestTheInstructionsNeverListTheTools(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: "<tool_call>{\"name\": \"list_files\", \"arguments\": {}}</tool_call>"},
@@ -199,8 +190,6 @@ func TestTheInstructionsNeverListTheTools(t *testing.T) {
 	}
 }
 
-// A conversation that asks for the tools in fast mode (two steps) still has
-// both steps for its work.
 func TestAskingForTheToolsCostsNoStep(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall("u1", toolUseTools, `{}`)}},

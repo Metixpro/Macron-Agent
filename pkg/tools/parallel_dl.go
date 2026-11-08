@@ -14,14 +14,9 @@ import (
 	"time"
 )
 
-// Direct downloads of big files open several connections, each fetching its
-// own byte range into its place in the file. The first request doubles as the
-// first range, a dropped connection resumes where it stopped, and a server
-// that stops honouring ranges falls back to one plain stream.
-
 var (
-	dlParallelMin int64 = 8 << 20 // smaller files come in one stream
-	dlPartBytes   int64 = 2 << 20 // about this much per connection
+	dlParallelMin int64 = 8 << 20
+	dlPartBytes   int64 = 2 << 20
 )
 
 const (
@@ -49,9 +44,6 @@ func newGet(ctx context.Context, rawURL string) (*http.Request, error) {
 	return req, nil
 }
 
-// Some sites turn away a request that says it is a browser but does not
-// look like one, yet serve a download tool; a 403 is tried once more as
-// one (and every part of that download after it).
 const plainUA = "Wget/1.21.4"
 
 type plainUAKey struct{}
@@ -60,7 +52,6 @@ func asDownloadTool(ctx context.Context) context.Context {
 	return context.WithValue(ctx, plainUAKey{}, true)
 }
 
-// contentRange reads "bytes 0-99/1000".
 func contentRange(h string) (start, end, total int64, ok bool) {
 	m := contentRangeRe.FindStringSubmatch(strings.TrimSpace(h))
 	if m == nil {
@@ -72,7 +63,6 @@ func contentRange(h string) (start, end, total int64, ok bool) {
 	return start, end, total, start <= end && end < total
 }
 
-// validator lets later ranges check they come from the same file.
 func validator(resp *http.Response) string {
 	if et := resp.Header.Get("ETag"); et != "" && !strings.HasPrefix(et, "W/") {
 		return et
@@ -80,8 +70,6 @@ func validator(resp *http.Response) string {
 	return resp.Header.Get("Last-Modified")
 }
 
-// parallelGet fills f (total bytes) over several connections; first is the
-// answer to "Range: bytes=0-" and serves the first part.
 func (r *Registry) parallelGet(ctx context.Context, f *os.File, rawURL string, first *http.Response, total int64) (int, error) {
 	conns := int(min(max(total/dlPartBytes, 1), dlMaxConns))
 	size := (total + int64(conns) - 1) / int64(conns)
@@ -113,8 +101,6 @@ func (r *Registry) parallelGet(ctx context.Context, f *os.File, rawURL string, f
 	return conns, nil
 }
 
-// getRange writes bytes start..end of the file, resuming after a broken
-// connection. body, when set, already streams from start.
 func (r *Registry) getRange(ctx context.Context, f *os.File, rawURL string, start, end int64, ifRange string, body io.ReadCloser) error {
 	w := counted(ctx, io.NewOffsetWriter(f, start))
 	want := end - start + 1
@@ -156,7 +142,7 @@ func (r *Registry) getRange(ctx context.Context, f *os.File, rawURL string, star
 					lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
 					continue
 				}
-				return errNoRanges // ignored the range, or the file changed
+				return errNoRanges
 			}
 			body = resp.Body
 		}

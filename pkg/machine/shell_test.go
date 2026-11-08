@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// A server started in the background keeps running, and the user's next
-// commands reach it on localhost: the session's shell.
 func TestBackgroundJobsShareTheShell(t *testing.T) {
 	s := newTestMachine(t)
 	ctx := context.Background()
@@ -25,13 +23,13 @@ func TestBackgroundJobsShareTheShell(t *testing.T) {
 	if res.ExitCode != 0 || !strings.Contains(res.Stdout, "hello from the server") {
 		t.Fatalf("a later command reaches the server on localhost: %+v", res)
 	}
-	// run_code's way: argv, stdin and stderr apart.
+
 	res = s.Run(ctx, "dev", RunOptions{Args: []string{"python3", "-c", "import sys; print(sys.stdin.read().upper()); print('oops', file=sys.stderr)"},
 		Stdin: []byte("abc"), InSession: true, Timeout: 10 * time.Second})
 	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "ABC" || strings.TrimSpace(res.Stderr) != "oops" {
 		t.Errorf("argv, stdin and stderr: %+v", res)
 	}
-	// What a command leaves behind ends with it; a timeout stops it.
+
 	_ = s.Run(ctx, "dev", RunOptions{Shell: "sleep 301 & echo left", InSession: true, Timeout: 10 * time.Second})
 	if res := s.Run(ctx, "dev", RunOptions{Shell: "pgrep -f '[s]leep 301' || echo none", InSession: true, Timeout: 10 * time.Second}); strings.TrimSpace(res.Stdout) != "none" {
 		t.Errorf("a command's leftovers end with it: %q", res.Stdout)
@@ -39,7 +37,7 @@ func TestBackgroundJobsShareTheShell(t *testing.T) {
 	if res := s.Run(ctx, "dev", RunOptions{Shell: "sleep 30", InSession: true, Timeout: time.Second}); res.ExitCode != 124 {
 		t.Errorf("timeout: %+v", res)
 	}
-	// The log, the list, and stopping a job.
+
 	log, _, err := s.ReadTail("dev", job.Log, 4096)
 	if err != nil || !strings.Contains(string(log), "GET /hello.txt") {
 		t.Errorf("the job's output: %q %v", log, err)
@@ -51,7 +49,7 @@ func TestBackgroundJobsShareTheShell(t *testing.T) {
 	if res := s.Run(ctx, "dev", RunOptions{Shell: "curl -s -m 2 localhost:8765/hello.txt || echo down", InSession: true, Timeout: 10 * time.Second}); !strings.Contains(res.Stdout, "down") {
 		t.Errorf("a stopped server is gone: %q", res.Stdout)
 	}
-	// A server tool never runs in the user's shell.
+
 	if res := s.Run(ctx, "dev", RunOptions{Shell: "test -n \"$WAZE_SHELL\" && echo shell || echo own", Timeout: 10 * time.Second}); strings.TrimSpace(res.Stdout) != "own" {
 		t.Errorf("a server tool runs on its own: %q", res.Stdout)
 	}

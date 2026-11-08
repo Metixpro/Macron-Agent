@@ -75,9 +75,6 @@ func TestFitHistoryDropsTheOldest(t *testing.T) {
 	}
 }
 
-// bigTool returns n characters each time: a job that fills the context. Its
-// outputs stay whole (like a book's pages), so they are not shortened when
-// the next round comes and the context really grows.
 func bigTool(n int) LocalTool {
 	if !slices.Contains(keepWhole, "fetch_chunk") {
 		keepWhole = append(keepWhole, "fetch_chunk")
@@ -111,7 +108,7 @@ func TestLongJobsAreCompacted(t *testing.T) {
 		Listener: &EventListener{
 			OnContext: func(used, window int) {
 				reports++
-				if window != compactTokens(20000) { // the bar is full where a compaction starts
+				if window != compactTokens(20000) {
 					t.Errorf("window %d", window)
 				}
 			},
@@ -213,7 +210,7 @@ func TestOverflowTeachesTheWindow(t *testing.T) {
 		}
 		return 200, answer(callsTo("fetch_chunk", "{}"), "tool_calls")
 	})
-	a.ContextWindow = func() int { return 1000000 } // wrong: the real one is smaller
+	a.ContextWindow = func() int { return 1000000 }
 	a.MaxSteps = 30
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Content: "go"}, Tools: []LocalTool{bigTool(12000)}})
 	if err != nil || res.Answer != "done" || res.Compactions == 0 {
@@ -230,9 +227,6 @@ func toMessages(ms []map[string]any) []llm.Message {
 	return out
 }
 
-// busyJob is a long review job like the one in the bug report: a long earlier
-// conversation, a big [context], pictures and large tool outputs, with a
-// provider that counts 40% more tokens than the estimate.
 func busyJob(t *testing.T, window int, about string) (*Result, []string, *fakeModel) {
 	t.Helper()
 	var f *fakeModel
@@ -294,7 +288,7 @@ func TestCompactionReallyMakesRoom(t *testing.T) {
 			t.Fatalf("the meter only goes down at an announced compaction: %v", trail)
 		}
 		prev = pct
-		// The meter's 100% is where a compaction starts (75% of the window).
+
 		if strings.HasPrefix(p, "C") && pct > 55 {
 			t.Fatalf("a compaction must make real room, got %d%%: %v", pct, trail)
 		}
@@ -322,8 +316,7 @@ func TestCompactionReallyMakesRoom(t *testing.T) {
 }
 
 func TestCompactionDoesNotRepeatWhenItCannotHelp(t *testing.T) {
-	// The [context] alone fills most of the window: compaction cannot get under
-	// the threshold, so it must not run again at every step.
+
 	res, trail, _ := busyJob(t, 128000, strings.Repeat("اطلاعات خیلی زیاد ", 22000))
 	t.Logf("%d compactions in %d steps: %v", res.Compactions, res.Steps, trail)
 	if res.Compactions > 6 {

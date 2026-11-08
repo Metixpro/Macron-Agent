@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
-// withAdvisor adds a second provider ("gpt", model gpt-x) beside the main one
-// ("m"), and a preset of the two.
 func withAdvisor(t *testing.T, h *harness, fanout string, enabled bool) {
 	t.Helper()
 	main, _ := h.st.Providers(bg)
@@ -25,7 +23,6 @@ func withAdvisor(t *testing.T, h *harness, fanout string, enabled bool) {
 		main[0].Name, fanout, on))
 }
 
-// advisorCalls counts the requests that went to the advisor's model.
 func advisorCalls(h *harness) int {
 	h.llm.mu.Lock()
 	defer h.llm.mu.Unlock()
@@ -38,8 +35,6 @@ func advisorCalls(h *harness) int {
 	return n
 }
 
-// moaReply: the advisor gives its view; the aggregator works (tools calls
-// list_files until it has n results) and answers.
 func moaReply(h *harness, n int, advisorStatus int) {
 	h.llm.reply = func(req map[string]any, k int) (map[string]any, int) {
 		if req["model"] == "gpt-x" {
@@ -73,19 +68,18 @@ func TestMoaRunsOneRequest(t *testing.T) {
 	if len(r) == 0 || !strings.Contains(llmText(r[len(r)-1]), "reference model=") || !strings.Contains(llmText(r[len(r)-1]), "ADVICE: split") {
 		t.Fatalf("the aggregator sees the advice: %v", len(r))
 	}
-	// The next request is the usual model alone.
+
 	h.send(private(ownerID, "یه سؤال معمولی"))
 	if advisorCalls(h) != 1 {
 		t.Error("/moa does not switch for good")
 	}
 }
 
-// every_n:3: the advisors at the first round and every third after.
 func TestMoaEveryThirdRound(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "0")
 	withAdvisor(t, h, "every_n:3", true)
-	moaReply(h, 6, 0) // 6 tool rounds, then the answer: 7 rounds
+	moaReply(h, 6, 0)
 	h.send(private(ownerID, "/moa یه کار چندمرحله‌ای"))
 	if n := advisorCalls(h); n != 3 {
 		t.Fatalf("advisors asked %d times, want 3 (rounds 1, 4, 7)", n)
@@ -147,7 +141,7 @@ func TestMoaPanel(t *testing.T) {
 		t.Fatal("every request")
 	}
 	h.wantText("صورتحساب روی پرووایدر همین مدله")
-	// A recursive or broken preset is reported.
+
 	_ = h.st.SetSetting(bg, settingMoaPresets, `[{"name":"loop","aggregator":{"provider":"moa"}}]`)
 	if probs := h.bot.moaProblems(h.bot.moaPresets()[0]); len(probs) == 0 {
 		t.Fatal("a mixture cannot aggregate")

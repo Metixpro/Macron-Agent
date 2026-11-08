@@ -14,13 +14,9 @@ import (
 	"unicode"
 )
 
-// ErrTooLarge is returned by copyLimited when the source exceeds the limit.
 var ErrTooLarge = errors.New("data exceeds the size limit")
 
 const browserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
-// The definitions go with every request that offers the tools: a parameter
-// whose name says it all has no description.
 
 func prop(typ, desc string) map[string]any {
 	return described(map[string]any{"type": typ}, desc)
@@ -52,7 +48,6 @@ func schema(props map[string]any, required ...string) map[string]any {
 	return s
 }
 
-// strArg returns a trimmed string argument ("" when missing).
 func strArg(args map[string]any, key string) string {
 	switch v := args[key].(type) {
 	case string:
@@ -65,15 +60,11 @@ func strArg(args map[string]any, key string) string {
 	return ""
 }
 
-// rawStrArg is like strArg but keeps surrounding whitespace (file contents).
 func rawStrArg(args map[string]any, key string) string {
 	s, _ := args[key].(string)
 	return s
 }
 
-// textArg is a text argument as it was sent: a model that sends a file's
-// content as JSON (an object, a list, a number) gets that JSON written,
-// not an empty file.
 func textArg(args map[string]any, key string) string {
 	switch v := args[key].(type) {
 	case nil:
@@ -87,9 +78,6 @@ func textArg(args map[string]any, key string) string {
 	}
 }
 
-// jsonText is v as indented JSON the way a person writes it: & < > stay as
-// they are (json.Marshal turns them into \u0026…, which confuses the model
-// and wastes tokens on command output and web pages).
 func jsonText(v any) string {
 	var b strings.Builder
 	enc := json.NewEncoder(&b)
@@ -101,7 +89,6 @@ func jsonText(v any) string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-// intArg returns an integer argument clamped to [lo, hi]; def is used when missing.
 func intArg(args map[string]any, key string, def, lo, hi int) int {
 	n := def
 	switch v := args[key].(type) {
@@ -115,8 +102,6 @@ func intArg(args map[string]any, key string, def, lo, hi int) int {
 	return min(max(n, lo), hi)
 }
 
-// sanitizeBase turns arbitrary input into a safe, flat file name (no directories,
-// no leading dots or dashes, letters of any script allowed).
 func sanitizeBase(s string) string {
 	s = strings.ReplaceAll(s, "\\", "/")
 	s = path.Base(strings.TrimSpace(s))
@@ -128,7 +113,7 @@ func sanitizeBase(s string) string {
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r), strings.ContainsRune("._-()", r):
 			b.WriteRune(r)
-		default: // spaces and everything else, so names are safe to reuse unquoted in a shell
+		default:
 			b.WriteRune('_')
 		}
 	}
@@ -144,8 +129,6 @@ func sanitizeBase(s string) string {
 	return out
 }
 
-// outputName builds the name of a generated file: the caller's choice if it is
-// usable, otherwise prefix+timestamp. The extension is forced into exts.
 func outputName(provided, prefix string, exts []string, defExt string) string {
 	name := sanitizeBase(provided)
 	if name == "" {
@@ -160,7 +143,6 @@ func outputName(provided, prefix string, exts []string, defExt string) string {
 	return name
 }
 
-// slug makes a short ASCII fragment for generated file names.
 func slug(s string, maxLen int) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(s) {
@@ -177,7 +159,6 @@ func slug(s string, maxLen int) string {
 	return strings.Trim(b.String(), "_")
 }
 
-// copyLimited copies at most max bytes and fails with ErrTooLarge if src has more.
 func copyLimited(dst io.Writer, src io.Reader, max int64) (int64, error) {
 	n, err := io.Copy(dst, io.LimitReader(src, max+1))
 	if err != nil {
@@ -199,7 +180,6 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// rootSnapshot identifies the versions of the files in the workspace root.
 func (r *Registry) rootSnapshot(sessionID string) map[string]string {
 	out := map[string]string{}
 	files, _ := r.Machine.ListFiles(sessionID)
@@ -209,7 +189,6 @@ func (r *Registry) rootSnapshot(sessionID string) map[string]string {
 	return out
 }
 
-// changedFiles lists the root files created or changed since before (at most 15).
 func (r *Registry) changedFiles(sessionID string, before map[string]string) []string {
 	var names []string
 	for name, sig := range r.rootSnapshot(sessionID) {
@@ -224,7 +203,6 @@ func (r *Registry) changedFiles(sessionID string, before map[string]string) []st
 	return names
 }
 
-// boolArg reads a true/false argument (models also send "true" or 1).
 func boolArg(args map[string]any, key string) bool {
 	switch v := args[key].(type) {
 	case bool:
@@ -237,21 +215,17 @@ func boolArg(args map[string]any, key string) bool {
 	return false
 }
 
-// WorkspaceSnapshot identifies the files in the workspace root, to see later what changed.
 func (r *Registry) WorkspaceSnapshot(sessionID string) map[string]string {
 	return r.rootSnapshot(sessionID)
 }
 
-// ChangedFiles lists the root files created or changed since the snapshot (at most 15).
 func (r *Registry) ChangedFiles(sessionID string, before map[string]string) []string {
 	return r.changedFiles(sessionID, before)
 }
 
-// numberText reads Persian and Arabic digits and separators as Latin ones.
 var numberText = strings.NewReplacer("۰", "0", "۱", "1", "۲", "2", "۳", "3", "۴", "4", "۵", "5", "۶", "6", "۷", "7", "۸", "8", "۹", "9",
 	"٠", "0", "١", "1", "٢", "2", "٣", "3", "٤", "4", "٥", "5", "٦", "6", "٧", "7", "٨", "8", "٩", "9", "٫", ".", "٬", "", ",", "", "_", "", " ", "")
 
-// parseNumber reads a number the way people write it: "12", "۱۲٫۵", "1,250", "40%".
 func parseNumber(s string) (float64, bool) {
 	s = strings.TrimSuffix(strings.TrimSpace(numberText.Replace(s)), "%")
 	f, err := strconv.ParseFloat(s, 64)

@@ -13,14 +13,9 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Recall: everything said between the owner and the agent is kept for good
-// (the conversation window summarizes what it forgets; the archive does
-// not), and search_past_chats finds it again by words, in Persian or any
-// other language: «what did we decide about the server last month?».
-
 const toolSearchChats = "search_past_chats"
 
-const recallBudget = 6000 // characters one search returns
+const recallBudget = 6000
 
 func (b *Bot) recallTool(u *store.User) agent.LocalTool {
 	uid := u.ID
@@ -60,7 +55,7 @@ func (b *Bot) recallTool(u *store.User) agent.LocalTool {
 					}
 					text := t.Content
 					if t.ID == h.ID {
-						text = h.Snippet // the match, with «the words» marked
+						text = h.Snippet
 					} else {
 						text = textutil.TruncateRunes(text, 400, "…")
 					}
@@ -76,8 +71,6 @@ func (b *Bot) recallTool(u *store.User) agent.LocalTool {
 	}
 }
 
-// searchCommand is the owner's «/search WORDS»: the same archive the agent
-// searches (search_past_chats), shown directly.
 func (b *Bot) searchCommand(ctx context.Context, m *telegram.Message, l lang, query string) {
 	query = strings.TrimSpace(query)
 	if query == "" {

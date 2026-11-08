@@ -152,7 +152,6 @@ func TestAnthropicPlainAnswerErrorsAndLimits(t *testing.T) {
 		t.Errorf("an overload is retried, a refused output limit is learned: %v", maxTokens)
 	}
 
-	// An error inside a stream is an API error, so the next provider takes over.
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		anthropicSSE(w, `{"type":"message_start","message":{"model":"m","usage":{}}}`, `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`)
 	}))
@@ -196,7 +195,6 @@ func TestOpenAICompatibleDetails(t *testing.T) {
 		t.Errorf("Azure takes its key in api-key: %v", req.Header)
 	}
 
-	// Reasoning models get no temperature and max_completion_tokens.
 	var bodies []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -218,7 +216,7 @@ func TestOpenAICompatibleDetails(t *testing.T) {
 	if _, ok := bodies[0]["temperature"]; ok || bodies[0]["max_completion_tokens"] != float64(50) || bodies[0]["max_tokens"] != nil {
 		t.Errorf("reasoning model body: %v", bodies[0])
 	}
-	// An unknown model that refuses the temperature is learned once.
+
 	bodies = nil
 	c = fastClient(srv.URL)
 	c.Model, c.Temperature = "custom-reasoner", 0.3
@@ -232,9 +230,6 @@ func TestOpenAICompatibleDetails(t *testing.T) {
 	}
 }
 
-// A temperature the admin chose goes to every model, 0 included; without
-// one, OpenAI-compatible models get 0.3 and Claude and reasoning models none.
-// A model that refuses it is learned once.
 func TestTheChosenTemperature(t *testing.T) {
 	var bodies []map[string]any
 	refuse := false

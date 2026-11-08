@@ -18,8 +18,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// ---------------------------------------------------------------- only final files reach the chat
-
 func TestFileTrackerSendsOnlyFinalResults(t *testing.T) {
 	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
 	if err != nil {
@@ -33,7 +31,7 @@ func TestFileTrackerSendsOnlyFinalResults(t *testing.T) {
 		}
 		ft.end(tool, "")
 	}
-	// Code cuts ten frames, then makes the final GIF: nothing is sent on its own…
+
 	var frames []string
 	for i := 0; i < 10; i++ {
 		frames = append(frames, fmt.Sprintf("frame_%02d.png", i))
@@ -43,15 +41,14 @@ func TestFileTrackerSendsOnlyFinalResults(t *testing.T) {
 	if got := ft.deliveries(nil); len(got) != 0 || len(ft.made()) != 0 {
 		t.Errorf("intermediate files must not flood the chat: %v", got)
 	}
-	// …until the model hands over the result, or shows it in its answer.
+
 	if got := ft.deliveries([]string{"final.gif", "gone.png"}); strings.Join(got, ",") != "final.gif" {
 		t.Errorf("explicit result: %v", got)
 	}
 	if got := ft.placed("Here it is:\n![the animation](final.gif)\n```\n![not this](frame_01.png)\n```\n![web](https://x.io/a.png)"); strings.Join(got, ",") != "final.gif" {
 		t.Errorf("placed: %v", got)
 	}
-	// A picture tool's output is not sent by itself either: it is only
-	// pointed out to the model when it sends nothing.
+
 	step("generate_image", "sunset.png")
 	if got := ft.deliveries(nil); len(got) != 0 {
 		t.Errorf("nothing is sent unless chosen: %v", got)
@@ -62,7 +59,7 @@ func TestFileTrackerSendsOnlyFinalResults(t *testing.T) {
 	if got := ft.made("sunset.png"); len(got) != 0 {
 		t.Errorf("made leaves out what was chosen: %v", got)
 	}
-	// Overwriting a picture counts as one change.
+
 	ft.start("edit_image")
 	time.Sleep(10 * time.Millisecond)
 	_ = sb.WriteFile("s", "sunset.png", []byte("better"))
@@ -154,7 +151,6 @@ func TestResultsArriveInsideTheAnswer(t *testing.T) {
 	}
 }
 
-// sendFiles is one model turn handing over several files at once.
 func sendFiles(names ...string) map[string]any {
 	var calls []any
 	for i, n := range names {
@@ -219,7 +215,7 @@ func TestFilesFollowAsAlbumsWhenTheMessageCannotCarryThem(t *testing.T) {
 		h.send(private(54, "سه نسخه بساز"))
 		rich := h.tg.of("sendRichMessage")
 		text := rich[len(rich)-1].body["rich_message"].(map[string]any)["markdown"]
-		if text != "سه تا نسخه:  \n*اولی*" { // its line break kept (telegram.HardBreaks)
+		if text != "سه تا نسخه:  \n*اولی*" {
 			t.Errorf("round %d: the text still arrives, without file links: %q", i, text)
 		}
 		if tries := len(rich) - 1; i < maxMediaStrikes && tries != 1 || i == maxMediaStrikes && tries != 0 {
@@ -250,7 +246,6 @@ func TestAlbumGroups(t *testing.T) {
 		t.Errorf("groups: %v", got)
 	}
 
-	// A voice message and a round video message travel alone, with their own methods.
 	native := []string{"a.jpg", "hi.voice.ogg", "me.round.mp4", "b.jpg"}
 	for _, n := range native {
 		_ = h.bot.app.Machine.WriteFile(s, n, []byte("x"))
@@ -272,14 +267,12 @@ func TestAlbumGroups(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- GIFs and stickers are seen, not cut up
-
 func TestGIFArrivesWithAFrameToLookAt(t *testing.T) {
 	h := newHarness(t)
 	h.tg.files["gif"] = []byte("fake mp4")
 	h.tg.files["thumb"] = testJPEG(90, 90)
 	m := private(53, "")
-	// Telegram also fills document for animations.
+
 	m.Animation = &telegram.Video{FileID: "gif", Duration: 3, Thumbnail: &telegram.PhotoSize{FileID: "thumb"}}
 	m.Document = &telegram.Document{FileID: "gif", FileName: "funny.gif.mp4", MimeType: "video/mp4"}
 	h.send(m)
@@ -334,8 +327,6 @@ func TestFramePreviewMakesAGrid(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- asking the user with a poll
-
 func TestParsePollArgs(t *testing.T) {
 	q, err := parsePollArgs(map[string]any{"question": " کدوم سبک؟ ", "options": []any{"مینیمال", "رنگی", "مینیمال", " ", "کلاسیک"}})
 	if err != nil || q.Question != "کدوم سبک؟" || strings.Join(q.Options, "|") != "مینیمال|رنگی|کلاسیک" {
@@ -356,7 +347,7 @@ func TestAskUserSendsAPollAndTheVoteContinuesTheTask(t *testing.T) {
 			msg["content"] = "قبل از ساختنش یه سؤال دارم 👇"
 			return msg, 0
 		}
-		return map[string]any{"role": "assistant", "content": "حله، سبک رنگی انتخاب شد 🎨"}, 0 // not a claim of work no tool did
+		return map[string]any{"role": "assistant", "content": "حله، سبک رنگی انتخاب شد 🎨"}, 0
 	}
 	h.send(private(55, "یه لوگو برام بساز"))
 
@@ -376,7 +367,6 @@ func TestAskUserSendsAPollAndTheVoteContinuesTheTask(t *testing.T) {
 	used, _ := h.st.UsedToday(bg, 55)
 	p := latestPoll(t, h, 55)
 
-	// Someone else votes (in a group anyone can): ignored.
 	h.bot.handlePollAnswer(&telegram.PollAnswer{PollID: p.PollID, User: &telegram.User{ID: 999, FirstName: "x"}, OptionIDs: []int{0}})
 	h.bot.wg.Wait()
 	if h.llm.count() != 1 {
@@ -390,8 +380,7 @@ func TestAskUserSendsAPollAndTheVoteContinuesTheTask(t *testing.T) {
 	if !strings.Contains(req, "The user answered your poll «لوگو با چه سبکی باشه؟» by choosing: رنگی") || !strings.Contains(req, "انتخاب کردم: رنگی") {
 		t.Errorf("the vote reaches the model:\n%s", req)
 	}
-	// The job that asked goes on as it stopped: its own call to ask_user and
-	// what it answered are still there, not a summary of them.
+
 	if !strings.Contains(req, `"name":"ask_user"`) || !strings.Contains(req, "The user answered your question. The job goes on") {
 		t.Errorf("the vote resumes the job itself:\n%s", req)
 	}
@@ -406,7 +395,6 @@ func TestAskUserSendsAPollAndTheVoteContinuesTheTask(t *testing.T) {
 		t.Errorf("a vote continues a request and is not charged: %d → %d", used, after)
 	}
 
-	// A second vote on the same poll does nothing.
 	h.bot.handlePollAnswer(&telegram.PollAnswer{PollID: p.PollID, User: &telegram.User{ID: 55}, OptionIDs: []int{2}})
 	h.bot.wg.Wait()
 	if h.llm.count() != 2 {
@@ -425,8 +413,6 @@ func TestPollFallsBackToText(t *testing.T) {
 	h.wantText("شماره یا اسم گزینه‌ات رو بفرست")
 }
 
-// latestPoll finds the recorded poll of a user (the fake names polls
-// "poll-<message id>").
 func latestPoll(t *testing.T, h *harness, userID int64) *store.Poll {
 	t.Helper()
 	for id := int64(500); id < 700; id++ {
@@ -460,7 +446,6 @@ func TestFilesCarryTheModelsCaption(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "بفرما"}, 0
 	}
 
-	// Inside the answer: the caption sits under the file.
 	h.send(private(55, "آهنگ رو بفرست"))
 	md := lastOf(h, "sendRichMessage").body["rich_message"].(map[string]any)["markdown"].(string)
 	for _, want := range []string{`![](tg://audio?id=`, `"🎵 رز سفید — حامیم")`, `"نسخه 'اول'")`, `![](tg://document?id=`} {
@@ -469,7 +454,6 @@ func TestFilesCarryTheModelsCaption(t *testing.T) {
 		}
 	}
 
-	// Sent separately: every kind of file keeps its caption.
 	h.tg.refuseFiles(true)
 	h.tg.reset()
 	h.send(private(55, "آهنگ رو بفرست"))
@@ -486,7 +470,6 @@ func TestFilesCarryTheModelsCaption(t *testing.T) {
 	}
 }
 
-// A vote that comes while the user has another job going waits for it.
 func TestAVoteWhileBusyIsNotLost(t *testing.T) {
 	h := newHarness(t)
 	old := pollWait
@@ -500,9 +483,9 @@ func TestAVoteWhileBusyIsNotLost(t *testing.T) {
 	}
 	h.send(private(58, "یه طرح بزن"))
 	p := latestPoll(t, h, 58)
-	release, _ := h.bot.gate.TryAcquire("58") // another job of the user, in another chat
+	release, _ := h.bot.gate.TryAcquire("58")
 	go func() {
-		time.Sleep(4500 * time.Millisecond) // longer than a request's own wait for a busy user
+		time.Sleep(4500 * time.Millisecond)
 		release()
 	}()
 	h.bot.handlePollAnswer(&telegram.PollAnswer{PollID: p.PollID, User: &telegram.User{ID: 58, FirstName: "Ali"}, OptionIDs: []int{1}})

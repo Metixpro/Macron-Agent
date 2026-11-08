@@ -22,37 +22,23 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Every search asks all the engines at once — treg.to (when it has a
-// token), DuckDuckGo and Bing for the web; Bing News and Google News for
-// news — and merges their lists: a page several engines found ranks higher
-// (reciprocal rank fusion), the same page under two addresses comes once,
-// and no site fills the list. An engine that keeps failing (a captcha, a
-// block) rests for a while, so it does not slow every search. The first
-// list in starts a short grace time for the others; one that has not
-// answered by then is left out. Alongside, a quick answer is looked up
-// (DuckDuckGo's instant answer, else the Wikipedia article the query
-// names). The same search within a few minutes is answered from memory.
-
-// SearchOptions shape one search.
 type SearchOptions struct {
 	Limit  int
-	Time   string // "day", "week", "month", "year"; "" = any time
-	News   bool   // news articles, newest first, with their dates and outlets
-	Answer bool   // also look for a quick answer
+	Time   string
+	News   bool
+	Answer bool
 }
 
-// SearchReport is what a search found.
 type SearchReport struct {
 	Results []SearchResult
 	Answer  *QuickAnswer
-	Engines []string // the engines whose results are in the list
-	Failed  []string // engines that failed this time ("bing: blocked")
+	Engines []string
+	Failed  []string
 }
 
-// QuickAnswer is a short, sourced answer from an encyclopedia or a calculation.
 type QuickAnswer struct {
 	Title, Text, URL, Source string
-	Facts                    []string // "Height: 435 m"
+	Facts                    []string
 }
 
 type webEngine struct {
@@ -63,15 +49,14 @@ type webEngine struct {
 
 const (
 	rrfK        = 20.0
-	perDomain   = 2 // in the top of the list
+	perDomain   = 2
 	engineLimit = 12 * time.Second
-	coolAfter   = 2 // failures in a row before an engine rests
+	coolAfter   = 2
 	coolFor     = 10 * time.Minute
 	cacheFor    = 3 * time.Minute
 	cacheSize   = 200
 )
 
-// searchGrace is how long the other engines may take once one has answered.
 var searchGrace = 2500 * time.Millisecond
 
 var (
@@ -79,7 +64,6 @@ var (
 	errUnrelated = errors.New("unrelated results (the engine distrusts this server)")
 )
 
-// termsIn counts the query's words in a result's title, snippet and address.
 func termsIn(r SearchResult, terms []string) int {
 	addr, _ := url.PathUnescape(r.URL)
 	hay := normalize(r.Title + " " + r.Snippet + " " + r.Source + " " + addr)
@@ -92,7 +76,6 @@ func termsIn(r SearchResult, terms []string) int {
 	return n
 }
 
-// engineState is how an engine has been doing.
 type engineState struct {
 	Name      string
 	Hits      int64
@@ -144,7 +127,6 @@ func (h *engineHealth) note(name string, err error, now time.Time) {
 	}
 }
 
-// EngineStatus is how each search engine has been doing since the start.
 func (e *Engine) EngineStatus() []engineState {
 	e.health.mu.Lock()
 	defer e.health.mu.Unlock()
@@ -175,7 +157,7 @@ func (c *searchCache) get(key string, now time.Time) (SearchReport, bool) {
 		return SearchReport{}, false
 	}
 	rep := x.rep
-	rep.Results = append([]SearchResult(nil), rep.Results...) // passages are added to a copy
+	rep.Results = append([]SearchResult(nil), rep.Results...)
 	return rep, true
 }
 
@@ -196,7 +178,6 @@ func (c *searchCache) put(key string, rep SearchReport, now time.Time) {
 	}
 }
 
-// webEngines are the engines of a search, in their order of trust.
 func (e *Engine) webEngines(opt SearchOptions) []webEngine {
 	var list []webEngine
 	if opt.News {
@@ -233,7 +214,6 @@ type engineResult struct {
 	err    error
 }
 
-// SearchWith runs one search on every engine at once and merges the lists.
 func (e *Engine) SearchWith(ctx context.Context, query string, opt SearchOptions) (*SearchReport, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -261,7 +241,7 @@ func (e *Engine) SearchWith(ctx context.Context, query string, opt SearchOptions
 			awake = append(awake, en)
 		}
 	}
-	if len(awake) == 0 { // all resting: ask them anyway rather than find nothing
+	if len(awake) == 0 {
 		awake = engines
 	}
 	if len(awake) == 0 {
@@ -283,10 +263,10 @@ func (e *Engine) SearchWith(ctx context.Context, query string, opt SearchOptions
 			defer cancel()
 			res, err := en.run(c, query, opt, opt.Limit+5)
 			if err != nil && ectx.Err() != nil && ctx.Err() == nil {
-				err = context.Canceled // left out after the grace time: not the engine's fault
+				err = context.Canceled
 			}
 			if err != nil && !errors.Is(err, context.Canceled) {
-				e.health.note(en.name, err, time.Now()) // a success counts once its list is judged
+				e.health.note(en.name, err, time.Now())
 			}
 			got <- engineResult{en, res, err}
 		}()
@@ -311,7 +291,7 @@ collect:
 	for i, en := range awake {
 		order[en.name] = i
 	}
-	sort.SliceStable(lists, func(i, j int) bool { return order[lists[i].engine.name] < order[lists[j].engine.name] }) // not the order they came in
+	sort.SliceStable(lists, func(i, j int) bool { return order[lists[i].engine.name] < order[lists[j].engine.name] })
 	dropUnrelated(lists, query, func(name string) { e.health.note(name, errUnrelated, time.Now()) })
 	rep := &SearchReport{}
 	var firstErr error
@@ -344,12 +324,6 @@ collect:
 	return rep, nil
 }
 
-// dropUnrelated: an engine that distrusts the server answers with anything
-// (its own company's pages, popular sites). Only results in the query's
-// own script are judged (a Persian query may well find English pages).
-// When most of an engine's list lacks the query's words, the list is not
-// used and the engine rests (junk is called); when many do, those results
-// go, unless another engine found them too.
 func dropUnrelated(lists []engineResult, query string, junk func(engine string)) {
 	terms := queryTerms(query)
 	if len(terms) == 0 {
@@ -393,7 +367,6 @@ func dropUnrelated(lists []engineResult, query string, junk func(engine string))
 	}
 }
 
-// fuse merges the engines' lists by reciprocal rank fusion.
 func fuse(lists []engineResult, limit int) []SearchResult {
 	type entry struct {
 		r     SearchResult
@@ -451,7 +424,6 @@ func fuse(lists []engineResult, limit int) []SearchResult {
 	return out
 }
 
-// sortNews puts the newest first and leaves out what is older than the time asked for.
 func sortNews(list []SearchResult, window string, now time.Time) []SearchResult {
 	limit := map[string]time.Duration{"day": 36 * time.Hour, "week": 8 * 24 * time.Hour, "month": 32 * 24 * time.Hour, "year": 370 * 24 * time.Hour}[window]
 	when := func(r SearchResult) time.Time {
@@ -473,8 +445,6 @@ func sortNews(list []SearchResult, window string, now time.Time) []SearchResult 
 
 var trackingParams = map[string]bool{"fbclid": true, "gclid": true, "yclid": true, "mc_cid": true, "mc_eid": true, "ref": true, "ref_src": true, "igshid": true, "si": true}
 
-// normURL is a page's address without what does not change the page:
-// the scheme, www. and m., tracking parameters, the fragment, a final slash.
 func normURL(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" {
@@ -494,7 +464,6 @@ func normURL(raw string) string {
 	return host + p
 }
 
-// siteOf is a page's site (its host without www.).
 func siteOf(raw string) string {
 	if u, err := url.Parse(raw); err == nil {
 		return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
@@ -502,9 +471,6 @@ func siteOf(raw string) string {
 	return raw
 }
 
-// ---------------------------------------------------------------- engines
-
-// searchDDG asks DuckDuckGo Lite, then its HTML page.
 func (e *Engine) searchDDG(ctx context.Context, query string, opt SearchOptions, limit int) ([]SearchResult, error) {
 	df := map[string]string{"day": "d", "week": "w", "month": "m", "year": "y"}[opt.Time]
 	var firstErr error
@@ -559,7 +525,7 @@ func (e *Engine) ddgPage(req *http.Request, query string, limit int, parse func(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		return nil, errBlocked // DuckDuckGo's bot check answers 202
+		return nil, errBlocked
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("duckduckgo returned status %d", resp.StatusCode)
@@ -580,7 +546,6 @@ func acceptLanguage(q string) string {
 
 var arabicRe = regexp.MustCompile(`\p{Arabic}`)
 
-// searchBing reads Bing's results page.
 func (e *Engine) searchBing(ctx context.Context, query string, opt SearchOptions, limit int) ([]SearchResult, error) {
 	v := url.Values{"q": {query}, "count": {fmt.Sprint(min(limit, 20))}}
 	switch opt.Time {
@@ -630,7 +595,6 @@ func (e *Engine) searchBing(ctx context.Context, query string, opt SearchOptions
 	return res, nil
 }
 
-// parseBing reads the <li class="b_algo"> results of a Bing page.
 func parseBing(doc *xhtml.Node, limit int) []SearchResult {
 	var out []SearchResult
 	var walk func(*xhtml.Node)
@@ -680,12 +644,10 @@ func bingResult(li *xhtml.Node) (SearchResult, bool) {
 	if r.Date != "" {
 		r.Snippet = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(r.Snippet, r.Date), "·"))
 	}
-	r.Date = "" // Bing's dates are relative words in the page's language: kept in the snippet only
+	r.Date = ""
 	return r, r.URL != "" && r.Title != "" && strings.HasPrefix(r.URL, "http")
 }
 
-// bingTarget turns Bing's click-tracking link into the page's own address
-// (its u parameter is "a1" + the address in base64).
 func bingTarget(href string) string {
 	u, err := url.Parse(href)
 	if err != nil {
@@ -714,7 +676,7 @@ type rssFeed struct {
 		Description string `xml:"description"`
 		PubDate     string `xml:"pubDate"`
 		Source      string `xml:"source"`
-		BingSource  string `xml:"Source"` // News:Source (its namespace is the feed's own address)
+		BingSource  string `xml:"Source"`
 	} `xml:"channel>item"`
 }
 
@@ -748,7 +710,6 @@ func rssDate(s string) string {
 	return ""
 }
 
-// searchBingNews reads Bing News' feed: the real links, dates and outlets.
 func (e *Engine) searchBingNews(ctx context.Context, query string, opt SearchOptions, limit int) ([]SearchResult, error) {
 	v := url.Values{"q": {query}, "format": {"rss"}}
 	if iv := map[string]string{"day": "7", "week": "8", "month": "9"}[opt.Time]; iv != "" {
@@ -780,7 +741,6 @@ func (e *Engine) searchBingNews(ctx context.Context, query string, opt SearchOpt
 	return out, nil
 }
 
-// searchGoogleNews reads Google News' feed (its links lead through Google).
 func (e *Engine) searchGoogleNews(ctx context.Context, query string, opt SearchOptions, limit int) ([]SearchResult, error) {
 	q := query
 	if w := map[string]string{"day": "1d", "week": "7d", "month": "30d", "year": "1y"}[opt.Time]; w != "" {
@@ -823,10 +783,6 @@ func htmlLine(s string) string {
 	return textutil.CollapseSpace(html.UnescapeString(tagRe.ReplaceAllString(html.UnescapeString(s), " ")))
 }
 
-// ---------------------------------------------------------------- quick answer
-
-// quickAnswer looks for a short sourced answer: DuckDuckGo's instant
-// answer, else (for a name of a few words) the Wikipedia article it names.
 func (e *Engine) quickAnswer(ctx context.Context, query string) *QuickAnswer {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -896,8 +852,6 @@ func (e *Engine) instantAnswer(ctx context.Context, query string) *QuickAnswer {
 	return a
 }
 
-// wikiAnswer is the opening of the Wikipedia article a short query names,
-// in the query's language, when its title carries the query's words.
 func (e *Engine) wikiAnswer(ctx context.Context, query string) *QuickAnswer {
 	lang := "en"
 	if arabicRe.MatchString(query) {
@@ -934,7 +888,6 @@ func (e *Engine) wikiAnswer(ctx context.Context, query string) *QuickAnswer {
 	return &QuickAnswer{Title: p.Title, Text: textutil.TruncateRunes(textutil.CollapseSpace(p.Extract), 700, "…"), URL: p.FullURL, Source: "Wikipedia"}
 }
 
-// sharesTerm: the title carries one of the query's words.
 func sharesTerm(title, query string) bool {
 	t := " " + strings.Join(queryTerms(title), " ") + " "
 	for _, w := range queryTerms(query) {

@@ -9,13 +9,13 @@ max_pages = int(d.get("max_pages", 3000))
 
 
 def norm(t):
-    # NFKC turns Arabic presentation forms (common in Persian PDFs) into plain letters.
+
     return unicodedata.normalize("NFKC", t or "").replace("\x00", "")
 
 
 pages, outline, title = [], [], ""
 try:
-    import fitz  # PyMuPDF: faster and keeps the reading order better
+    import fitz
 
     doc = fitz.open(path)
     if doc.needs_pass and not doc.authenticate(""):

@@ -7,11 +7,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// A conversational message (a greeting, a thank-you, «خوبی؟») goes to the
-// model with the light prompt and without the tools: their definitions and
-// the guidance on them are most of what a request costs, and such a message
-// needs none. If it turns out to need them after all, the model calls
-// use_tools and the job goes on with everything.
 const toolUseTools = "use_tools"
 
 var useToolsDef = llm.Tool{Type: "function", Function: llm.ToolDef{Name: toolUseTools,
@@ -20,18 +15,11 @@ var useToolsDef = llm.Tool{Type: "function", Function: llm.ToolDef{Name: toolUse
 
 const (
 	toolsReady        = "Your tools are available now. Carry on with the user's message."
-	chatHistoryTokens = 6000 // the recent turns: enough to know what a short reply is about
+	chatHistoryTokens = 6000
 	smallTalkRunes    = 80
 	smallTalkWords    = 12
 )
 
-// smallTalkVocab holds the words a conversational message is made of, in
-// Persian and English: greetings, how-are-yous, thanks, praise, laughter,
-// goodbyes, ways of addressing someone. A yes, an OK or a «باشه» is not here:
-// after an offer it means "go ahead", which needs the tools. Nor are «بد»
-// («بد شد»: a complaint about the work), «چطور» ("how?") and «چه» ("what?"):
-// they ask about what came before. drawnOut holds
-// the same words with no letter doubled, for «سلاااام», "heyyy" and «خخخخ».
 var smallTalkVocab, drawnOut = map[string]bool{}, map[string]bool{}
 
 func init() {
@@ -54,16 +42,13 @@ func init() {
 	}
 }
 
-// IsSmallTalk reports whether a message is only conversation: short, no
-// numbers or links, and every word one of smallTalkVocab (emoji alone count
-// too). It errs on the side of the tools: anything else is a task.
 func IsSmallTalk(text string) bool {
 	text = strings.TrimSpace(text)
 	runes := []rune(text)
 	if len(runes) == 0 || len(runes) > smallTalkRunes || strings.Contains(text, "://") || strings.Contains(text, "www.") {
 		return false
 	}
-	text = strings.NewReplacer("چه خبر", "چخبر", "چه‌خبر", "چخبر").Replace(text) // «چه» alone asks about what came before
+	text = strings.NewReplacer("چه خبر", "چخبر", "چه‌خبر", "چخبر").Replace(text)
 	var words []string
 	var word []rune
 	flush := func() {
@@ -75,16 +60,16 @@ func IsSmallTalk(text string) bool {
 	for _, r := range strings.ToLower(text) {
 		switch {
 		case unicode.IsDigit(r):
-			return false // a time, a price, an amount: a task
+			return false
 		case r == 'ي':
 			word = append(word, 'ی')
 		case r == 'ك':
 			word = append(word, 'ک')
 		case unicode.IsLetter(r):
 			word = append(word, r)
-		case unicode.Is(unicode.Mn, r): // Arabic diacritics
+		case unicode.Is(unicode.Mn, r):
 		default:
-			flush() // spaces, نیم‌فاصله, punctuation and emoji split words
+			flush()
 		}
 	}
 	flush()
@@ -99,7 +84,6 @@ func IsSmallTalk(text string) bool {
 	return true
 }
 
-// dedupe drops every doubled letter ("heyy" → "hey", «خخخ» → «خ»).
 func dedupe(w string) string {
 	var out []rune
 	for _, r := range w {

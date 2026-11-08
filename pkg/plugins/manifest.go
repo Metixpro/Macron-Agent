@@ -1,9 +1,3 @@
-// Package plugins adds tools to the agent without rebuilding it: script
-// plugins (a folder with plugin.json and a run.py, run.sh, run.js or a
-// binary) that run on the machine, and MCP servers (Model Context Protocol,
-// over stdio or HTTP) whose tools are listed when they connect. The agent
-// installs, tests, turns on and off and removes them when its owner asks in
-// the chat; nothing is compiled.
 package plugins
 
 import (
@@ -17,27 +11,26 @@ import (
 	"strings"
 )
 
-// Who may use a plugin's tools.
 const (
 	AccessEveryone = "everyone"
 	AccessAdmins   = "admins"
 )
 
 const (
-	maxTools        = 30         // tools one script plugin declares
-	maxSchemaBytes  = 16 << 10   // a tool's parameters schema
-	maxDescRunes    = 1000       // a tool's description
-	defaultTimeout  = 30         // seconds
-	maxTimeout      = 300        // seconds
-	defaultMemoryMB = 256        // memory a run can write to
-	maxMemoryMB     = 8192       //
-	maxManifest     = 256 << 10  // plugin.json
-	maxEnvVars      = 20         // secrets a plugin asks for
-	maxEnvValue     = 4096       // one secret
-	maxNetHosts     = 20         // sites a networked plugin may be limited to
-	pluginMount     = "/plugin"  // where a plugin's folder is seen here
-	serversMount    = "/plugins" // where an MCP server sees the plugins folder (read-only)
-	depsDir         = ".deps"    // its Python packages
+	maxTools        = 30
+	maxSchemaBytes  = 16 << 10
+	maxDescRunes    = 1000
+	defaultTimeout  = 30
+	maxTimeout      = 300
+	defaultMemoryMB = 256
+	maxMemoryMB     = 8192
+	maxManifest     = 256 << 10
+	maxEnvVars      = 20
+	maxEnvValue     = 4096
+	maxNetHosts     = 20
+	pluginMount     = "/plugin"
+	serversMount    = "/plugins"
+	depsDir         = ".deps"
 	manifestName    = "plugin.json"
 	runtimePython   = "python"
 	runtimeBash     = "bash"
@@ -54,17 +47,14 @@ var (
 	mcpNameRe  = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 )
 
-// ToolSpec is one tool a script plugin offers the model.
 type ToolSpec struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
-	// TestArgs are the arguments of the panel's self-test (none: the tool
-	// is tried with no arguments when it requires none).
+
 	TestArgs map[string]any `json:"test_args,omitempty"`
 }
 
-// Manifest is a script plugin's plugin.json.
 type Manifest struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -72,23 +62,20 @@ type Manifest struct {
 	Author      string `json:"author"`
 	Description string `json:"description"`
 	Enabled     *bool  `json:"enabled,omitempty"`
-	// Entry is the program, relative to the folder (default: run.py,
-	// run.sh, run.js or run, the first that exists).
+
 	Entry          string `json:"entry,omitempty"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 	MemoryMB       *int   `json:"memory_mb,omitempty"`
 	RequiresNet    bool   `json:"requires_net,omitempty"`
-	// NetHosts, when set, are the only sites a networked plugin reaches.
+
 	NetHosts []string `json:"net_hosts,omitempty"`
-	// Access is who may use its tools: everyone (default) or admins.
+
 	Access string `json:"access,omitempty"`
-	// Env names the secrets it needs (name → what it is); the values are
-	// set in the panel and given to it as environment variables.
+
 	Env   map[string]string `json:"env,omitempty"`
 	Tools []ToolSpec        `json:"tools"`
 }
 
-// ParseManifest reads and checks a plugin.json.
 func ParseManifest(data []byte) (*Manifest, error) {
 	if len(data) > maxManifest {
 		return nil, errors.New("plugin.json is too large")
@@ -101,7 +88,6 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	return &m, m.Check()
 }
 
-// Check validates a manifest and fills in its defaults.
 func (m *Manifest) Check() error {
 	m.ID = strings.ToLower(strings.TrimSpace(m.ID))
 	if !idRe.MatchString(m.ID) {
@@ -190,7 +176,6 @@ func checkTool(t *ToolSpec) error {
 	return nil
 }
 
-// cleanSchema checks a tool's JSON schema: an object, not too large.
 func cleanSchema(s map[string]any) (map[string]any, error) {
 	if s == nil {
 		return map[string]any{"type": "object", "properties": map[string]any{}}, nil
@@ -213,7 +198,6 @@ func cleanSchema(s map[string]any) (map[string]any, error) {
 	return s, nil
 }
 
-// requiredOf names a schema's required parameters.
 func requiredOf(s map[string]any) []string {
 	var out []string
 	if list, ok := s["required"].([]any); ok {
@@ -229,7 +213,6 @@ func requiredOf(s map[string]any) []string {
 	return out
 }
 
-// reservedEnv names variables a plugin may not set: the machine's own.
 func reservedEnv(k string) bool {
 	switch k {
 	case "PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM", "NODE_PATH", "NODE_OPTIONS", "LD_PRELOAD", "LD_LIBRARY_PATH",
@@ -247,7 +230,6 @@ func oneLine(s string, n int) string {
 	return s
 }
 
-// runtimeOf is how an entry file is run.
 func runtimeOf(entry string) string {
 	switch strings.ToLower(path.Ext(entry)) {
 	case ".py":
@@ -260,12 +242,8 @@ func runtimeOf(entry string) string {
 	return runtimeBinary
 }
 
-// defaultEntries are the programs a folder is looked into for, in order.
 var defaultEntries = []string{"run.py", "run.sh", "run.js", "run"}
 
-// pythonBoot runs a plugin's run.py with its own folder and packages first
-// on sys.path and never the current folder (the user's workspace): a file
-// a user drops there cannot stand in for a module the plugin imports.
 const pythonBoot = `import runpy, sys
 entry = sys.argv[1]
 sys.argv = sys.argv[1:]
@@ -274,19 +252,6 @@ sys.path[:] = [root, root + "/.deps"] + [p for p in sys.path if p not in ("", ".
 runpy.run_path(entry, run_name="__main__")
 `
 
-// ManifestForScript makes the manifest of a single script (run.py, run.sh
-// or run.js) from the comments at its top:
-//
-//	# plugin: crypto-depth
-//	# tool: get_crypto_depth
-//	# description: The order book of a crypto pair
-//	# param: symbol string required The pair, e.g. BTCUSDT
-//	# param: limit integer How many orders (default 20)
-//	# net: true
-//	# timeout: 30
-//
-// Without them, the file's name is the plugin's and the tool's, and the
-// tool takes one text argument, "input".
 func ManifestForScript(fileName string, code []byte) (*Manifest, error) {
 	base := strings.ToLower(path.Base(strings.ReplaceAll(fileName, "\\", "/")))
 	ext := path.Ext(base)
@@ -382,7 +347,6 @@ func ManifestForScript(fileName string, code []byte) (*Manifest, error) {
 	return m, m.Check()
 }
 
-// slug makes an id of a name: lowercase letters, digits and -.
 func slug(s string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(strings.TrimSpace(s)) {

@@ -18,8 +18,6 @@ type ResearchSource struct {
 	Content string `json:"content"`
 }
 
-// RunDeepResearch plans queries, reads the top pages in parallel and has the
-// LLM write a cited report, which is also saved to the session workspace.
 func (r *Registry) RunDeepResearch(ctx context.Context, sessionID, topic string, breadth int) (string, error) {
 	breadth = min(max(breadth, 1), 5)
 	if r.LLM == nil {
@@ -27,7 +25,6 @@ func (r *Registry) RunDeepResearch(ctx context.Context, sessionID, topic string,
 	}
 	planned := r.planQueries(ctx, topic, breadth)
 
-	// Search + fetch with bounded parallelism.
 	var (
 		mu      sync.Mutex
 		sources []ResearchSource
@@ -116,7 +113,6 @@ Requirements:
 	return fmt.Sprintf("### [Deep Research Completed — %d sources analyzed]\n%s\n\n%s", len(sources), saved, report), nil
 }
 
-// planQueries asks the LLM for search angles and falls back to fixed ones.
 func (r *Registry) planQueries(ctx context.Context, topic string, breadth int) []string {
 	prompt := fmt.Sprintf(`You are a research planner. For the topic %q write exactly %d distinct, high-signal web search queries (mix English and Persian when useful) that together cover the topic from different angles.
 Reply with ONLY a JSON array of strings, e.g. ["query 1", "query 2"].`, topic, breadth)

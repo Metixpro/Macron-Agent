@@ -10,9 +10,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// In privacy mode a group where the bot is not an admin never sends it
-// «مکرون …»: when a message does reach it there (a mention), the group's
-// admins hear how to fix that, once in a while, and so do the owners.
 func TestGroupWhereTheBotSeesOnlyMentions(t *testing.T) {
 	h := newHarness(t)
 	h.bot.readsAll.Store(false)
@@ -47,7 +44,6 @@ func TestGroupWhereTheBotSeesOnlyMentions(t *testing.T) {
 		t.Error("once in a while, not on every message")
 	}
 
-	// A group where the bot is an admin sees everything: nothing to say.
 	admin := group(40, "@WazeBot سلام")
 	admin.Chat.ID = -100600
 	h.tg.mu.Lock()
@@ -60,7 +56,6 @@ func TestGroupWhereTheBotSeesOnlyMentions(t *testing.T) {
 		t.Error("an admin bot sees all")
 	}
 
-	// Added to a group as a member: the hello says it from the start.
 	_ = h.st.SetSetting(bg, store.SettingGroupApproval, "false")
 	chat := telegram.Chat{ID: -100700, Type: "supergroup", Title: "گروه تازه"}
 	h.tg.reset()
@@ -70,7 +65,6 @@ func TestGroupWhereTheBotSeesOnlyMentions(t *testing.T) {
 		t.Errorf("the hello tells them: %v", h.tg.texts())
 	}
 
-	// The personal admin panel has no group/privacy instructions.
 	h.tg.reset()
 	h.send(private(ownerID, "/admin"))
 	h.noText("حالت Privacy روشنه")

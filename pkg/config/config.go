@@ -1,8 +1,3 @@
-// Package config loads settings from flags and environment variables.
-//
-// Secrets (LLM key, Telegram token, server token) should come from the
-// environment or a .env file — values passed as flags are visible to every
-// user of the machine through `ps`.
 package config
 
 import (
@@ -16,10 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	_ "time/tzdata" // time zones even on minimal servers
+	_ "time/tzdata"
 )
 
-// Environment variable names.
 const (
 	EnvAPIURL        = "WAZE_API_URL"
 	EnvAPIKey        = "WAZE_API_KEY"
@@ -35,49 +29,37 @@ const (
 	EnvSecretKey     = "WAZE_SECRET_KEY"
 	EnvTimezone      = "WAZE_TIMEZONE"
 	EnvCookiesDir    = "WAZE_COOKIES_DIR"
-	EnvTregToken     = "WAZE_TREG_TOKEN"     // treg.to token: web search goes there first
-	EnvReaderURL     = "WAZE_READER_URL"     // reader service for pages that block bots (default r.jina.ai; "off" disables it)
-	EnvReaderKey     = "WAZE_READER_KEY"     // its API key (optional; a Jina key raises its rate limit)
-	EnvImageAPI      = "WAZE_IMAGE_API_URL"  // AI image engine of generate_image (default: the txt2img service; "off" = the fallbacks only)
-	EnvImageKey      = "WAZE_IMAGE_API_KEY"  // its api_key (the bot's admin panel can set it too)
-	EnvImageEditURL  = "WAZE_IMAGE_EDIT_URL" // the Nano Banana task service of edit_image ("off" disables editing)
-	EnvImageEditKey  = "WAZE_IMAGE_EDIT_KEY" // its X-API-Key (the bot's admin panel can set it too)
-	EnvMusicURL      = "WAZE_MUSIC_API_URL"  // the song service of generate_song ("off" disables songs)
-	EnvMusicKey      = "WAZE_MUSIC_API_KEY"  // its X-API-Key (the bot's admin panel can set it too)
-	EnvPiperModel    = "WAZE_PIPER_MODEL"    // the local Persian voice of text_to_speech (a Piper .onnx; "off" = Edge TTS only)
-	EnvContextWindow = "WAZE_CONTEXT_WINDOW" // the model's context window in tokens (default: guessed from the model's name)
-	EnvSkillsDir     = "WAZE_SKILLS_DIR"     // procedural skills on disk (default /etc/waze/skills, else ./skills)
-	EnvSkillsWrite   = "WAZE_SKILLS_WRITE"   // the REST API may save skills
-	EnvPluginsDir    = "WAZE_PLUGINS_DIR"    // the admins' plugins, one folder each (default /etc/waze/plugins, else beside the workspaces)
-	EnvMCPConfig     = "WAZE_MCP_CONFIG"     // MCP servers in mcp_servers.json form (default /etc/waze/mcp_servers.json)
-	EnvTelegramAPI   = "WAZE_TELEGRAM_API"   // a local Bot API server (or a proxy of api.telegram.org)
-	EnvTelegramLocal = "WAZE_TELEGRAM_LOCAL" // 1: that server runs with --local (files up to 2000 MB); 0: it does not; unset: guessed
+	EnvTregToken     = "WAZE_TREG_TOKEN"
+	EnvReaderURL     = "WAZE_READER_URL"
+	EnvReaderKey     = "WAZE_READER_KEY"
+	EnvImageAPI      = "WAZE_IMAGE_API_URL"
+	EnvImageKey      = "WAZE_IMAGE_API_KEY"
+	EnvImageEditURL  = "WAZE_IMAGE_EDIT_URL"
+	EnvImageEditKey  = "WAZE_IMAGE_EDIT_KEY"
+	EnvMusicURL      = "WAZE_MUSIC_API_URL"
+	EnvMusicKey      = "WAZE_MUSIC_API_KEY"
+	EnvPiperModel    = "WAZE_PIPER_MODEL"
+	EnvContextWindow = "WAZE_CONTEXT_WINDOW"
+	EnvSkillsDir     = "WAZE_SKILLS_DIR"
+	EnvSkillsWrite   = "WAZE_SKILLS_WRITE"
+	EnvPluginsDir    = "WAZE_PLUGINS_DIR"
+	EnvMCPConfig     = "WAZE_MCP_CONFIG"
+	EnvTelegramAPI   = "WAZE_TELEGRAM_API"
+	EnvTelegramLocal = "WAZE_TELEGRAM_LOCAL"
 )
 
 const DefaultModel = "claude-sonnet-5"
 
-// DefaultImageAPI is the txt2img service: generate_image's first engine (76
-// styles, ten picture shapes). Without its key the fallbacks make the picture.
 const DefaultImageAPI = "https://nanobanana.irjh.top/api/txt2img/v1/index.php"
 
-// DefaultImageEditAPI is the Nano Banana task service: edit_image, and
-// generate_image's second engine.
 const DefaultImageEditAPI = "https://nanobanana.irjh.top/v2/index.php"
 
-// DefaultMusicAPI is the song service: generate_song makes songs with a
-// singer from lyrics. Without its key the tool is not offered.
 const DefaultMusicAPI = "https://nanobanana.irjh.top/music/index.php"
 
-// DefaultPiperModel is the Persian voice the installer puts on the server:
-// Mana (MahtaFetrat/Mana-Persian-Piper, a Piper medium voice trained on
-// the ManaTTS corpus; natural, 63 MB).
 const DefaultPiperModel = "/opt/piper-voices/fa_IR-mana-medium.onnx"
 
-// olderPiperModels are the voices earlier installers put there: a server
-// that has one of them and not Mana keeps its local voice.
 var olderPiperModels = []string{"/opt/piper-voices/fa_IR-mantatts-par.onnx"}
 
-// defaultPiper is Mana, or an older voice on a server that has only that.
 func defaultPiper() string {
 	for _, m := range append([]string{DefaultPiperModel}, olderPiperModels...) {
 		if fi, err := os.Stat(m); err == nil && fi.Size() > 0 {
@@ -89,7 +71,6 @@ func defaultPiper() string {
 	return DefaultPiperModel
 }
 
-// Config is shared by the CLI, the Telegram bot and the REST server.
 type Config struct {
 	APIURL        string
 	APIKey        string
@@ -99,31 +80,28 @@ type Config struct {
 	UseEnvProxy   bool
 	GitHubToken   string
 	TregToken     string
-	ReaderURL     string // "" = off
+	ReaderURL     string
 	ReaderKey     string
-	ImageAPI      string // "" = Flux only
+	ImageAPI      string
 	ImageKey      string
-	ImageEditAPI  string // "" = no AI editing
+	ImageEditAPI  string
 	ImageEditKey  string
-	MusicAPI      string // "" = no songs
+	MusicAPI      string
 	MusicKey      string
-	PiperModel    string // the local Persian voice (Piper); "" = Edge TTS only
-	ContextWindow int    // tokens; 0 = guessed from the model's name
-	SkillsDir     string // procedural skills (SKILL.md folders), outside the workspaces
-	SkillsWrite   bool   // the REST API may save skills (the bot lets its admins, the CLI always)
-	PluginsDir    string // the admins' plugins (plugin.json folders)
-	MCPConfig     string // mcp_servers.json
-	CookiesDir    string // cookies.txt files for sites that ask for a login
+	PiperModel    string
+	ContextWindow int
+	SkillsDir     string
+	SkillsWrite   bool
+	PluginsDir    string
+	MCPConfig     string
+	CookiesDir    string
 	MaxSteps      int
-	Slots         int // commands that run at the same time (0 = 8, or twice the CPUs)
+	Slots         int
 	RunTimeout    time.Duration
-	// OptionalAPIURL lets front-ends that manage providers elsewhere (the
-	// Telegram bot keeps them in its database) start without WAZE_API_URL.
+
 	OptionalAPIURL bool
 }
 
-// LoadDotEnv reads KEY=VALUE lines from path into the process environment.
-// Variables that are already set win. A missing file is not an error.
 func LoadDotEnv(path string) error {
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -177,7 +155,6 @@ func envBool(key string) bool {
 	return b
 }
 
-// Bind registers the shared flags; defaults come from the environment.
 func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.APIURL, "api-url", envOr(EnvAPIURL, ""), "OpenAI-compatible base URL, e.g. https://host/v1 (env "+EnvAPIURL+")")
 	fs.StringVar(&c.APIKey, "api-key", os.Getenv(EnvAPIKey), "LLM API key — prefer the "+EnvAPIKey+" environment variable")
@@ -210,7 +187,7 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 		c.ImageAPI = ""
 	}
 	if strings.Contains(strings.ToLower(c.ImageAPI), "nestapi.ir") {
-		c.ImageAPI = DefaultImageAPI // the engine this variable used to name is gone
+		c.ImageAPI = DefaultImageAPI
 	}
 	c.ImageKey = strings.TrimSpace(os.Getenv(EnvImageKey))
 	c.ImageEditAPI = strings.TrimSpace(os.Getenv(EnvImageEditURL))
@@ -242,16 +219,13 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	c.SkillsWrite = envBool(EnvSkillsWrite)
 }
 
-// DefaultSkillsDir is /etc/waze/skills when it exists, else ./skills.
 func DefaultSkillsDir() string { return HomePath("skills") }
 
-// MaxAgentSteps and MaxRunMinutes bound the agent's budget per request.
 const (
 	MaxAgentSteps = 1000
 	MaxRunMinutes = 24 * 60
 )
 
-// Validate checks the configuration after fs.Parse. Warnings are advice, not errors.
 func (c *Config) Validate(fs *flag.FlagSet) (warnings []string, err error) {
 	c.APIURL = strings.TrimRight(strings.TrimSpace(c.APIURL), "/")
 	var u *url.URL
@@ -306,14 +280,12 @@ func isLocalHost(h string) bool {
 	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
 }
 
-// LoadDefaultDotEnv loads $MACRON_ENV_FILE, or config.env in the home folder.
 func LoadDefaultDotEnv() error {
 	err := LoadDotEnv(EnvFilePath())
 	AliasEnv()
 	return err
 }
 
-// ParseIDs reads a list of Telegram ids separated by commas, spaces or semicolons.
 func ParseIDs(s string) (map[int64]bool, error) {
 	out := map[int64]bool{}
 	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == ';' || r == '\n' }) {
@@ -326,7 +298,6 @@ func ParseIDs(s string) (map[int64]bool, error) {
 	return out, nil
 }
 
-// Location loads WAZE_TIMEZONE (default Asia/Tehran).
 func Location() (*time.Location, error) {
 	name := envOr(EnvTimezone, "Asia/Tehran")
 	loc, err := time.LoadLocation(name)

@@ -15,17 +15,6 @@ import (
 	"time"
 )
 
-// OpenAI's Responses API (POST /responses), which some gateways offer
-// instead of (or beside) chat completions. Requests and answers keep the
-// package's chat-shaped types: system messages become `instructions`, a
-// tool call a function_call item, a tool's result a function_call_output
-// item. Streaming reads the response.* server-sent events. A gateway that
-// answers a /responses request in the chat-completions shape is read too.
-
-// CleanBaseURL takes an address as people paste it, often a whole endpoint
-// (".../v1/responses", ".../v1/chat/completions", ".../v1/messages"), and
-// returns the base URL the client wants and the wire format the endpoint
-// names ("" when it names none).
 func CleanBaseURL(raw string) (base, api string) {
 	base = strings.TrimSpace(raw)
 	u, err := url.Parse(base)
@@ -47,7 +36,6 @@ func CleanBaseURL(raw string) (base, api string) {
 	return base, ""
 }
 
-// responsesBody is the request body of the Responses API.
 func (c *Client) responsesBody(req Request) map[string]any {
 	var (
 		instructions []string
@@ -71,7 +59,7 @@ func (c *Client) responsesBody(req Request) map[string]any {
 				}
 				continue
 			}
-			input = append(input, responsesUser(Message{Role: "user", Content: m.Text()})) // a note in the middle of the conversation
+			input = append(input, responsesUser(Message{Role: "user", Content: m.Text()}))
 		case "assistant":
 			leading = false
 			if t := m.Text(); strings.TrimSpace(t) != "" {
@@ -111,7 +99,7 @@ func (c *Client) responsesBody(req Request) map[string]any {
 			if schema == nil {
 				schema = map[string]any{"type": "object", "properties": map[string]any{}}
 			}
-			// strict is on by default in this API and wants every property required.
+
 			tools = append(tools, map[string]any{"type": "function", "name": t.Function.Name, "description": t.Function.Description,
 				"parameters": schema, "strict": false})
 		}
@@ -127,14 +115,13 @@ func (c *Client) responsesBody(req Request) map[string]any {
 		body["reasoning"] = map[string]any{"effort": e}
 	}
 	if !c.noStore.Load() {
-		body["store"] = false // the conversation is the bot's to keep, not the provider's
+		body["store"] = false
 	}
-	// Said either way: some gateways (kie.ai) stream unless told not to.
+
 	body["stream"] = req.OnDelta != nil
 	return body
 }
 
-// responsesUser is a user message as an input item.
 func responsesUser(m Message) map[string]any {
 	if len(m.Parts) == 0 {
 		return map[string]any{"role": "user", "content": []map[string]any{{"type": "input_text", "text": nonEmpty(m.Content)}}}
@@ -161,8 +148,6 @@ func nonEmpty(s string) string {
 	return s
 }
 
-// learnResponses reads a refusal of a parameter this API's gateways dislike;
-// it reports whether the request should go again without it.
 func (c *Client) learnResponses(body string) bool {
 	b := strings.ToLower(body)
 	switch {
@@ -201,7 +186,6 @@ type responsesError struct {
 	Type    string `json:"type"`
 }
 
-// api maps an error of the API to the status the failover and retry rules read.
 func (e responsesError) api() *APIError {
 	status := http.StatusBadGateway
 	switch low := strings.ToLower(e.Code + " " + e.Type); {
@@ -222,7 +206,6 @@ func (e responsesError) api() *APIError {
 	return &APIError{Status: status, Body: strings.Trim(body, ": ")}
 }
 
-// responsesItem is an output item of a response.
 type responsesItem struct {
 	Type      string `json:"type"`
 	ID        string `json:"id"`
@@ -250,14 +233,13 @@ type responsesResult struct {
 	} `json:"incomplete_details"`
 }
 
-// finish maps the end of a response to the finish reasons the agent reads.
 func (r responsesResult) finish(hasCalls bool) string {
 	if r.IncompleteDetails != nil {
 		switch r.IncompleteDetails.Reason {
 		case "content_filter":
 			return "content_filter"
 		default:
-			return "length" // max_output_tokens or the like: cut off
+			return "length"
 		}
 	}
 	if hasCalls {
@@ -266,7 +248,6 @@ func (r responsesResult) finish(hasCalls bool) string {
 	return "stop"
 }
 
-// message puts the output items into a message: its text, its reasoning and its tool calls.
 func (r responsesResult) message() Message {
 	msg := Message{Role: "assistant"}
 	var text, thought strings.Builder
@@ -308,11 +289,8 @@ func orEmptyObject(args string) string {
 	return args
 }
 
-// readResponses reads an answer of the Responses API, streamed or whole.
 func readResponses(resp *http.Response, onDelta func(string), idle time.Duration) (*Response, time.Duration, error) {
-	// kie.ai's gateway (a Codex upstream) answers with server-sent events even to a
-	// request that did not ask for a stream, so a stream is read whenever one
-	// comes, with or without a callback for its text.
+
 	if mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mt == "text/event-stream" {
 		body := newIdleBody(resp.Body, idle)
 		defer body.Close()
@@ -323,7 +301,7 @@ func readResponses(resp *http.Response, onDelta func(string), idle time.Duration
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: read response body: %w", errTransport, err)
 	}
-	if t := bytes.TrimSpace(data); bytes.HasPrefix(t, []byte("event:")) || bytes.HasPrefix(t, []byte("data:")) { // a stream under another content type
+	if t := bytes.TrimSpace(data); bytes.HasPrefix(t, []byte("event:")) || bytes.HasPrefix(t, []byte("data:")) {
 		out, err := readResponsesStream(bytes.NewReader(data), onDelta)
 		return out, 0, err
 	}
@@ -346,7 +324,7 @@ func readResponses(resp *http.Response, onDelta func(string), idle time.Duration
 	if raw.Status == "failed" || raw.Status == "cancelled" {
 		return nil, 0, &APIError{Status: http.StatusBadGateway, Body: "the response " + raw.Status}
 	}
-	if len(raw.Output) == 0 && len(raw.Choices) > 0 { // a gateway that answers in the chat-completions shape
+	if len(raw.Output) == 0 && len(raw.Choices) > 0 {
 		var cc ChatResponse
 		if json.Unmarshal(data, &cc) == nil && len(cc.Choices) > 0 {
 			r := &Response{Message: cc.Choices[0].Message, Usage: cc.Usage, Model: cc.Model, FinishReason: cc.Choices[0].FinishReason}
@@ -370,7 +348,6 @@ func readResponses(resp *http.Response, onDelta func(string), idle time.Duration
 	return r, 0, nil
 }
 
-// readResponsesStream assembles a streamed answer from the response.* events.
 func readResponsesStream(body io.Reader, onDelta func(string)) (*Response, error) {
 	type event struct {
 		Type        string          `json:"type"`
@@ -437,12 +414,12 @@ func readResponsesStream(body io.Reader, onDelta func(string)) (*Response, error
 		}
 		var ev event
 		if json.Unmarshal([]byte(data), &ev) != nil {
-			continue // keep-alive comments and vendor extensions
+			continue
 		}
 		gotData = true
 		typ := ev.Type
 		if typ == "" {
-			typ = name // some gateways name the event only on its event: line
+			typ = name
 		}
 		switch typ {
 		case "error", "response.failed":
@@ -515,7 +492,7 @@ func readResponsesStream(body io.Reader, onDelta func(string)) (*Response, error
 		if final.Usage != nil {
 			out.Usage = final.Usage.usage()
 		}
-		if text.Len() == 0 && len(calls) == 0 { // a gateway that streams only the end
+		if text.Len() == 0 && len(calls) == 0 {
 			m := final.message()
 			text.WriteString(m.Content)
 			thought.WriteString(m.ReasoningContent)

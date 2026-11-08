@@ -11,15 +11,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// Splitting cuts a video (or a long audio) into parts that each fit
-// Telegram, copying the streams: no quality is lost and it takes seconds,
-// where re-encoding a long video would take minutes and blur it.
-
 const (
 	ToolSplitVideo = "split_video"
 
 	splitMaxParts  = 20
-	splitLongVideo = 10 * 60 // seconds: longer videos are split, not re-encoded
+	splitLongVideo = 10 * 60
 )
 
 func (r *Registry) registerSplitTool() {
@@ -60,7 +56,6 @@ func (r *Registry) splitVideo(ctx context.Context, sessionID string, args map[st
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// mediaLength reads a file's length in seconds with ffprobe.
 func (r *Registry) mediaLength(ctx context.Context, sessionID, name string) float64 {
 	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Args: []string{"ffprobe", "-v", "error", "-show_entries", "format=duration",
 		"-of", "csv=p=0", "./" + name}, Timeout: 30 * time.Second})
@@ -68,8 +63,6 @@ func (r *Registry) mediaLength(ctx context.Context, sessionID, name string) floa
 	return dur
 }
 
-// splitMedia cuts f into parts of at most limit bytes (or of every seconds),
-// cutting at keyframes. Parts that come out too big are cut again shorter.
 func (r *Registry) splitMedia(ctx context.Context, sessionID string, f dlFile, limit int64, every float64) ([]dlFile, error) {
 	dur := f.duration
 	if dur <= 0 {
@@ -91,7 +84,7 @@ func (r *Registry) splitMedia(ctx context.Context, sessionID string, f dlFile, l
 	pattern := strings.ReplaceAll(stem, "%", "%%") + " - part %02d" + ext
 	partName := func(i int) string { return fmt.Sprintf("%s - part %02d%s", stem, i, ext) }
 	for try := 0; try < 3 && ctx.Err() == nil; try++ {
-		// Parts of an earlier split would be counted as this one's.
+
 		for i := 1; i <= splitMaxParts+1; i++ {
 			_ = r.Machine.Remove(sessionID, partName(i))
 		}
@@ -134,7 +127,7 @@ func (r *Registry) splitMedia(ctx context.Context, sessionID string, f dlFile, l
 		if every > 0 {
 			return nil, fmt.Errorf("parts of %s are larger than %s; ask for shorter parts", clock(every), limitText())
 		}
-		seg *= 0.7 // keyframes are far apart: cut shorter
+		seg *= 0.7
 	}
 	return nil, fmt.Errorf("could not make parts under %s", humanSize(limit))
 }

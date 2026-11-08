@@ -10,11 +10,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// After a code file is written, edited or patched, a quick syntax check of
-// it, as an editor shows: the model learns of a broken file at once, not
-// when it runs it. Only checkers whose program is here are used,
-// and none runs the file's code.
-
 type syntaxChecker struct {
 	program, label string
 	argv           func(file string) []string
@@ -42,8 +37,6 @@ func pyCheck(code string) func(string) []string {
 	return func(f string) []string { return []string{"python3", "-I", "-c", code, f} }
 }
 
-// syntaxNote checks a file's syntax: "" when no checker applies, else a
-// line to add to the tool's result.
 func (r *Registry) syntaxNote(ctx context.Context, sessionID, name string) string {
 	c, ok := syntaxCheckers[strings.ToLower(path.Ext(name))]
 	if !ok || !r.syntax[c.program] {
@@ -54,7 +47,7 @@ func (r *Registry) syntaxNote(ctx context.Context, sessionID, name string) strin
 		return "\n✓ syntax ok (" + c.label + ")"
 	}
 	if res.ExitCode < 0 || res.ExitCode == 124 {
-		return "" // could not check: say nothing rather than something wrong
+		return ""
 	}
 	lines := strings.Split(strings.TrimSpace(res.Stdout), "\n")
 	if len(lines) > 8 {
@@ -63,16 +56,12 @@ func (r *Registry) syntaxNote(ctx context.Context, sessionID, name string) strin
 	return "\n⚠ syntax error (" + c.label + "):\n" + strings.Join(lines, "\n")
 }
 
-// Syntax verdicts of CheckSyntax.
 const (
-	SyntaxUnknown = 0  // no checker for the file, or it could not run
-	SyntaxOK      = 1  // it parses
-	SyntaxBroken  = -1 // it does not; note says where
+	SyntaxUnknown = 0
+	SyntaxOK      = 1
+	SyntaxBroken  = -1
 )
 
-// CheckSyntax checks content named name (its extension picks the checker)
-// before it is written anywhere: a file for one of the user's servers is
-// checked here, here, so a broken edit never reaches the server.
 func (r *Registry) CheckSyntax(ctx context.Context, sessionID, name string, content []byte) (int, string) {
 	ext := strings.ToLower(path.Ext(name))
 	c, ok := syntaxCheckers[ext]
@@ -80,7 +69,7 @@ func (r *Registry) CheckSyntax(ctx context.Context, sessionID, name string, cont
 		return SyntaxUnknown, ""
 	}
 	r.syntaxOnce.Do(func() {
-		if r.syntax == nil { // the dev tools were not set up (not registered yet): look for the checkers now
+		if r.syntax == nil {
 			r.syntax = r.Machine.Available("python3", "bash", "node", "php", "ruby", "gofmt")
 		}
 	})
@@ -99,7 +88,7 @@ func (r *Registry) CheckSyntax(ctx context.Context, sessionID, name string, cont
 	case res.ExitCode < 0 || res.ExitCode == 124:
 		return SyntaxUnknown, ""
 	}
-	out := strings.ReplaceAll(strings.TrimSpace(res.Stdout), tmp, name) // the error names the real file
+	out := strings.ReplaceAll(strings.TrimSpace(res.Stdout), tmp, name)
 	lines := strings.Split(out, "\n")
 	if len(lines) > 8 {
 		lines = lines[len(lines)-8:]

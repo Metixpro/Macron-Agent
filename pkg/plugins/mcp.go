@@ -21,22 +21,15 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// An MCP client (Model Context Protocol, JSON-RPC 2.0): over stdio with a
-// program the machine runs (npx, uvx, python…), over Streamable HTTP, or
-// over the older HTTP+SSE. It initializes, lists the server's tools and
-// calls them; a server's own requests are answered (ping) or refused.
-
 const (
 	mcpProtocol     = "2025-06-18"
-	maxMCPMessage   = 16 << 20 // one JSON-RPC message
-	maxMCPTools     = 64       // tools taken from one server
-	maxMCPPages     = 10       // pages of tools/list
+	maxMCPMessage   = 16 << 20
+	maxMCPTools     = 64
+	maxMCPPages     = 10
 	mcpStartTimeout = 3 * time.Minute
 	mcpCallTimeout  = 2 * time.Minute
 )
 
-// ServerConfig is an MCP server: a program (Command, Args, Env) or an
-// address (URL, Headers), as in Claude's mcp_servers.json.
 type ServerConfig struct {
 	ID      string            `json:"id"`
 	Name    string            `json:"name,omitempty"`
@@ -45,17 +38,15 @@ type ServerConfig struct {
 	Env     map[string]string `json:"env,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
-	// Transport forces "sse" (HTTP+SSE) or "http" (Streamable HTTP) for a
-	// URL; empty: from the address (…/sse is SSE).
+
 	Transport string `json:"transport,omitempty"`
 	Enabled   *bool  `json:"enabled,omitempty"`
 	Access    string `json:"access,omitempty"`
-	// TimeoutSeconds bounds one tool call (default 120).
+
 	TimeoutSeconds int   `json:"timeout_seconds,omitempty"`
 	RequiresNet    *bool `json:"requires_net,omitempty"`
 }
 
-// Check validates a server's configuration.
 func (c *ServerConfig) Check() error {
 	c.ID = strings.ToLower(strings.TrimSpace(c.ID))
 	if !idRe.MatchString(c.ID) {
@@ -79,7 +70,7 @@ func (c *ServerConfig) Check() error {
 	}
 	switch c.Access {
 	case "":
-		c.Access = AccessAdmins // a server often holds someone's token: admins only unless said otherwise
+		c.Access = AccessAdmins
 	case AccessEveryone, AccessAdmins:
 	default:
 		return fmt.Errorf("access must be %q or %q", AccessEveryone, AccessAdmins)
@@ -102,8 +93,6 @@ func (c *ServerConfig) callTimeout() time.Duration {
 	return mcpCallTimeout
 }
 
-// ParseServers reads servers from mcp_servers.json ({"mcpServers": {...}}),
-// a bare map of servers, or one server ({"command": …} or {"url": …}).
 func ParseServers(data []byte) ([]ServerConfig, error) {
 	data = bytes.TrimSpace(bytes.TrimPrefix(data, []byte("\ufeff")))
 	var top map[string]json.RawMessage
@@ -145,8 +134,6 @@ func ParseServers(data []byte) ([]ServerConfig, error) {
 	return out, nil
 }
 
-// ParseServerLine reads one server from what an admin types: a command
-// line ("npx -y @modelcontextprotocol/server-github"), an address, or JSON.
 func ParseServerLine(text string) ([]ServerConfig, error) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "{") {
@@ -171,7 +158,6 @@ func ParseServerLine(text string) ([]ServerConfig, error) {
 	return []ServerConfig{c}, c.Check()
 }
 
-// serverID names a server after its package or host.
 func serverID(c ServerConfig) string {
 	if c.URL != "" {
 		if u, err := url.Parse(c.URL); err == nil {
@@ -193,7 +179,6 @@ func serverID(c ServerConfig) string {
 	return slug(strings.TrimSuffix(strings.TrimPrefix(name, "mcp-"), "-mcp"))
 }
 
-// splitCommand splits a command line by spaces, keeping quoted parts.
 func splitCommand(s string) ([]string, error) {
 	var out []string
 	var cur strings.Builder
@@ -225,8 +210,6 @@ func splitCommand(s string) ([]string, error) {
 	return out, nil
 }
 
-// ---------------------------------------------------------------- JSON-RPC
-
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -248,7 +231,6 @@ type rpcReply struct {
 	err    error
 }
 
-// transport carries JSON-RPC messages to and from a server.
 type transport interface {
 	request(ctx context.Context, method string, params any) (json.RawMessage, error)
 	notify(ctx context.Context, method string, params any) error
@@ -256,7 +238,6 @@ type transport interface {
 	close()
 }
 
-// waiters matches replies to requests by id.
 type waiters struct {
 	mu      sync.Mutex
 	next    atomic.Int64
@@ -334,7 +315,6 @@ func encodeRequest(id, method string, params any) ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// answerServer is the reply to a request the server sends us.
 func answerServer(m rpcMessage) []byte {
 	reply := map[string]any{"jsonrpc": "2.0", "id": m.ID}
 	if m.Method == "ping" {
@@ -345,8 +325,6 @@ func answerServer(m rpcMessage) []byte {
 	data, _ := json.Marshal(reply)
 	return data
 }
-
-// ---------------------------------------------------------------- stdio
 
 type stdioConn struct {
 	p  *machine.Process
@@ -370,7 +348,7 @@ func (c *stdioConn) read() {
 	for sc.Scan() {
 		line := bytes.TrimSpace(sc.Bytes())
 		if len(line) == 0 || line[0] != '{' {
-			continue // a server that logs to stdout: not a message
+			continue
 		}
 		var m rpcMessage
 		if json.Unmarshal(line, &m) != nil {
@@ -379,7 +357,7 @@ func (c *stdioConn) read() {
 		switch {
 		case m.Method != "" && len(m.ID) > 0:
 			c.write(answerServer(m))
-		case m.Method != "": // a notification
+		case m.Method != "":
 		case len(m.ID) > 0:
 			c.w.deliver(m)
 		}
@@ -435,14 +413,12 @@ func (c *stdioConn) alive() bool {
 
 func (c *stdioConn) close() { c.p.Close() }
 
-// ---------------------------------------------------------------- Streamable HTTP
-
 type httpConn struct {
 	url     string
 	headers map[string]string
 	client  *http.Client
-	session atomic.Value // string: Mcp-Session-Id
-	proto   atomic.Value // string: the protocol version agreed
+	session atomic.Value
+	proto   atomic.Value
 	next    atomic.Int64
 	gone    atomic.Bool
 }
@@ -482,7 +458,7 @@ func (c *httpConn) request(ctx context.Context, method string, params any) (json
 		c.session.Store(s)
 	}
 	if resp.StatusCode == http.StatusNotFound && c.session.Load() != nil {
-		c.gone.Store(true) // the session ended: the next call connects again
+		c.gone.Store(true)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
@@ -587,7 +563,6 @@ func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("HTTP %d", e.status)
 }
 
-// readSSE reads server-sent events until each returns false or the stream ends.
 func readSSE(r io.Reader, each func(event, data string) bool) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), maxMCPMessage)
@@ -618,8 +593,6 @@ func readSSE(r io.Reader, each func(event, data string) bool) error {
 	}
 	return sc.Err()
 }
-
-// ---------------------------------------------------------------- HTTP+SSE (older servers)
 
 type sseConn struct {
 	endpoint string
@@ -776,16 +749,12 @@ func (c *sseConn) alive() bool {
 
 func (c *sseConn) close() { _ = c.body.Close() }
 
-// ---------------------------------------------------------------- the session
-
-// mcpTool is a tool a server lists.
 type mcpTool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-// handshake initializes a session and lists the server's tools.
 func handshake(ctx context.Context, t transport, version string) ([]mcpTool, string, error) {
 	res, err := t.request(ctx, "initialize", map[string]any{
 		"protocolVersion": mcpProtocol,
@@ -840,8 +809,6 @@ func handshake(ctx context.Context, t transport, version string) ([]mcpTool, str
 	return tools, name, nil
 }
 
-// callResult turns a tools/call result into text for the model; pictures
-// are saved with save and named.
 func callResult(raw json.RawMessage, save func(ext string, data []byte) (string, error)) string {
 	var res struct {
 		Content []struct {

@@ -8,28 +8,21 @@ import (
 	"time"
 )
 
-// Lessons are what the bot drew from its own jobs (a step failed, another
-// way worked): general rules, without anything about the user. They wait
-// for an admin; only approved ones reach the agent, as skills. The same
-// lesson again (the same key) counts up instead of making another.
-
-// Lesson statuses.
 const (
 	LessonPending  = "pending"
 	LessonApproved = "approved"
 	LessonRejected = "rejected"
 )
 
-// Lesson is one lesson.
 type Lesson struct {
 	ID        int64
-	Key       string // category/short-problem-name: the same lesson has the same key
+	Key       string
 	Category  string
 	Title     string
 	Rule      string
-	Tools     string // the tools it is about, comma separated
+	Tools     string
 	Status    string
-	Seen      int // how many jobs taught it
+	Seen      int
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DecidedAt *time.Time
@@ -49,9 +42,6 @@ func scanLesson(row interface{ Scan(...any) error }) (*Lesson, error) {
 	return &x, nil
 }
 
-// AddLesson records a lesson. One with the same key counts up (and keeps
-// its status: a rejected one stays rejected, so it is never asked again).
-// fresh: it is new; status: where it stands now.
 func (s *Store) AddLesson(ctx context.Context, x Lesson) (id int64, fresh bool, status string, err error) {
 	now := s.Now()
 	var seen int64
@@ -68,7 +58,6 @@ func (s *Store) AddLesson(ctx context.Context, x Lesson) (id int64, fresh bool, 
 	return id, !existed, status, err
 }
 
-// Lesson returns one lesson.
 func (s *Store) Lesson(ctx context.Context, id int64) (*Lesson, error) {
 	x, err := scanLesson(s.db.QueryRowContext(ctx, `SELECT `+lessonColumns+` FROM lessons WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -77,7 +66,6 @@ func (s *Store) Lesson(ctx context.Context, id int64) (*Lesson, error) {
 	return x, err
 }
 
-// Lessons lists the lessons in a status, the most taught first ("" = all).
 func (s *Store) Lessons(ctx context.Context, status, category string, limit int) ([]Lesson, error) {
 	q, args := `SELECT `+lessonColumns+` FROM lessons WHERE 1 = 1`, []any{}
 	if status != "" {
@@ -106,8 +94,6 @@ func (s *Store) Lessons(ctx context.Context, status, category string, limit int)
 	return out, rows.Err()
 }
 
-// LessonKeys are the keys of the lessons (of a category; "" = all) that
-// are not rejected, so the same lesson is told under the same key.
 func (s *Store) LessonKeys(ctx context.Context, category string, limit int) (map[string]string, error) {
 	q, args := `SELECT lesson_key, title FROM lessons WHERE status <> 'rejected'`, []any{}
 	if category != "" {
@@ -130,7 +116,6 @@ func (s *Store) LessonKeys(ctx context.Context, category string, limit int) (map
 	return out, rows.Err()
 }
 
-// DecideLesson approves or rejects a lesson (or puts it back to pending).
 func (s *Store) DecideLesson(ctx context.Context, id int64, status string) error {
 	var decided any
 	if status != LessonPending {
@@ -140,14 +125,12 @@ func (s *Store) DecideLesson(ctx context.Context, id int64, status string) error
 	return err
 }
 
-// EditLesson replaces a lesson's text (an admin's edit).
 func (s *Store) EditLesson(ctx context.Context, id int64, title, rule string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE lessons SET title = ?, rule = ?, updated_at = ? WHERE id = ?`,
 		truncate(title, 200), truncate(rule, 4000), s.Now(), id)
 	return err
 }
 
-// LessonCounts counts the lessons by status.
 func (s *Store) LessonCounts(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT status, COUNT(*) FROM lessons GROUP BY status`)
 	if err != nil {
@@ -166,7 +149,6 @@ func (s *Store) LessonCounts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// MoveLesson puts a lesson in another category; its key follows.
 func (s *Store) MoveLesson(ctx context.Context, id int64, category string) error {
 	x, err := s.Lesson(ctx, id)
 	if err != nil {
@@ -178,16 +160,12 @@ func (s *Store) MoveLesson(ctx context.Context, id int64, category string) error
 	return err
 }
 
-// LessonLog actions.
 const (
-	LessonAdopted  = "adopt"  // a lesson went into its skill
-	LessonReverted = "undo"   // it was taken back, the skill as it was before
-	LessonReviewed = "review" // the background review merged or flagged
+	LessonAdopted  = "adopt"
+	LessonReverted = "undo"
+	LessonReviewed = "review"
 )
 
-// LessonLog is one thing learning did to the skills. Before and After are
-// the skill as it was and as it became (JSON of its description and body;
-// "" when there was none), so taking a lesson back restores it exactly.
 type LessonLog struct {
 	ID        int64
 	LessonID  int64
@@ -208,7 +186,6 @@ func scanLessonLog(row interface{ Scan(...any) error }) (*LessonLog, error) {
 	return &x, err
 }
 
-// AddLessonLog records what learning did.
 func (s *Store) AddLessonLog(ctx context.Context, x LessonLog) (int64, error) {
 	r, err := s.db.ExecContext(ctx, `INSERT INTO lesson_log (lesson_id, category, action, title, before, after, note, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, x.LessonID, truncate(x.Category, 32), x.Action, truncate(x.Title, 200), x.Before, x.After,
@@ -219,7 +196,6 @@ func (s *Store) AddLessonLog(ctx context.Context, x LessonLog) (int64, error) {
 	return r.LastInsertId()
 }
 
-// LessonLogs are the latest things learning did, newest first ("" = every action).
 func (s *Store) LessonLogs(ctx context.Context, action string, limit int) ([]LessonLog, error) {
 	q, args := `SELECT `+lessonLogColumns+` FROM lesson_log`, []any{}
 	if action != "" {
@@ -242,7 +218,6 @@ func (s *Store) LessonLogs(ctx context.Context, action string, limit int) ([]Les
 	return out, rows.Err()
 }
 
-// LastAdoption is the latest time a lesson went into its skill (ErrNotFound: never).
 func (s *Store) LastAdoption(ctx context.Context, lessonID int64) (*LessonLog, error) {
 	x, err := scanLessonLog(s.db.QueryRowContext(ctx, `SELECT `+lessonLogColumns+` FROM lesson_log WHERE lesson_id = ? AND action = ?
 		ORDER BY id DESC LIMIT 1`, lessonID, LessonAdopted))
@@ -252,8 +227,6 @@ func (s *Store) LastAdoption(ctx context.Context, lessonID int64) (*LessonLog, e
 	return x, err
 }
 
-// MergeLesson folds a duplicate into the lesson kept: its count joins the
-// kept one, and it is rejected so it is never proposed again.
 func (s *Store) MergeLesson(ctx context.Context, keep, drop int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

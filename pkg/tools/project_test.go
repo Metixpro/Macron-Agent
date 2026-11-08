@@ -13,7 +13,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
-// fakeProject writes a small multi-language project into the workspace.
 func fakeProject(t *testing.T, r *Registry, session string) {
 	t.Helper()
 	files := map[string]string{
@@ -127,7 +126,6 @@ func TestEditFile(t *testing.T) {
 		t.Errorf("file:\n%s", got)
 	}
 
-	// All or nothing: the second edit fails, the first is not applied either.
 	before := read("proj/main.go")
 	out = call(t, r, "e", ToolEditFile, map[string]any{"filename": "proj/main.go", "edits": []any{
 		map[string]any{"old_text": "hi", "new_text": "bye"},
@@ -136,7 +134,7 @@ func TestEditFile(t *testing.T) {
 	if !strings.Contains(out, "edit 2: old_text was not found") || read("proj/main.go") != before {
 		t.Errorf("atomic: %s", out)
 	}
-	// Not unique, then replace_all.
+
 	r.Machine.WriteFile("e", "dup.txt", []byte("a = 1\nb = 1\na = 1\n"))
 	if out := call(t, r, "e", ToolEditFile, map[string]any{"filename": "dup.txt", "old_text": "a = 1", "new_text": "a = 2"}); !strings.Contains(out, "appears 2 times in dup.txt (lines 1, 3)") {
 		t.Errorf("unique: %s", out)
@@ -145,14 +143,14 @@ func TestEditFile(t *testing.T) {
 	if got := read("dup.txt"); got != "a = 2\nb = 1\na = 2\n" {
 		t.Errorf("replace_all: %q", got)
 	}
-	// A near miss points at the right line.
+
 	if out := call(t, r, "e", ToolEditFile, map[string]any{"filename": "proj/pkg/util.py", "old_text": "def get(self,key):", "new_text": "x"}); !strings.Contains(out, "not found") {
 		t.Errorf("near miss: %s", out)
 	}
 	if out := call(t, r, "e", ToolEditFile, map[string]any{"filename": "proj/pkg/util.py", "old_text": "  class Cache:\n    def put(self):", "new_text": "x"}); !strings.Contains(out, "3: class Cache:") {
 		t.Errorf("near miss hint: %s", out)
 	}
-	// Windows line ends are kept.
+
 	call(t, r, "e", ToolEditFile, map[string]any{"filename": "proj/legacy/old.txt", "old_text": "line one\nline two", "new_text": "first\nsecond"})
 	if got := read("proj/legacy/old.txt"); got != "first\r\nsecond\r\nline three\r\n" {
 		t.Errorf("crlf: %q", got)
@@ -162,8 +160,6 @@ func TestEditFile(t *testing.T) {
 	}
 }
 
-// Spaces and tabs the model got wrong do not stop an edit: the one place
-// whose lines match apart from them is edited, indented the way the file is.
 func TestEditFileForgivesWhitespace(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	read := func(name string) string {
@@ -244,7 +240,7 @@ func tgzBytes(t *testing.T, entries []tar.Header, contents map[string]string) []
 
 func TestExtractArchivesSafely(t *testing.T) {
 	r := newRegistry(t, true, nil)
-	// A zip with one top folder (flattened) and an escaping entry (skipped).
+
 	r.Machine.WriteFile("x", "site.zip", projectZip(t, map[string]string{
 		"site-main/index.html": "<h1>hi</h1>", "site-main/js/app.js": "app()", "../evil.txt": "no",
 	}))
@@ -259,7 +255,6 @@ func TestExtractArchivesSafely(t *testing.T) {
 		t.Error("zip slip")
 	}
 
-	// A tar.gz with two top folders keeps them; links are skipped.
 	r.Machine.WriteFile("x", "mono.tar.gz", tgzBytes(t, []tar.Header{
 		{Name: "api/", Typeflag: tar.TypeDir}, {Name: "api/main.go", Typeflag: tar.TypeReg},
 		{Name: "web/index.ts", Typeflag: tar.TypeReg}, {Name: "web/link", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"},
@@ -302,7 +297,6 @@ func TestPackAndImport(t *testing.T) {
 		t.Errorf("zip entries: %v", names)
 	}
 
-	// Import from a direct archive link (a GitHub-style tarball with one top folder).
 	tarball := tgzBytes(t, []tar.Header{{Name: "pax_global_header", Typeflag: tar.TypeXGlobalHeader},
 		{Name: "owner-repo-abc123/", Typeflag: tar.TypeDir}, {Name: "owner-repo-abc123/go.mod", Typeflag: tar.TypeReg},
 		{Name: "owner-repo-abc123/cmd/main.go", Typeflag: tar.TypeReg}},
@@ -375,8 +369,6 @@ func TestRepositoryLinks(t *testing.T) {
 	}
 }
 
-// In the real machine: a project is tested and versioned with git, as the
-// agent is told to do.
 func TestProjectBuildAndGit(t *testing.T) {
 	r := newRegistry(t, false, nil)
 	files := map[string]string{

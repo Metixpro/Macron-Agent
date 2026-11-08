@@ -1,5 +1,3 @@
-// Package emoji swaps ordinary Unicode emoji for Telegram custom ("premium")
-// emoji in outgoing text and buttons, using an admin-maintained mapping.
 package emoji
 
 import (
@@ -14,17 +12,15 @@ import (
 )
 
 const (
-	vs16 = '️' // emoji presentation selector
-	zwj  = '‍' // zero-width joiner
+	vs16 = '️'
+	zwj  = '‍'
 )
 
-// Set is an immutable emoji → custom emoji id mapping. A nil *Set is valid and empty.
 type Set struct {
 	ids     map[string]string
-	lengths []int // distinct key lengths in bytes, longest first
+	lengths []int
 }
 
-// New builds a set. Keys are matched with and without the U+FE0F selector.
 func New(m map[string]string) *Set {
 	s := &Set{ids: map[string]string{}}
 	add := func(k, v string) {
@@ -38,7 +34,7 @@ func New(m map[string]string) *Set {
 	for k, v := range m {
 		add(k, v)
 	}
-	for k, v := range m { // variants without the selector, unless mapped explicitly
+	for k, v := range m {
 		add(strings.ReplaceAll(k, string(vs16), ""), v)
 	}
 	seen := map[int]bool{}
@@ -52,7 +48,6 @@ func New(m map[string]string) *Set {
 	return s
 }
 
-// Len is the number of mapped emoji (including selector variants).
 func (s *Set) Len() int {
 	if s == nil {
 		return 0
@@ -60,7 +55,6 @@ func (s *Set) Len() int {
 	return len(s.ids)
 }
 
-// ID returns the custom emoji id of e.
 func (s *Set) ID(e string) (string, bool) {
 	if s == nil {
 		return "", false
@@ -72,8 +66,6 @@ func (s *Set) ID(e string) (string, bool) {
 	return id, ok
 }
 
-// match finds a mapped emoji at the start of text. It returns the matched text
-// (including a trailing U+FE0F), its id, and its length in bytes.
 func (s *Set) match(text string) (string, string, int) {
 	for _, l := range s.lengths {
 		if l > len(text) {
@@ -87,7 +79,7 @@ func (s *Set) match(text string) (string, string, int) {
 		if r, size := utf8.DecodeRuneInString(text[n:]); r == vs16 {
 			n += size
 		}
-		// Do not cut a longer sequence (ZWJ family, skin tone, keycap) in half.
+
 		if r, _ := utf8.DecodeRuneInString(text[n:]); r == zwj || (r >= 0x1F3FB && r <= 0x1F3FF) || r == '⃣' {
 			continue
 		}
@@ -96,7 +88,6 @@ func (s *Set) match(text string) (string, string, int) {
 	return "", "", 0
 }
 
-// replace applies fn to every mapped emoji in plain text.
 func (s *Set) replace(text string, fn func(emoji, id string) string) string {
 	if s.Len() == 0 {
 		return text
@@ -120,14 +111,12 @@ func (s *Set) replace(text string, fn func(emoji, id string) string) string {
 	return b.String()
 }
 
-// HTML replaces emoji in Telegram HTML with <tg-emoji> tags, leaving tags,
-// code, preformatted blocks and existing custom emoji untouched.
 func (s *Set) HTML(src string) string {
 	if s.Len() == 0 {
 		return src
 	}
 	var b strings.Builder
-	skip := 0 // depth inside code/pre/tg-emoji
+	skip := 0
 	for len(src) > 0 {
 		lt := strings.IndexByte(src, '<')
 		if lt < 0 {
@@ -167,8 +156,6 @@ func (s *Set) HTML(src string) string {
 
 var mdSkipRe = regexp.MustCompile("(?s)```.*?(?:```|\\z)|~~~.*?(?:~~~|\\z)|`[^`\n]*`|!\\[[^\\]\n]*\\]\\([^)\n]*\\)|\\]\\([^)\n]*\\)|<tg-emoji[^>]*>.*?</tg-emoji>")
 
-// Markdown replaces emoji in rich Markdown with ![emoji](tg://emoji?id=…),
-// outside code, links and existing custom emoji.
 func (s *Set) Markdown(md string) string {
 	if s.Len() == 0 {
 		return md
@@ -186,8 +173,6 @@ func (s *Set) Markdown(md string) string {
 
 func mdEmoji(e, id string) string { return "![" + e + "](tg://emoji?id=" + id + ")" }
 
-// Button moves a mapped emoji at the start (or end) of a button label into the
-// button's icon. It returns the label to show and the icon id ("" if none).
 func (s *Set) Button(label string) (string, string) {
 	if s.Len() == 0 {
 		return label, ""
@@ -196,13 +181,12 @@ func (s *Set) Button(label string) (string, string) {
 	if _, id, n := s.match(t); n > 0 {
 		rest := strings.TrimSpace(t[n:])
 		if rest == "" {
-			// An emoji-only button: the icon is the emoji, and the text an
-			// invisible character, so Telegram does not draw the emoji twice.
+
 			return "\u200c", id
 		}
 		return rest, id
 	}
-	// Trailing emoji: "Settings ⚙️"
+
 	for i := len(t) - 1; i > 0; i-- {
 		if !utf8.RuneStart(t[i]) {
 			continue
@@ -220,15 +204,11 @@ func (s *Set) Button(label string) (string, string) {
 	return label, ""
 }
 
-// ---------------------------------------------------------------- admin input
-
-// Entity is a custom emoji entity of an incoming message (UTF-16 offsets).
 type Entity struct {
 	Offset, Length int
 	CustomEmojiID  string
 }
 
-// Pair is one parsed mapping.
 type Pair struct {
 	Emoji string
 	ID    string
@@ -236,12 +216,8 @@ type Pair struct {
 
 var idRe = regexp.MustCompile(`^\d{5,25}$`)
 
-// Key is how mappings compare: "❤️" and "❤" are the same emoji.
 func Key(e string) string { return strings.ReplaceAll(e, string(vs16), "") }
 
-// Dedupe keeps the first mapping of each emoji (selector variants are one
-// emoji), in the given order; the rest are extra. Different emojis may share
-// one premium emoji.
 func Dedupe(pairs []Pair) (kept, extra []Pair) {
 	emojis := map[string]bool{}
 	for _, p := range pairs {
@@ -255,17 +231,13 @@ func Dedupe(pairs []Pair) (kept, extra []Pair) {
 	return kept, extra
 }
 
-// Reject says why a new mapping was not added.
 type Reject struct {
 	Pair
-	Taken   bool   // the emoji already has a premium emoji
-	UsedFor string // the premium emoji is already used for this emoji
-	Twice   bool   // the emoji came twice in the same message (the first one counts)
+	Taken   bool
+	UsedFor string
+	Twice   bool
 }
 
-// Filter splits new mappings into the ones to add and the extra ones: an emoji
-// that already has a premium emoji, a premium emoji already used for another
-// emoji, or a line repeating an earlier one. The others are added.
 func Filter(existing map[string]string, pairs []Pair) (add []Pair, rejected []Reject) {
 	have, used := map[string]bool{}, map[string]string{}
 	for e, id := range existing {
@@ -293,17 +265,13 @@ func Filter(existing map[string]string, pairs []Pair) (add []Pair, rejected []Re
 	return add, rejected
 }
 
-// Problem is a line ParseMappings could not use.
 type Problem struct {
-	Line      string // the line, shortened
-	MissingID bool   // it starts with an emoji but has no premium emoji or id; otherwise it does not start with an emoji
+	Line      string
+	MissingID bool
 }
 
-// ParseMappings reads lines of the form "<emoji> <premium emoji or id>".
-// The premium emoji is recognised through the message's custom_emoji entities.
-// It returns the valid pairs and every line it could not use.
 func ParseMappings(text string, entities []Entity) (pairs []Pair, problems []Problem) {
-	// Map UTF-16 offsets to byte offsets.
+
 	u16ToByte := map[int]int{}
 	u16 := 0
 	for i, r := range text {
@@ -341,7 +309,7 @@ func ParseMappings(text string, entities []Entity) (pairs []Pair, problems []Pro
 			problems = append(problems, Problem{Line: truncate(trimmed, 30)})
 			continue
 		}
-		// A custom emoji entity anywhere after the first token wins.
+
 		firstEnd := lineStart + strings.Index(line, first) + len(first)
 		var id string
 		for _, sp := range spans {
@@ -362,7 +330,6 @@ func ParseMappings(text string, entities []Entity) (pairs []Pair, problems []Pro
 	return pairs, problems
 }
 
-// IsEmoji reports whether s looks like a single emoji (sequence).
 func IsEmoji(s string) bool {
 	if s == "" || utf8.RuneCountInString(s) > 12 {
 		return false
@@ -372,12 +339,12 @@ func IsEmoji(s string) bool {
 		switch {
 		case r == vs16 || r == zwj || r == '⃣' || (r >= 0x1F3FB && r <= 0x1F3FF) || (r >= 0xE0020 && r <= 0xE007F):
 		case r >= 0x1F000 || (r >= 0x2190 && r <= 0x2BFF) || (r >= 0x2300 && r <= 0x23FF) || r == 0x00A9 || r == 0x00AE || r == 0x3030 || r == 0x303D || r == 0x3297 || r == 0x3299,
-			r >= 0x203C && r <= 0x2049, r == 0x2139: // ‼️ ⁉️ and ℹ️ are punctuation and a letter in Unicode
+			r >= 0x203C && r <= 0x2049, r == 0x2139:
 			hasPictograph = true
 		case unicode.Is(unicode.So, r):
 			hasPictograph = true
 		case r == '#' || r == '*' || (r >= '0' && r <= '9'):
-			// keycap bases, valid only with U+20E3 (checked loosely)
+
 		default:
 			return false
 		}
@@ -393,8 +360,6 @@ func truncate(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// Preview renders up to limit mappings as an HTML list for the admin panel and
-// says how many more there are.
 func Preview(m map[string]string, limit int) (list string, more int) {
 	keys := make([]string, 0, len(m))
 	for k := range m {

@@ -11,13 +11,6 @@ import (
 	"unicode"
 )
 
-// docHTML turns the Markdown a model writes into the HTML of a printed
-// document: headings, paragraphs, nested lists (task boxes too), quotes,
-// code, tables with their alignment, rules, pictures from the workspace and
-// inline bold, italics, strike, code and links. Every block takes its own
-// direction (dir="auto"), so Persian and English mix on one page. All text
-// is escaped first: nothing in it becomes markup of its own.
-
 var (
 	mdHeadingRe  = regexp.MustCompile(`^(#{1,6})[ \t]+(.+?)[ \t]*#*$`)
 	mdHRRe       = regexp.MustCompile(`^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$`)
@@ -116,7 +109,6 @@ func docHTML(md string) string {
 	return out.String()
 }
 
-// mdList renders the lines of a list, nested by their indentation.
 func mdList(lines []string) string {
 	var out strings.Builder
 	type level struct {
@@ -127,7 +119,7 @@ func mdList(lines []string) string {
 	open := false
 	for _, l := range lines {
 		m := mdListRe.FindStringSubmatch(l)
-		if m == nil { // a continued item
+		if m == nil {
 			out.WriteString(" " + mdInline(strings.TrimSpace(l)))
 			continue
 		}
@@ -140,7 +132,7 @@ func mdList(lines []string) string {
 			out.WriteString("</li></" + stack[len(stack)-1].tag + ">")
 			stack = stack[:len(stack)-1]
 		}
-		if n := len(stack); n > 0 && indent == stack[n-1].indent && tag != stack[n-1].tag { // bullets, then numbers
+		if n := len(stack); n > 0 && indent == stack[n-1].indent && tag != stack[n-1].tag {
 			out.WriteString("</li></" + stack[n-1].tag + ">")
 			stack, open = stack[:n-1], false
 		}
@@ -203,7 +195,6 @@ func mdAlign(aligns []string, i int) string {
 	return ""
 }
 
-// mdInline renders the inline marks of escaped text.
 func mdInline(s string) string {
 	var stash []string
 	hold := func(h string) string {
@@ -217,7 +208,7 @@ func mdInline(s string) string {
 		sub := mdImageRe.FindStringSubmatch(m)
 		src := sub[2]
 		if !strings.HasPrefix(src, "https://") && !strings.HasPrefix(src, "http://") {
-			src = "https://waze.local/" + strings.TrimLeft(strings.TrimPrefix(src, "/workspace"), "/") // a workspace picture
+			src = "https://waze.local/" + strings.TrimLeft(strings.TrimPrefix(src, "/workspace"), "/")
 		}
 		return hold(`<img src="` + html.EscapeString(src) + `" alt="` + html.EscapeString(sub[1]) + `">`)
 	})
@@ -238,7 +229,6 @@ func mdInline(s string) string {
 	return s
 }
 
-// htmlPDF prints Markdown as an A4 document with the browser.
 func (r *Registry) htmlPDF(ctx context.Context, sessionID, md, title, name string) error {
 	body := docHTML(md)
 	rtl := persianShare(title+" "+md) >= 0.3
@@ -267,7 +257,6 @@ func (r *Registry) htmlPDF(ctx context.Context, sessionID, md, title, name strin
 	return nil
 }
 
-// textDir is the direction of a text: that of its first letter.
 func textDir(s string) string {
 	for _, c := range s {
 		switch {
@@ -280,7 +269,6 @@ func textDir(s string) string {
 	return "auto"
 }
 
-// jalali is the Persian (solar hijri) date of a day.
 func jalali(t time.Time) (y, m, d int) {
 	gy, gm, gd := t.Year(), int(t.Month()), t.Day()
 	before := [...]int{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}
@@ -305,14 +293,12 @@ func jalali(t time.Time) (y, m, d int) {
 
 var jalaliMonths = [...]string{"فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"}
 
-// persianDate writes a day as «۳ آبان ۱۴۰۵».
 func persianDate(t time.Time) string {
 	y, m, d := jalali(t)
 	digits := strings.NewReplacer("0", "۰", "1", "۱", "2", "۲", "3", "۳", "4", "۴", "5", "۵", "6", "۶", "7", "۷", "8", "۸", "9", "۹")
 	return digits.Replace(fmt.Sprintf("%d %s %d", d, jalaliMonths[m-1], y))
 }
 
-// persianShare is the share of letters in Arabic script.
 func persianShare(s string) float64 {
 	var fa, all int
 	for _, c := range s {

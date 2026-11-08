@@ -12,8 +12,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// A user sends a project as a zip; the agent unpacks it, finds the spot,
-// edits it in place, packs the result and hands it back, all in one request.
 func TestProjectWorkflowThroughTheBot(t *testing.T) {
 	h := newHarness(t)
 	h.st.SetSetting(bg, store.SettingAgentSteps, "10")

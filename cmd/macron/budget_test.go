@@ -28,7 +28,6 @@ func TestAgentBudgetFromThePanelAndContinuation(t *testing.T) {
 	h.wantText("ادامهٔ کار: ⏩ ادامه خودکار: خاموش")
 	h.wantText("قدم‌ها: 6 · زمان: 45 دقیقه · توقف بی‌کاری: 15 دقیقه")
 
-	// A job bigger than the budget: a report, and the work log in memory.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if strings.Contains(llmText(req), "Stop working now") {
 			return map[string]any{"role": "assistant", "content": "نصفش انجام شد؛ بگو ادامه بده."}, 0
@@ -44,7 +43,7 @@ func TestAgentBudgetFromThePanelAndContinuation(t *testing.T) {
 	if last := mem.History[len(mem.History)-1].Content; !strings.Contains(last, "[work log before stopping") || strings.Count(last, "list_files") != 6 {
 		t.Errorf("memory keeps the work log:\n%s", last)
 	}
-	// Back to the server's defaults.
+
 	h.st.SetSetting(bg, store.SettingAgentSteps, "0")
 	if steps, _ := h.bot.agentBudget(); steps != 4 {
 		t.Errorf("0 = default: %d", steps)
@@ -73,7 +72,6 @@ func TestAnAnswerIsNeverLost(t *testing.T) {
 	}
 }
 
-// The ⏩ button goes forever → 3 → 10 → off → forever; forever is the default.
 func TestAutoContinueButton(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.DeleteSetting(bg, store.SettingAutoContinue)

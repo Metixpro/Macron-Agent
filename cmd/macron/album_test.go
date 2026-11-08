@@ -16,8 +16,6 @@ func albumItem(id int64, group, caption, fileID string) *telegram.Message {
 	return m
 }
 
-// The captioned item leads, the rest follow in the order they were sent, and a
-// reply carried by an item that is not the lead is not lost.
 func TestMergeAlbumLeadsWithTheCaptionedItem(t *testing.T) {
 	a, b, c := albumItem(12, "g", "", "f12"), albumItem(11, "g", "", "f11"), albumItem(13, "g", "این سایتو میشناسید", "f13")
 	b.ReplyToMessage = &telegram.Message{MessageID: 3, Text: "قبلی"}
@@ -34,14 +32,12 @@ func TestMergeAlbumLeadsWithTheCaptionedItem(t *testing.T) {
 	if a.AlbumDone || len(a.Album) != 0 {
 		t.Error("the items themselves are not changed")
 	}
-	// no caption at all: the first item (by id) leads
+
 	if m := mergeAlbum([]*telegram.Message{albumItem(5, "g", "", "x"), albumItem(4, "g", "", "y")}); m.MessageID != 4 || len(m.Album) != 1 {
 		t.Errorf("no caption: %+v", m)
 	}
 }
 
-// Items arriving close together are one album; a gap makes two; two albums
-// never mix.
 func TestAlbumCollectorWaitsForTheLastItem(t *testing.T) {
 	oldQ, oldM := albumQuiet, albumMax
 	albumQuiet, albumMax = 80*time.Millisecond, 2*time.Second
@@ -77,7 +73,6 @@ func TestAlbumCollectorWaitsForTheLastItem(t *testing.T) {
 		t.Errorf("one of three items and one of one: %v", first)
 	}
 
-	// a whole album of ten does not wait
 	start := time.Now()
 	for i := range albumItems {
 		c.add(albumItem(int64(100+i), "full", "", "z"), &wg, fire)
@@ -88,8 +83,6 @@ func TestAlbumCollectorWaitsForTheLastItem(t *testing.T) {
 	}
 }
 
-// What the user did: two photos sent together, one with a caption. It is ONE
-// request with the caption and both photos, one answer, and no «busy».
 func TestAnAlbumIsOneRequest(t *testing.T) {
 	h := newHarness(t)
 	oldQ := albumQuiet
@@ -128,7 +121,6 @@ func TestAnAlbumIsOneRequest(t *testing.T) {
 		t.Errorf("memory of the turn: %v", mem.History)
 	}
 
-	// an album with no caption at all: asked about, as one message, not twice
 	h.tg.reset()
 	h.llm.requests = nil
 	h.bot.handleMessage(albumItem(80, "grp2", "", "a1"))

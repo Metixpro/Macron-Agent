@@ -1,7 +1,3 @@
-// Command macron runs Macron Agent: a personal AI agent that lives in the
-// owner's Telegram, with its files, memory and skills on the owner's own
-// machine. Without arguments it starts the bot; "macron help" lists the
-// commands that set it up and keep it running.
 package main
 
 import (
@@ -90,7 +86,6 @@ func main() {
 	defer st.Close()
 	seedProvider(rootCtx, st, cfg)
 
-	// The LLM endpoints are chosen by the admins, so they may live on a private network.
 	llmHTTP := &http.Client{Timeout: 180 * time.Second}
 	usage := func(provider string, u llm.Usage, failed bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -105,9 +100,6 @@ func main() {
 		log.Printf("⚠️  no LLM provider yet: add one in the admin panel (/settings → پروایدرها)")
 	}
 
-	// A local Bot API server (larger files, lower latency) can replace
-	// api.telegram.org; in local mode it takes files up to 2000 MB, and the
-	// tools are made for that limit.
 	apiBase := strings.TrimRight(os.Getenv(config.EnvTelegramAPI), "/")
 	if apiBase == "" {
 		apiBase = "https://api.telegram.org"
@@ -129,25 +121,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("❌ %v", err)
 	}
-	// The treg.to token set in the admin panel wins over the environment's.
+
 	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))
 	cookies := newCookiePool(st, cfg.CookiesDir)
 	migrateSingleCookie(rootCtx, st)
-	cookies.http = a.Registry.HTTP // the registry's client
+	cookies.http = a.Registry.HTTP
 	a.Registry.SetCookiePool(cookies)
 	a.Registry.SetUserCookies(cookies.user)
 	go cookies.refreshLoop(rootCtx)
 	go cookies.checkLoop(rootCtx, a.Registry.TestCookie)
-	// The image editing key set in the admin panel wins over the environment's.
+
 	a.Registry.SetImageEditKey(imageEditKey(st, cfg.ImageEditKey))
-	// The picture studio's key set in the admin panel wins over the environment's.
+
 	a.Registry.SetImageKey(imageGenKey(st, cfg.ImageKey))
-	// The song service's key set in the admin panel wins over the environment's.
+
 	a.Registry.SetMusicKey(musicKey(st, cfg.MusicKey))
-	// The conversation is compressed once it outgrows what one request
-	// carries, so the summary covers every turn left out (none is lost in
-	// between) and the history a request sends stays the same from one
-	// message to the next, which providers cache.
+
 	mem := memory.New(st, prov, func() int { return historyBudget(st, window()) })
 
 	api := telegram.NewBotWithBase(*tokenFlag, apiBase)
@@ -176,16 +165,15 @@ func main() {
 		brain:      br,
 		workFiles:  cfg.WorkspaceTTL,
 	}
-	a.Registry.Gate, a.Registry.CheckpointDir = bot.newCommandGate(), config.HomePath("checkpoints") // every shell command passes it
-	a.Agent.Teachings = bot.teachings                                                                // what the admins taught by hand, in every prompt
-	api.OnSent = bot.noteSent                                                                        // a reaction is counted only on the bot's own messages
+	a.Registry.Gate, a.Registry.CheckpointDir = bot.newCommandGate(), config.HomePath("checkpoints")
+	a.Agent.Teachings = bot.teachings
+	api.OnSent = bot.noteSent
 	bot.reloadEmoji(rootCtx)
-	mem.UserBudget = bot.historyFor // the conversation fits the model's window
+	mem.UserBudget = bot.historyFor
 	a.Agent.Redact = bot.redact
-	// Only the bot's admins teach it skills (a skill reaches every user).
+
 	a.Registry.SetSkillWriter(bot.sessionAdmin)
-	// The owner's plugins: scripts and MCP servers, whose tools join the
-	// built-in ones while they are on (the agent connects them: pluginstool.go).
+
 	bot.plugins = &plugins.Manager{Dir: cfg.PluginsDir, MCPFile: cfg.MCPConfig, Machine: a.Machine,
 		HTTP:   pluginHTTP(cfg.UseEnvProxy),
 		States: pluginStates{st}, Version: app.Version, IsAdmin: bot.sessionAdmin, Reserved: a.Registry.Builtin}
@@ -204,11 +192,10 @@ func main() {
 		log.Printf("⚠️  could not register the command menu: %v", err)
 	}
 	cancel()
-	// Jobs the last run of the bot left running (a restart, a crash) become
-	// unfinished before any update is read; their users are told, with ▶️.
+
 	orphans := bot.orphanedJobs(rootCtx)
 	go bot.tellRestarted(rootCtx, orphans)
-	bgOrphans := bot.orphanedBgTasks(rootCtx) // background tasks too, with 🔁
+	bgOrphans := bot.orphanedBgTasks(rootCtx)
 	go bot.tellBgRestarted(rootCtx, bgOrphans)
 	go housekeeping(rootCtx, st)
 	bot.startSysmon(rootCtx)
@@ -218,7 +205,7 @@ func main() {
 	go bot.runWeeklyReports(rootCtx)
 	go bot.runEvalSchedule(rootCtx)
 	go bot.runUpdateNotices(rootCtx)
-	bot.serveWeb(rootCtx) // the webhook and the dashboard, when their address is set
+	bot.serveWeb(rootCtx)
 	go bot.reportUpdate(rootCtx)
 
 	log.Printf("🤖 @%s is online (Macron Agent %s · home %s · time zone %s)", me.Username, app.Version, config.Home(), loc)
@@ -236,7 +223,6 @@ func main() {
 	}
 }
 
-// seedProvider turns WAZE_API_URL into the first provider on a fresh database.
 func seedProvider(ctx context.Context, st *store.Store, cfg *config.Config) {
 	if cfg.APIURL == "" {
 		return
@@ -245,7 +231,7 @@ func seedProvider(ctx context.Context, st *store.Store, cfg *config.Config) {
 	if err != nil || len(list) > 0 {
 		return
 	}
-	base, api := llm.CleanBaseURL(cfg.APIURL) // an endpoint as pasted (…/v1/responses) names its wire format
+	base, api := llm.CleanBaseURL(cfg.APIURL)
 	if _, err := st.AddProvider(ctx, store.Provider{Name: "default", BaseURL: base, API: api, APIKey: cfg.APIKey, Model: cfg.Model,
 		Priority: 10, Enabled: true, Vision: true}); err != nil {
 		log.Printf("⚠️  could not create the default provider: %v", err)
@@ -254,7 +240,6 @@ func seedProvider(ctx context.Context, st *store.Store, cfg *config.Config) {
 	log.Printf("created the model provider %q from the settings; more are added in /settings → providers", "default")
 }
 
-// poll fetches updates until ctx ends, backing off on errors.
 func poll(ctx context.Context, bot *Bot) {
 	var offset int64
 	backoff := time.Second
@@ -290,7 +275,6 @@ func poll(ctx context.Context, bot *Bot) {
 	}
 }
 
-// housekeeping removes old records every few hours.
 func housekeeping(ctx context.Context, st *store.Store) {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()

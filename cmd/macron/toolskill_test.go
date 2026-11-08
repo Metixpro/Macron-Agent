@@ -7,13 +7,10 @@ import (
 	"testing"
 )
 
-// How well a provider's model calls tools is learned from its own requests and
-// shown on its card; only the admins focus its tools.
 func TestToolSkillIsLearnedAndFocuses(t *testing.T) {
 	h := newHarness(t)
 	id := h.bot.prov.ActiveID()
 
-	// Its calls are counted: one misnamed tool, then an answer.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if n == 0 {
 			return toolCall("functions.ListFiles", `{}`), 0
@@ -29,7 +26,6 @@ func TestToolSkillIsLearnedAndFocuses(t *testing.T) {
 		t.Fatal("too few calls to judge: every tool")
 	}
 
-	// A model that slips often still has every tool: only the admins narrow them.
 	h.bot.saveToolSkill(bg, id, toolSkill{Calls: 30, Problems: 9})
 	h.llm.reply = say("۸۵ هزار تومن")
 	h.send(private(20, "قیمت دلار امروز چنده؟"))
@@ -37,7 +33,6 @@ func TestToolSkillIsLearnedAndFocuses(t *testing.T) {
 		t.Errorf("a slipping model keeps every tool: %d of %d", len(got), len(full))
 	}
 
-	// The admins' choice wins.
 	h.bot.saveToolSkill(bg, id, toolSkill{Mode: toolModeFull, Calls: 30, Problems: 9})
 	h.send(private(20, "قیمت دلار امروز چنده؟"))
 	if slices.Contains(offeredTools(h.llm.last()), "more_tools") {
@@ -51,7 +46,6 @@ func TestToolSkillIsLearnedAndFocuses(t *testing.T) {
 		t.Errorf("focused when the admins say so: %d of %d: %v", len(focused), len(full), focused)
 	}
 
-	// The provider's card shows it, and its button goes round the modes.
 	h.bot.saveToolSkill(bg, id, toolSkill{Calls: 30, Problems: 9})
 	h.click(ownerID, ownerID, 9, "a:pv:"+strconv.FormatInt(id, 10))
 	if v := lastOf(h, "editMessageText"); !strings.Contains(v.body["text"].(string), "خودکار: همه ابزارها") ||

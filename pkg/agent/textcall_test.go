@@ -30,7 +30,7 @@ func argsOf(t *testing.T, s string) map[string]any {
 func TestParseTextToolCalls(t *testing.T) {
 	cases := []struct {
 		name, content, clean string
-		calls                []string // name:query
+		calls                []string
 	}{
 		{"hermes", "باشه، می‌گردم.\n<tool_call>\n{\"name\": \"web_search\", \"arguments\": {\"query\": \"قیمت طلا\"}}\n</tool_call>",
 			"باشه، می‌گردم.", []string{"web_search:قیمت طلا"}},
@@ -54,7 +54,7 @@ func TestParseTextToolCalls(t *testing.T) {
 		{"bare json reply", `{"name": "web_search", "arguments": {"query": "bare"}}`, "", []string{"web_search:bare"}},
 		{"tool_calls array", `<tool_calls>[{"name":"web_search","arguments":{"query":"1"}},{"name":"list_files","arguments":{}}]</tool_calls>`, "", []string{"web_search:1", "list_files:"}},
 		{"repaired JSON", "<tool_call>{'name': 'web_search', 'arguments': {'query': 'fix',}}</tool_call>", "", []string{"web_search:fix"}},
-		// Not calls:
+
 		{"ordinary json is an answer", "این یه نمونه‌ست:\n```json\n{\"name\": \"Ali\", \"age\": 30}\n```", "این یه نمونه‌ست:\n```json\n{\"name\": \"Ali\", \"age\": 30}\n```", nil},
 		{"prose", "سلام! خوبم، تو چطوری؟", "سلام! خوبم، تو چطوری؟", nil},
 		{"code mentioning a tool", "```python\nweb_search('x')\n```", "```python\nweb_search('x')\n```", nil},
@@ -173,8 +173,6 @@ func TestHeadTail(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- the loop with a model that writes its calls
-
 func textModelAgent(t *testing.T, handler http.HandlerFunc) *Agent {
 	t.Helper()
 	srv := httptest.NewServer(handler)
@@ -199,7 +197,7 @@ func TestTextModeLoopRunsCallsAndFeedsResultsBack(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		requests = append(requests, req)
 		switch len(requests) {
-		case 1: // a broken call first
+		case 1:
 			reply(w, "<tool_call>{\"name\": \"read_file\", \"arguments\": {filename: notes.txt}}</tool_call>")
 		case 2:
 			reply(w, "ببخشید.\n<tool_call>{\"name\": \"read_file\", \"arguments\": {\"filename\": \"notes.txt\"}}</tool_call>")
@@ -217,13 +215,13 @@ func TestTextModeLoopRunsCallsAndFeedsResultsBack(t *testing.T) {
 	if strings.Join(started, ",") != "read_file,read_file" {
 		t.Errorf("tool events: %v", started)
 	}
-	// The broken call came back as an error the model could act on…
+
 	second, _ := json.Marshal(requests[1]["messages"])
 	if !strings.Contains(string(second), `\u003ctool_response name=\"read_file\"\u003e\nError: invalid arguments JSON`) &&
 		!strings.Contains(string(second), `<tool_response name=\"read_file\">\nError: invalid arguments JSON`) {
 		t.Errorf("the parse error must reach the model:\n%s", second)
 	}
-	// …and the real result after the fix, as a user turn (works without native tool support).
+
 	third := requests[2]["messages"].([]any)
 	last := third[len(third)-1].(map[string]any)
 	if last["role"] != "user" || !strings.Contains(last["content"].(string), "pistachio") {
@@ -234,7 +232,7 @@ func TestTextModeLoopRunsCallsAndFeedsResultsBack(t *testing.T) {
 			t.Errorf("markup was streamed to the user: %q", s)
 		}
 	}
-	// The system prompt says how to call by text; the tools' definitions go with the call, not as a list in it.
+
 	sys := requests[0]["messages"].([]any)[0].(map[string]any)["content"].(string)
 	if !strings.Contains(sys, "<tool_call>") || strings.Contains(sys, "- read_file(filename*: string") {
 		t.Errorf("the way to call by text, without the list:\n%s", sys[len(sys)-600:])
@@ -290,8 +288,6 @@ func TestNativeCallsWinAndDuplicateMarkupIsHidden(t *testing.T) {
 	}
 }
 
-// TestOtherCallFormats: DSML (DeepSeek V3.2), Kimi, GLM, Mistral and
-// gpt-oss calls written as text are run, and none of their markup is shown.
 func TestOtherCallFormats(t *testing.T) {
 	known := map[string]bool{"web_search": true}
 	cases := map[string]struct{ text, args, rest string }{
@@ -331,8 +327,6 @@ func normJSON(t *testing.T, s string) string {
 	return string(b)
 }
 
-// TestNoInternalMarkupReachesTheUser: tags a model leaves in its answer,
-// template tokens and inline reasoning are removed; code keeps them.
 func TestNoInternalMarkupReachesTheUser(t *testing.T) {
 	for in, want := range map[string]string{
 		"سلام! </｜｜DSML｜｜ parameter>اینم جواب":                              "سلام! اینم جواب",

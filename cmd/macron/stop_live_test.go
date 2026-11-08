@@ -9,8 +9,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// blockingJob starts a job that lists the workspace, then waits in its
-// second model call until release is closed.
 func blockingJob(t *testing.T, h *harness, uid int64) (started, release, done chan struct{}) {
 	t.Helper()
 	started, release, done = make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -37,7 +35,7 @@ func TestAnOldDraftNeverStopsTheJob(t *testing.T) {
 	h := newHarness(t)
 	started, release, done := blockingJob(t, h, 31)
 	<-started
-	// A stop for a draft this chat no longer shows (an earlier answer's): ignored.
+
 	h.bot.handleStop(&telegram.MessageGenerationStopped{Chat: telegram.Chat{ID: 31, Type: "private"}, DraftID: 987654})
 	close(release)
 	<-done
@@ -51,17 +49,7 @@ func TestAStoppedJobKeepsItsWorkAndGoesOn(t *testing.T) {
 	const uid = 32
 	started, release, done := blockingJob(t, h, uid)
 	<-started
-	var draftID int64
-	h.bot.drafts.Range(func(k, v any) bool {
-		if v.(draftOwner).userID == uid {
-			draftID = k.(int64)
-		}
-		return true
-	})
-	if draftID == 0 {
-		t.Fatal("the job's draft is not registered")
-	}
-	h.bot.handleStop(&telegram.MessageGenerationStopped{Chat: telegram.Chat{ID: uid, Type: "private"}, DraftID: telegram.FlexInt64(draftID)})
+	stopLiveMessage(h, uid)
 	close(release)
 	<-done
 	h.noText("the late answer")
@@ -71,7 +59,6 @@ func TestAStoppedJobKeepsItsWorkAndGoesOn(t *testing.T) {
 		t.Fatalf("no ▶️ continue button: %v", buttons(notice))
 	}
 
-	// ▶️: the job goes on, knowing what it asked and what it had done.
 	h.llm.reply = say("بقیه‌ش رو هم انجام دادم ✅")
 	h.click(uid, uid, 700, fmt.Sprintf("run:go:%d", uid))
 	h.wantText("بقیه‌ش رو هم انجام دادم")
@@ -79,7 +66,7 @@ func TestAStoppedJobKeepsItsWorkAndGoesOn(t *testing.T) {
 	if !strings.Contains(last, "work log before stopping") || !strings.Contains(last, "list_files") || !strings.Contains(last, "مرتب کن") {
 		t.Fatalf("the continued job does not know the stopped one: %s", last)
 	}
-	// Someone else's button does nothing.
+
 	h.tg.reset()
 	h.click(4444, uid, 700, fmt.Sprintf("run:go:%d", uid))
 	if h.llm.count() > 4 {
@@ -98,29 +85,26 @@ func TestThePlanShowsInTheLiveCard(t *testing.T) {
 				map[string]any{"id": "l1", "type": "function", "function": map[string]any{"name": "list_files", "arguments": `{}`}},
 			}}, 0
 		}
-		time.Sleep(600 * time.Millisecond) // the card refreshes meanwhile
+		time.Sleep(600 * time.Millisecond)
 		return map[string]any{"role": "assistant", "content": "گزارش آماده‌ست ✅"}, 0
 	}
 	h.send(private(uid, "فایل‌هامو پیدا کن و یه گزارش بنویس"))
 	h.wantText("گزارش آماده‌ست")
 	found := false
-	for _, d := range h.tg.of("sendRichMessageDraft") {
-		md := fmt.Sprint(d.body["rich_message"])
-		if strings.Contains(md, "📋 `0/2`") && strings.Contains(md, "- [ ] ⏳ **پیدا کردن فایل‌ها**") && strings.Contains(md, "- [ ] نوشتن گزارش") {
+	for _, md := range liveFrames(h) {
+		if strings.Contains(md, "📋 <code>0/2</code>") && strings.Contains(md, "• [ ] ⏳ <b>پیدا کردن فایل‌ها</b>") && strings.Contains(md, "• [ ] نوشتن گزارش") {
 			found = true
 		}
 	}
 	if !found {
-		for _, d := range h.tg.of("sendRichMessageDraft") {
-			t.Logf("draft: %v", d.body["rich_message"])
+		for _, frame := range liveFrames(h) {
+			t.Logf("frame: %s", frame)
 		}
 		t.Fatal("the plan is not in the live card")
 	}
 	h.noText("update_plan")
 }
 
-// TestTheNextRequestKnowsWhatWasDone: a follow-up sees the steps behind the
-// last answer and the files in the workspace, so «همون فایل» needs no search.
 func TestTheNextRequestKnowsWhatWasDone(t *testing.T) {
 	h := newHarness(t)
 	const uid = 36

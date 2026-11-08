@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// showPanel puts a screen in the message of a button (a new message only
-// when that one can no longer be edited).
 func (b *Bot) showPanel(ctx context.Context, msg *telegram.Message, v panelView) int64 {
 	err := b.editHTML(ctx, msg.Chat.ID, msg.MessageID, v.html, v.kb)
 	if err == nil || telegram.IsNotModified(err) {
@@ -22,8 +20,6 @@ func (b *Bot) showPanel(ctx context.Context, msg *telegram.Message, v panelView)
 	return sent.MessageID
 }
 
-// viewMe is the agent's status for its owner: today's tokens, the conversation
-// and the memory files, the archive, the workspace.
 func (b *Bot) viewMe(ctx context.Context, u *store.User) panelView {
 	l := b.lang(u.ID)
 	used, _ := b.st.TokensToday(ctx, u.ID)
@@ -53,13 +49,11 @@ func (b *Bot) viewMe(ctx context.Context, u *store.User) panelView {
 	return panelView{html: html, kb: keyboard(row(b.button(l.t("🔄 بروزرسانی"), "me:home", ""), b.button(l.t("✖️ بستن"), "me:x", telegram.StyleDanger)))}
 }
 
-// sendMe answers /me.
 func (b *Bot) sendMe(ctx context.Context, m *telegram.Message, u *store.User) {
 	v := b.viewMe(ctx, u)
 	b.sendPanel(ctx, m, v.html, v.kb)
 }
 
-// handleMeCallback answers the status card's buttons.
 func (b *Bot) handleMeCallback(ctx context.Context, q *telegram.CallbackQuery, answer func(string, bool)) {
 	answer("", false)
 	if strings.TrimPrefix(q.Data, "me:") == "x" {

@@ -18,28 +18,16 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// ToolDelegate hands a self-contained part of a job to a sub-agent with a
-// fresh context: the same workspace, only the tools its part needs (its
-// toolsets), a short prompt about working and reporting, a budget of its
-// own; only its final report comes back, so the main conversation stays
-// small. It runs alongside the other calls of its turn (other sub-agents, a
-// picture being made…). A sub-agent can hand over the files it made, but
-// cannot delegate again, ask the user or talk to the chat. Its tool calls go
-// to the listener's SubAgent; its context is its own and never reaches the meter.
 const ToolDelegate = "delegate_task"
 
 const (
-	delegateSteps    = 50 // its own budget: it never spends the main agent's
+	delegateSteps    = 50
 	delegateMaxSteps = 100
 	delegateReport   = 8000
 )
 
-// subLocalTools are the request tools a sub-agent keeps.
 var subLocalTools = map[string]bool{"view_image": true, "send_file": true}
 
-// toolsets group the tools a sub-agent may get: the ones delegate_task names
-// and the ones its goal plainly needs, on top of subBasics. A sub-agent with
-// a few tools costs a fraction of one with all of them, at every step.
 var toolsets = map[string][]string{
 	"web": {"web_search", "web_fetch", "deep_research", "crypto_currency_price", tools.ToolMarketPrice, "whois_lookup", "github_inspect"},
 	"code": {tools.ToolRunCode, "bash_execute", tools.ToolShellJobs, tools.ToolProjectTree, tools.ToolSearchCode, tools.ToolFindFiles,
@@ -52,13 +40,10 @@ var toolsets = map[string][]string{
 	"music":     {tools.ToolMusic, tools.ToolSong, "search_music", "download_file", tools.ToolDownloadMedia},
 }
 
-// toolsetNames lists the toolsets in a fixed order (the tool's schema).
 var toolsetNames = []string{"web", "code", "media", "images", "documents", "browser", "motion", "music"}
 
-// subBasics are what every sub-agent gets: files, skills, looking and sending.
 var subBasics = []string{"list_files", "read_file", "write_file", tools.ToolListSkills, tools.ToolReadSkill, "view_image", "send_file"}
 
-// toolsetHints are words of a goal that show what it needs.
 var toolsetHints = map[string][]string{
 	"web":    {"search", "research", "find out", "look up", "news", "price", "website", "gold", "سرچ", "جستجو", "تحقیق", "پیدا کن", "اخبار", "خبر", "قیمت", "سایت", "طلا", "سکه", "دلار"},
 	"code":   {"code", "script", "program", "bug", "project", "repo", "test", "python", "rust", "build", "کد", "اسکریپت", "برنامه", "باگ", "پروژه"},
@@ -71,8 +56,6 @@ var toolsetHints = map[string][]string{
 	"music":   {"beat", "jingle", "melody", "compose", "sound effect", "بیت", "ملودی", "جینگل", "آهنگ بساز"},
 }
 
-// subTools is the set of tools a sub-agent gets: the basics, the toolsets
-// asked for and the ones its goal shows; web when nothing else says.
 func subTools(asked []any, goal string) map[string]bool {
 	sets := map[string]bool{}
 	for _, v := range asked {
@@ -104,8 +87,6 @@ func subTools(asked []any, goal string) map[string]bool {
 	return out
 }
 
-// subPrompt is a sub-agent's prompt: a worker on one part of a job that
-// reports to the main agent, with guidance only on the tools it has.
 func (a *Agent) subPrompt(offers func(string) bool) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `You are a sub-agent of %s: you do one part of a bigger job on your own and report to the agent that gave it to you, not to the user.
@@ -129,8 +110,6 @@ func (a *Agent) subPrompt(offers func(string) bool) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// subTitle names a sub-agent in the live view: the model's title, or the
-// start of its goal.
 func subTitle(title, goal string) string {
 	t := strings.TrimSpace(title)
 	if t == "" {
@@ -166,10 +145,9 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 		if n, ok := args["max_steps"].(float64); ok && n >= 1 {
 			steps = min(int(n), delegateMaxSteps)
 		}
-		// A workspace of its own: the files its task names are copied in,
-		// and only what it hands back leaves it.
+
 		session := machine.SubSession(parent.SessionID, fmt.Sprintf("d%d", a.subs.Add(1)))
-		a.Registry.RemoveSub(session) // anything a crash left under that name
+		a.Registry.RemoveSub(session)
 		defer a.Registry.RemoveSub(session)
 		shared := a.Registry.ShareFiles(parent.SessionID, session, goal+"\n"+extra)
 		start := a.Registry.SubFiles(session)
@@ -190,7 +168,7 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 		asked, _ := args["toolsets"].([]any)
 		allowed := subTools(asked, goal+"\n"+extra)
 		filter := parent.ToolFilter
-		var shown *EventListener // where its calls are shown
+		var shown *EventListener
 		if l.SubAgent != nil {
 			title, _ := args["title"].(string)
 			shown = l.SubAgent(subTitle(title, goal), session)
@@ -200,7 +178,7 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 		}
 		var (
 			mu      sync.Mutex
-			results strings.Builder // what its calls answered: the files they made are named there
+			results strings.Builder
 			sends   []deferredSend
 		)
 		onEnd := func(name, args, result string, took time.Duration) {
@@ -215,17 +193,17 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 		var local []LocalTool
 		for _, t := range parent.Tools {
 			switch t.Def.Function.Name {
-			case "view_image": // it looks at its own files, through the parent's tool
+			case "view_image":
 				h := t.Handler
 				local = append(local, LocalTool{Def: t.Def, Handler: func(ctx context.Context, args map[string]any) (ToolOutput, error) {
 					out, err := h(ctx, a.subPaths(session, prefix, args))
 					out.Text = strings.ReplaceAll(out.Text, prefix, "")
 					return out, err
 				}})
-			case "send_file": // sent once handed over, under the name it then has
+			case "send_file":
 				local = append(local, LocalTool{Def: t.Def, Handler: func(_ context.Context, args map[string]any) (ToolOutput, error) {
 					name, _ := args["filename"].(string)
-					name = strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(strings.TrimSpace(name), "/workspace/")), "/") // ./a.png, dir//b.pdf
+					name = strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(strings.TrimSpace(name), "/workspace/")), "/")
 					if info, err := a.Registry.Machine.Stat(session, name); err != nil || !info.Mode().IsRegular() {
 						return ToolOutput{Text: "error: " + name + " is not a file in your workspace"}, nil
 					}
@@ -247,12 +225,11 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 			ToolFilter: func(name string) bool {
 				return allowed[name] && (filter == nil || filter(name))
 			},
-			// Its tool calls only: no text, context or compaction of its own reaches the chat.
+
 			Listener: &EventListener{OnToolStart: shown.OnToolStart, OnToolEnd: onEnd, OnToolProgress: shown.OnToolProgress},
 			depth:    parent.depth + 1,
 		}
-		// It ends before its parent has to: the parent still needs time to
-		// take its work in and answer.
+
 		pctx, sctx := ctx, ctx
 		if d, ok := ctx.Deadline(); ok {
 			left := time.Until(d)
@@ -260,8 +237,7 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 			sctx, cancel = context.WithTimeout(ctx, left-reserve(left))
 			defer cancel()
 		}
-		// Nobody watches a sub-agent: a dangerous command it wants is refused,
-		// never waiting for an answer (pkg/cmdgate).
+
 		sctx = cmdgate.WithOrigin(sctx, cmdgate.OriginSubAgent)
 		res, err := a.do(sctx, sub)
 		contract := ""
@@ -282,8 +258,6 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 			return ToolOutput{Text: fmt.Sprintf("the sub-agent failed: %v. Do this part yourself or try again with a clearer goal.", err)}, nil
 		}
 
-		// It hands back what it made and named: in its report, in what its
-		// calls answered (not in work/), or with send_file. Drafts stay behind.
 		mu.Lock()
 		named, report := results.String(), res.Answer
 		sent := map[string]bool{}
@@ -295,7 +269,7 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 		current := a.Registry.SubFiles(session)
 		for f, sig := range current {
 			if start[f] == sig {
-				continue // a copy it did not change
+				continue
 			}
 			if sent[f] || namesFile(report, f) || !strings.HasPrefix(f, "work/") && namesFile(named, f) {
 				out = append(out, f)
@@ -309,7 +283,7 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 		for _, s := range sends {
 			to, ok := moved[s.name]
 			if sig, given := start[s.name]; !ok && given && current[s.name] == sig {
-				to, ok = s.name, true // a file it was given and sent as it is: the parent's own copy
+				to, ok = s.name, true
 			}
 			if ok {
 				args := maps.Clone(s.args)
@@ -343,10 +317,6 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 	}}
 }
 
-// holdToSchema checks the JSON a sub-agent's report ends with against the
-// output_schema; a report that does not match is sent back once with what is
-// wrong. It returns the line for the main agent: the checked JSON, or why
-// it still does not match (res.Answer holds the corrected report).
 func (a *Agent) holdToSchema(ctx context.Context, sub Request, res *Result, schema map[string]any, schemaText string) string {
 	check := func(report string) (any, []string) {
 		v, ok := reportJSON(report)
@@ -377,7 +347,6 @@ func (a *Agent) holdToSchema(ctx context.Context, sub Request, res *Result, sche
 	return "[output_schema] The report matches the schema. Its JSON:\n```json\n" + string(raw) + "\n```"
 }
 
-// deferredSend is a send_file of a sub-agent, made once its files are handed over.
 type deferredSend struct {
 	name string
 	args map[string]any
@@ -392,8 +361,6 @@ func (a *Agent) sendFile(ctx context.Context, tools []LocalTool, args map[string
 	return ToolOutput{}, nil
 }
 
-// subPaths points the file names a sub-agent gives at its own workspace, as
-// its parent's tools see it.
 func (a *Agent) subPaths(session, prefix string, args map[string]any) map[string]any {
 	fix := func(v any) any {
 		name, ok := v.(string)
@@ -421,8 +388,6 @@ func (a *Agent) subPaths(session, prefix string, args map[string]any) map[string
 	return out
 }
 
-// namesFile reports whether text names a file: its path, or its name when
-// that is not a short, common one.
 func namesFile(text, f string) bool {
 	if strings.Contains(text, f) {
 		return true
@@ -431,7 +396,6 @@ func namesFile(text, f string) bool {
 	return base != f && len(base) > 6 && strings.Contains(text, base)
 }
 
-// workspaceNote tells a sub-agent about its workspace.
 func workspaceNote(shared []string) string {
 	s := "Your workspace is your own; "
 	if len(shared) > 0 {

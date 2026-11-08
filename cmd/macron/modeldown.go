@@ -10,14 +10,8 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// modelDownAlerts keeps the owners from being told of the same outage over
-// and over: once in ten minutes.
 var modelDownAlerts = guard.NewRateLimiter(1, 10*time.Minute)
 
-// alertModelDown tells the owners (in the log chat, else themselves) that a
-// request failed because no model answered, with what each provider last said:
-// an outage that only the users see is one nobody fixes. It never blocks the
-// request that failed.
 func (b *Bot) alertModelDown(uid int64, err error) {
 	if ok, _ := modelDownAlerts.Allow("all"); !ok {
 		return
@@ -46,7 +40,6 @@ func (b *Bot) alertModelDown(uid int64, err error) {
 	}()
 }
 
-// errText is an error for a log line: the provider's own words first.
 func errText(err error) string {
 	var api *llm.APIError
 	if errors.As(err, &api) {

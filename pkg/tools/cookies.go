@@ -9,31 +9,21 @@ import (
 	"time"
 )
 
-// Cookies for sites that ask for a login (YouTube's bot check, Instagram…).
-// Several accounts can be added; each download takes the least recently used
-// cookie that fits the site. When a site blocks one (rate limit, login wall),
-// that cookie rests for 30–60 minutes and the download is retried at once
-// with the next one.
-
-// Cookie is one cookies.txt of the pool.
 type Cookie struct {
 	ID      string
 	Label   string
-	Domains []string // the sites it holds a login for
+	Domains []string
 	Data    string
 }
 
-// CookiePool hands out cookies and rests the ones a site blocked.
 type CookiePool interface {
-	// Pick returns a ready cookie for host, never one in skip.
 	Pick(host string, skip map[string]bool) (Cookie, bool)
-	// Rest takes a cookie out of use for d after a block.
+
 	Rest(id string, d time.Duration, reason string)
-	// Good records a successful use.
+
 	Good(id string)
 }
 
-// CookieDomains lists the domains of a Netscape cookies.txt.
 func CookieDomains(data string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -57,7 +47,6 @@ func CookieDomains(data string) []string {
 	return out
 }
 
-// cookieHost is the site a target belongs to (searches included).
 func cookieHost(target, host string) string {
 	switch {
 	case strings.HasPrefix(target, "ytsearch"):
@@ -70,7 +59,6 @@ func cookieHost(target, host string) string {
 	return strings.TrimPrefix(strings.ToLower(host), "www.")
 }
 
-// CookieFits reports whether a cookie holds a login for host.
 func CookieFits(c Cookie, host string) bool {
 	for _, d := range c.Domains {
 		if host == d || strings.HasSuffix(host, "."+d) || strings.HasSuffix(d, "."+host) {
@@ -80,12 +68,8 @@ func CookieFits(c Cookie, host string) bool {
 	return false
 }
 
-// cookieRest is how long a blocked cookie waits: 30–60 minutes.
 func cookieRest() time.Duration { return 30*time.Minute + rand.N(30*time.Minute) }
 
-// cookieBlocked: the site refused this account (rest it and use another).
-// A video kept from the server's country or needing an older account says
-// nothing about the cookie: it never rests one.
 func cookieBlocked(e string) bool {
 	if geoBlocked(e) || ageGated(e) {
 		return false
@@ -94,30 +78,23 @@ func cookieBlocked(e string) bool {
 		"log in to", "checkpoint", "challenge_required", "cookies are no longer valid", "account has been")
 }
 
-// privateForAccount: another account might see it (try the next cookie, no rest).
 func privateForAccount(e string) bool {
 	return ageGated(e) || containsAny(e, "private video", "private account", "this content isn't available", "members-only", "join this channel")
 }
 
-// geoBlocked: the item is not shown in the server's country; no account,
-// retry or cookie changes that.
 func geoBlocked(e string) bool {
 	return containsAny(e, "not available in your country", "available in your country", "from your location", "geo restrict",
 		"geo-restrict", "georestrict", "blocked it in your country", "not available in this country")
 }
 
-// ageGated: the item needs an account old enough (another one may be).
 func ageGated(e string) bool {
 	return containsAny(e, "confirm your age", "age-restricted", "age restricted", "inappropriate for some users")
 }
 
-// forbidden: an HTTP 403, which the account, the IP or a stale link may
-// cause: another account is tried once, and this one does not rest for it.
 func forbidden(e string) bool {
 	return containsAny(e, "http error 403", "403: forbidden", "403 forbidden")
 }
 
-// MemoryCookiePool is a CookiePool kept in memory (cookies from files).
 type MemoryCookiePool struct {
 	mu      sync.Mutex
 	cookies []Cookie
@@ -125,7 +102,6 @@ type MemoryCookiePool struct {
 	used    map[string]time.Time
 }
 
-// NewMemoryCookiePool builds a pool from cookies.txt contents.
 func NewMemoryCookiePool(cookies ...Cookie) *MemoryCookiePool {
 	p := &MemoryCookiePool{resting: map[string]time.Time{}, used: map[string]time.Time{}}
 	for _, c := range cookies {
@@ -169,8 +145,6 @@ func (p *MemoryCookiePool) Good(id string) {
 	p.mu.Unlock()
 }
 
-// Inherit carries the rests and the order of use of an older pool over (its
-// cookies that are still here keep their place).
 func (p *MemoryCookiePool) Inherit(old *MemoryCookiePool) {
 	old.mu.Lock()
 	resting, used := maps.Clone(old.resting), maps.Clone(old.used)
@@ -187,7 +161,6 @@ func (p *MemoryCookiePool) Inherit(old *MemoryCookiePool) {
 	}
 }
 
-// RestingUntil reports when a resting cookie is back (zero when ready).
 func (p *MemoryCookiePool) RestingUntil(id string) time.Time {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -197,5 +170,4 @@ func (p *MemoryCookiePool) RestingUntil(id string) time.Time {
 	return time.Time{}
 }
 
-// SetCookiePool gives the downloaders cookies for sites that ask for a login.
 func (r *Registry) SetCookiePool(p CookiePool) { r.cookiePool = p }

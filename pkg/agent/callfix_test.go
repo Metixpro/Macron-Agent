@@ -69,7 +69,7 @@ func TestFixCallArguments(t *testing.T) {
 	}{
 		{"web_search", `{"q": "دلار", "limit": "۵", "news": "yes", "region": "IR-FA"}`, map[string]any{"query": "دلار", "limit": 5.0, "news": true, "region": "ir-fa"}, true},
 		{"web_search", `{"searchQuery": "x", "limit": null}`, map[string]any{"query": "x"}, true},
-		{"web_search", `{"input": "x"}`, map[string]any{"query": "x"}, true}, // the one missing parameter
+		{"web_search", `{"input": "x"}`, map[string]any{"query": "x"}, true},
 		{"web_search", `{"query": ["قیمت طلا"]}`, map[string]any{"query": "قیمت طلا"}, false},
 		{"web_search", `{"query": "x", "limit": "1,500"}`, map[string]any{"query": "x", "limit": 1500.0}, false},
 		{"write_file", `{"file_path": "a.py", "text": "print(1)"}`, map[string]any{"filename": "a.py", "content": "print(1)"}, true},
@@ -79,7 +79,7 @@ func TestFixCallArguments(t *testing.T) {
 		{"view_image", `{"filenames": "[\"a.png\", \"b.png\"]"}`, map[string]any{"filenames": []any{"a.png", "b.png"}}, false},
 		{"view_image", `{"file": "a.png"}`, map[string]any{"filenames": []any{"a.png"}}, true},
 		{"run_code", `{"code": "print(1)", "language": "Python", "timeout": "30"}`, map[string]any{"code": "print(1)", "language": "python", "timeout": 30.0}, false},
-		{"run_code", `{"script": "print(1)", "language": "js"}`, map[string]any{"code": "print(1)", "language": "js"}, true}, // an enum it cannot tell stays (the tool says what it takes)
+		{"run_code", `{"script": "print(1)", "language": "js"}`, map[string]any{"code": "print(1)", "language": "js"}, true},
 		{"schedule", `{"task": "x", "when": "{\"hour\": \"9\", \"daily\": \"true\"}"}`, map[string]any{"task": "x", "when": map[string]any{"hour": 9.0, "daily": true}}, false},
 		{"generate_image", `{"description": "a cat"}`, map[string]any{"prompt": "a cat"}, true},
 	} {
@@ -92,12 +92,11 @@ func TestFixCallArguments(t *testing.T) {
 		}
 	}
 
-	// Right as it is: untouched.
 	tc := llm.ToolCall{Function: llm.FunctionCall{Name: "web_search", Arguments: `{"query":"x","limit":3}`}}
 	if fx := fixCall(&tc, fixDefs()); fx.any() || tc.Function.Arguments != `{"query":"x","limit":3}` {
 		t.Errorf("a right call: %s %s", fx, tc.Function.Arguments)
 	}
-	// What cannot be told is left for the model to fix.
+
 	name, got, _ := fixed(t, "web_search", `{"query": "x", "limit": "a few"}`)
 	if name != "web_search" || got["limit"] != "a few" {
 		t.Errorf("not a number: %v", got)

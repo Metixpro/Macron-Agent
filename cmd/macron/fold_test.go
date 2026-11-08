@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// A long answer goes as one message whose sections open with a tap, not as
-// several messages in a row; a short one stays as it is.
 func TestLongAnswersFold(t *testing.T) {
 	h := newHarness(t)
 	long := "خلاصه سفر به اصفهان 👇\n\n## روز اول\n\n" + strings.Repeat("میدون نقش جهان و مسجد شیخ لطف‌الله رو ببین. ", 40) +

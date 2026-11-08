@@ -25,7 +25,7 @@ func TestEvalGraders(t *testing.T) {
 		{"math", evalOutcome{answer: "۳۹۹٫۵"}, true},
 		{"math", evalOutcome{answer: "400"}, false},
 		{"code", evalOutcome{answer: "5,736,396", tools: []string{"run_code"}, tool: have}, true},
-		{"code", evalOutcome{answer: "5736396", tool: have}, false}, // a guess, without code
+		{"code", evalOutcome{answer: "5736396", tool: have}, false},
 		{"csv", evalOutcome{file: files(map[string]string{"sales.csv": csv})}, true},
 		{"csv", evalOutcome{file: files(map[string]string{"sales.csv": "a,b\n1,2"})}, false},
 		{"chart", evalOutcome{tools: []string{"generate_chart"}, tool: have, file: noFile}, true},
@@ -45,9 +45,6 @@ func TestEvalGraders(t *testing.T) {
 	}
 }
 
-// The exam runs the real agent on each case, stores the run, and tells the
-// owners when the score is low; it runs again after the model changes and
-// once a night.
 func TestTheExam(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {

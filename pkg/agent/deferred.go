@@ -11,24 +11,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// Deferred tools: the plugins' and MCP servers' tools wait unloaded when
-// there are many of them. Their schemas would cost every step thousands of
-// tokens and crowd the built-in tools out of a call's limit (MaxTools); the
-// model sees how many there are and loads what a job needs with tool_search.
-// A tool the conversation names, or that the job already used, is loaded by
-// itself. Calls to a tool that is not loaded still run, if the model knows
-// its name.
-
-// ToolSearch finds and loads the tools of the plugins and MCP servers.
 const ToolSearch = "tool_search"
 
-// deferAbove is how many plugin tools go as they are: a few cost little.
 const deferAbove = 16
 
-// searchResults is how many tools one search loads at most.
 const searchResults = 8
 
-// shelf holds the unloaded tools of one request.
 type shelf struct {
 	mu     sync.Mutex
 	tools  map[string]llm.Tool
@@ -36,8 +24,6 @@ type shelf struct {
 	order  []string
 }
 
-// deferPlugins shelves the plugins' tools of a request when there are more
-// than deferAbove (nil: none are shelved). A sub-agent gets no plugin tools.
 func (a *Agent) deferPlugins(defs []llm.Tool, req Request) *shelf {
 	if req.depth > 0 || a.Registry == nil {
 		return nil
@@ -53,7 +39,7 @@ func (a *Agent) deferPlugins(defs []llm.Tool, req Request) *shelf {
 		return nil
 	}
 	sort.Strings(s.order)
-	text := focusText(req) // a tool the conversation names is loaded
+	text := focusText(req)
 	for _, n := range s.order {
 		if len(n) > 4 && strings.Contains(text, n) {
 			s.loaded[n] = true
@@ -63,13 +49,8 @@ func (a *Agent) deferPlugins(defs []llm.Tool, req Request) *shelf {
 	return s
 }
 
-// preloadMax is how many tools a family the message names loads at once.
 const preloadMax = 8
 
-// preload loads, before the first step, the tools of a family the message
-// names («از دیتابیس sqlite…» → sqlite_*): no round goes to tool_search for
-// what the request already says. The family's tools the message's other
-// words point to come first.
 func (s *shelf) preload(req Request) {
 	msg := req.Input.Content
 	for _, p := range req.Input.Parts {
@@ -105,7 +86,6 @@ func (s *shelf) preload(req Request) {
 	}
 }
 
-// hide leaves out the shelved tools a job has not loaded.
 func (s *shelf) hide(defs []llm.Tool) []llm.Tool {
 	if s == nil {
 		return defs
@@ -121,7 +101,6 @@ func (s *shelf) hide(defs []llm.Tool) []llm.Tool {
 	return out
 }
 
-// note tells the model what waits unloaded (the plugins' name parts).
 func (s *shelf) note() string {
 	if s == nil {
 		return ""
@@ -146,7 +125,6 @@ func (s *shelf) loadedNames() []string {
 	return out
 }
 
-// families are the first words of the shelved tools' names, the most common first.
 func (s *shelf) families() string {
 	count := map[string]int{}
 	for _, n := range s.order {
@@ -183,7 +161,6 @@ func (s *shelf) searchTool() LocalTool {
 	}
 }
 
-// search loads the shelved tools that best match the query.
 func (s *shelf) search(q string) string {
 	words := searchWords(q)
 	type hit struct {
@@ -231,7 +208,6 @@ func (s *shelf) search(q string) string {
 	return "Loaded; call them from the next step:\n" + strings.Join(lines, "\n")
 }
 
-// searchWords are the lower-case words of a text (names split at _ - . too).
 func searchWords(s string) []string {
 	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 }

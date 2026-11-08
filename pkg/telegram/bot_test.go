@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// A field that does not fit (a value of a new or changed type) never loses
-// the update: the message is read without it, its reply too.
 func TestDecodeUpdatesLeavesOutWhatDoesNotFit(t *testing.T) {
 	raw := []json.RawMessage{
 		[]byte(`{"update_id":1,"message":{"message_id":5,"chat":{"id":-100,"type":"supergroup"},"from":{"id":7,"first_name":"Ali"},"text":"مکرون نظرت چیه",

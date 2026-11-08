@@ -13,7 +13,6 @@ func groupClick(h *harness, userID int64, msg *telegram.Message, data string) {
 	h.bot.wg.Wait()
 }
 
-// panelIn finds the message id of the panel the bot noted in a chat.
 func panelIn(h *harness, chatID int64) int64 {
 	h.t.Helper()
 	var id int64
@@ -53,7 +52,6 @@ func TestGroupPanelsAnswerOnlyTheirOwner(t *testing.T) {
 		t.Fatal("the owner uses their own panel")
 	}
 
-	// After a restart the registry is empty: the command the panel replies to names the owner.
 	h.bot.panels.Delete(panelKey(chat.ID, panel.MessageID))
 	panel.ReplyToMessage = &telegram.Message{MessageID: 77, From: &telegram.User{ID: owner}, Chat: chat}
 	groupClick(h, other, panel, "mode:set:deep")
@@ -65,7 +63,6 @@ func TestGroupPanelsAnswerOnlyTheirOwner(t *testing.T) {
 		t.Fatal("the owner still uses it after a restart")
 	}
 
-	// Others' panels in private chats and buttons meant for everyone are untouched.
 	if (&Bot{}).foreignPanel(&telegram.CallbackQuery{From: telegram.User{ID: other}, Data: "mode:set:fast",
 		Message: &telegram.Message{MessageID: 9, Chat: telegram.Chat{ID: other, Type: "private"}}}) {
 		t.Error("private chats have no owners to check")
@@ -74,7 +71,6 @@ func TestGroupPanelsAnswerOnlyTheirOwner(t *testing.T) {
 		t.Error("buttons that check their own owner are left alone")
 	}
 
-	// The reminders panel is locked the same way.
 	h.send(group(owner, "/reminders"))
 	list := &telegram.Message{MessageID: panelIn(h, chat.ID), Chat: chat}
 	if !h.bot.foreignPanel(&telegram.CallbackQuery{From: telegram.User{ID: other}, Data: "sc:list", Message: list}) {

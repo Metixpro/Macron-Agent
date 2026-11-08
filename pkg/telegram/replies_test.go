@@ -15,7 +15,6 @@ func decodeMessage(t *testing.T, raw string) *Message {
 	return &m
 }
 
-// The bot's answers are rich messages: replying to one shows its blocks, not text.
 func TestRichMessageText(t *testing.T) {
 	m := decodeMessage(t, `{"message_id":5,"chat":{"id":1,"type":"private"},"rich_message":{"is_rtl":true,"blocks":[
 		{"type":"heading","size":2,"text":"قیمت‌ها"},
@@ -40,7 +39,7 @@ func TestRichMessageText(t *testing.T) {
 }
 
 func TestRepliedReadsEveryKindOfReply(t *testing.T) {
-	// A reply to a rich answer gets its picture, to be opened like any photo.
+
 	m := decodeMessage(t, `{"message_id":9,"chat":{"id":-1,"type":"supergroup"},"text":"این رو بزرگ کن","reply_to_message":{"message_id":5,
 		"from":{"id":42,"is_bot":true,"first_name":"Macron"},"chat":{"id":-1,"type":"supergroup"},
 		"rich_message":{"blocks":[{"type":"slideshow","blocks":[{"type":"photo","photo":[{"file_id":"big","width":800,"height":600}]}]},{"type":"paragraph","text":"بفرما"}]}}}`)
@@ -52,15 +51,12 @@ func TestRepliedReadsEveryKindOfReply(t *testing.T) {
 		t.Error("the update itself is left as it was")
 	}
 
-	// In a forum, a topic's first message is not what the message replies to.
 	topic := decodeMessage(t, `{"message_id":20,"chat":{"id":-2,"type":"supergroup","is_forum":true},"is_topic_message":true,"message_thread_id":3,
 		"text":"مکرون سلام","reply_to_message":{"message_id":3,"from":{"id":7,"first_name":"Ali"},"chat":{"id":-2,"type":"supergroup"},"forum_topic_created":{"name":"Talk"}}}`)
 	if topic.Replied() != nil || topic.RepliedInChat() != nil {
 		t.Error("a topic's first message is not a reply")
 	}
 
-	// A message of another chat (or one a guest bot cannot see): its author and
-	// media, and the part the user quoted as its text.
 	ext := decodeMessage(t, `{"message_id":30,"chat":{"id":-3,"type":"supergroup"},"text":"@bot ترجمه کن","quote":{"text":"Good morning","position":0},
 		"external_reply":{"origin":{"type":"user","date":1,"sender_user":{"id":99,"first_name":"Sara"}},"photo":[{"file_id":"ph","width":5,"height":5}]}}`)
 	r = ext.Replied()

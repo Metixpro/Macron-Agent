@@ -9,8 +9,6 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-// A zip made on a Persian Windows keeps its names in Windows-1256: the files
-// are unpacked under their Persian names, not dropped.
 func TestZipWithWindowsNames(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	persian, _ := charmap.Windows1256.NewEncoder().String("گزارش.txt")

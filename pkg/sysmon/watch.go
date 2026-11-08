@@ -5,37 +5,30 @@ import (
 	"time"
 )
 
-// Alert kinds.
 const (
 	AlertCPU  = "cpu"
 	AlertRAM  = "ram"
 	AlertDisk = "disk"
 )
 
-// Limits are the percentages that raise an alert (0: that one is off).
 type Limits struct{ CPU, RAM, Disk int }
 
-// Alert is a limit crossed, or the end of it.
 type Alert struct {
 	Kind      string
-	Value     float64 // the reading that crossed it (CPU: the last 5 minutes' mean)
+	Value     float64
 	Limit     int
 	Recovered bool
-	Path      string // the disk
-	Top       []Proc // the busiest processes then (by CPU or memory)
+	Path      string
+	Top       []Proc
 }
 
 const (
-	cpuWindow  = 5 * time.Minute // CPU must stay over its limit this long
+	cpuWindow  = 5 * time.Minute
 	ramWindow  = 2 * time.Minute
-	alertAgain = 3 * time.Hour // a limit still crossed is mentioned again after this
-	recoverGap = 5.0           // a reading must fall this far under the limit to count as recovered
+	alertAgain = 3 * time.Hour
+	recoverGap = 5.0
 )
 
-// Watch checks the readings against limits and tells of crossings: once when
-// a limit is crossed, again every few hours while it stays crossed, and once
-// when it is over. Limits are asked for at every reading, so a change in
-// the panel counts at once.
 type Watch struct {
 	Limits func() Limits
 	Notify func(Alert)
@@ -59,8 +52,6 @@ func (w *Watch) st(key string) *alertState {
 	return w.state[key]
 }
 
-// fire sends an alert on a crossing (crossed with its reading), a repeat or
-// a recovery; it reports nothing when there is nothing new.
 func (w *Watch) fire(key string, over bool, recovered bool, a Alert) {
 	w.mu.Lock()
 	s := w.st(key)

@@ -21,14 +21,11 @@ import (
 
 const studioTestKey = "k3y-for-tests"
 
-// fakeImageServices plays the picture studio (/studio: one POST with JSON,
-// styles, aspects and generate, two JPEGs per picture) and Flux (/flux/<prompt>,
-// a JPEG of the asked size).
 type fakeImageServices struct {
 	*httptest.Server
-	nest, flux atomic.Int32 // generate calls, Flux calls
-	calls      atomic.Int32 // every call to the studio
-	fail       atomic.Bool  // the studio fails a generate
+	nest, flux atomic.Int32
+	calls      atomic.Int32
+	fail       atomic.Bool
 	mu         sync.Mutex
 	lastBody   map[string]any
 	fluxPrompt string
@@ -133,7 +130,6 @@ func (f *fakeImageServices) body() map[string]any {
 	return f.lastBody
 }
 
-// studioRegistry is a registry whose first engine is the fake studio.
 func studioRegistry(t *testing.T, f *fakeImageServices) *Registry {
 	t.Helper()
 	r := newRegistry(t, true, nil)
@@ -179,7 +175,7 @@ func TestGenerateImageStudioMakesTheStyleAndShape(t *testing.T) {
 	}
 	body := f.body()
 	if body["action"] != "generate" || body["prompt"] != "a red bicycle on a beach" || body["style"] != "cyberpunk" || body["aspect"] != "16:9" {
-		t.Fatalf("the studio was asked: %v", body) // the last call: 5:3 → 16:9
+		t.Fatalf("the studio was asked: %v", body)
 	}
 	if f.flux.Load() != 0 {
 		t.Fatal("Flux is not called when the studio works")
@@ -224,7 +220,6 @@ func TestGenerateImageTwoOptions(t *testing.T) {
 		t.Fatalf("one generate gives both options, got %d calls", f.nest.Load())
 	}
 
-	// The request's allowance: one picture left means one option.
 	ctx := WithAllowance(context.Background(), &Allowance{Images: 1})
 	out, err := r.Execute(ctx, "img", "generate_image", `{"prompt":"a lighthouse at dawn","count":2,"filename":"one.jpg"}`)
 	if err != nil || strings.Contains(out, "option 2") || !strings.Contains(out, "File: one.jpg") {
@@ -308,7 +303,6 @@ func TestGenerateImageFallsBackToFlux(t *testing.T) {
 		t.Fatalf("Flux has no styles: the style goes into the words: %q", fp)
 	}
 
-	// No address at all (WAZE_IMAGE_API_URL=off): straight to Flux.
 	r.imageAPI = ""
 	f.nest.Store(0)
 	out = call(t, r, "img", "generate_image", map[string]any{"prompt": "a dog"})
@@ -340,7 +334,7 @@ func TestGenerateImageAKeyTheStudioRefusesIsNotRetried(t *testing.T) {
 	r.imageAPI = f.URL + "/studio"
 	r.SetImageKey(func() string { return "wrong-key" })
 	out := call(t, r, "img", "generate_image", map[string]any{"prompt": "a cat"})
-	if f.calls.Load() != 2 { // the styles are asked once, the picture once: a refused key is not tried again
+	if f.calls.Load() != 2 {
 		t.Fatalf("a refused key is not tried again: %d calls", f.calls.Load())
 	}
 	if !strings.Contains(out, "did not accept its key") || strings.Contains(out, "wrong-key") || !strings.Contains(out, "do NOT substitute") {
@@ -395,12 +389,10 @@ func TestTheStyleListIsReadOnceAndNeverHoldsAPictureBack(t *testing.T) {
 	for range 3 {
 		call(t, r, "img", "generate_image", map[string]any{"prompt": "a quiet harbour", "style": "neon"})
 	}
-	if f.calls.Load() != 2+3 { // styles and aspects once, a picture each time
+	if f.calls.Load() != 2+3 {
 		t.Fatalf("the lists are cached: %d calls", f.calls.Load())
 	}
 
-	// A service whose lists cannot be read: the built-in lists stand in, and
-	// it is not asked again for a while.
 	bad := newRegistry(t, true, nil)
 	bad.imageAPI = f.URL + "/studio"
 	bad.SetImageKey(func() string { return "wrong-key" })
@@ -416,8 +408,6 @@ func TestTheStyleListIsReadOnceAndNeverHoldsAPictureBack(t *testing.T) {
 	}
 }
 
-// TestLiveStudio draws with the real service when WAZE_TEST_IMAGE_KEY is set
-// (the key comes from the environment only; nothing is stored).
 func TestLiveStudio(t *testing.T) {
 	key := os.Getenv("WAZE_TEST_IMAGE_KEY")
 	if key == "" {

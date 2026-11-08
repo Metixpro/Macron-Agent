@@ -23,7 +23,6 @@ func TestRunCodeShowsTheRealTerminal(t *testing.T) {
 		t.Errorf("a snippet is not a deliverable: it lives in a hidden folder: %v", fi)
 	}
 
-	// A named file is saved (to be delivered) and can be run again later.
 	out = call(t, r, "dev", ToolRunCode, map[string]any{"filename": "calc.py", "code": "import sys\nprint(sum(map(int, sys.argv[1:])), input())",
 		"args": []string{"2", "40"}, "stdin": "done"})
 	if !strings.Contains(out, "$ python3 calc.py 2 40\n42 done\n[exit 0") {

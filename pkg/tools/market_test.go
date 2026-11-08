@@ -70,7 +70,6 @@ func TestMarketPrice(t *testing.T) {
 		t.Error("a minute-old answer comes from the cache")
 	}
 
-	// tgju has no coins but the emami: bonbast fills the rest in.
 	out = call(t, r, "m", ToolMarketPrice, map[string]any{"items": "coins"})
 	if !strings.Contains(out, "🪙 ربع سکه: ۷۷٬۰۰۰٬۰۰۰") || !strings.Contains(out, "🪙 سکه امامی: ۲۷۳٬۸۱۰٬۰۰۰") || !strings.Contains(out, "tgju.org + bonbast.com") {
 		t.Errorf("filled in:\n%s", out)

@@ -23,26 +23,16 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
-// The live model lab: the whole bot (its prompt, every tool, the live
-// draft) on a real model, to see that whatever shape the model writes its
-// calls in, nothing of them reaches the user. Set WAZE_TEST_LLM_URL,
-// WAZE_TEST_LLM_KEY and WAZE_TEST_LLM_MODEL;
-// WAZE_TEST_LLM_LOG keeps the model's raw replies in that folder.
-
-// leakRe is what must never show in a message: tool markup, special tokens,
-// a call written out as text.
 var leakRe = regexp.MustCompile(`(?i)<\s*/?\s*(?:[a-z0-9_-]+:)?(?:tool_call|tool_calls|function_calls?|invoke|parameter|tool_use|arg_key|arg_value)\b|` +
 	`<function=|<\|[a-z_]+\|>|\[TOOL_CALLS\]|\bto=functions\.|(?m:^\s*Action:\s)|` +
 	`(?m:^[\s>*•-]*(?:bash_execute|run_code|write_file|read_file|web_search|web_fetch|send_file|list_files|update_plan|generate_chart|generate_image)\s*\()|` +
 	`"name"\s*:\s*"(?:bash_execute|run_code|write_file|read_file|web_search|send_file|update_plan|generate_chart)"`)
 
-// labProxy forwards the bot's model calls to the real API and keeps each
-// raw reply (a stream's text reassembled) for the log.
 type labProxy struct {
 	target, key string
 	mu          sync.Mutex
 	replies     []string
-	raw         []string // each request and its raw reply
+	raw         []string
 }
 
 func (p *labProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,8 +72,6 @@ func (p *labProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.mu.Unlock()
 }
 
-// assembled is a reply as the model wrote it: its text and native calls
-// (a stream's deltas joined).
 func assembled(raw string) string {
 	var text, calls strings.Builder
 	if !strings.Contains(raw, "data:") {
@@ -134,7 +122,6 @@ func assembled(raw string) string {
 	return strings.TrimSpace(calls.String() + "\n" + text.String())
 }
 
-// shown is everything the user saw: drafts, messages and their edits.
 func shown(h *harness) []string {
 	h.tg.mu.Lock()
 	defer h.tg.mu.Unlock()
@@ -167,18 +154,18 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 	}
 	_ = h.bot.prov.Reload(bg)
 	h.bot.runTimeout = 4 * time.Minute
-	if os.Getenv("WAZE_TEST_LLM_PLUGINS") != "" { // many plugin tools: the job loads the ones it needs (tool_search)
+	if os.Getenv("WAZE_TEST_LLM_PLUGINS") != "" {
 		h.bot.app.Registry.SetPlugins(labPlugins{})
 	}
-	if os.Getenv("WAZE_TEST_LLM_FOCUS") != "" { // as a provider the bot judged weak at calling tools
+	if os.Getenv("WAZE_TEST_LLM_FOCUS") != "" {
 		h.bot.saveToolSkill(bg, p.ID, toolSkill{Mode: toolModeFocus})
 	}
-	if os.Getenv("WAZE_TEST_LLM_WEB") != "" { // the real web (through this machine's proxy) and production's limits
-		web := netclient.NewClient(netclient.Options{UseEnvProxy: true, Timeout: 25 * time.Second}) // the proxy is on loopback
+	if os.Getenv("WAZE_TEST_LLM_WEB") != "" {
+		web := netclient.NewClient(netclient.Options{UseEnvProxy: true, Timeout: 25 * time.Second})
 		engine := search.NewEngine(web)
 		h.bot.app.Search, h.bot.app.Registry.Search, h.bot.app.Registry.HTTP = engine, engine, web
 		h.bot.runTimeout = 8 * time.Minute
-		_ = h.st.SetSetting(bg, store.SettingAgentSteps, "80") // production's default
+		_ = h.st.SetSetting(bg, store.SettingAgentSteps, "80")
 	}
 
 	jobs := strings.Split(os.Getenv("WAZE_TEST_LLM_JOBS"), "|")
@@ -199,7 +186,7 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 		proxy.replies, proxy.raw = nil, nil
 		proxy.mu.Unlock()
 		start := time.Now()
-		h.send(private(int64(700+i), job)) // each job its own user: its own workspace and storage
+		h.send(private(int64(700+i), job))
 		texts := shown(h)
 		var bad []string
 		for _, s := range texts {
@@ -245,7 +232,6 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 	}
 }
 
-// labPlugins are an MCP server's worth of tools, for the lab.
 type labPlugins struct{}
 
 func (labPlugins) Tools() []llm.Tool {

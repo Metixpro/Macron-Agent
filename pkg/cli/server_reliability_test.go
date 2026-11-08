@@ -19,7 +19,7 @@ func TestServicePathsAreLiteral(t *testing.T) {
 	if strings.Contains(s, "\nEnvironment=INJECTED=") || !strings.Contains(s, `%%u`) || !strings.Contains(s, `$$HOME`) || !strings.Contains(s, `UMask=0077`) {
 		t.Fatalf("unsafe service rendering: %s", s)
 	}
-	// Decode the actual XML, including characters invalid without escaping.
+
 	p := renderLaunchd(unit{Home: `/home/a&b<test>`, Binary: `/opt/a&b/macron`})
 	d := xml.NewDecoder(strings.NewReader(p))
 	found := false
@@ -97,8 +97,6 @@ func TestBackupRejectsMissingHome(t *testing.T) {
 	}
 }
 
-// WorkingDirectory= must never be quoted: systemd reads a quoted value as a
-// relative path and refuses the whole unit ("path is not absolute").
 func TestSystemdWorkingDirectoryIsRaw(t *testing.T) {
 	for _, home := range []string{"/home/debian/.macron", "/home/debian/my dir/.macron"} {
 		s := renderSystemd(unit{Home: home, Binary: "/home/debian/.local/bin/macron"})
@@ -114,8 +112,6 @@ func TestSystemdWorkingDirectoryIsRaw(t *testing.T) {
 	}
 }
 
-// The unit systemd will really load: checked by systemd-analyze when the
-// machine has it (Linux CI and servers do).
 func TestSystemdUnitVerifies(t *testing.T) {
 	if _, err := exec.LookPath("systemd-analyze"); err != nil {
 		t.Skip("no systemd-analyze")
@@ -140,7 +136,7 @@ func TestSystemdUnitVerifies(t *testing.T) {
 			t.Errorf("%s: unit rejected: %v\n%s\n%s", dir, err, out, renderSystemd(u))
 		}
 	}
-	// And the old quoted form really is rejected, so the check can fail.
+
 	root := t.TempDir()
 	path := filepath.Join(root, unitName)
 	bad := "[Service]\nWorkingDirectory=\"" + root + "\"\nExecStart=/bin/true\n"

@@ -10,26 +10,17 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// A web page is mostly its frame: menus, the site's header and footer,
-// language lists, share buttons, related links. The reader keeps what the
-// page is about: the <main> or <article> (or the block that holds most of
-// its paragraphs) when it carries enough of the text, without the frame;
-// headings stay headings and tables stay rows.
-
-// boilerRe matches the class or id of a page's frame.
 var boilerRe = regexp.MustCompile(`(?i)(?:^|[\s_-])(?:nav|navbar|navigation|menu|menubar|breadcrumbs?|footer|sidebar|side-bar|cookies?|consent|` +
 	`share|sharing|social|comments?|advert|adverts|ads|adsbox|newsletter|popup|modal|subscribe|signup|` +
 	`langlinks|interlanguage|language-list|lang-list|toc|mw-jump-link|catlinks|navbox|sitenotice|mw-panel|printfooter|` +
 	`mw-editsection|reference|noprint|` +
 	`vector-header|vector-menu|vector-page-toolbar|skip-link|skiplink|screen-reader-text|visually-hidden|sr-only)(?:$|[\s_-])`)
 
-// mainIDRe matches the id or class of a page's main content.
 var mainIDRe = regexp.MustCompile(`(?i)^(?:mw-content-text|content|main-content|maincontent|main|article-body|articlebody|article-content|` +
 	`post-content|entry-content|story-body|news-content|newsbody|news-text|item-text|body-text)$`)
 
 var frameTags = map[string]bool{"nav": true, "footer": true, "aside": true, "menu": true, "dialog": true}
 
-// framed: an element of the page's frame, or hidden.
 func framed(n *html.Node) bool {
 	if frameTags[n.Data] {
 		return true
@@ -45,7 +36,7 @@ func framed(n *html.Node) bool {
 		return true
 	}
 	if n.Data == "header" && !inside(n, "article", "main") {
-		return true // the site's header, not an article's
+		return true
 	}
 	if n.Data == "body" || n.Data == "main" || n.Data == "article" || n.Data == "html" {
 		return false
@@ -53,7 +44,6 @@ func framed(n *html.Node) bool {
 	return boilerRe.MatchString(attr(n, "class")) || boilerRe.MatchString(attr(n, "id"))
 }
 
-// rawText is the text of a node as written (for <pre>).
 func rawText(n *html.Node) string {
 	var sb strings.Builder
 	var walk func(*html.Node)
@@ -92,7 +82,6 @@ func inside(n *html.Node, tags ...string) bool {
 	return false
 }
 
-// readableText is the text of a web page without its frame.
 func readableText(doc *html.Node) string {
 	all := render(doc, true)
 	total := utf8.RuneCountInString(all)
@@ -112,8 +101,6 @@ func readableText(doc *html.Node) string {
 	return all
 }
 
-// mainNode is the page's own marking of its content: <main>, role="main",
-// its one <article>, or a known content id.
 func mainNode(doc *html.Node) *html.Node {
 	var mains, articles, ids []*html.Node
 	var walk func(*html.Node)
@@ -137,7 +124,7 @@ func mainNode(doc *html.Node) *html.Node {
 	}
 	walk(doc)
 	switch {
-	case len(ids) > 0 && ids[0].Parent != nil && attr(ids[0], "id") == "mw-content-text": // Wikipedia
+	case len(ids) > 0 && ids[0].Parent != nil && attr(ids[0], "id") == "mw-content-text":
 		return ids[0]
 	case len(articles) == 1:
 		return articles[0]
@@ -149,8 +136,6 @@ func mainNode(doc *html.Node) *html.Node {
 	return nil
 }
 
-// densestNode is the block that holds the most paragraph text (its own
-// paragraphs count whole, its children's half).
 func densestNode(doc *html.Node) *html.Node {
 	score := map[*html.Node]int{}
 	var walk func(*html.Node)
@@ -185,9 +170,6 @@ func densestNode(doc *html.Node) *html.Node {
 	return best
 }
 
-// render writes a node as text: paragraphs and list items on their own
-// lines, headings marked, table rows as cells with " | " between them.
-// noFrame leaves out the page's frame.
 func render(root *html.Node, noFrame bool) string {
 	var sb strings.Builder
 	var walk func(*html.Node)
@@ -207,7 +189,7 @@ func render(root *html.Node, noFrame bool) string {
 			if block {
 				sb.WriteByte('\n')
 			}
-			if n.Data == "pre" { // code keeps its lines
+			if n.Data == "pre" {
 				code := strings.Trim(rawText(n), "\n")
 				if code != "" {
 					sb.WriteString("\n```\n" + strings.ReplaceAll(code, "\n\n\n", "\n\n") + "\n```\n")
@@ -248,13 +230,13 @@ func render(root *html.Node, noFrame bool) string {
 		if strings.TrimSpace(l) == "```" {
 			code = !code
 		}
-		if code { // as written
+		if code {
 			out = append(out, strings.TrimRight(l, " \t"))
 			continue
 		}
 		l = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(l), "|"))
 		if strings.Trim(l, "|#• ") == "" && l != "" {
-			continue // an empty row, heading or list item
+			continue
 		}
 		out = append(out, l)
 	}

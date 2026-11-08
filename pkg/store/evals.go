@@ -5,20 +5,18 @@ import (
 	"time"
 )
 
-// EvalRun is one run of the bot's periodic exam.
 type EvalRun struct {
 	ID        int64
 	StartedAt time.Time
 	Took      time.Duration
-	Reason    string // nightly, provider, manual
+	Reason    string
 	Provider  string
 	Model     string
 	Passed    int
 	Total     int
-	Details   string // JSON: each case with its result
+	Details   string
 }
 
-// Score is the run's grade in percent.
 func (r EvalRun) Score() int {
 	if r.Total == 0 {
 		return 0
@@ -26,7 +24,6 @@ func (r EvalRun) Score() int {
 	return r.Passed * 100 / r.Total
 }
 
-// AddEvalRun stores a run.
 func (s *Store) AddEvalRun(ctx context.Context, r EvalRun) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `INSERT INTO eval_runs (started_at, took_ms, reason, provider, model, passed, total, details)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, r.StartedAt.UTC(), r.Took.Milliseconds(), truncate(r.Reason, 32), truncate(r.Provider, 64),
@@ -37,7 +34,6 @@ func (s *Store) AddEvalRun(ctx context.Context, r EvalRun) (int64, error) {
 	return res.LastInsertId()
 }
 
-// EvalRuns returns the latest runs, newest first.
 func (s *Store) EvalRuns(ctx context.Context, limit int) ([]EvalRun, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, started_at, took_ms, reason, provider, model, passed, total, details
 		FROM eval_runs ORDER BY started_at DESC, id DESC LIMIT ?`, limit)

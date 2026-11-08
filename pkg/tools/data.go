@@ -11,12 +11,6 @@ import (
 	"unicode"
 )
 
-// query_data answers questions about data files with SQL (SQLite): a
-// database is attached read-only, a CSV/TSV or JSON file becomes a table
-// named after it (columns typed from their values), and every sheet of an
-// Excel file a table named after the sheet. Several files can be joined.
-// The query runs here; only reads are allowed.
-
 const (
 	ToolQueryData = "query_data"
 
@@ -153,7 +147,6 @@ func (r *Registry) queryData(ctx context.Context, sessionID string, args map[str
 	return text, nil
 }
 
-// sheetCSV writes the rows of a sheet as CSV.
 func sheetCSV(rows [][]string) []byte {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
@@ -161,8 +154,6 @@ func sheetCSV(rows [][]string) []byte {
 	return buf.Bytes()
 }
 
-// tableIdent makes a table name SQL can use without quotes: ASCII
-// punctuation and spaces become "_" (Persian letters stay), unique.
 func tableIdent(name string, used map[string]bool) string {
 	var b strings.Builder
 	under := false

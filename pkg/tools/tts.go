@@ -17,20 +17,13 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// text_to_speech reads Persian with a local Piper voice (no internet, no
-// limits of a free service) and English with Edge TTS; Edge TTS also reads
-// the Persian Piper cannot (not installed, the model missing, an error).
-
-// piperRetry is how long a server without Piper is not asked again.
 const piperRetry = 10 * time.Minute
 
-// piperVoice is the local Persian voice, read here.
 type piperVoice struct {
-	model    string       // the .onnx, its .onnx.json beside it; "" = off
-	offUntil atomic.Int64 // Piper is not installed: not tried before this (unix seconds)
+	model    string
+	offUntil atomic.Int64
 }
 
-// PiperFiles are the files of a Piper voice (the machine mounts them read-only).
 func PiperFiles(model string) []string {
 	if model == "" || !filepath.IsAbs(model) {
 		return nil
@@ -51,7 +44,6 @@ func (p *piperVoice) ready() bool {
 	return len(files) > 0
 }
 
-// name is the voice's name in its file name: fa_IR-mantatts-par.onnx → mantatts.
 func (p *piperVoice) name() string {
 	base := strings.TrimSuffix(filepath.Base(p.model), ".onnx")
 	if parts := strings.Split(base, "-"); len(parts) >= 2 && parts[1] != "" {
@@ -60,7 +52,6 @@ func (p *piperVoice) name() string {
 	return base
 }
 
-// edgeVoices are the tool's voices on Edge TTS.
 var edgeVoices = map[string]struct{ id, name string }{
 	"farid":       {"fa-IR-FaridNeural", "Farid Neural"},
 	"dilara":      {"fa-IR-DilaraNeural", "Dilara Neural"},
@@ -87,11 +78,9 @@ func (r *Registry) textToSpeech(ctx context.Context, sessionID string, args map[
 	}
 	persian := hasPersian(text)
 	voice := strings.ToLower(strings.TrimSpace(strArg(args, "voice")))
-	// The local voice reads Persian unless a voice of Edge TTS was asked for
-	// by name (farid, a man; dilara, a woman): none, "mana" and the names of
-	// earlier local voices all mean it.
+
 	local := voice == "" || voice == "mana" || voice == "amir" || voice == "mantatts" || voice == "local"
-	if _, ok := edgeVoices[voice]; !ok { // none, or one it does not know
+	if _, ok := edgeVoices[voice]; !ok {
 		voice = "farid"
 		if !persian {
 			voice = "christopher"
@@ -101,7 +90,6 @@ func (r *Registry) textToSpeech(ctx context.Context, sessionID string, args map[
 	asVoice := boolArg(args, "as_voice")
 	speed := speechSpeed(args)
 
-	// Piper reads only Persian: English text goes straight to Edge TTS.
 	if persian && local && r.piper.ready() {
 		out, err := r.piperSpeech(ctx, sessionID, text, name, asVoice, speed)
 		if err == nil {
@@ -112,7 +100,6 @@ func (r *Registry) textToSpeech(ctx context.Context, sessionID string, args map[
 	return r.edgeSpeech(ctx, sessionID, text, name, voice, asVoice, speed), nil
 }
 
-// speechSpeed reads the speed (0.5 slow … 2 fast; 1 = normal).
 func speechSpeed(args map[string]any) float64 {
 	s := 1.0
 	switch v := args["speed"].(type) {
@@ -129,18 +116,16 @@ func speechSpeed(args map[string]any) float64 {
 	return min(max(s, 0.5), 2)
 }
 
-// piperSpeech reads Persian with the local voice: a WAV, then an MP3 (or a
-// voice message).
 func (r *Registry) piperSpeech(ctx context.Context, sessionID, text, name string, asVoice bool, speed float64) (string, error) {
-	wav := ".tts-" + strconv.FormatInt(time.Now().UnixNano(), 36) + ".wav" // hidden: never delivered
+	wav := ".tts-" + strconv.FormatInt(time.Now().UnixNano(), 36) + ".wav"
 	defer func() { _ = r.Machine.Remove(sessionID, wav) }()
-	// The text goes through stdin, so it can never be parsed as an option.
+
 	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{
-		// A short pause between sentences reads more naturally; the speed is the phonemes' length.
+
 		Args: []string{"python3", "-I", "-m", "piper", "-m", r.piper.model, "--length_scale", strconv.FormatFloat(1/speed, 'f', 3, 64),
 			"--sentence_silence", "0.25", "-f", "./" + wav},
 		Stdin:   []byte(text),
-		Timeout: 3 * time.Minute, // loading the model alone takes a second or two
+		Timeout: 3 * time.Minute,
 	})
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "No module named piper") {
@@ -148,12 +133,12 @@ func (r *Registry) piperSpeech(ctx context.Context, sessionID, text, name string
 		}
 		return "", errors.New(failure("piper", res))
 	}
-	if info, err := r.Machine.Stat(sessionID, wav); err != nil || info.Size() <= 44 { // a WAV header and nothing else
+	if info, err := r.Machine.Stat(sessionID, wav); err != nil || info.Size() <= 44 {
 		return "", errors.New("piper produced no audio")
 	}
 	out, kind := name, "Audio"
 	conv := ffmpegArgs("-i", "./"+wav, "-ac", "1", "-c:a", "libmp3lame", "-b:a", "64k", "./"+out)
-	if asVoice { // a voice message, with its waveform, instead of a music file
+	if asVoice {
 		out, kind = nativeName("", name, VoiceSuffix), "Voice message"
 		conv = ffmpegArgs("-i", "./"+wav, "-ac", "1", "-ar", "48000", "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", "-application", "voip", "./"+out)
 	}
@@ -168,12 +153,11 @@ func (r *Registry) piperSpeech(ctx context.Context, sessionID, text, name string
 	return speechResult(kind, out, info.Size(), "Piper "+r.piper.name()+" (local)"), nil
 }
 
-// edgeSpeech reads text with Edge TTS (online).
 func (r *Registry) edgeSpeech(ctx context.Context, sessionID, text, name, voice string, asVoice bool, speed float64) string {
 	v := edgeVoices[voice]
 	rate := fmt.Sprintf("--rate=%+d%%", int((speed-1)*100+0.5*sign(speed-1)))
 	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{
-		// edge-tts takes a proxy only as an option.
+
 		Args: []string{"bash", "-c", `p=(); [ -n "$HTTPS_PROXY" ] && p=(--proxy "$HTTPS_PROXY"); exec python3 -I -m edge_tts "${p[@]}" "$@"`, "tts",
 			"--voice", v.id, rate, "--file", "-", "--write-media", "./" + name},
 		Stdin:   []byte(text),

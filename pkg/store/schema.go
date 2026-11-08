@@ -1,20 +1,9 @@
 package store
 
-// The database schema, in SQLite's own SQL.
-//
-// Times are DATETIME / DATE columns holding UTC text of a fixed width (see
-// timeLayout in sqlite.go), so a comparison of the text is a comparison of the
-// times, and the driver hands them back as time.Time. Flags are INTEGER 0/1.
-//
-// Each entry of migrations is one version of the database; a database that is
-// behind runs the entries it has not seen, each statement on its own (see
-// migrate). A change to a database that exists is a new entry at the end: an
-// ALTER TABLE … ADD COLUMN, a new table, a new index. Never edit an entry that
-// has shipped.
 var migrations = [][]string{
-	// 1: the whole schema
+
 	{
-		// the people who talked to the agent (the owner, and anyone the owner allows)
+
 		`CREATE TABLE IF NOT EXISTS users (
 			id INTEGER NOT NULL PRIMARY KEY,
 			username TEXT COLLATE NOCASE NULL,
@@ -34,7 +23,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users (last_seen_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_created ON users (created_at)`,
 
-		// the requests and tokens each user spends a day
 		`CREATE TABLE IF NOT EXISTS daily_usage (
 			user_id INTEGER NOT NULL,
 			day DATE NOT NULL,
@@ -44,7 +32,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_day ON daily_usage (day)`,
 
-		// the conversation window
 		`CREATE TABLE IF NOT EXISTS context_messages (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -55,7 +42,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ctx_user ON context_messages (user_id, id)`,
 
-		// the summary of what the window forgot
 		`CREATE TABLE IF NOT EXISTS context_memory (
 			user_id INTEGER NOT NULL PRIMARY KEY,
 			summary TEXT NOT NULL,
@@ -64,7 +50,6 @@ var migrations = [][]string{
 			updated_at DATETIME NOT NULL
 		)`,
 
-		// the models the agent talks to
 		`CREATE TABLE IF NOT EXISTS providers (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT COLLATE NOCASE NOT NULL,
@@ -89,28 +74,24 @@ var migrations = [][]string{
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_name ON providers (name)`,
 
-		// settings
 		`CREATE TABLE IF NOT EXISTS settings (
 			k TEXT NOT NULL PRIMARY KEY,
 			v TEXT NOT NULL,
 			updated_at DATETIME NOT NULL
 		)`,
 
-		// admins
 		`CREATE TABLE IF NOT EXISTS admins (
 			user_id INTEGER NOT NULL PRIMARY KEY,
 			added_by INTEGER NOT NULL,
 			created_at DATETIME NOT NULL
 		)`,
 
-		// premium emoji (the keys compare byte for byte)
 		`CREATE TABLE IF NOT EXISTS premium_emoji (
 			emoji TEXT NOT NULL PRIMARY KEY,
 			custom_emoji_id TEXT NOT NULL,
 			created_at DATETIME NOT NULL
 		)`,
 
-		// statistics
 		`CREATE TABLE IF NOT EXISTS usage_stats (
 			day DATE NOT NULL,
 			kind TEXT NOT NULL,
@@ -122,7 +103,6 @@ var migrations = [][]string{
 			PRIMARY KEY (day, kind, name)
 		)`,
 
-		// groups and channels the agent is in
 		`CREATE TABLE IF NOT EXISTS bot_chats (
 			chat_id INTEGER NOT NULL PRIMARY KEY,
 			type TEXT NOT NULL,
@@ -138,7 +118,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_chats_status ON bot_chats (status, updated_at)`,
 
-		// questions the agent put to a user as a poll
 		`CREATE TABLE IF NOT EXISTS polls (
 			poll_id TEXT NOT NULL PRIMARY KEY,
 			user_id INTEGER NOT NULL,
@@ -153,7 +132,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_polls_created ON polls (created_at)`,
 
-		// reminders and scheduled tasks
 		`CREATE TABLE IF NOT EXISTS schedules (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -175,7 +153,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_sched_due ON schedules (status, next_run)`,
 		`CREATE INDEX IF NOT EXISTS idx_sched_user ON schedules (user_id, status)`,
 
-		// long-term memory (facts the user can see and delete)
 		`CREATE TABLE IF NOT EXISTS user_facts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -185,7 +162,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_facts_user ON user_facts (user_id, id)`,
 
-		// per-user preferences
 		`CREATE TABLE IF NOT EXISTS user_prefs (
 			user_id INTEGER NOT NULL,
 			name TEXT NOT NULL,
@@ -193,7 +169,6 @@ var migrations = [][]string{
 			PRIMARY KEY (user_id, name)
 		)`,
 
-		// group messages kept for a while for catch-up summaries (opt-in per group)
 		`CREATE TABLE IF NOT EXISTS group_messages (
 			chat_id INTEGER NOT NULL,
 			message_id INTEGER NOT NULL,
@@ -210,7 +185,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_gm_chat_time ON group_messages (chat_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_gm_user ON group_messages (chat_id, user_id, message_id)`,
 
-		// per-chat preferences
 		`CREATE TABLE IF NOT EXISTS chat_prefs (
 			chat_id INTEGER NOT NULL,
 			name TEXT NOT NULL,
@@ -218,7 +192,6 @@ var migrations = [][]string{
 			PRIMARY KEY (chat_id, name)
 		)`,
 
-		// the downloaders' cookie pool (logins for YouTube, Instagram…)
 		`CREATE TABLE IF NOT EXISTS dl_cookies (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			label TEXT NOT NULL,
@@ -234,7 +207,6 @@ var migrations = [][]string{
 			fetched_at DATETIME NULL
 		)`,
 
-		// each user's own cookies, used only for their downloads
 		`CREATE TABLE IF NOT EXISTS user_cookies (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -245,7 +217,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_user_cookies_user ON user_cookies (user_id)`,
 
-		// lessons the agent drew from its own jobs, waiting for the owner
 		`CREATE TABLE IF NOT EXISTS lessons (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			lesson_key TEXT NOT NULL,
@@ -262,7 +233,6 @@ var migrations = [][]string{
 		`CREATE UNIQUE INDEX IF NOT EXISTS uk_lesson_key ON lessons (lesson_key)`,
 		`CREATE INDEX IF NOT EXISTS idx_lessons_status ON lessons (status, updated_at)`,
 
-		// how the agent did each day (jobs, feedback, tool calls and failures), for the weekly report
 		`CREATE TABLE IF NOT EXISTS learn_daily (
 			day DATE NOT NULL,
 			kind TEXT NOT NULL,
@@ -272,7 +242,6 @@ var migrations = [][]string{
 			PRIMARY KEY (day, kind, tool)
 		)`,
 
-		// the agent's periodic exams: a fixed set of hard requests, graded
 		`CREATE TABLE IF NOT EXISTS eval_runs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			started_at DATETIME NOT NULL,
@@ -286,8 +255,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_eval_runs_started ON eval_runs (started_at)`,
 
-		// the job each user has running, and the last one that stopped before
-		// it was done (see openjobs.go): a restart or an error never loses it
 		`CREATE TABLE IF NOT EXISTS open_jobs (
 			user_id INTEGER NOT NULL,
 			kind TEXT NOT NULL,
@@ -303,8 +270,6 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_open_jobs_kind ON open_jobs (kind, updated_at)`,
 
-		// background tasks (see bgtasks.go): long jobs that run on their own
-		// while the owner goes on chatting
 		`CREATE TABLE IF NOT EXISTS bg_tasks (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -323,8 +288,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_bg_tasks_user ON bg_tasks (user_id, id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bg_tasks_status ON bg_tasks (status)`,
 
-		// every exchange, kept for good and searchable (full text): the
-		// conversation window forgets and summarizes, the archive does not
 		`CREATE TABLE IF NOT EXISTS chat_archive (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -342,9 +305,6 @@ var migrations = [][]string{
 		END`,
 	},
 
-	// 2: the outside classifier is gone; requests are triaged on this machine
-	// (cmd/macron/triage.go). Its log goes, the owner's choices carry over to
-	// the new keys, and its settings (with its sealed key) are removed.
 	{
 		`DROP INDEX IF EXISTS idx_snap_log_at`,
 		`DROP TABLE IF EXISTS snap_log`,
@@ -354,8 +314,6 @@ var migrations = [][]string{
 		`DELETE FROM settings WHERE k IN ('snap_on', 'snap_key', 'snap_model', 'snap_timeout_ms', 'snap_route', 'snap_effort', 'snap_chat', 'snap_trim')`,
 	},
 
-	// 3: what learning did to the skills, with each skill as it was before,
-	// so a lesson can be taken back exactly (cmd/macron/learn.go)
 	{
 		`CREATE TABLE IF NOT EXISTS lesson_log (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -371,8 +329,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_lesson_log_lesson ON lesson_log (lesson_id, id)`,
 	},
 
-	// 4: the command gate (pkg/cmdgate): what the owner allowed for good, and
-	// every decision about a command flagged as dangerous
 	{
 		`CREATE TABLE IF NOT EXISTS cmd_allow (
 			pattern TEXT NOT NULL PRIMARY KEY,
@@ -391,8 +347,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_cmd_audit_at ON cmd_audit (at)`,
 	},
 
-	// 5: the owner's board of jobs (cmd/macron/kanban.go): cards in to do,
-	// doing, blocked and done; a card run on its own is a background task
 	{
 		`CREATE TABLE IF NOT EXISTS kanban (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

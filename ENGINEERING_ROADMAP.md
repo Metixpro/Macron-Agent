@@ -1,8 +1,7 @@
-# Macron: evidence required before claiming superiority
+# Macron Agent — development roadmap
 
-The uploaded engine already has tool calling, delegation, compaction, model
-failover, SQLite/FTS, skills, learning, scheduled work and Telegram integration.
-Counting advertised tools is not a useful comparison against Hermes.
+The engine includes tool calling, delegation, compaction, provider failover,
+SQLite/FTS, skills, learning, scheduling and Telegram integration.
 
 Priority work and acceptance criteria:
 

@@ -17,12 +17,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Reminders and scheduled tasks: "مکرون فردا ساعت ۱۱ صبح یادم بنداز به مهدی
-// زنگ بزنم", "مکرون هر روز ساعت ۱۰ قیمت تتر و طلا رو بفرست تو این گروه".
-// The model turns the request into a schedule (schedule tool); a ticker
-// fires due schedules: a reminder is a message, a task is a run of the
-// assistant whose answer is posted in the chat.
-
 const (
 	toolSchedule       = "schedule"
 	toolListSchedules  = "list_schedules"
@@ -35,13 +29,10 @@ const (
 	maxScheduleAhead     = 366 * 24 * time.Hour
 	scheduleMaxFailures  = 3
 	lateReminderNoticeAt = 10 * time.Minute
-	// onceRetries: a one-time schedule whose run failed (the model was down,
-	// Telegram did not answer) is tried again this many times.
+
 	onceRetries = 3
 )
 
-// onceRetryAfter is the wait before retry n (0-based) of a one-time schedule:
-// 2, 6, 18 minutes (a variable for the tests).
 var onceRetryAfter = func(n int) time.Duration {
 	d := 2 * time.Minute
 	for range n {
@@ -51,8 +42,7 @@ var onceRetryAfter = func(n int) time.Duration {
 }
 
 func (b *Bot) scheduleTools(u *store.User, m *telegram.Message) []agent.LocalTool {
-	// "required" only when something is: strict providers (Gemini, some
-	// OpenAI proxies) refuse "required": null and native tool calls with it.
+
 	obj := func(props map[string]any, required ...string) map[string]any {
 		m := map[string]any{"type": "object", "properties": props}
 		if len(required) > 0 {
@@ -128,8 +118,6 @@ func numArg(v any) float64 {
 	return 0
 }
 
-// createSchedule validates a schedule request and stores it. The returned
-// text goes back to the model (errors say what to fix).
 func (b *Bot) createSchedule(ctx context.Context, u *store.User, m *telegram.Message, args map[string]any, now time.Time) string {
 	kind, _ := args["kind"].(string)
 	text, _ := args["text"].(string)
@@ -215,7 +203,7 @@ func (b *Bot) createSchedule(ctx context.Context, u *store.User, m *telegram.Mes
 			first = now.Add(rule.Every)
 		}
 	default:
-		// The given moment counts if it is in the future and fits the rule.
+
 		if !first.After(now) || (rule.Kind == "weekly" && !containsWeekday(rule.Days, first.In(b.loc).Weekday())) ||
 			(rule.Kind == "monthly" && first.In(b.loc).Day() != rule.Day) {
 			first = rule.Next(now, b.loc)
@@ -283,9 +271,6 @@ func (b *Bot) describeSchedules(ctx context.Context, userID, chatID int64) strin
 	return sb.String()
 }
 
-// ---------------------------------------------------------------- running
-
-// runScheduler fires due schedules until ctx ends.
 func (b *Bot) runScheduler(ctx context.Context) {
 	t := time.NewTicker(schedulerTick)
 	defer t.Stop()
@@ -299,8 +284,6 @@ func (b *Bot) runScheduler(ctx context.Context) {
 	}
 }
 
-// runDueSchedules claims each due schedule (so it runs exactly once, even
-// with several bot instances) and fires it in the background.
 func (b *Bot) runDueSchedules(ctx context.Context, now time.Time) {
 	qctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -319,7 +302,7 @@ func (b *Bot) runDueSchedules(ctx context.Context, now time.Time) {
 		}
 		var next time.Time
 		if !rule.Once() {
-			next = rule.Next(now, b.loc) // missed occurrences are not replayed
+			next = rule.Next(now, b.loc)
 		}
 		ok, err := b.st.ClaimSchedule(qctx, x, next)
 		if err != nil || !ok {
@@ -339,8 +322,7 @@ func (b *Bot) runDueSchedules(ctx context.Context, now time.Time) {
 			paused, _ := b.st.RecordScheduleResult(rctx, x.ID, msg, scheduleMaxFailures)
 			switch {
 			case err != nil && rule.Once() && x.Failures < onceRetries:
-				// A one-time run is not lost to a passing failure (a cancelled
-				// or ended schedule stays as it is).
+
 				_, _ = b.st.RetrySchedule(rctx, x.ID, time.Now().Add(onceRetryAfter(x.Failures)))
 			case err != nil && rule.Once():
 				b.schedulePausedNotice(rctx, x, msg, false)
@@ -364,7 +346,7 @@ func (b *Bot) fireSchedule(x store.Schedule, rule sched.Rule, now time.Time) err
 	if err != nil {
 		return err
 	}
-	// Nobody to post to any more: the user blocked the bot, or the bot left the group.
+
 	if x.ChatType == "private" && u.BlockedBot {
 		_, _ = b.st.CancelSchedule(ctx, x.ID, 0)
 		return errors.New("the user blocked the bot")
@@ -376,12 +358,12 @@ func (b *Bot) fireSchedule(x store.Schedule, rule sched.Rule, now time.Time) err
 		}
 	}
 	if x.Kind == store.ScheduleReminder {
-		// A reminder uses no model: it costs no tokens.
+
 		return b.sendReminder(ctx, x, u, rule, now.Sub(x.NextRun) > lateReminderNoticeAt)
 	}
 	m := &telegram.Message{From: &telegram.User{ID: u.ID, FirstName: u.FirstName, LastName: u.LastName, Username: u.Username},
 		Chat: telegram.Chat{ID: x.ChatID, Type: x.ChatType}, Date: now.Unix(),
-		IsTopicMessage: x.ThreadID != 0, MessageThreadID: x.ThreadID} // posted in the topic it was made in
+		IsTopicMessage: x.ThreadID != 0, MessageThreadID: x.ThreadID}
 	about := fmt.Sprintf("This is scheduled task #%d (%s) that the user set up earlier. Do it now and post the result for them. "+
 		"They are not watching live, so don't ask questions or for confirmation; be concise and current.", x.ID, rule.Describe())
 	return b.handlePrompt(u, m, x.Body, promptOptions{schedule: &x, noMemory: true, about: about,
@@ -405,15 +387,13 @@ func (b *Bot) sendReminder(ctx context.Context, x store.Schedule, u *store.User,
 	}
 	if _, err := b.api.SendHTML(ctx, x.ChatID, b.bidi(x.ChatID, sb.String()), telegram.SendOptions{ThreadID: x.ThreadID}); err != nil {
 		if telegram.IsUnreachable(err) {
-			_, _ = b.st.CancelSchedule(ctx, x.ID, 0) // blocked, or removed from the group
+			_, _ = b.st.CancelSchedule(ctx, x.ID, 0)
 		}
 		return err
 	}
 	return nil
 }
 
-// schedulePausedNotice tells the owner that a schedule stopped after failing:
-// paused (a recurring one, resumed from /reminders) or given up (a one-time one).
 func (b *Bot) schedulePausedNotice(ctx context.Context, x store.Schedule, why string, paused bool) {
 	l := b.lang(x.UserID)
 	format := l.t("⚠️ کار زمان‌بندی‌شده <b>#%d</b> («%s») چند بار پشت هم انجام نشد و متوقفش کردم.\nآخرین خطا: <i>%s</i>\n\nبا /reminders می‌تونی دوباره روشنش کنی.")
@@ -421,10 +401,8 @@ func (b *Bot) schedulePausedNotice(ctx context.Context, x store.Schedule, why st
 		format = l.t("⚠️ کار زمان‌بندی‌شده <b>#%d</b> («%s») با چند بار تلاش هم انجام نشد.\nآخرین خطا: <i>%s</i>")
 	}
 	text := fmt.Sprintf(format, x.ID, esc(x.Title), esc(textutil.TruncateRunes(why, 200, "…")))
-	_, _ = b.api.SendHTML(ctx, x.UserID, b.bidi(x.UserID, text), telegram.SendOptions{}) // the owner's own chat: a group need not hear it
+	_, _ = b.api.SendHTML(ctx, x.UserID, b.bidi(x.UserID, text), telegram.SendOptions{})
 }
-
-// ---------------------------------------------------------------- /reminders
 
 func (b *Bot) sendSchedules(ctx context.Context, m *telegram.Message, userID int64) {
 	v := b.viewSchedules(ctx, userID)
@@ -492,7 +470,6 @@ func (b *Bot) handleScheduleCallback(ctx context.Context, q *telegram.CallbackQu
 	_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, v.html, v.kb)
 }
 
-// stringList reads a JSON argument that is a list of strings (or one string).
 func stringList(v any) []string {
 	var out []string
 	switch x := v.(type) {

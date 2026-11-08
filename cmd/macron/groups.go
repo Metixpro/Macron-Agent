@@ -13,10 +13,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// ---------------------------------------------------------------- the bot in groups
-
-// handleGroupMembership tracks the groups and channels the bot is added to or
-// removed from, tells the owners (or the log chat) and greets a new group.
 func (b *Bot) handleGroupMembership(u *telegram.ChatMemberUpdated) {
 	ctx, cancel := b.ctx(30 * time.Second)
 	defer cancel()
@@ -46,7 +42,7 @@ func (b *Bot) handleGroupMembership(u *telegram.ChatMemberUpdated) {
 		b.noteSight(chat.ID, cur.Status)
 		if chat.Type != "channel" {
 			hello := gl.t(textGroupHello)
-			if !b.seesAll(ctx, chat.ID) { // in privacy mode «مکرون …» never reaches the bot: say so from the start
+			if !b.seesAll(ctx, chat.ID) {
 				hello += "\n\n" + b.sightHint(gl)
 				b.sightHints.Store(chat.ID, time.Now())
 			}
@@ -56,7 +52,7 @@ func (b *Bot) handleGroupMembership(u *telegram.ChatMemberUpdated) {
 		if err := b.st.SaveChatLeave(ctx, chat.ID, cur.Status, chat.Title); err != nil {
 			log.Printf("group %d: %v", chat.ID, err)
 		}
-		// Nothing of a group is kept once the bot is gone.
+
 		if err := b.st.ForgetChat(ctx, chat.ID); err != nil {
 			log.Printf("group %d: forgetting its messages: %v", chat.ID, err)
 		}
@@ -134,11 +130,8 @@ func statusName(l lang, s string) string {
 	return s
 }
 
-// notifyLog sends a notice to the log chat, or to every owner when none is
-// set (or the log chat refuses it).
 func (b *Bot) notifyLog(ctx context.Context, html string) { b.notifyLogKB(ctx, html, nil) }
 
-// notifyLogKB is notifyLog with buttons.
 func (b *Bot) notifyLogKB(ctx context.Context, html string, kb *telegram.InlineKeyboardMarkup) {
 	if v, ok := b.st.Setting(store.SettingLogChat); ok && v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
@@ -154,7 +147,6 @@ func (b *Bot) notifyLogKB(ctx context.Context, html string, kb *telegram.InlineK
 	}
 }
 
-// touchChat keeps the record of a group the bot is used in.
 func (b *Bot) touchChat(c telegram.Chat) {
 	ctx, cancel := b.ctx(5 * time.Second)
 	defer cancel()
@@ -162,8 +154,6 @@ func (b *Bot) touchChat(c telegram.Chat) {
 		log.Printf("group %d: %v", c.ID, err)
 	}
 }
-
-// ---------------------------------------------------------------- admin panel: groups
 
 func (b *Bot) viewGroups(ctx context.Context, l lang) panelView {
 	active, left, members, err := b.st.ChatCounts(ctx)
@@ -294,7 +284,6 @@ func (b *Bot) handleGroupPanel(ctx context.Context, q *telegram.CallbackQuery, p
 	show(b.viewGroups(ctx, l))
 }
 
-// setLogChat handles the "gr_log" dialog step.
 func (b *Bot) setLogChat(ctx context.Context, l lang, m *telegram.Message) (panelView, error) {
 	var target any
 	text := strings.TrimSpace(m.Text)

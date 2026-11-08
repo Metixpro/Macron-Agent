@@ -22,7 +22,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/updater"
 )
 
-// fakeGitHub serves one release whose program says its version.
 func fakeGitHub(t *testing.T, version string, tamper bool, brokenBrowser ...bool) *httptest.Server {
 	t.Helper()
 	script := "#!/bin/sh\n[ \"$1\" = version ] && echo 'macron " + version + "'\n"
@@ -66,7 +65,6 @@ func fakeGitHub(t *testing.T, version string, tamper bool, brokenBrowser ...bool
 	return srv
 }
 
-// withRelease points the updater at a fake release and a program of its own.
 func withRelease(t *testing.T, srv *httptest.Server) (self string, restarted *atomic.Int32) {
 	t.Helper()
 	t.Setenv("MACRON_HOME", t.TempDir())
@@ -104,7 +102,7 @@ func TestUpdateFromTheChat(t *testing.T) {
 	if !strings.Contains(raw, `"version":"99.0.0"`) {
 		t.Fatalf("pending: %s", raw)
 	}
-	// The new process says so.
+
 	_ = h.st.SetSetting(bg, settingUpdatePending, `{"chat":`+itoaTest(ownerID)+`,"version":"`+app.Version+`"}`)
 	h.bot.reportUpdate(bg)
 	h.wantText("[+] آپدیت شد به <b>v" + app.Version + "</b> · سرویس فعال · uptime")
@@ -122,7 +120,6 @@ func TestUpdateUpToDate(t *testing.T) {
 	h.wantText("تو آخرین نسخه‌ای")
 }
 
-// A download that does not match its sum, or no network: nothing changes.
 func TestUpdateFailsSafely(t *testing.T) {
 	h := newHarness(t)
 	self, restarted := withRelease(t, fakeGitHub(t, "99.0.0", true))
@@ -143,14 +140,13 @@ func TestUpdateFailsSafely(t *testing.T) {
 	}
 }
 
-// The daily notice: once per version.
 func TestUpdateNoticeOncePerVersion(t *testing.T) {
 	h := newHarness(t)
 	withRelease(t, fakeGitHub(t, "99.0.0", false))
 	h.bot.checkUpdateNotice(bg)
-	h.bot.checkUpdateNotice(bg) // within the day: not looked up again
+	h.bot.checkUpdateNotice(bg)
 	_ = h.st.SetSetting(bg, settingUpdateChecked, time.Now().Add(-48*time.Hour).UTC().Format(time.RFC3339))
-	h.bot.checkUpdateNotice(bg) // a day later, the same version: not told again
+	h.bot.checkUpdateNotice(bg)
 	n := strings.Count(h.tg.allText(), "نسخه <b>v99.0.0</b> موجوده")
 	if n != 1 {
 		t.Fatalf("told %d times", n)

@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// TestToolGroupsNameEveryFocusGroup: every focus group has a key and a
-// description for the fast classifier, in the same order.
 func TestToolGroupsNameEveryFocusGroup(t *testing.T) {
 	if len(toolGroupInfo) != len(focusGroups) {
 		t.Fatalf("%d names for %d groups", len(toolGroupInfo), len(focusGroups))
@@ -23,9 +21,6 @@ func TestToolGroupsNameEveryFocusGroup(t *testing.T) {
 	}
 }
 
-// TestFocusPickChoosesTheTools: a request with FocusPick gets the core, the
-// tools picked, what its words point to and more_tools, and nothing else; the
-// tools it was not offered are counted.
 func TestFocusPickChoosesTheTools(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: "ok"})
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Role: "user", Content: "یه نمودار بکش"},

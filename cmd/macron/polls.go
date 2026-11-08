@@ -16,15 +16,11 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// When the assistant needs the user's opinion or decision, it asks with a
-// native Telegram poll (ask_user). Its turn ends there; the vote comes back
-// as the next request, so the work continues with the user's choice.
-
 const (
 	pollMaxOptions  = 10
 	pollQuestionLen = 300
 	pollOptionLen   = 100
-	pollMaxAge      = 7 * 24 * time.Hour // older votes are ignored
+	pollMaxAge      = 7 * 24 * time.Hour
 )
 
 type pollQuestion struct {
@@ -33,7 +29,6 @@ type pollQuestion struct {
 	Multiple bool
 }
 
-// parsePollArgs validates the ask_user arguments.
 func parsePollArgs(args map[string]any) (*pollQuestion, error) {
 	raw, _ := args["question"].(string)
 	q := strings.TrimSpace(textutil.OneLine(raw))
@@ -92,9 +87,6 @@ func (b *Bot) askUserTool(box *outbox) agent.LocalTool {
 	}
 }
 
-// sendQuestion sends the poll (as a reply when no text came before it),
-// records it and returns how the question is remembered. If the poll is
-// refused, the question goes out as text with numbered options.
 func (b *Bot) sendQuestion(ctx context.Context, u *store.User, m *telegram.Message, q *pollQuestion, reply bool) (remembered, pollID string) {
 	l := b.langOf(m.From)
 	opts := telegram.SendOptions{}.InTopic(m)
@@ -123,9 +115,8 @@ func (b *Bot) sendQuestion(ctx context.Context, u *store.User, m *telegram.Messa
 	return strings.Replace(remembered, "with a poll", "in text", 1), ""
 }
 
-// handlePollAnswer continues the conversation with the user's vote.
 func (b *Bot) handlePollAnswer(a *telegram.PollAnswer) {
-	if a.User == nil || len(a.OptionIDs) == 0 { // anonymous, or a retracted vote
+	if a.User == nil || len(a.OptionIDs) == 0 {
 		return
 	}
 	ctx, cancel := b.ctx(20 * time.Second)
@@ -140,14 +131,14 @@ func (b *Bot) handlePollAnswer(a *telegram.PollAnswer) {
 	if b.personal && (p.ChatType != "private" || p.ChatID < 0) {
 		return
 	}
-	// Only the person who was asked continues the task.
+
 	if p.UserID != a.User.ID || time.Since(p.CreatedAt) > pollMaxAge {
 		return
 	}
 	if ok, err := b.st.MarkPollAnswered(ctx, p.PollID); err != nil || !ok {
 		return
 	}
-	_ = b.api.StopPoll(ctx, p.ChatID, p.MessageID) // closes it and shows the choice
+	_ = b.api.StopPoll(ctx, p.ChatID, p.MessageID)
 
 	var choices []string
 	for _, id := range a.OptionIDs {
@@ -168,9 +159,8 @@ func (b *Bot) handlePollAnswer(a *telegram.PollAnswer) {
 	picked := strings.Join(choices, "، ")
 	text := l.f("(توی نظرسنجی «%s» انتخاب کردم: %s)", p.Question, picked)
 	about := fmt.Sprintf("The user answered your poll «%s» by choosing: %s. Continue the task you were working on, following this choice.", p.Question, picked)
-	// A vote that comes while the user has another job joins it (in this chat)
-	// or waits for it to end: it is never lost to "busy".
-	resume := b.resumeOf(p.PollID) // the job that asked, as it stopped
+
+	resume := b.resumeOf(p.PollID)
 	if b.interject(user, m, text) {
 		return
 	}
@@ -178,14 +168,10 @@ func (b *Bot) handlePollAnswer(a *telegram.PollAnswer) {
 	b.handlePrompt(user, m, text, promptOptions{free: true, vote: true, noReact: true, about: about, resume: resume})
 }
 
-// Jobs waiting for a poll's answer, as they stopped (agent.Suspended): the
-// vote resumes the job itself, every tool result still in view. Kept in
-// memory for suspendTTL, at most suspendMax of them; after that, or after a
-// restart, the vote goes on from the conversation's notes as before.
 const (
 	suspendTTL  = 12 * time.Hour
 	suspendMax  = 200
-	suspendSize = 6 << 20 // a bigger job is not kept
+	suspendSize = 6 << 20
 )
 
 type suspension struct {
@@ -193,7 +179,6 @@ type suspension struct {
 	at time.Time
 }
 
-// suspendFor keeps a job that asked with a poll.
 func (b *Bot) suspendFor(pollID string, s *agent.Suspended) {
 	if pollID == "" || s == nil || s.Size() > suspendSize {
 		return
@@ -214,7 +199,6 @@ func (b *Bot) suspendFor(pollID string, s *agent.Suspended) {
 	b.suspended.Store(pollID, suspension{s: s, at: time.Now()})
 }
 
-// resumeOf takes the job a poll's answer resumes (nil: none kept).
 func (b *Bot) resumeOf(pollID string) *agent.Suspended {
 	v, ok := b.suspended.LoadAndDelete(pollID)
 	if !ok || time.Since(v.(suspension).at) > suspendTTL {
@@ -223,10 +207,8 @@ func (b *Bot) resumeOf(pollID string) *agent.Suspended {
 	return v.(suspension).s
 }
 
-// pollWait is how long a vote waits for the user's running job (a variable for the tests).
 var pollWait = 10 * time.Minute
 
-// waitIdle waits until the user has no job running, at most max.
 func (b *Bot) waitIdle(uid int64, max time.Duration) {
 	key := strconv.FormatInt(uid, 10)
 	deadline := time.Now().Add(max)

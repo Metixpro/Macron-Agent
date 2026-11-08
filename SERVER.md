@@ -1,10 +1,8 @@
-# Server development build (1.1.0-dev)
+# Macron Agent — server guide
 
-This build adds direct local task execution and fixes concrete installation,
-service rendering and backup defects. It is a development build, not a claim of
-feature parity or superiority over Hermes.
+Installation, service management, dependencies, backups and recovery.
 
-## Install the uploaded source on Linux
+## Build and install on Linux
 
 Go 1.26+ is required. Run as the account that should own the agent, in the
 extracted source directory:
@@ -151,15 +149,14 @@ UPPER_CASE keys live in `config.env`; lower_case keys are the agent's own settin
 | `MACRON_WEBHOOK_ADDR` | — | e.g. `:8787`: signed events on `POST /hook/NAME` become background tasks (`/dashboard` shows the secret) |
 | `MACRON_DASHBOARD_ADDR` | — | e.g. `127.0.0.1:8788`: a read-only status page (loopback only; `/dashboard` gives the link) |
 
-Commands: `/settings` (the panel; `/admin` still works), `/update`, `/moa`, `/learn undo ID`, `/approve`, `/yolo [off]`, `/board`, `/search WORDS`, `/dashboard`. Group settings: `/groupsettings`.
+Commands: `/settings` (the panel; `/admin` still works), `/update`, `/moa`, `/learn undo ID`, `/approve`, `/yolo [off]`, `/board`, `/search WORDS`, `/dashboard`.
 
 ### 1.2.1 presentation cleanup
 
 Progress uses the classic code block. Appearance selection, the private-view
 selector and the attached final work report are removed. `/mode` selects only
-fast/deep responses. Private progress uses the standard draft with Stop;
+fast/deep responses. Private progress uses a live message with a Stop button underneath;
 legacy display preferences are ignored. Internal continuation history is kept.
-See [the review and remaining limits](audits/REVIEW-1.2.1.fa.md).
 
 ### 1.2.2: private Telegram and GitHub updates
 
@@ -194,3 +191,11 @@ The CLI keeps owner personality/rules and execution/safety instructions, while
 loading skill descriptions and hidden tool guidance when needed. Skill discovery
 and reading still work, and discovery keeps the system prefix stable. Repeated
 model measurements are recorded separately from the 1.2.2 baseline.
+
+### 1.2.4: live private messages and queued follow-ups
+
+Private chat progress is an editable message with the classic code block and an
+inline Stop keyboard underneath. It does not use Telegram drafts for ordinary
+messages. New messages wait in FIFO order and start separate requests after the
+active request finishes. Stopping the active request keeps the waiting tasks.
+The queue accepts up to eight waiting messages; a full queue is reported explicitly.

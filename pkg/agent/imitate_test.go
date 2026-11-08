@@ -15,9 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// A reply that writes a tool call out as text («web_search(…) → …», the
-// shape of the work notes a turn keeps) did nothing. In a conversation it
-// means the message needs the tools: the request starts over with them.
 func TestAConversationThatWritesACallGetsItsTools(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: "باشه، الان درستش می‌کنم\nweb_search(query=\"tgs sticker\") → {\n</rfl:parameter>"},
@@ -35,8 +32,6 @@ func TestAConversationThatWritesACallGetsItsTools(t *testing.T) {
 	}
 }
 
-// With its tools offered, a reply that writes its calls out as text is sent
-// back once, and what remains of such lines never reaches the user.
 func TestCallsWrittenAsTextAreSentBack(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: "خروجی آماده‌ست ✅\nweb_search(query=\"x\") → {\"ok\":true}"},
@@ -72,10 +67,6 @@ func TestImitatedCalls(t *testing.T) {
 	}
 }
 
-// A call that arrives without a name (a provider's parser that failed:
-// «"name":null,"arguments":"{}"») never runs and never goes back in the
-// history (the provider would refuse the next request); the model is asked
-// for it again.
 func TestANamelessCallIsAskedForAgain(t *testing.T) {
 	a, script := setup(t,
 		map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall("", "", `{}`)}},
@@ -104,8 +95,6 @@ func TestANamelessCallIsAskedForAgain(t *testing.T) {
 	}
 }
 
-// A reply that says the work is done when no tool ran («یادآور تنظیم شد»
-// from a weak model) is sent back once: it does the work, or says plainly.
 func TestAClaimOfWorkNoToolDidIsSentBack(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: "فایل notes.txt رو ساختم ✅"},
@@ -134,8 +123,6 @@ func TestClaimsDone(t *testing.T) {
 	}
 }
 
-// A reply that asks the user what something is, before any search («ترمکس
-// چیه؟») is sent back once: it looks it up and goes on.
 func TestAQuestionASearchWouldAnswerIsSentBack(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: "ترمکس دقیقاً چیه؟ منظورت کدوم برنامه‌ست؟"},
@@ -166,10 +153,6 @@ func TestAsksFirst(t *testing.T) {
 	}
 }
 
-// A call the provider split in two while streaming («download_file» with half
-// its arguments, «filename» with «}») is asked for again without streaming;
-// and arguments that are still not JSON never go back to the provider (it
-// refuses the next request with them in the history).
 func TestABrokenStreamedCallIsAskedForAgain(t *testing.T) {
 	broken := &llm.Response{Message: llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{
 		toolCall("c1", "download_file", `{"url": "https://a.com/x.svg"`), toolCall("c2", "filename", "}")}}}
@@ -197,8 +180,6 @@ func TestABrokenStreamedCallIsAskedForAgain(t *testing.T) {
 	}
 }
 
-// Once a streamed reply's calls arrive broken, the rest of the request goes
-// without streaming: each step costs one call, not a broken one and its retry.
 func TestAfterABrokenStreamTheRequestStopsStreaming(t *testing.T) {
 	var mu sync.Mutex
 	var streamed []bool
@@ -212,9 +193,9 @@ func TestAfterABrokenStreamTheRequestStopsStreaming(t *testing.T) {
 		mu.Unlock()
 		var msg map[string]any
 		switch n {
-		case 0: // streamed: a call without a name
+		case 0:
 			msg = map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"id": "x", "type": "function", "function": map[string]any{"name": "", "arguments": "{}"}}}}
-		case 1, 2: // the retry and the next step: whole calls
+		case 1, 2:
 			msg = map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"id": fmt.Sprint("c", n), "type": "function", "function": map[string]any{"name": "list_files", "arguments": "{}"}}}}
 		default:
 			msg = map[string]any{"role": "assistant", "content": "تموم شد"}
@@ -252,9 +233,6 @@ func TestAfterABrokenStreamTheRequestStopsStreaming(t *testing.T) {
 	}
 }
 
-// A model that does not see pictures refuses a request with one in it (a
-// view_image of the chart it made, a photo the user sent): the job goes on
-// with a line in place of each picture instead of stopping.
 func TestAModelWithoutVisionGoesOnWithoutThePictures(t *testing.T) {
 	var mu sync.Mutex
 	var sent []string

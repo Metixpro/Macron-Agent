@@ -11,8 +11,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/agent"
 )
 
-// consoleJob is a job half way: a plan, the context, done, failed and
-// running steps, and a sub-agent at work.
 func TestImportingAPremiumEmojiPack(t *testing.T) {
 	if packName("https://t.me/addemoji/vector_icons_by_fStikBot") != "vector_icons_by_fStikBot" || packName("tg://addemoji?set=Abc_1") != "Abc_1" ||
 		packName("t.me/addstickers/Cats") != "Cats" || packName("Vector_Icons") != "Vector_Icons" || packName("سلام") != "" || packName("a b") != "" {
@@ -46,8 +44,6 @@ func TestImportingAPremiumEmojiPack(t *testing.T) {
 	h.wantText("پیدا نشد")
 }
 
-// sentReport reports whether report.pdf reached the chat: as a document, or
-// inside the answer's rich message.
 func sentReport(h *harness) bool {
 	for _, d := range h.tg.of("sendDocument") {
 		if d.body["document_name"] == "report.pdf" {
@@ -62,8 +58,6 @@ func sentReport(h *harness) bool {
 	return false
 }
 
-// A file the model attached goes to the user even when the job then runs
-// out of time: the live card said it would, and that work is done.
 func TestAttachedFilesGoEvenWhenTheJobRunsOutOfTime(t *testing.T) {
 	h := newHarness(t)
 	h.bot.runTimeout = 1500 * time.Millisecond
@@ -73,7 +67,7 @@ func TestAttachedFilesGoEvenWhenTheJobRunsOutOfTime(t *testing.T) {
 		if n == 0 {
 			return toolCall(toolSendFile, `{"filename":"report.pdf","caption":"گزارش"}`), 0
 		}
-		time.Sleep(3 * time.Second) // past the request's time
+		time.Sleep(3 * time.Second)
 		return map[string]any{"role": "assistant", "content": "تموم شد"}, 0
 	}
 	h.send(private(uid, "گزارش رو بساز و بفرست"))
@@ -89,7 +83,6 @@ func TestAttachedFilesGoEvenWhenTheJobRunsOutOfTime(t *testing.T) {
 	}
 }
 
-// A stop is a stop: what was attached stays in the workspace for «continue».
 func TestAStoppedJobSendsNoFiles(t *testing.T) {
 	h := newHarness(t)
 	old := stopButtonAfter
@@ -125,10 +118,6 @@ func TestAStoppedJobSendsNoFiles(t *testing.T) {
 	}
 }
 
-// TestThePlanIsATaskList: rich messages draw «- [ ]» and «- [x]» as real
-// checkboxes; each step is its own list item (lines that only follow each
-// other would run into one paragraph), and a step's own number, dash or
-// brackets stay text.
 func TestThePlanIsATaskList(t *testing.T) {
 	items := []agent.PlanItem{
 		{Text: "استخراج ساختار مخزن و خواندن SKILL.md", Status: agent.PlanDone},
@@ -147,7 +136,7 @@ func TestThePlanIsATaskList(t *testing.T) {
 	if planMarkdown(nil) != "" {
 		t.Fatal("no plan, nothing")
 	}
-	// The classic (HTML) card keeps its icons: its line breaks are kept as they are.
+
 	if h := planHTML(items); !strings.Contains(h, "✅ استخراج") || !strings.Contains(h, "\n⏳ <b>") {
 		t.Fatalf("html: %s", h)
 	}

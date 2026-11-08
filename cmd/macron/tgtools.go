@@ -14,10 +14,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// The Telegram toolkit: things the agent can do in the chat besides writing
-// its answer — throw animated dice, drop a pin on the map, run a group vote
-// or a quiz, celebrate with a full-screen effect, look at the group.
-
 const (
 	toolDice        = "roll_dice"
 	toolLocation    = "send_location"
@@ -29,7 +25,6 @@ const (
 	maxDicePerReply = 6
 )
 
-// extras are chat actions that follow the answer (a map pin, a vote).
 type extras struct {
 	mu     sync.Mutex
 	later  []func(ctx context.Context)
@@ -74,7 +69,6 @@ func boolArg(v any) bool {
 	return false
 }
 
-// diceMeaning explains a die's value for the model.
 func diceMeaning(emoji string, v int) string {
 	switch emoji {
 	case "🎯":

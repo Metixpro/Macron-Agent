@@ -16,21 +16,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-// Long-term memory is two files in the agent's home folder (pkg/brain):
-// USER.md holds what the agent knows about its owner, MEMORY.md what it
-// learned about its work and machine (projects, paths, servers, habits).
-// The model saves with remember and forgets with forget; the owner opens
-// the files in any editor or manages them in /memory. Unlike the
-// conversation, /new keeps them.
-
 const (
 	toolRemember   = "remember"
 	toolForget     = "forget"
 	factsPerPage   = 10
 	factsDeleteRow = 5
 
-	aboutUser = "user" // USER.md
-	aboutWork = "work" // MEMORY.md
+	aboutUser = "user"
+	aboutWork = "work"
 )
 
 func (b *Bot) factsOn(ctx context.Context, userID int64) bool {
@@ -45,7 +38,6 @@ func (b *Bot) notesOf(about string) *brain.Notes {
 	return b.brain.User
 }
 
-// memItem is one fact of either file, with the number its file gives it.
 type memItem struct {
 	about string
 	id    int
@@ -66,7 +58,6 @@ func (b *Bot) memoryItems() ([]memItem, error) {
 	return out, nil
 }
 
-// factsAbout is the context with what the model remembers.
 func (b *Bot) factsAbout(ctx context.Context, userID int64, public bool) string {
 	if !b.factsOn(ctx, userID) {
 		return ""
@@ -162,7 +153,6 @@ func (b *Bot) factTools(u *store.User) []agent.LocalTool {
 	}}
 }
 
-// looksSecret refuses long digit runs (cards, IDs, phone-like codes) and password words.
 func looksSecret(s string) bool {
 	l := strings.ToLower(s)
 	for _, w := range []string{"password", "passwd", "رمز", "پسورد", "cvv", "cvv2", "otp", "pin code", "api key", "apikey", "secret key", "private key", "seed phrase"} {
@@ -197,16 +187,6 @@ func toASCIIDigits(s string) string {
 		return r
 	}, s)
 }
-
-// ---------------------------------------------------------------- the /memory panel
-//
-//	m:h:UID:PAGE            the panel
-//	m:d:UID:KIND:ID:PAGE    forget one fact (KIND u: USER.md, w: MEMORY.md)
-//	m:c:UID / m:C:UID       forget everything (ask / do it)
-//	m:t:UID:PAGE            turn the long-term memory on or off
-//	m:n:UID                 start a new conversation (facts stay)
-//	m:f:UID                 send the files (SOUL.md, USER.md, MEMORY.md)
-//	m:x:UID                 close
 
 func (b *Bot) openMemoryPanel(ctx context.Context, m *telegram.Message) {
 	v := b.viewMemory(ctx, m.From.ID, 0)
@@ -289,7 +269,6 @@ func (b *Bot) viewMemory(ctx context.Context, uid int64, page int) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// sendBrainFiles sends the three files to the chat.
 func (b *Bot) sendBrainFiles(ctx context.Context, l lang, chatID int64) {
 	for _, f := range []struct{ name, text, caption string }{
 		{brain.SoulFile, b.currentSoul(), l.t("🧬 روح من: شخصیت و لحن")},

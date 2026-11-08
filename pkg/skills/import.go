@@ -16,13 +16,6 @@ import (
 	"unicode/utf8"
 )
 
-// ImportZip, ImportTarGz and ImportArchive add every skill folder of an
-// archive (any folder holding a SKILL.md, with its references/, templates/
-// and scripts/), e.g. a download of the Hermes Agent skills. The folder above
-// a skill names its category when the front matter does not. A skill with the
-// same name is replaced. Paths that leave the folder, links, hidden files and
-// oversized archives are refused. The archive is read from its raw bytes.
-
 const (
 	maxZipBytes   = 30 << 20
 	maxZipEntries = 3000
@@ -30,13 +23,11 @@ const (
 	maxSkillDepth = 4
 )
 
-// ImportResult says what an import did.
 type ImportResult struct {
-	Imported []string // names
-	Skipped  []string // "folder: reason"
+	Imported []string
+	Skipped  []string
 }
 
-// entry is one regular file of an archive.
 type entry struct {
 	size uint64
 	read func() ([]byte, error)
@@ -44,14 +35,12 @@ type entry struct {
 
 var gzipMagic = []byte{0x1f, 0x8b}
 
-// IsArchive reports whether data is a zip, a tar.gz or a tar.
 func IsArchive(data []byte) bool {
 	return bytes.HasPrefix(data, []byte("PK\x03\x04")) || bytes.HasPrefix(data, gzipMagic) || isTar(data)
 }
 
 func isTar(data []byte) bool { return len(data) > 262 && string(data[257:262]) == "ustar" }
 
-// ImportArchive imports a zip, a tar.gz (.tgz) or a tar, whichever data is.
 func (s *Store) ImportArchive(data []byte) (ImportResult, error) {
 	if bytes.HasPrefix(data, []byte("PK\x03\x04")) {
 		return s.ImportZip(data)
@@ -86,7 +75,6 @@ func (s *Store) ImportZip(data []byte) (ImportResult, error) {
 	return s.importFiles(files)
 }
 
-// ImportTarGz is ImportZip for a .tar.gz / .tgz (or a plain .tar).
 func (s *Store) ImportTarGz(data []byte) (ImportResult, error) {
 	var r io.Reader = bytes.NewReader(data)
 	if bytes.HasPrefix(data, gzipMagic) {
@@ -116,7 +104,7 @@ func (s *Store) ImportTarGz(data []byte) (ImportResult, error) {
 		}
 		name := archiveName(h.Name)
 		if !h.FileInfo().Mode().IsRegular() || name == "" || h.Size < 0 {
-			continue // folders, links, devices
+			continue
 		}
 		size := uint64(h.Size)
 		if total += size; total > maxZipBytes {
@@ -135,7 +123,6 @@ func (s *Store) ImportTarGz(data []byte) (ImportResult, error) {
 	return s.importFiles(files)
 }
 
-// archiveName is a member's path, cleaned and relative ("" for the root).
 func archiveName(name string) string {
 	return strings.TrimPrefix(path.Clean("/"+strings.ReplaceAll(name, "\\", "/")), "/")
 }
@@ -144,7 +131,6 @@ func tooBig(name string) error {
 	return fmt.Errorf("%s is larger than %d MB", path.Base(name), maxZipFile>>20)
 }
 
-// importFiles imports every skill folder of an archive's files.
 func (s *Store) importFiles(files map[string]entry) (ImportResult, error) {
 	var res ImportResult
 	var roots []string
@@ -188,7 +174,6 @@ func readZipFile(f *zip.File) ([]byte, error) {
 	return data, err
 }
 
-// importFolder writes one skill folder of the archive in place, atomically.
 func (s *Store) importFolder(files map[string]entry, dir string) (string, error) {
 	raw, err := files[path.Join(dir, FileName)].read()
 	if err != nil {
@@ -304,7 +289,6 @@ func hiddenPart(parts []string) bool {
 	return false
 }
 
-// containsSkill reports whether a file belongs to a skill nested deeper.
 func containsSkill(files map[string]entry, prefix string, parts []string) bool {
 	for i := 1; i < len(parts); i++ {
 		if _, ok := files[prefix+strings.Join(parts[:i], "/")+"/"+FileName]; ok {

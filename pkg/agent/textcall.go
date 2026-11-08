@@ -9,35 +9,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// Many models (DeepSeek, Qwen, local models, free proxies) do not return
-// native tool_calls, or a gateway drops the tools array, and the model writes
-// its call into the text instead. parseTextToolCalls finds those calls so the
-// agent can run them, and returns the text without them so the chat stays clean.
-//
-// Recognised forms:
-//
-//	<tool_call>{"name": "web_search", "arguments": {"query": "…"}}</tool_call>   Hermes, Qwen
-//	<function_call>…</function_call>, <tool_use>…</tool_use>, <tool_calls>[…]</tool_calls>
-//	<function=web_search>{"query": "…"}</function>                               Llama, Qwen-Coder
-//	<function=web_search><parameter=query>…</parameter></function>
-//	<invoke name="web_search"><parameter name="query">…</parameter></invoke>
-//	```tool_call {…} ```   ```json {"name": "web_search", "arguments": {…}} ```
-//	<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>web_search
-//	```json {…} ```<｜tool▁call▁end｜><｜tool▁calls▁end｜>                       DeepSeek
-//	<｜DSML｜function_calls><｜DSML｜invoke name="web_search">
-//	<｜DSML｜parameter name="query" string="true">…</｜DSML｜parameter>…          DeepSeek V3.2 (DSML)
-//	<|tool_call_begin|>functions.web_search:0<|tool_call_argument_begin|>{…}    Kimi
-//	<tool_call>web_search<arg_key>query</arg_key><arg_value>…</arg_value>        GLM
-//	[TOOL_CALLS][{"name": …}]   [TOOL_CALLS]web_search[ARGS]{…}                  Mistral
-//	<|channel|>commentary to=functions.web_search<|message|>{…}<|call|>          gpt-oss
-//	Action: web_search \n Action Input: {…}                                     ReAct
-//	a reply that is nothing but {"name": "web_search", "arguments": {…}}
-//
-// Explicit call markup is trusted even for an unknown tool name (the model
-// then gets an "unknown tool" error and corrects itself). Plain JSON blocks,
-// ReAct lines and bare JSON count only when they name a known tool, so
-// ordinary JSON in an answer is never mistaken for a call.
-
 type textCall struct {
 	start, end int
 	name, args string
@@ -67,23 +38,16 @@ var (
 	wrapperTagRe   = regexp.MustCompile(`</?(?:function_calls|tool_calls)>`)
 	nsTagRe        = regexp.MustCompile(`<(\s*/?\s*)[A-Za-z0-9_-]{1,20}:((?:tool_call|tool_calls|toolcall|function_calls|function_call|invoke|parameter|tool_use|arg_key|arg_value)\b)`)
 	prefixTagRe    = regexp.MustCompile(`<(\s*/?\s*)[a-z0-9]{2,20}_(tool_calls?)>`)
-	// pythonTagRe is a special token a JSON call follows: Llama's
-	// <|python_tag|>, Granite's <|tool_call|>, InternLM's <|plugin|>, Phi-4's functools.
+
 	pythonTagRe   = regexp.MustCompile(`(?:<\|(?:python_tag|tool_call|tool_calls|plugin)\|>|\bfunctools)\s*`)
 	pyCallStartRe = regexp.MustCompile(`(?m)^[ \t>*•-]*\[?\s*([A-Za-z_][A-Za-z0-9_]*)\(`)
 	blankLinesRe  = regexp.MustCompile(`\n{3,}`)
 )
 
-// parseTextToolCalls returns the calls written in content (in order) and the
-// content without them.
 func parseTextToolCalls(content string, known map[string]bool) ([]llm.ToolCall, string) {
 	return parseTextCalls(content, known, false)
 }
 
-// parseLooseToolCalls is parseTextToolCalls that also takes calls to a tool
-// named almost right, in the forms that need a known name (a JSON block, a
-// ReAct "Action:"): call repair gives them the real name. Only calls that are
-// run are read this way; an answer keeps a JSON example that names no tool.
 func parseLooseToolCalls(content string, known map[string]bool) ([]llm.ToolCall, string) {
 	return parseTextCalls(content, known, true)
 }
@@ -92,9 +56,9 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 	if strings.TrimSpace(content) == "" {
 		return nil, content
 	}
-	content = dsmlRe.ReplaceAllString(content, "<$1")         // DSML is the same markup with a prefix on every tag
-	content = nsTagRe.ReplaceAllString(content, "<$1$2")      // and <minimax:tool_call>, </rfl:parameter>: a namespace
-	content = prefixTagRe.ReplaceAllString(content, "<$1$2>") // <longcat_tool_call>: a model's own prefix
+	content = dsmlRe.ReplaceAllString(content, "<$1")
+	content = nsTagRe.ReplaceAllString(content, "<$1$2")
+	content = prefixTagRe.ReplaceAllString(content, "<$1$2>")
 	var found []textCall
 	taken := func(s, e int) bool {
 		for _, f := range found {
@@ -110,7 +74,7 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 		}
 		for i, c := range calls {
 			tc := textCall{start: s, end: e, name: c.name, args: c.args}
-			if i > 0 { // several calls in one block share its span
+			if i > 0 {
 				tc.start, tc.end = e, e
 			}
 			found = append(found, tc)
@@ -120,7 +84,7 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 		if known[name] || !loose {
 			return known[name]
 		}
-		_, ok := resolveName(name, known) // a name call repair can tell ("google_search")
+		_, ok := resolveName(name, known)
 		return ok
 	}
 	isKnown := func(calls []nameArgs) bool {
@@ -132,29 +96,28 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 		return len(calls) > 0
 	}
 
-	// DeepSeek special tokens.
 	for _, m := range deepseekCallRe.FindAllStringSubmatchIndex(content, -1) {
 		if c, ok := parseDeepSeekCall(content[m[2]:m[3]]); ok {
 			add(m[0], m[1], []nameArgs{c})
 		}
 	}
-	// <tool_call>…</tool_call> and friends.
+
 	for _, m := range tagCallRe.FindAllStringSubmatchIndex(content, -1) {
 		add(m[0], m[1], callsFromBody(content[m[4]:m[5]]))
 	}
-	// <function=name>…</function>
+
 	for _, m := range functionTagRe.FindAllStringSubmatchIndex(content, -1) {
 		add(m[0], m[1], []nameArgs{{name: content[m[2]:m[3]], args: argsFromBody(content[m[4]:m[5]], paramEqRe)}})
 	}
-	// <invoke name="…">…</invoke>
+
 	for _, m := range invokeRe.FindAllStringSubmatchIndex(content, -1) {
 		add(m[0], m[1], []nameArgs{{name: content[m[2]:m[3]], args: argsFromBody(content[m[4]:m[5]], paramNameRe)}})
 	}
-	// gpt-oss: to=functions.name … <|message|>{…}<|call|>
+
 	for _, m := range harmonyRe.FindAllStringSubmatchIndex(content, -1) {
 		add(m[0], m[1], []nameArgs{{name: content[m[2]:m[3]], args: normalizeArgs(content[m[4]:m[5]])}})
 	}
-	// Mistral: [TOOL_CALLS][{…}] or [TOOL_CALLS]name[ARGS]{…}
+
 	for _, m := range mistralRe.FindAllStringSubmatchIndex(content, -1) {
 		dec := json.NewDecoder(strings.NewReader(content[m[1]:]))
 		var v any
@@ -169,7 +132,7 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 			add(m[0], end, callsFromValue(v))
 		}
 	}
-	// Llama: <|python_tag|>{"name": …, "parameters": {…}}
+
 	for _, m := range pythonTagRe.FindAllStringIndex(content, -1) {
 		dec := json.NewDecoder(strings.NewReader(content[m[1]:]))
 		var v any
@@ -178,15 +141,15 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 		}
 		add(m[0], m[1]+int(dec.InputOffset()), callsFromValue(v))
 	}
-	// Pythonic: web_search(query="…"), or a list of them, on a line of its own.
+
 	for _, g := range pythonicCalls(content, knows) {
 		add(g.start, g.end, g.calls)
 	}
-	// A tag left open because the model stopped right after the call.
+
 	if m := tagOpenTailRe.FindStringSubmatchIndex(content); m != nil && !taken(m[0], m[1]) {
 		add(m[0], m[1], callsFromBody(content[m[4]:m[5]]))
 	}
-	// Fenced blocks.
+
 	for _, m := range fenceRe.FindAllStringSubmatchIndex(content, -1) {
 		lang, body := strings.ToLower(content[m[2]:m[3]]), content[m[4]:m[5]]
 		calls := callsFromBody(body)
@@ -199,14 +162,14 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 			}
 		}
 	}
-	// ReAct.
+
 	for _, m := range reactRe.FindAllStringSubmatchIndex(content, -1) {
 		c := nameArgs{name: content[m[2]:m[3]], args: normalizeArgs(strings.TrimSpace(content[m[4]:m[5]]))}
 		if knows(c.name) {
 			add(m[0], m[1], []nameArgs{c})
 		}
 	}
-	// A reply that is only a call.
+
 	if t := strings.TrimSpace(unfence(content)); len(found) == 0 && (strings.HasPrefix(t, "{") || strings.HasPrefix(t, "[")) {
 		if calls := callsFromBody(content); isKnown(calls) {
 			add(0, len(content), calls)
@@ -233,8 +196,6 @@ func parseTextCalls(content string, known map[string]bool, loose bool) ([]llm.To
 	return calls, cleanText(clean.String())
 }
 
-// stripToolMarkup removes call markup (e.g. a duplicate of native calls)
-// and any internal token left in the text.
 func stripToolMarkup(content string, known map[string]bool) string {
 	_, clean := parseTextToolCalls(content, known)
 	return scrubMarkup(clean)
@@ -248,13 +209,11 @@ func cleanText(s string) string {
 
 type nameArgs struct{ name, args string }
 
-// parseDeepSeekCall reads "function<sep>name\n```json\n{…}\n```" (V3/R1)
-// or "name<sep>{…}" (V3.1).
 func parseDeepSeekCall(inner string) (nameArgs, bool) {
 	parts := deepseekSepRe.Split(inner, -1)
 	var name, rest string
 	switch {
-	case len(parts) >= 3: // function<sep>name<sep>args
+	case len(parts) >= 3:
 		name, rest = parts[1], strings.Join(parts[2:], "")
 	case len(parts) == 2:
 		left := strings.TrimSpace(parts[0])
@@ -266,8 +225,8 @@ func parseDeepSeekCall(inner string) (nameArgs, bool) {
 	default:
 		return nameArgs{}, false
 	}
-	name = kimiIndexRe.ReplaceAllString(strings.TrimPrefix(strings.TrimSpace(name), "functions."), "") // Kimi: functions.name:0
-	if name == "" || !isIdent(name) {                                                                  // Step-3 puts an <invoke …> there: read as one
+	name = kimiIndexRe.ReplaceAllString(strings.TrimPrefix(strings.TrimSpace(name), "functions."), "")
+	if name == "" || !isIdent(name) {
 		return nameArgs{}, false
 	}
 	return nameArgs{name: name, args: normalizeArgs(unfence(rest))}, true
@@ -275,8 +234,6 @@ func parseDeepSeekCall(inner string) (nameArgs, bool) {
 
 var kimiIndexRe = regexp.MustCompile(`:\d+$`)
 
-// callsFromBody reads one call, an array of calls or {"tool_calls": […]}
-// from JSON (after light repair). A body that is "name\n{args}" works too.
 func callsFromBody(body string) []nameArgs {
 	body = unfence(strings.TrimSpace(body))
 	if body == "" {
@@ -286,7 +243,7 @@ func callsFromBody(body string) []nameArgs {
 	if json.Unmarshal([]byte(body), &v) != nil {
 		fixed, err := repairJSON(body)
 		if err != nil || json.Unmarshal([]byte(fixed), &v) != nil {
-			if i := strings.Index(body, "<arg_key>"); i > 0 && isIdent(strings.TrimSpace(body[:i])) { // GLM
+			if i := strings.Index(body, "<arg_key>"); i > 0 && isIdent(strings.TrimSpace(body[:i])) {
 				obj := map[string]any{}
 				for _, p := range argPairRe.FindAllStringSubmatch(body[i:], -1) {
 					obj[p[1]] = paramValue(p[2])
@@ -297,13 +254,12 @@ func callsFromBody(body string) []nameArgs {
 			if name, rest, ok := strings.Cut(body, "\n"); ok && isIdent(strings.TrimSpace(name)) {
 				return []nameArgs{{name: strings.TrimSpace(name), args: normalizeArgs(rest)}}
 			}
-			// Broken JSON: keep the name and the raw arguments, so the model
-			// is told what is wrong instead of the call being lost.
+
 			if m := brokenNameRe.FindStringSubmatch(body); m != nil {
 				args := "{}"
 				if a := brokenArgsRe.FindStringSubmatch(body); a != nil {
 					args = strings.TrimSpace(a[1])
-					args = strings.TrimSpace(strings.TrimSuffix(args, "}")) // the closer of the outer object
+					args = strings.TrimSpace(strings.TrimSuffix(args, "}"))
 				}
 				return []nameArgs{{name: m[1], args: args}}
 			}
@@ -340,7 +296,7 @@ func callsFromValue(v any) []nameArgs {
 }
 
 func callFromObject(m map[string]any) (nameArgs, bool) {
-	if fn, ok := m["function"].(map[string]any); ok { // OpenAI shape
+	if fn, ok := m["function"].(map[string]any); ok {
 		return callFromObject(fn)
 	}
 	var name string
@@ -361,13 +317,12 @@ func callFromObject(m map[string]any) (nameArgs, bool) {
 	return nameArgs{name: name, args: "{}"}, true
 }
 
-// argsFromBody reads a JSON object, or <parameter…>value</parameter> pairs.
 func argsFromBody(body string, paramRe *regexp.Regexp) string {
 	body = strings.TrimSpace(body)
 	if ps := paramRe.FindAllStringSubmatch(body, -1); len(ps) > 0 {
 		obj := map[string]any{}
 		for _, p := range ps {
-			if len(p) == 4 { // <parameter name="…" string="true">: the value as written
+			if len(p) == 4 {
 				if strings.Contains(strings.ReplaceAll(p[2], " ", ""), `string="true"`) {
 					obj[p[1]] = strings.Trim(p[3], "\n")
 				} else {
@@ -383,7 +338,6 @@ func argsFromBody(body string, paramRe *regexp.Regexp) string {
 	return normalizeArgs(unfence(body))
 }
 
-// paramValue keeps numbers, booleans, arrays and objects typed; anything else is a string.
 func paramValue(raw string) any {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -413,8 +367,6 @@ func argsToJSON(a any) string {
 	}
 }
 
-// normalizeArgs trims and unfences an arguments string; it does not repair
-// it (that happens before the call, with an error message on failure).
 func normalizeArgs(s string) string {
 	s = strings.TrimSpace(unfence(strings.TrimSpace(s)))
 	if s == "" {
@@ -423,7 +375,6 @@ func normalizeArgs(s string) string {
 	return s
 }
 
-// unfence removes a surrounding ```lang … ``` fence.
 func unfence(s string) string {
 	t := strings.TrimSpace(s)
 	if !strings.HasPrefix(t, "```") {
@@ -448,17 +399,11 @@ func isIdent(s string) bool {
 	return true
 }
 
-// ---------------------------------------------------------------- streaming
-
-// callMarkers start tool-call markup; streamed text is cut before them so
-// the user never sees a half-written call.
 var callMarkers = []string{"<tool_call", "<toolcall", "<tool_calls", "<function_call", "<function=", "<tool_use", "<invoke",
 	"<｜tool", "<|tool", "```tool", "```function_call", "\nAction:", "Action Input:", "<｜DSML", "<|DSML", "<｜｜", "</｜", "<parameter",
 	"<arg_key", "[TOOL_CALLS]", "<|start|>", "<|channel|>", "<|message|>", "<|im_", "<|eot", "<|endof", "<｜end", "<｜begin", "to=functions."}
 
 var (
-	// streamCutRes start a call whatever the model: a namespaced tag, a JSON
-	// call (fenced or not), ReAct, a special token.
 	streamCutRes = []*regexp.Regexp{
 		regexp.MustCompile(`<\s*/?\s*[A-Za-z0-9_-]{1,20}:(?:tool_call|tool_calls|toolcall|invoke|parameter|function_calls?|tool_use)`),
 		regexp.MustCompile("(?m)^[ \\t]*(?:```[A-Za-z_]*[ \\t]*\\n[ \\t]*)?\\[?\\s*\\{\\s*\"(?:name|function|tool|tool_name)\"\\s*:\\s*" +
@@ -468,17 +413,14 @@ var (
 		regexp.MustCompile(`\bfunctools\s*\[`),
 		regexp.MustCompile(`<[a-z0-9]{2,20}_tool_calls?>`),
 	}
-	// streamPyRe is a call written as code on its own line (pythonic, or the
-	// work notes' shape), outside code blocks.
+
 	streamPyRe = regexp.MustCompile(`(?m)^[ \t>*•-]*\[?\s*[a-z][a-z0-9]*_[a-z0-9_]*\(`)
-	// streamHoldRe is a last line that may be a call still arriving.
+
 	streamHoldRe  = regexp.MustCompile("^[ \\t]*(?:\\{|\\[\\s*(?:\\{|[a-z_]*$|[a-z][a-z0-9]*_)|<|Action|functools|[a-z][a-z0-9]*_[a-z0-9_]*(?:\\(.*)?$)")
 	fenceOpenRe   = regexp.MustCompile("^[ \\t]*```[A-Za-z_]*[ \\t]*$")
 	trailingTagRe = regexp.MustCompile(`<[A-Za-z0-9_:/|｜-]*$`)
 )
 
-// visibleStream is the part of a streamed answer that can be shown: it ends
-// before anything that is, or may be about to be, a tool call.
 func visibleStream(s string) string {
 	s = streamThought(s)
 	cut := len(s)
@@ -493,7 +435,7 @@ func visibleStream(s string) string {
 		}
 	}
 	for _, loc := range streamPyRe.FindAllStringIndex(s, -1) {
-		if loc[0] < cut && strings.Count(s[:loc[0]], "```")%2 == 0 { // outside a code block
+		if loc[0] < cut && strings.Count(s[:loc[0]], "```")%2 == 0 {
 			cut = loc[0]
 			break
 		}
@@ -501,11 +443,11 @@ func visibleStream(s string) string {
 	if cut < len(s) {
 		s = strings.TrimRight(s[:cut], " \t")
 	}
-	// The line arriving now may be a call: it waits for the next words.
+
 	if i := strings.LastIndexByte(s, '\n'); streamHoldRe.MatchString(s[i+1:]) && (s[i+1:] == "" || !strings.Contains(s[:i+1], "```") ||
 		strings.Count(s[:i+1], "```")%2 == 0 || strings.HasPrefix(strings.TrimSpace(s[i+1:]), "{")) {
 		s = strings.TrimRight(s[:i+1], " \t")
-		// …and a code block opened just for it.
+
 		if j := strings.LastIndexByte(s, '\n'); fenceOpenRe.MatchString(s[j+1:]) && strings.Count(s, "```")%2 == 1 {
 			s = strings.TrimRight(s[:j+1], " \t")
 		}
@@ -513,7 +455,7 @@ func visibleStream(s string) string {
 	if loc := trailingTagRe.FindStringIndex(s); loc != nil {
 		s = strings.TrimRight(s[:loc[0]], " \t")
 	}
-	// A tag may be arriving right now ("<tool_ca").
+
 	for _, m := range callMarkers {
 		if m[0] != '<' {
 			continue
@@ -527,23 +469,15 @@ func visibleStream(s string) string {
 	return s
 }
 
-// ---------------------------------------------------------------- internal markup
-
-// Internal markup never reaches the user: tool-call tags a model left in its
-// text (DSML and the rest), special tokens of its chat template and
-// reasoning written inline. Code blocks and `code` are left as written (an
-// answer may be about this very markup).
 var (
 	dsmlTagRe      = regexp.MustCompile(`<\s*/?\s*[｜|]{1,3}\s*DSML\s*[｜|]{1,3}[^<>\n]{0,200}>`)
-	specialTokenRe = regexp.MustCompile(`<[｜|][A-Za-z][A-Za-z0-9_▁.:\-]{0,40}[｜|]>`) // <|im_end|>, <｜end▁of▁sentence｜>: no spaces
+	specialTokenRe = regexp.MustCompile(`<[｜|][A-Za-z][A-Za-z0-9_▁.:\-]{0,40}[｜|]>`)
 	bracketTokenRe = regexp.MustCompile(`\[/?(?:TOOL_CALLS|TOOL_RESULTS|ARGS|CALL_ID|AVAILABLE_TOOLS)\]`)
 	orphanTagRe    = regexp.MustCompile(`</?(?:[A-Za-z0-9_-]{1,20}:)?(?:tool_call|tool_calls|toolcall|function_calls|function_call|tool_use|tool_response|tool_result|invoke|parameter|arg_key|arg_value)\b[^<>\n]{0,200}>`)
 	thinkBlockRe   = regexp.MustCompile(`(?s)^\s*<(think|thinking|reasoning)>.*?</(?:think|thinking|reasoning)>\s*`)
 	thinkCloseRe   = regexp.MustCompile(`</(?:think|thinking|reasoning)>`)
 )
 
-// scrubMarkup removes internal markup from text meant for people.
-// namedCalls drops the calls that have no tool name; it reports how many.
 func namedCalls(calls []llm.ToolCall) ([]llm.ToolCall, int) {
 	out := calls[:0:0]
 	dropped := 0
@@ -560,12 +494,8 @@ func namedCalls(calls []llm.ToolCall) ([]llm.ToolCall, int) {
 	return out, dropped
 }
 
-// imitatedCallRe is a line that starts like a call written out as text:
-// «bash_execute(python3 …) → {…}», the shape of the work notes a turn keeps.
 var imitatedCallRe = regexp.MustCompile(`(?m)^[ \t>*•-]*([A-Za-z][A-Za-z0-9_]{4,})\(`)
 
-// imitatedCalls are the tools a reply wrote out as calls in its text instead
-// of calling them (nothing ran), outside code.
 func imitatedCalls(text string, known map[string]bool) []string {
 	var names []string
 	seen := map[string]bool{}
@@ -581,8 +511,6 @@ func imitatedCalls(text string, known map[string]bool) []string {
 	return names
 }
 
-// dropImitatedCalls removes the lines of calls written out as text from an
-// answer: they did nothing, and the user must not read them as work done.
 func dropImitatedCalls(text string, known map[string]bool) string {
 	if len(imitatedCalls(text, known)) == 0 {
 		return text
@@ -612,9 +540,6 @@ func scrubMarkup(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// dropThought removes reasoning a model wrote into its answer: a leading
-// <think>…</think>, or everything before a lone </think> (some servers drop
-// the opening tag).
 func dropThought(s string) string {
 	s = thinkBlockRe.ReplaceAllString(s, "")
 	if loc := thinkCloseRe.FindStringIndex(s); loc != nil && !strings.Contains(s[:loc[0]], "```") && !strings.Contains(s[:loc[0]], "<think") {
@@ -623,7 +548,6 @@ func dropThought(s string) string {
 	return s
 }
 
-// streamThought hides inline reasoning while it is being written.
 func streamThought(s string) string {
 	t := strings.TrimLeft(s, " \t\n")
 	for _, open := range []string{"<think>", "<thinking>", "<reasoning>"} {
@@ -633,14 +557,13 @@ func streamThought(s string) string {
 			}
 			return ""
 		}
-		if strings.HasPrefix(open, t) && t != "" { // "<thi" arriving
+		if strings.HasPrefix(open, t) && t != "" {
 			return ""
 		}
 	}
 	return s
 }
 
-// outsideCode applies f to the parts of s outside ``` blocks and `code`.
 func outsideCode(s string, f func(string) string) string {
 	var sb strings.Builder
 	for i, block := range strings.Split(s, "```") {
@@ -665,12 +588,6 @@ func outsideCode(s string, f func(string) string) string {
 	return sb.String()
 }
 
-// ---------------------------------------------------------------- pythonic calls
-
-// pythonicCalls reads calls written as Python on a line of their own:
-// «web_search(query="x")», «[a(k=1), b(k="v")]». Only a known tool with
-// keyword arguments (or none) is a call: «bash_execute(python3 - << 'EOF' …)»
-// (the work notes' shape) is not.
 type callGroup struct {
 	start, end int
 	calls      []nameArgs
@@ -696,7 +613,7 @@ func pythonicCalls(content string, knows func(string) bool) []callGroup {
 			for pos < len(content) && (content[pos] == ' ' || content[pos] == '\t') {
 				pos++
 			}
-			if pos < len(content) && content[pos] == ',' { // the next call of a list
+			if pos < len(content) && content[pos] == ',' {
 				pos++
 				for pos < len(content) && (content[pos] == ' ' || content[pos] == '\t') {
 					pos++
@@ -712,7 +629,7 @@ func pythonicCalls(content string, knows func(string) bool) []callGroup {
 		if end < len(content) && content[end] == ']' {
 			end++
 		}
-		// Nothing else may follow on the line: a call, not a sentence about one.
+
 		if rest, _, _ := strings.Cut(content[end:], "\n"); strings.TrimSpace(rest) != "" {
 			continue
 		}
@@ -721,8 +638,6 @@ func pythonicCalls(content string, knows func(string) bool) []callGroup {
 	return out
 }
 
-// pythonicCall reads «name(k=v, …)» at pos: the name, where it ends, and the
-// arguments as JSON.
 func pythonicCall(s string, pos int) (name string, end int, args string, ok bool) {
 	i := pos
 	for i < len(s) && (s[i] == '_' || s[i] >= 'a' && s[i] <= 'z' || s[i] >= 'A' && s[i] <= 'Z' || s[i] >= '0' && s[i] <= '9') {
@@ -751,7 +666,7 @@ func pythonicCall(s string, pos int) (name string, end int, args string, ok bool
 			i++
 		}
 		if key == "" || i >= len(s) || s[i] != '=' {
-			return "", 0, "", false // a positional argument: not a call
+			return "", 0, "", false
 		}
 		i++
 		for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
@@ -777,8 +692,6 @@ func pythonicCall(s string, pos int) (name string, end int, args string, ok bool
 	}
 }
 
-// pyValue reads a Python literal: a string, a number, True/False/None, or a
-// JSON-like list or object. n is how much of s it took.
 func pyValue(s string) (v any, n int, ok bool) {
 	switch {
 	case s == "":

@@ -8,8 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// A sub-agent's send_file is honoured once its workspace is handed over:
-// the file reaches the chat under its name in the main workspace.
 func TestASubAgentsFileReachesTheChat(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -35,8 +33,6 @@ func TestASubAgentsFileReachesTheChat(t *testing.T) {
 	}
 }
 
-// What a sub-agent's picture or music tool made counts as the agent's own
-// once handed over; its other files stay work in progress.
 func TestHandedOverFilesKeepWhatMadeThem(t *testing.T) {
 	h := newHarness(t)
 	sb := h.bot.app.Machine
@@ -50,8 +46,6 @@ func TestHandedOverFilesKeepWhatMadeThem(t *testing.T) {
 	}
 }
 
-// The background check rests a cookie whose account was refused, and leaves
-// one that failed for another reason (the network, the video) alone.
 func TestTheBackgroundCheckRestsOnlyRefusedCookies(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()

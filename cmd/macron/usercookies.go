@@ -13,30 +13,13 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// Each user's own cookies (/cookies), as tg-ytdlp-bot's per-user cookie
-// files: a site that asks for a login (YouTube's "not a bot", a private
-// Instagram) is downloaded with the user's own login first, before the
-// shared pool, and only for them.
-//
-//	ck:h:UID       the panel
-//	ck:a:UID       add one (the next message is the cookies.txt)
-//	ck:t:UID:ID    try one
-//	ck:d:UID:ID    delete one
-//	ck:c:UID       stop adding
-//	ck:x:UID       close
-//
-// Every step edits the panel's own message: the dialog, its errors, the
-// result and the test; the user's messages with cookies are deleted.
-
 const cookieWaitTTL = 10 * time.Minute
 
-// cookieWait is a /cookies dialog waiting for a cookies.txt.
 type cookieWait struct {
 	until         time.Time
-	chatID, msgID int64 // the panel
+	chatID, msgID int64
 }
 
-// showCookies edits the panel (or sends it again when it is gone).
 func (b *Bot) showCookies(ctx context.Context, chatID, msgID int64, v panelView) int64 {
 	err := b.editHTML(ctx, chatID, msgID, v.html, v.kb)
 	if err == nil || telegram.IsNotModified(err) {
@@ -48,7 +31,6 @@ func (b *Bot) showCookies(ctx context.Context, chatID, msgID int64, v panelView)
 	return msgID
 }
 
-// cookieAsk is the panel while it waits for a cookies.txt.
 func (b *Bot) cookieAsk(l lang, uid int64, notice string) panelView {
 	html := l.t("🍪 فایل <code>cookies.txt</code> (فرمت Netscape) رو بفرست، یا متنش رو کپی کن. ") +
 		l.t("پیامت بعد از خوندن پاک می‌شه. کوکی تازه یه سایت جای قبلیِ همون سایت رو می‌گیره.") + l.t("\n\n<i>برای انصراف /cancel رو بفرست.</i>")
@@ -58,7 +40,6 @@ func (b *Bot) cookieAsk(l lang, uid int64, notice string) panelView {
 	return panelView{html: html, kb: keyboard(row(b.button(l.t("❌ انصراف"), "ck:c:"+strconv.FormatInt(uid, 10), telegram.StyleDanger)))}
 }
 
-// withNotice puts a line above the panel.
 func withNotice(v panelView, notice string) panelView {
 	if notice != "" {
 		v.html = notice + "\n\n" + v.html
@@ -76,7 +57,6 @@ func (b *Bot) openCookiesPanel(ctx context.Context, m *telegram.Message) {
 	b.sendPanel(ctx, m, v.html, v.kb)
 }
 
-// cookieSites names the sites of a cookies.txt: its logins, else its domains.
 func cookieSites(data string, domains []string) []string {
 	var sites []string
 	for _, lg := range tools.CookieLogins(data, time.Now()) {
@@ -96,7 +76,6 @@ func cookieSites(data string, domains []string) []string {
 	return sites
 }
 
-// cookieMainSite is the site a cookie is tried on (YouTube first).
 func cookieMainSite(data string, domains []string) string {
 	sites := cookieSites(data, domains)
 	for _, s := range sites {
@@ -110,7 +89,6 @@ func cookieMainSite(data string, domains []string) string {
 	return ""
 }
 
-// loginStatus describes the logins of a cookies.txt.
 func loginStatus(l lang, data string, loc *time.Location) string {
 	logins := tools.CookieLogins(data, time.Now())
 	if len(logins) == 0 {
@@ -212,7 +190,6 @@ func (b *Bot) handleCookiesCallback(ctx context.Context, q *telegram.CallbackQue
 	show(withNotice(b.viewUserCookies(ctx, uid), notice))
 }
 
-// cookieVerdict tries a cookies.txt on its main site (YouTube for real).
 func (b *Bot) cookieVerdict(l lang, data string, domains []string) string {
 	site := cookieMainSite(data, domains)
 	if site == "" {
@@ -230,8 +207,6 @@ func (b *Bot) cookieVerdict(l lang, data string, domains []string) string {
 	return l.f("🩺 %s: ❌ کار نمی‌کنه: %s", esc(site), esc(res.Detail))
 }
 
-// cookieInput takes the cookies.txt a user was asked for in /cookies; the
-// answers go into the panel's message.
 func (b *Bot) cookieInput(ctx context.Context, m *telegram.Message, cmd string) bool {
 	v, ok := b.cookieWaits.Load(m.From.ID)
 	if !ok || !m.Chat.Private() {
@@ -245,7 +220,7 @@ func (b *Bot) cookieInput(ctx context.Context, m *telegram.Message, cmd string) 
 	l := b.langOf(m.From)
 	uid := m.From.ID
 	show := func(v panelView) { w.msgID = b.showCookies(ctx, w.chatID, w.msgID, v) }
-	ask := func(problem string) bool { // the dialog stays open
+	ask := func(problem string) bool {
 		show(b.cookieAsk(l, uid, problem))
 		b.cookieWaits.Store(uid, w)
 		return true
@@ -257,10 +232,10 @@ func (b *Bot) cookieInput(ctx context.Context, m *telegram.Message, cmd string) 
 		show(withNotice(b.viewUserCookies(ctx, uid), l.t("باشه، بی‌خیالش شدیم.")))
 		return true
 	case cmd != "":
-		b.cookieWaits.Delete(uid) // another command: abandon the dialog
+		b.cookieWaits.Delete(uid)
 		return false
 	}
-	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // cookies are a login: never leave them in the chat (the file stays fetchable)
+	_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 	data := m.Text
 	if d := m.Document; d != nil {
 		raw, err := b.fetch(ctx, d.FileID, maxCookieBytes)
@@ -287,7 +262,7 @@ func (b *Bot) cookieInput(ctx context.Context, m *telegram.Message, cmd string) 
 	case len(logins) == 0 && knownLoginSite(domains):
 		return ask(l.t("❌ توی این کوکی‌ها لاگینی نیست؛ اول توی سایت لاگین کن، بعد بگیرش."))
 	}
-	// A new cookie of a site replaces the user's older one of the same site.
+
 	sites := map[string]bool{}
 	for _, s := range cookieSites(data, domains) {
 		sites[s] = true
@@ -320,7 +295,6 @@ func (b *Bot) cookieInput(ctx context.Context, m *telegram.Message, cmd string) 
 	return true
 }
 
-// knownLoginSite reports domains of a site whose login cookies are known.
 func knownLoginSite(domains []string) bool {
 	for _, d := range domains {
 		if tools.KnownLoginSite(d) {

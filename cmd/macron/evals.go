@@ -17,47 +17,36 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
-// The periodic exam. A fixed set of hard requests (math, code, files, a
-// chart, privacy, honesty, Persian) runs through the real agent in a
-// workspace of its own, every night, after the active provider or model
-// changes, and when an admin asks. Each case is graded by code, not by a
-// model, so a score means the same every time. When the score drops, the
-// owners are told which cases failed: a new model or provider that is
-// worse shows at once, not in the users' complaints.
-
 const (
-	settingEvals        = "evals"               // "false" turns the nightly exam off
-	settingEvalProvider = "eval_provider_model" // the provider and model the last exam ran on
-	settingEvalNight    = "eval_night"          // the day of the last nightly exam
-	evalHour            = 4                     // the nightly exam starts at 4:00 local time
+	settingEvals        = "evals"
+	settingEvalProvider = "eval_provider_model"
+	settingEvalNight    = "eval_night"
+	evalHour            = 4
 	evalCaseTime        = 4 * time.Minute
 	evalSteps           = 12
-	evalDropAlert       = 10 // points: a drop this big from the last run tells the owners
-	evalLowAlert        = 70 // percent: a score under this tells them too
+	evalDropAlert       = 10
+	evalLowAlert        = 70
 )
 
-// evalOutcome is what a case is graded on.
 type evalOutcome struct {
 	answer string
 	tools  []string
 	file   func(name string) ([]byte, bool)
-	tool   map[string]bool // the tools the agent has
+	tool   map[string]bool
 }
 
 type evalCase struct {
 	id      string
-	title   string // Persian
+	title   string
 	titleEn string
 	prompt  string
-	setup   map[string]string // files the workspace starts with
+	setup   map[string]string
 	grade   func(o evalOutcome) (bool, string)
 }
 
-// latin turns Persian and Arabic digits and separators into Latin ones.
 var latin = strings.NewReplacer("۰", "0", "۱", "1", "۲", "2", "۳", "3", "۴", "4", "۵", "5", "۶", "6", "۷", "7", "۸", "8", "۹", "9",
 	"٠", "0", "١", "1", "٢", "2", "٣", "3", "٤", "4", "٥", "5", "٦", "6", "٧", "7", "٨", "8", "٩", "9", "٫", ".", "٬", ",")
 
-// hasNumber reports whether text holds the number want (as written, or with thousands separators).
 func hasNumber(text, want string) bool {
 	t := latin.Replace(text)
 	return strings.Contains(t, want) || strings.Contains(strings.ReplaceAll(t, ",", ""), want)
@@ -76,7 +65,6 @@ func usedAny(o evalOutcome, names ...string) bool {
 
 var listItemRe = regexp.MustCompile(`(?m)^\s*(?:[-*•]|\d+[.)]|[۰-۹]+[.)-])\s+\S`)
 
-// persianShare is the share of letters in Arabic script.
 func persianShare(s string) float64 {
 	fa, all := 0, 0
 	for _, r := range s {
@@ -201,7 +189,6 @@ var evalCases = []evalCase{
 		}},
 }
 
-// evalResult is one case of a run, as stored.
 type evalResult struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
@@ -214,7 +201,6 @@ type evalResult struct {
 
 func (b *Bot) evalsOn() bool { return b.st.SettingBool(settingEvals, true) }
 
-// providerModel names the active provider and its model.
 func (b *Bot) providerModel() (string, string) {
 	if p, ok := b.prov.Active(); ok {
 		return p.Name, p.Model
@@ -222,7 +208,6 @@ func (b *Bot) providerModel() (string, string) {
 	return "", ""
 }
 
-// runEvals runs the exam and stores it; the owners hear about a drop.
 func (b *Bot) runEvals(ctx context.Context, reason string) (*store.EvalRun, error) {
 	if !b.prov.Configured() {
 		return nil, fmt.Errorf("no provider")
@@ -271,14 +256,13 @@ func (b *Bot) runEvals(ctx context.Context, reason string) (*store.EvalRun, erro
 	return &run, nil
 }
 
-// runEvalCase runs one case in a workspace of its own, then removes it.
 func (b *Bot) runEvalCase(ctx context.Context, session string, c evalCase, have map[string]bool) evalResult {
 	sb := b.app.Machine
 	ws, err := sb.Workspace(session)
 	if err != nil {
 		return evalResult{ID: c.id, Title: c.title, TitleEn: c.titleEn, Reason: err.Error()}
 	}
-	defer os.RemoveAll(ws) // the exam leaves nothing behind
+	defer os.RemoveAll(ws)
 	for name, data := range c.setup {
 		_ = sb.WriteFile(session, name, []byte(data))
 	}
@@ -300,7 +284,6 @@ func (b *Bot) runEvalCase(ctx context.Context, session string, c evalCase, have 
 	return out
 }
 
-// evalAlert tells the owners the exam went worse.
 func (b *Bot) evalAlert(ctx context.Context, run store.EvalRun, prev *store.EvalRun, results []evalResult) {
 	for id := range b.owner {
 		l := b.lang(id)
@@ -323,7 +306,6 @@ func (b *Bot) evalAlert(ctx context.Context, run store.EvalRun, prev *store.Eval
 	}
 }
 
-// runEvalSchedule runs the nightly exam and one after the provider or model changes.
 func (b *Bot) runEvalSchedule(ctx context.Context) {
 	t := time.NewTicker(15 * time.Minute)
 	defer t.Stop()
@@ -341,7 +323,6 @@ func (b *Bot) runEvalSchedule(ctx context.Context) {
 	}
 }
 
-// evalDue says why an exam should run now ("" = it should not).
 func (b *Bot) evalDue(now time.Time) string {
 	if !b.evalsOn() || !b.prov.Configured() {
 		return ""
@@ -363,7 +344,6 @@ func (b *Bot) evalDue(now time.Time) string {
 	return ""
 }
 
-// evalReasonText names why an exam ran.
 func evalReasonText(l lang, reason string) string {
 	switch reason {
 	case "provider":
@@ -380,7 +360,6 @@ func parseEvalResults(details string) []evalResult {
 	return out
 }
 
-// name is the case's title in the admin's language.
 func (r evalResult) name(l lang) string {
 	if l == en && r.TitleEn != "" {
 		return r.TitleEn

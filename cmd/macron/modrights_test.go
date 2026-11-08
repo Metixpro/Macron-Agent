@@ -25,16 +25,14 @@ func lastBody(h *harness, method string) map[string]any {
 	return calls[len(calls)-1].body
 }
 
-// TestGroupAdminRights: presets, +/- changes, titles and restrictions, and
-// nobody gets through the bot a right the asker or the bot doesn't have.
 func TestGroupAdminRights(t *testing.T) {
 	h := newHarness(t)
 	b := h.bot
 	all := []string{"can_change_info", "can_delete_messages", "can_restrict_members", "can_invite_users", "can_pin_messages",
 		"can_manage_topics", "can_manage_video_chats", "can_promote_members", "can_post_stories", "can_edit_stories", "can_delete_stories"}
-	h.tg.members["-100500:42"] = adminJSON(42, false, all...) // the bot
+	h.tg.members["-100500:42"] = adminJSON(42, false, all...)
 	h.tg.members["-100500:77"] = adminJSON(77, false, "can_delete_messages", "can_restrict_members", "can_pin_messages", "can_invite_users",
-		"can_promote_members", "can_manage_video_chats") // the asker: no change_info
+		"can_promote_members", "can_manage_video_chats")
 	h.tg.members["-100500:1"] = `{"status":"creator","user":{"id":1,"first_name":"Owner"}}`
 	h.tg.members["-100500:78"] = "member"
 	h.tg.members["-100500:83"] = "member"
@@ -47,7 +45,6 @@ func TestGroupAdminRights(t *testing.T) {
 	h.tg.members["-100500:555"] = "member"
 	do := func(args map[string]any) string { return b.moderate(t.Context(), modMessage(77, "", nil), args) }
 
-	// A preset with changes and a title; what the asker lacks is left out.
 	out := do(map[string]any{"action": "promote", "users": []any{"78"}, "rights": []any{"moderator", "+info", "-delete"}, "text": "ضعیف ۲"})
 	body := lastBody(h, "promoteChatMember")
 	if body["can_restrict_members"] != true || body["can_pin_messages"] != true || body["can_delete_messages"] != nil || body["can_change_info"] != nil {
@@ -60,13 +57,12 @@ func TestGroupAdminRights(t *testing.T) {
 		t.Fatal("no title")
 	}
 
-	// set_rights keeps the other rights.
 	out = do(map[string]any{"action": "set_rights", "users": []any{"79"}, "rights": []any{"+ban", "-pin"}})
 	body = lastBody(h, "promoteChatMember")
 	if body["user_id"] != float64(79) || body["can_delete_messages"] != true || body["can_restrict_members"] != true || body["can_pin_messages"] != nil {
 		t.Fatalf("set_rights: %v\n%s", body, out)
 	}
-	// An admin with a right the asker lacks, one promoted by someone else, the owner.
+
 	for user, want := range map[string]string{"80": "they have rights you don't (change_info)", "81": "promoted by someone else",
 		"1": "the group's owner"} {
 		h.tg.reset()
@@ -74,7 +70,7 @@ func TestGroupAdminRights(t *testing.T) {
 			t.Errorf("demote %s: %s", user, out)
 		}
 	}
-	// A bot admin asking: no limit but the bot's own rights.
+
 	h.tg.reset()
 	out = b.moderate(t.Context(), modMessage(ownerID, "", nil), map[string]any{"action": "promote", "users": []any{"78"}, "rights": []any{"full"}})
 	if body = lastBody(h, "promoteChatMember"); body["can_change_info"] != true || body["can_promote_members"] != true || body["is_anonymous"] != nil ||
@@ -82,7 +78,6 @@ func TestGroupAdminRights(t *testing.T) {
 		t.Fatalf("full by a bot admin: %v\n%s", body, out)
 	}
 
-	// title makes a member a moderator first.
 	h.tg.reset()
 	out = do(map[string]any{"action": "title", "users": []any{"83"}, "text": "پشتیبان گروه"})
 	if lastBody(h, "promoteChatMember")["can_restrict_members"] != true || !strings.Contains(out, "titled «پشتیبان گروه»") {
@@ -92,7 +87,6 @@ func TestGroupAdminRights(t *testing.T) {
 		t.Errorf("an unknown right: %s", out)
 	}
 
-	// restrict: what to take away, for a time; a restricted member's rights are the base.
 	h.tg.reset()
 	out = do(map[string]any{"action": "restrict", "users": []any{"555"}, "permissions": []any{"-media", "-links"}, "duration": "2h"})
 	body = lastBody(h, "restrictChatMember")
@@ -112,7 +106,6 @@ func TestGroupAdminRights(t *testing.T) {
 		t.Errorf("admins are not restricted: %s", out)
 	}
 
-	// info lists rights, or what a restricted member may send.
 	for user, want := range map[string]string{"79": "rights: delete_messages, pin_messages", "82": "blocked: photos", "81": "promoted by someone else",
 		"1": "the group's owner"} {
 		if out := do(map[string]any{"action": "info", "users": []any{user}}); !strings.Contains(out, want) {
@@ -120,7 +113,6 @@ func TestGroupAdminRights(t *testing.T) {
 		}
 	}
 
-	// unwarn takes back one warning; 'all' every one.
 	for i := 0; i < 2; i++ {
 		do(map[string]any{"action": "warn", "users": []any{"555"}, "reason": fmt.Sprint("r", i)})
 	}
@@ -160,8 +152,6 @@ func TestParseRightsAndPermissions(t *testing.T) {
 	}
 }
 
-// TestBotAdminsKeepTheirRole: a group admin can't promote, retitle or
-// change the rights of a bot admin; another bot admin can.
 func TestBotAdminsKeepTheirRole(t *testing.T) {
 	h := newHarness(t)
 	h.tg.members["-100500:42"] = adminJSON(42, false, "can_delete_messages", "can_restrict_members", "can_pin_messages", "can_promote_members")

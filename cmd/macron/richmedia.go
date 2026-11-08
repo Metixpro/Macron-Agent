@@ -15,42 +15,30 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-// Files inside the answer. A rich message can show uploaded files in its
-// text: pictures and videos (several of them as one swipeable slideshow),
-// songs and documents. The model can place a file itself by writing
-// ![caption](file.png) on its own line; files it does not place go above the
-// text (pictures, videos) or below it (songs, documents). When Telegram
-// refuses a rich message with files, the text goes alone and the files follow
-// as albums.
-
 const (
-	maxEmbedFiles   = 20                      // per message (Telegram allows 50)
-	maxEmbedBytes   = telegram.MaxUploadBytes // per message
-	maxMediaStrikes = 3                       // failures in a row before files go separately
-	mediaRetryAfter = 6 * time.Hour           // then try again once in a while
-	embedTimeout    = 4 * time.Minute         // one upload
+	maxEmbedFiles   = 20
+	maxEmbedBytes   = telegram.MaxUploadBytes
+	maxMediaStrikes = 3
+	mediaRetryAfter = 6 * time.Hour
+	embedTimeout    = 4 * time.Minute
 )
 
-// urlSchemes mark media targets that are not workspace files.
 var urlSchemes = []string{"http://", "https://", "tg://"}
 
-// mediaRef is a Markdown media block: ![alt](target "title").
 var mediaRef = regexp.MustCompile(`!\[([^\]\n]*)\]\(\s*<?([^()<>"\s][^()<>"\n]*?)>?(?:\s+"((?:[^"\\\n]|\\.)*)")?\s*\)`)
 
-// mediaFile is a workspace file shown in a message.
 type mediaFile struct {
 	id      string
 	name    string
-	typ     string // photo, video, animation, audio, document
+	typ     string
 	size    int64
 	caption string
 }
 
-// answerPart is one message of the answer.
 type answerPart struct {
-	md    string      // the text with its tg:// media links
-	plain string      // the same text without files (the fallback)
-	files []mediaFile // uploaded with the message
+	md    string
+	plain string
+	files []mediaFile
 	bytes int64
 }
 
@@ -68,7 +56,7 @@ func (p *answerPart) add(f mediaFile) mediaFile {
 
 func (p *answerPart) fits(f mediaFile) bool {
 	if tools.NativeKind(f.name) != "" {
-		return false // a voice or round video message is its own message
+		return false
 	}
 	for _, have := range p.files {
 		if have.name == f.name {
@@ -101,8 +89,6 @@ func cleanCaption(s string) string {
 	return textutil.TruncateRunes(s, 200, "…")
 }
 
-// mediaKind decides how a workspace file is shown; ok is false for a file
-// that cannot be uploaded (missing, empty, too big, outside the workspace).
 func (b *Bot) mediaKind(session, name string) (mediaFile, bool) {
 	name = workspaceName(name)
 	if name == "" {
@@ -128,13 +114,10 @@ func (b *Bot) mediaKind(session, name string) (mediaFile, bool) {
 
 func (f mediaFile) visual() bool { return f.typ == "photo" || f.typ == "video" || f.typ == "animation" }
 
-// planAnswer splits the answer into messages and decides which files go
-// inside them (embed) and which are sent separately (rest). Placed files
-// are shown even when the model did not hand them over with send_file.
 func (b *Bot) planAnswer(l lang, session, answer string, deliver []string, captions map[string]string, embed bool) (parts []answerPart, rest []string) {
 	chunks := []string{""}
 	if strings.TrimSpace(answer) != "" {
-		chunks = b.answerChunks(l, answer) // a long answer folds into fewer messages
+		chunks = b.answerChunks(l, answer)
 	}
 	shown := map[string]bool{}
 	addRest := func(name string) {
@@ -158,7 +141,7 @@ func (b *Bot) planAnswer(l lang, session, answer string, deliver []string, capti
 				g := mediaRef.FindStringSubmatch(ref)
 				alt, target, title := g[1], strings.TrimSpace(g[2]), g[3]
 				if isURL(target) {
-					return ref // Telegram fetches web media itself
+					return ref
 				}
 				caption := cleanCaption(title)
 				if caption == "" {
@@ -171,7 +154,7 @@ func (b *Bot) planAnswer(l lang, session, answer string, deliver []string, capti
 				f, ok := b.mediaKind(session, target)
 				switch {
 				case !ok:
-					return text // not a workspace file: keep only its caption
+					return text
 				case embed && p.fits(f):
 					if caption == "" {
 						caption = cleanCaption(stripMarkdown(captions[f.name]))
@@ -191,9 +174,6 @@ func (b *Bot) planAnswer(l lang, session, answer string, deliver []string, capti
 		parts = append(parts, p)
 	}
 
-	// Files the model did not place: pictures and videos on top of the first
-	// message (a slideshow when there are several), songs and documents at
-	// the end of the last one.
 	var top, bottom []mediaFile
 	first, last := &parts[0], &parts[len(parts)-1]
 	for _, name := range deliver {
@@ -254,13 +234,10 @@ func removeName(list []string, name string) []string {
 	return out
 }
 
-// stripMarkdown removes emphasis marks (a media caption is plain text).
 func stripMarkdown(s string) string {
 	return strings.NewReplacer("**", "", "__", "", "~~", "", "||", "", "`", "").Replace(s)
 }
 
-// withoutMediaRefs replaces the model's references to workspace files by
-// their captions (guest answers and the live draft cannot carry files).
 func withoutMediaRefs(md string) string {
 	if !strings.Contains(md, "![") {
 		return md
@@ -280,20 +257,15 @@ func withoutMediaRefs(md string) string {
 	})
 }
 
-// sendAnswerWithFiles sends the answer with the deliverable files inside it;
-// effect (a message effect id) plays with its first message. It returns the
-// files that were shown and those still to be sent separately.
-// With inPlace, a first part without files replaces the group's live message
-// instead of being sent as a new one. Answers carry no buttons.
 func (b *Bot) sendAnswerWithFiles(ctx context.Context, m *telegram.Message, session, answer, head string, deliver []string, captions map[string]string,
 	effect string, inPlace func(context.Context, string) error) (shown, rest []string) {
 	embed := !b.richOff.Load() && (b.mediaStrikes.Load() < maxMediaStrikes ||
 		time.Since(time.Unix(b.mediaFailedAt.Load(), 0)) > mediaRetryAfter)
 	parts, rest := b.planAnswer(b.langOf(m.From), session, answer, deliver, captions, embed)
-	if head != "" && len(parts) > 0 { // above the first part (after the answer was folded and split)
+	if head != "" && len(parts) > 0 {
 		parts[0].md, parts[0].plain = head+"\n\n"+parts[0].md, head+"\n\n"+parts[0].plain
 	}
-	// An effect Telegram does not know must not cost the message.
+
 	withEffect := func(opts telegram.SendOptions, send func(telegram.SendOptions) error) error {
 		err := send(opts)
 		if err != nil && opts.EffectID != "" && !telegram.IsUnreachable(err) && ctx.Err() == nil {
@@ -304,12 +276,12 @@ func (b *Bot) sendAnswerWithFiles(ctx context.Context, m *telegram.Message, sess
 		return err
 	}
 	for i, p := range parts {
-		opts := telegram.SendOptions{}.InTopic(m) // every part stays in the question's topic
+		opts := telegram.SendOptions{}.InTopic(m)
 		if i == 0 {
 			opts.ReplyTo, opts.EffectID = m.MessageID, effect
 		}
 		if i > 0 {
-			time.Sleep(350 * time.Millisecond) // keeps the order and reads naturally
+			time.Sleep(350 * time.Millisecond)
 		}
 		if len(p.files) > 0 {
 			var total int64
@@ -318,7 +290,7 @@ func (b *Bot) sendAnswerWithFiles(ctx context.Context, m *telegram.Message, sess
 					total += fi.Size()
 				}
 			}
-			uctx, ucancel := b.uploadCtx(ctx, total) // big files get their own time
+			uctx, ucancel := b.uploadCtx(ctx, total)
 			err := withEffect(opts, func(o telegram.SendOptions) error { return b.sendRichFiles(uctx, m.Chat.ID, session, p, o) })
 			ucancel()
 			if err == nil {
@@ -357,7 +329,7 @@ func (b *Bot) sendAnswerWithFiles(ctx context.Context, m *telegram.Message, sess
 				return shown, rest
 			}
 			log.Printf("[chat %d] answer part %d failed: %v; sending it as plain text", m.Chat.ID, i, err)
-			// Last resort: the words without any formatting, so the answer is never lost.
+
 			if _, err := b.api.SendHTMLParts(ctx, m.Chat.ID, telegram.EscapeHTML(p.md), telegram.SendOptions{}.InTopic(m)); err != nil {
 				log.Printf("[chat %d] answer part %d is lost: %v", m.Chat.ID, i, err)
 			}
@@ -366,7 +338,6 @@ func (b *Bot) sendAnswerWithFiles(ctx context.Context, m *telegram.Message, sess
 	return shown, rest
 }
 
-// sendRichFiles uploads one message with its files.
 func (b *Bot) sendRichFiles(ctx context.Context, chatID int64, session string, p answerPart, opts telegram.SendOptions) error {
 	ctx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()

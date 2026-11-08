@@ -4,9 +4,6 @@ import (
 	"context"
 )
 
-// ---------------------------------------------------------------- premium emoji
-
-// SetPremiumEmoji maps a Unicode emoji to a custom (premium) emoji id.
 func (s *Store) SetPremiumEmoji(ctx context.Context, emoji, customID string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO premium_emoji (emoji, custom_emoji_id, created_at) VALUES (?, ?, ?)
 		ON CONFLICT DO UPDATE SET custom_emoji_id = excluded.custom_emoji_id`, emoji, customID, s.Now())
@@ -23,7 +20,6 @@ func (s *Store) ClearPremiumEmoji(ctx context.Context) error {
 	return err
 }
 
-// PremiumEmojiInOrder returns the mappings as [emoji, id] pairs, oldest first.
 func (s *Store) PremiumEmojiInOrder(ctx context.Context) ([][2]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT emoji, custom_emoji_id FROM premium_emoji ORDER BY created_at, emoji`)
 	if err != nil {
@@ -41,7 +37,6 @@ func (s *Store) PremiumEmojiInOrder(ctx context.Context) ([][2]string, error) {
 	return out, rows.Err()
 }
 
-// PremiumEmoji returns all mappings.
 func (s *Store) PremiumEmoji(ctx context.Context) (map[string]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT emoji, custom_emoji_id FROM premium_emoji`)
 	if err != nil {

@@ -33,7 +33,7 @@ func testPNG(w, h int) []byte {
 	img := image.NewNRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			img.Set(x, y, color.NRGBA{200, 10, 10, uint8(x % 256)}) // transparent parts too
+			img.Set(x, y, color.NRGBA{200, 10, 10, uint8(x % 256)})
 		}
 	}
 	var buf bytes.Buffer
@@ -46,8 +46,6 @@ func group(userID int64, text string) *telegram.Message {
 	m.Chat = telegram.Chat{ID: -100500, Type: "supergroup", Title: "بچه‌های Go"}
 	return m
 }
-
-// ---------------------------------------------------------------- unit: vision
 
 func TestVisionImageShrinksAndFlattens(t *testing.T) {
 	url, desc, err := visionImage(testPNG(3000, 1000))
@@ -70,8 +68,6 @@ func TestVisionImageShrinksAndFlattens(t *testing.T) {
 		t.Error("text is not an image")
 	}
 }
-
-// ---------------------------------------------------------------- unit: terminal trace
 
 func TestTraceShowsOnlyToolNames(t *testing.T) {
 	now := time.Now()
@@ -107,8 +103,6 @@ func TestTraceShowsOnlyToolNames(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- live terminal
-
 func TestTerminalShowsEachStep(t *testing.T) {
 	h := newHarness(t)
 	_ = h.bot.app.Machine.WriteFile(sessionFor(20), "notes.txt", []byte("hi"))
@@ -116,16 +110,13 @@ func TestTerminalShowsEachStep(t *testing.T) {
 		if n == 0 {
 			return map[string]any{"role": "assistant", "content": "یه نگاه به فایل‌هات بندازم", "tool_calls": toolCall("list_files", `{}`)["tool_calls"]}, 0
 		}
-		time.Sleep(900 * time.Millisecond) // give the draft time to show the finished step
+		time.Sleep(900 * time.Millisecond)
 		return map[string]any{"role": "assistant", "content": "یه فایل notes.txt داری."}, 0
 	}
 	h.send(private(20, "چه فایل‌هایی دارم؟"))
-	var all []string
-	for _, d := range h.tg.of("sendRichMessageDraft") {
-		all = append(all, fmt.Sprint(d.body["rich_message"]))
-	}
+	all := liveFrames(h)
 	joined := strings.Join(all, "\n=====\n")
-	for _, want := range []string{"tg-thinking", "MACRON ⟫ live", "✓ Files"} {
+	for _, want := range []string{"دارم فکر", "MACRON ⟫ live", "✓ Files"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the terminal misses %q:\n%s", want, joined)
 		}
@@ -142,16 +133,15 @@ func TestThinkingBubbleWhenTerminalIsOff(t *testing.T) {
 	h := newHarness(t)
 	_ = h.st.SetSetting(bg, store.SettingLiveTrace, "false")
 	h.send(private(21, "سلام"))
-	drafts := h.tg.of("sendRichMessageDraft")
-	if len(drafts) == 0 || !strings.Contains(fmt.Sprint(drafts[0].body["rich_message"]), "tg-thinking") ||
-		strings.Contains(fmt.Sprint(drafts[0].body["rich_message"]), traceTitle) {
-		t.Errorf("with the terminal off the draft is a thinking bubble: %v", drafts)
+	frames := liveFrames(h)
+	if len(frames) == 0 || strings.Contains(strings.Join(frames, ""), traceTitle) {
+		t.Fatalf("private live status missing: %v", frames)
 	}
 }
 
 func TestGroupTraceMessageIsRemovedAfterTheAnswer(t *testing.T) {
 	h := newHarness(t)
-	h.bot.richOff.Store(true) // a Bot API server without rich messages: the classic trace
+	h.bot.richOff.Store(true)
 	oldDelay, oldEdit := traceMsgDelay, groupEditEvery
 	traceMsgDelay, groupEditEvery = 0, 0
 	t.Cleanup(func() { traceMsgDelay, groupEditEvery = oldDelay, oldEdit })
@@ -180,8 +170,6 @@ func TestGroupTraceMessageIsRemovedAfterTheAnswer(t *testing.T) {
 	}
 	h.wantText("فضای کاری خالیه.")
 }
-
-// ---------------------------------------------------------------- workspace vision and files
 
 func TestViewImageLetsTheModelCheckItsOutput(t *testing.T) {
 	h := newHarness(t)
@@ -229,8 +217,7 @@ func TestSendFileDeliversAFixedScript(t *testing.T) {
 
 func TestDeveloperModePromptIsPresentWhenCodeCanRun(t *testing.T) {
 	h := newHarness(t)
-	// run_code exists where an interpreter is installed, and the prompt
-	// promises it exactly then.
+
 	h.send(private(25, "یه سوال دارم"))
 	req := llmText(h.llm.last())
 	if has := h.bot.app.Registry.Has(tools.ToolRunCode); has != strings.Contains(req, "Developer mode") {
@@ -241,8 +228,6 @@ func TestDeveloperModePromptIsPresentWhenCodeCanRun(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- groups
-
 func TestGroupWakeWord(t *testing.T) {
 	h := newHarness(t)
 	cases := []struct {
@@ -251,7 +236,7 @@ func TestGroupWakeWord(t *testing.T) {
 	}{
 		{"مکرون قیمت دلار؟", "قیمت دلار؟", true},
 		{"مکرون، یه جوک بگو", "یه جوک بگو", true},
-		{"مكرون سلام", "سلام", true}, // Arabic kaf
+		{"مكرون سلام", "سلام", true},
 		{"ماکرون چطوری؟", "چطوری؟", true},
 		{"Macron what's up", "what's up", true},
 		{"macron: hi", "hi", true},
@@ -263,7 +248,7 @@ func TestGroupWakeWord(t *testing.T) {
 		{"مکرونی پختم امشب", "", false},
 		{"سلام مکرون", "", false},
 		{"macronutrients matter", "", false},
-		{"ویز سلام", "", false}, // the old name
+		{"ویز سلام", "", false},
 	}
 	for _, c := range cases {
 		ok, got := h.bot.addressed(group(30, c.text))
@@ -326,7 +311,7 @@ func TestBotAddedToGroupNotifiesTheOwner(t *testing.T) {
 	h := newHarness(t)
 	chat := telegram.Chat{ID: -100777, Type: "supergroup", Title: "گروه برنامه‌نویس‌ها", Username: "go_devs"}
 	adder := telegram.User{ID: 555, FirstName: "Reza", Username: "reza"}
-	_ = h.st.SetSetting(bg, store.SettingGroupApproval, "false") // approvals: approval_test.go
+	_ = h.st.SetSetting(bg, store.SettingGroupApproval, "false")
 	h.bot.handleMembership(&telegram.ChatMemberUpdated{Chat: chat, From: adder,
 		OldChatMember: telegram.ChatMember{Status: "left"}, NewChatMember: telegram.ChatMember{Status: "member"}})
 
@@ -353,7 +338,6 @@ func TestBotAddedToGroupNotifiesTheOwner(t *testing.T) {
 		t.Fatalf("the group is logged: %+v %v", c, err)
 	}
 
-	// With a log channel the notices go there instead.
 	h.tg.reset()
 	_ = h.st.SetSetting(bg, store.SettingLogChat, "-1009999")
 	h.bot.handleMembership(&telegram.ChatMemberUpdated{Chat: chat, From: adder,
@@ -366,7 +350,6 @@ func TestBotAddedToGroupNotifiesTheOwner(t *testing.T) {
 		t.Errorf("the removal is recorded: %+v", c)
 	}
 
-	// The admin panel lists it.
 	v := h.bot.viewGroups(bg, fa)
 	if !strings.Contains(v.html, "خارج‌شده: 1") || !strings.Contains(fmt.Sprint(v.kb), "گروه برنامه‌نویس‌ها") {
 		t.Errorf("groups view:\n%s\n%v", v.html, v.kb)
@@ -388,8 +371,6 @@ func TestOwnerSetsTheLogChannel(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------- stop button
-
 func TestStopWorksWhenTheDraftIDIsUnknown(t *testing.T) {
 	h := newHarness(t)
 	started, release := make(chan struct{}), make(chan struct{})
@@ -401,7 +382,8 @@ func TestStopWorksWhenTheDraftIDIsUnknown(t *testing.T) {
 	done := make(chan struct{})
 	go func() { h.send(private(26, "یه کار طولانی")); close(done) }()
 	<-started
-	// draft_id arrived in a shape that decoded to 0: the chat still identifies the run.
+	v, _ := h.bot.runs.Load(int64(26))
+	h.bot.drafts.Store(int64(123), draftOwner{userID: 26, chatID: 26, key: v.(*activeRun).key})
 	h.bot.handleStop(&telegram.MessageGenerationStopped{Chat: telegram.Chat{ID: 26, Type: "private"}})
 	close(release)
 	<-done

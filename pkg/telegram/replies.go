@@ -5,19 +5,6 @@ import (
 	"strings"
 )
 
-// What a message replies to. Telegram shows it in several ways:
-//
-//   - reply_to_message: a message of the same chat and thread. The bot's own
-//     answers are rich messages, which have no text: what they say is in
-//     their blocks (read by RichText), and their pictures and files too.
-//   - external_reply: a message of another chat or topic, or one the bot
-//     cannot see (guest mode). It carries who wrote it and its media, never
-//     its text; the part the user quoted (quote) is all there is of that.
-//   - In a forum, every message of a topic "replies" to the topic's first
-//     message (a service message) unless it replies to something else: that
-//     is not a reply.
-
-// ExternalReplyInfo is a message replied to from another chat or topic.
 type ExternalReplyInfo struct {
 	Origin    *MessageOrigin `json:"origin,omitempty"`
 	Chat      *Chat          `json:"chat,omitempty"`
@@ -35,14 +22,11 @@ type ExternalReplyInfo struct {
 	Poll      *Poll          `json:"poll,omitempty"`
 }
 
-// Story is a story a message replies to.
 type Story struct {
 	Chat Chat  `json:"chat"`
 	ID   int64 `json:"id"`
 }
 
-// RepliedInChat is the message of this chat that m replies to: nil when it
-// replies to nothing, or only belongs to a forum topic (its first message).
 func (m *Message) RepliedInChat() *Message {
 	if m == nil || m.ReplyToMessage == nil || m.ReplyToMessage.ForumTopicCreated != nil {
 		return nil
@@ -50,10 +34,6 @@ func (m *Message) RepliedInChat() *Message {
 	return m.ReplyToMessage
 }
 
-// Replied is the message m replies to, as far as the update shows it: a copy
-// of reply_to_message with a rich message's media where the other messages
-// keep theirs, or external_reply with the quoted part as its text. nil when
-// m replies to nothing.
 func (m *Message) Replied() *Message {
 	if r := m.RepliedInChat(); r != nil {
 		cp := *r
@@ -70,7 +50,7 @@ func (m *Message) Replied() *Message {
 		r.Chat = *e.Chat
 	}
 	if r.MessageID == 0 {
-		r.MessageID = -m.MessageID // its own id is unknown: one that names its files apart from the reply's
+		r.MessageID = -m.MessageID
 	}
 	switch o := e.Origin; {
 	case o == nil:
@@ -81,7 +61,7 @@ func (m *Message) Replied() *Message {
 	case o.SenderChat != nil:
 		r.SenderChat = o.SenderChat
 	case o.SenderUserName != "":
-		r.From = &User{FirstName: o.SenderUserName} // a hidden account: a name, no id
+		r.From = &User{FirstName: o.SenderUserName}
 	}
 	if m.Quote != nil {
 		r.Text = m.Quote.Text
@@ -89,10 +69,6 @@ func (m *Message) Replied() *Message {
 	return r
 }
 
-// ---------------------------------------------------------------- received rich messages
-
-// richBlock is one block of a received rich message (RichBlock); only the
-// fields that hold text or media are read.
 type richBlock struct {
 	Type       string            `json:"type"`
 	Text       json.RawMessage   `json:"text,omitempty"`
@@ -124,7 +100,6 @@ type richBlock struct {
 	VoiceNote *Voice      `json:"voice_note,omitempty"`
 }
 
-// richBlocks decodes the blocks of a received rich message (nil when there is none).
 func richBlocks(raw json.RawMessage) []richBlock {
 	if len(raw) == 0 {
 		return nil
@@ -149,11 +124,8 @@ func decodeBlocks(raws []json.RawMessage) []richBlock {
 	return out
 }
 
-// maxRichDepth bounds nested blocks (quotes in lists in details…).
 const maxRichDepth = 6
 
-// RichText is what a received rich message says, as plain text with a few
-// marks (# headings, • lists, > quotes, | tables); "" for other messages.
 func (m *Message) RichText() string {
 	if m == nil {
 		return ""
@@ -245,13 +217,12 @@ func writeBlocks(sb *strings.Builder, blocks []richBlock, prefix string, depth i
 			line("[" + name + "]")
 			line(captionText(b.Caption))
 		case "anchor":
-		default: // paragraph, footer and any block added later that has text
+		default:
 			line(richText(b.Text, 0))
 		}
 	}
 }
 
-// richText reads a RichText: a string, a list of them, or a styled piece.
 func richText(raw json.RawMessage, depth int) string {
 	raw = json.RawMessage(strings.TrimSpace(string(raw)))
 	if len(raw) == 0 || depth > 32 {
@@ -310,8 +281,6 @@ func richText(raw json.RawMessage, depth int) string {
 	return ""
 }
 
-// captionText reads a block's caption: a RichBlockCaption (text and credit)
-// or, for tables, a RichText.
 func captionText(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -331,9 +300,6 @@ func captionText(raw json.RawMessage) string {
 	return t
 }
 
-// fillRichMedia gives a rich message the first picture, video, song, voice
-// and file of its blocks, where messages keep theirs, so they can be opened
-// like any other message's.
 func (m *Message) fillRichMedia() {
 	if len(m.RichMessage) == 0 || m.HasMedia() {
 		return

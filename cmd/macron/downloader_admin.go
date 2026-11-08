@@ -20,21 +20,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// The downloader section of the admin panel: what is installed, a one-tap
-// yt-dlp update (sites change often; an old yt-dlp is the first reason a
-// download fails) and cookies for sites that ask for a login.
-//
-//	a:dl             status and the cookie pool
-//	a:dl:update      update yt-dlp (self-update, pip, or the standalone build)
-//	a:dl:cookies     add a cookies.txt (dialog)
-//	a:dl:links       add cookies fetched from links (dialog; fetched again when they stop working)
-//	a:dl:test        try every cookie (YouTube for real); a failed linked one is fetched again
-//	a:dl:delck:ID    remove one
-
-// settingDLCookies held the single cookies.txt of older versions (now in the pool).
 const settingDLCookies = "dl_cookies"
 
-// ytdlpAge reads the release date out of a yt-dlp version (2026.08.19).
 func ytdlpAge(version string, now time.Time) (time.Duration, bool) {
 	if len(version) < 10 {
 		return 0, false
@@ -81,7 +68,6 @@ func (b *Bot) viewDownloader(l lang) panelView {
 		row(b.button(l.t("🔗 کوکی از لینک"), "a:dl:links", ""), b.button(l.t("🩺 تست کوکی‌ها"), "a:dl:test", "")),
 	}
 
-	// The cookie pool: several accounts, used in turn; a blocked one rests.
 	list, _ := b.st.Cookies(context.Background())
 	now := b.st.Now()
 	ready := 0
@@ -122,10 +108,8 @@ func (b *Bot) viewDownloader(l lang) panelView {
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
-// maxCookieLinks bounds the links one message adds.
 const maxCookieLinks = 10
 
-// addCookieLinks fetches each link (one per line) and adds it to the pool.
 func (b *Bot) addCookieLinks(ctx context.Context, l lang, text string) (string, bool) {
 	var sb strings.Builder
 	added, n := false, 0
@@ -164,8 +148,6 @@ func (b *Bot) addCookieLinks(ctx context.Context, l lang, text string) (string, 
 	return strings.TrimSpace(sb.String()), added
 }
 
-// testCookies tries every cookie of the pool, a few at a time; a linked one
-// that fails is fetched again from its link and tried once more.
 func (b *Bot) testCookies(ctx context.Context, l lang) string {
 	list, err := b.st.Cookies(ctx)
 	if err != nil {
@@ -212,7 +194,6 @@ func (b *Bot) testCookies(ctx context.Context, l lang) string {
 	return strings.TrimSpace(sb.String())
 }
 
-// updateYtDlp updates yt-dlp outside the machine (an admin's explicit action).
 func (b *Bot) updateYtDlp(ctx context.Context, l lang) string {
 	d := b.app.Registry.DownloaderStatus()
 	run := func(args ...string) (string, error) {
@@ -226,7 +207,7 @@ func (b *Bot) updateYtDlp(ctx context.Context, l lang) string {
 	if len(d.YtDlp) == 1 {
 		out, err = run(d.YtDlp[0], "-U")
 	}
-	// Installed with pip or a package manager (apt): yt-dlp cannot update itself.
+
 	if low := strings.ToLower(out); len(d.YtDlp) != 1 || strings.Contains(low, "pip") || strings.Contains(low, "apt") ||
 		strings.Contains(low, "package manager") {
 		pip := []string{"python3", "-m", "pip", "install", "--upgrade", "yt-dlp[default]"}
@@ -234,7 +215,7 @@ func (b *Bot) updateYtDlp(ctx context.Context, l lang) string {
 		if strings.Contains(out, "externally-managed") {
 			out, err = run(append(pip, "--break-system-packages")...)
 		}
-		if err != nil { // no usable pip: the official standalone build
+		if err != nil {
 			if path, berr := b.installYtDlpBinary(ctx, ytDlpTarget(d)); berr == nil {
 				out, err = "installed "+path, nil
 			}
@@ -248,16 +229,11 @@ func (b *Bot) updateYtDlp(ctx context.Context, l lang) string {
 	return result
 }
 
-// ytDlpBinary is where the standalone yt-dlp goes when the installed one
-// cannot be replaced; it comes first in PATH and leaves the package
-// manager's copy alone.
 var (
 	ytDlpBinary   = "/usr/local/bin/yt-dlp"
 	ytDlpReleases = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
 )
 
-// ytDlpTarget replaces the installed binary when its folder is writable (the
-// installer gives the service its own folder), else uses ytDlpBinary.
 func ytDlpTarget(d tools.DownloaderInfo) string {
 	if len(d.YtDlp) == 1 && unix.Access(filepath.Dir(d.YtDlp[0]), unix.W_OK) == nil {
 		return d.YtDlp[0]
@@ -265,7 +241,6 @@ func ytDlpTarget(d tools.DownloaderInfo) string {
 	return ytDlpBinary
 }
 
-// installYtDlpBinary downloads the official standalone yt-dlp build to target.
 func (b *Bot) installYtDlpBinary(ctx context.Context, target string) (string, error) {
 	name := "yt-dlp"
 	switch runtime.GOARCH {
@@ -309,7 +284,6 @@ func (b *Bot) installYtDlpBinary(ctx context.Context, target string) (string, er
 	return target, err
 }
 
-// looksLikeCookies accepts the Netscape cookies.txt format.
 func looksLikeCookies(s string) bool {
 	if strings.Contains(s, "# Netscape HTTP Cookie File") || strings.Contains(s, "# HTTP Cookie File") {
 		return true

@@ -8,9 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// The two answers a user reported: a model said it had stopped a project,
-// deleted its session files and logged the account out, and ran nothing;
-// asked why, it said it had gone on the server and done it.
 const (
 	reportedFirst = "پروژه متوقف شد، سشن پاک شد.\nمراحل انجام‌شده:\n۱. پروسس ایجنت (PID 2351828) kill شد.\n۲. فایل‌های سشن (sessions/) حذف شدند.\n" +
 		"۳. فایل .env با API_ID و API_HASH پاک شد.\n۴. لاگ‌ها در /home/python/userbot/ باقی موندن (اگر خواستی خودمونم حذف کن).\nاکانت از سرور خارج شد."
@@ -40,7 +37,7 @@ func TestTheReportedAnswersAreSeenAsClaims(t *testing.T) {
 			t.Errorf("the second answer: claim %d not seen: %v", want, claimsIn(reportedSecond))
 		}
 	}
-	// With no tool run in the request, nothing backs any of it.
+
 	var none ledger
 	if got := none.unbacked(reportedFirst); len(got) < 3 {
 		t.Errorf("all of it is unbacked: %v", got)
@@ -118,7 +115,7 @@ func TestReceiptsBackOnlyWhatTheyDid(t *testing.T) {
 	}
 	var f ledger
 	f.add("bash_execute", `{"command":"rm -rf x"}`, "error: the user did not allow it", false)
-	f.add("bash_execute", `{"command":"rm -rf y"}`, "[exit 0]", true) // refused: it never ran
+	f.add("bash_execute", `{"command":"rm -rf y"}`, "[exit 0]", true)
 	if f.supports(claimDestroy) {
 		t.Error("a refused or failed call backs nothing")
 	}
@@ -135,8 +132,6 @@ func TestReceiptsBackOnlyWhatTheyDid(t *testing.T) {
 	}
 }
 
-// A model says «done» and called nothing: it is sent back with the receipts it has
-// (none), does the work with the tool, and the answer that follows is not warned.
 func TestAnAnswerThatClaimsWorkNoToolDidIsSentBack(t *testing.T) {
 	var ran []string
 	a, script := setup(t,
@@ -157,8 +152,6 @@ func TestAnAnswerThatClaimsWorkNoToolDidIsSentBack(t *testing.T) {
 	}
 }
 
-// A model that keeps the claim after it was sent back is not trusted: the user
-// is told that nothing of it is confirmed, in their language.
 func TestAClaimThatStaysIsWarnedAbout(t *testing.T) {
 	for lang, want := range map[string]string{"fa": "⚠️ توجه", "en": "⚠️ Heads-up"} {
 		a, script := setup(t,
@@ -171,7 +164,7 @@ func TestAClaimThatStaysIsWarnedAbout(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(script.requests) != 3 { // asked for it twice, no more
+		if len(script.requests) != 3 {
 			t.Fatalf("%s: %d calls", lang, len(script.requests))
 		}
 		if !strings.HasPrefix(res.Answer, want) || res.Unbacked == "" || !strings.Contains(res.Answer, "kill شد") {
@@ -180,8 +173,6 @@ func TestAClaimThatStaysIsWarnedAbout(t *testing.T) {
 	}
 }
 
-// The check never gets in the way of an honest answer: a claim with its receipt,
-// advice, a refusal, and a run that goes on from an earlier round.
 func TestHonestAnswersAreNotWarned(t *testing.T) {
 	var ran []string
 	a, _ := setup(t,
@@ -206,7 +197,6 @@ func TestHonestAnswersAreNotWarned(t *testing.T) {
 	}
 }
 
-// A model without tools (chat mode) is never asked for receipts it cannot have.
 func TestSmallTalkIsNotCheckedForReceipts(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: "ممنون! راستی فایل رو حذف کردم 😄"})
 	res, _ := a.Do(context.Background(), Request{SessionID: "s", Chat: true, Input: llm.Message{Role: "user", Content: "مرسی"}})

@@ -50,11 +50,6 @@ func (r *Registry) registerInfoTools() {
 		}, []string{"repo"}, r.githubInspect)
 }
 
-// ---------------------------------------------------------------- crypto
-
-// The price sources, tried in order: Binance refuses some countries (HTTP
-// 451), its public market-data mirror does not, and OKX is the last resort.
-// The Toman rate comes from the first Iranian exchange that answers.
 var (
 	binanceAPIs = []string{"https://api.binance.com", "https://data-api.binance.vision"}
 	okxAPI      = "https://www.okx.com"
@@ -64,12 +59,10 @@ var (
 )
 
 type coinPrice struct {
-	price, change float64 // USD, 24-hour change in percent
+	price, change float64
 	source        string
 }
 
-// getJSONWithin is getJSON with its own time limit, so a source that hangs
-// leaves time for the next one.
 func (r *Registry) getJSONWithin(ctx context.Context, limit time.Duration, rawURL string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
@@ -110,8 +103,6 @@ func (r *Registry) coinPriceOf(ctx context.Context, sym string) *coinPrice {
 	return nil
 }
 
-// tomanRate is the price of one USDT in Toman, asked of the exchanges at
-// once; the first one in order that answered wins.
 func (r *Registry) tomanRate(ctx context.Context) (float64, string) {
 	type source struct {
 		name string
@@ -127,7 +118,7 @@ func (r *Registry) tomanRate(ctx context.Context) (float64, string) {
 			if r.getJSON(ctx, ramzinexAPI+"/exchange/api/v1.0/exchange/pairs/11", &d) != nil {
 				return 0
 			}
-			return d.Data.Buy / 10 // rial → toman
+			return d.Data.Buy / 10
 		}},
 		{"Nobitex", func() float64 {
 			var d struct {
@@ -153,9 +144,9 @@ func (r *Registry) tomanRate(ctx context.Context) (float64, string) {
 				return 0
 			}
 			v, _ := strconv.ParseFloat(d.Result.LatestTrades[0].Price, 64)
-			return v // already in toman
+			return v
 		}},
-		// The exchanges answer only inside Iran; tgju answers everywhere.
+
 		{"tgju.org", func() float64 {
 			board, err := r.marketSnapshot(ctx, []string{"usdt"})
 			if err != nil {
@@ -304,9 +295,6 @@ func commas(n int64) string {
 	return s
 }
 
-// ---------------------------------------------------------------- whois
-
-// normalizeDomain accepts a bare domain or URL and returns its ASCII form.
 func normalizeDomain(in string) (string, error) {
 	d := strings.ToLower(strings.TrimSpace(in))
 	if i := strings.Index(d, "://"); i >= 0 {
@@ -390,7 +378,7 @@ func (r *Registry) whoisLookup(ctx context.Context, _ string, args map[string]an
 			break
 		}
 	}
-	if count == 0 { // no whois program, or nothing it could read: the registry's RDAP
+	if count == 0 {
 		if lines := r.rdapLookup(ctx, dom); len(lines) > 0 {
 			for _, l := range lines {
 				fmt.Fprintf(&sb, "  %s\n", l)
@@ -403,9 +391,6 @@ func (r *Registry) whoisLookup(ctx context.Context, _ string, args map[string]an
 	return sb.String(), nil
 }
 
-// whoisText asks the whois servers (port 43, which the machine's web proxy
-// does not carry) from the bot itself: the domain is validated and passed as
-// one argument, never through a shell.
 func whoisText(ctx context.Context, dom string) string {
 	if _, err := exec.LookPath("whois"); err != nil {
 		return ""
@@ -419,10 +404,8 @@ func whoisText(ctx context.Context, dom string) string {
 	return string(out)
 }
 
-// rdapAPI finds each domain's registry (a redirect to it).
 var rdapAPI = "https://rdap.org/domain/"
 
-// rdapLookup reads a domain's registration from its registry's RDAP.
 func (r *Registry) rdapLookup(ctx context.Context, dom string) []string {
 	var d struct {
 		LDHName string   `json:"ldhName"`
@@ -469,7 +452,6 @@ func (r *Registry) rdapLookup(ctx context.Context, dom string) []string {
 	return lines
 }
 
-// vcardName reads the full name (fn) of an RDAP jCard.
 func vcardName(card []any) string {
 	if len(card) < 2 {
 		return ""
@@ -484,9 +466,6 @@ func vcardName(card []any) string {
 	return ""
 }
 
-// ---------------------------------------------------------------- github
-
-// normalizeRepo accepts 'owner/repo' or a github.com URL (including /tree/… suffixes).
 func normalizeRepo(in string) (string, error) {
 	s := strings.TrimSpace(in)
 	for _, p := range []string{"https://", "http://"} {
@@ -499,7 +478,7 @@ func normalizeRepo(in string) (string, error) {
 	}
 	owner, name := parts[0], strings.TrimSuffix(parts[1], ".git")
 	repo := owner + "/" + name
-	// "." and ".." match the character class but would climb out of /repos/ in the API path.
+
 	if !repoRe.MatchString(repo) || owner == "." || owner == ".." || name == "." || name == ".." {
 		return "", fmt.Errorf("%q is not a valid 'owner/repo'", in)
 	}

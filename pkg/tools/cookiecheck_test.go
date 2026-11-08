@@ -21,7 +21,7 @@ func TestCookieLoginsAndExpiry(t *testing.T) {
 	now := time.Now()
 	data := "# Netscape HTTP Cookie File\n" +
 		cookieLine(".youtube.com", "LOGIN_INFO", now.Add(90*24*time.Hour)) +
-		cookieLine(".youtube.com", "PREF", now.Add(-time.Hour)) + // not a login cookie
+		cookieLine(".youtube.com", "PREF", now.Add(-time.Hour)) +
 		"#HttpOnly_" + cookieLine(".instagram.com", "sessionid", now.Add(-time.Hour)) +
 		cookieLine(".x.com", "auth_token", time.Time{}) +
 		cookieLine(".reddit.com", "csv", now.Add(time.Hour))

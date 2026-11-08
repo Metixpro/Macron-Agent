@@ -8,9 +8,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-// When the output limit cuts a reply, its last call may have lost the end of
-// its arguments: it is not run, the model is told why, and the calls before
-// it are run as usual.
 func TestACutCallIsNotRun(t *testing.T) {
 	a, script := setup(t,
 		finished{map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{
@@ -43,8 +40,6 @@ func TestACutCallIsNotRun(t *testing.T) {
 	}
 }
 
-// A read-only call repeated past the limit is answered from its last result,
-// unless something that writes ran in between (then it reads again).
 func TestRepeatedReadsAreAnsweredFromTheLastResult(t *testing.T) {
 	read := func(id string) map[string]any {
 		return map[string]any{"role": "assistant", "tool_calls": []llm.ToolCall{toolCall(id, "read_file", `{"filename":"a.txt"}`)}}

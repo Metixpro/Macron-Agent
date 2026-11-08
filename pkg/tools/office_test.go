@@ -20,9 +20,6 @@ func readBack(t *testing.T, data []byte) []sheet {
 	return sheets
 }
 
-// A workbook made here opens as a real one: every part is well-formed XML,
-// values come back, Persian sheets are right-to-left, the header is frozen
-// with filters.
 func TestCreateSpreadsheet(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	out := call(t, r, "x", ToolCreateSpreadsheet, map[string]any{"filename": "prices", "sheets": []any{
@@ -118,7 +115,6 @@ func officeZip(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// A workbook as Excel writes it: shared strings, a date style, a skipped row.
 func TestDocumentReaderReadsExcel(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	ns := `xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`
@@ -146,7 +142,6 @@ func TestDocumentReaderReadsExcel(t *testing.T) {
 	}
 }
 
-// Slides come in the presentation's order, with their titles, tables and notes.
 func TestDocumentReaderReadsSlides(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	p := `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`
@@ -217,7 +212,6 @@ func TestDocumentReaderReadsSQLite(t *testing.T) {
 	}
 }
 
-// SQL joins a database, a CSV and a sheet of a workbook, read-only.
 func TestQueryData(t *testing.T) {
 	r := newRegistry(t, true, nil)
 	makeSQLite(t, r, "x", "shop.db")

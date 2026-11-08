@@ -9,9 +9,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
-// Light requests go to the tier's model, hard ones to the strong model the
-// admin chose in the panel; a follow-up stays with it, the kinds are the
-// admin's, and a light model that struggles hands the job over.
 func TestSmartModelRouting(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
@@ -25,13 +22,11 @@ func TestSmartModelRouting(t *testing.T) {
 	const uid = 402
 	const code = "یه تابع پایتون بنویس که یه فایل csv رو بخونه و جمع ستون دوم رو برگردونه"
 
-	// Nothing changes until the admins choose a strong model.
 	h.send(private(uid, code))
 	if h.lastModel() != "m" {
 		t.Fatalf("no strong model yet: %q", h.lastModel())
 	}
 
-	// The panel: a door in the providers, then Free's strong model.
 	h.send(private(ownerID, "/admin"))
 	h.click(ownerID, ownerID, 9, "a:pv")
 	if !hasButton(buttons(lastOf(h, "editMessageText")), "→ a:rt") {
@@ -60,17 +55,15 @@ func TestSmartModelRouting(t *testing.T) {
 	}
 	route("سلام خوبی؟", "m")
 	route(code, "big")
-	route("آره", "big")           // a follow-up stays with it
-	route("قیمت دلار چنده؟", "m") // a request of its own does not
+	route("آره", "big")
+	route("قیمت دلار چنده؟", "m")
 
-	// The admin's kinds: code off, and a short code request is light.
 	h.click(ownerID, ownerID, 9, "a:rt:kinds")
 	h.click(ownerID, ownerID, 9, "a:rt:kind:code")
 	route("یه تابع پایتون بنویس", "m")
 	h.click(ownerID, ownerID, 9, "a:rt:kreset")
 	route("یه تابع پایتون بنویس", "big")
 
-	// The test dialog says where a message goes and why.
 	h.click(ownerID, ownerID, 9, "a:rt:test")
 	h.tg.reset()
 	h.send(private(ownerID, "یه مقاله کامل و حرفه‌ای درباره تاریخ ایران بنویس با منابع معتبر"))
@@ -79,7 +72,6 @@ func TestSmartModelRouting(t *testing.T) {
 		t.Errorf("the test: %s", v)
 	}
 
-	// A light model whose steps fail hands the rest to the strong one.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if req["model"] == "big" {
 			return map[string]any{"role": "assistant", "content": "انجام شد"}, 0
@@ -88,7 +80,7 @@ func TestSmartModelRouting(t *testing.T) {
 	}
 	h.tg.reset()
 	from := h.llm.count()
-	h.send(private(uid, "قیمت طلا رو از فایل قیمت‌ها بخون")) // a quick question: light, until its steps fail
+	h.send(private(uid, "قیمت طلا رو از فایل قیمت‌ها بخون"))
 	h.wantText("انجام شد")
 	var models []any
 	h.llm.mu.Lock()
@@ -109,7 +101,6 @@ func TestSmartModelRouting(t *testing.T) {
 		t.Errorf("the statistics: %v", rows)
 	}
 
-	// Off: everything on the tier's model again.
 	h.llm.reply = say("ok")
 	h.click(ownerID, ownerID, 9, "a:rt:on")
 	route(code, "m")

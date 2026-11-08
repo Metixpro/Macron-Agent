@@ -10,23 +10,14 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
-// How well each provider's model calls tools, learned from its requests: a
-// call with a tool or a parameter named wrong, one that could not run as
-// written, or a reply that announced work and called nothing. The card in
-// the panel shows it. Every model gets every tool unless an admin chooses
-// focused tools for its provider (pkg/agent/focus.go: only the tools a
-// request points to, and more_tools for the rest): narrowing them by itself
-// made a model that slipped now and then unable to do half its jobs (it
-// rarely asks for more_tools), and the agent repairs a slipped call anyway.
-
 const (
-	settingToolSkill = "provider_tools:" // + the provider's id
+	settingToolSkill = "provider_tools:"
 	toolModeAuto     = ""
 	toolModeFull     = "full"
 	toolModeFocus    = "focus"
-	skillMinCalls    = 12  // calls before the bot judges a model
-	skillWeakShare   = 0.2 // slips per call that make it weak
-	skillWindow      = 400 // past this, the counts halve: what it does now matters most
+	skillMinCalls    = 12
+	skillWeakShare   = 0.2
+	skillWindow      = 400
 )
 
 type toolSkill struct {
@@ -41,7 +32,6 @@ func (s toolSkill) weak() bool {
 
 func (s toolSkill) focus() bool { return s.Mode == toolModeFocus }
 
-// clean is the share of its calls that went right, in percent.
 func (s toolSkill) clean() int {
 	if s.Calls == 0 {
 		return 100
@@ -64,14 +54,11 @@ func (b *Bot) saveToolSkill(ctx context.Context, id int64, s toolSkill) {
 	}
 }
 
-// focusTools says whether a request routed with ctx goes with focused tools.
 func (b *Bot) focusTools(ctx context.Context) bool {
 	p, ok := b.prov.ActiveFor(ctx)
 	return ok && b.toolSkill(p.ID).focus()
 }
 
-// learnToolSkill adds a request's calls to what is known of each provider
-// that answered it (by name; a user's own providers are not counted).
 func (b *Bot) learnToolSkill(ctx context.Context, q map[string]agent.CallQuality, custom bool) {
 	if len(q) == 0 || custom {
 		return
@@ -101,7 +88,6 @@ func (b *Bot) learnToolSkill(ctx context.Context, q map[string]agent.CallQuality
 	}
 }
 
-// toolModeLine is a provider's line on its card.
 func (b *Bot) toolModeLine(l lang, p store.Provider) string {
 	s := b.toolSkill(p.ID)
 	mode := map[string]string{toolModeFull: l.t("همه ابزارها"), toolModeFocus: l.t("ابزارهای متمرکز")}[s.Mode]
@@ -117,7 +103,6 @@ func (b *Bot) toolModeLine(l lang, p store.Provider) string {
 	return line
 }
 
-// nextToolMode is the mode the card's button moves to: auto → all → focused → auto.
 func nextToolMode(m string) string {
 	switch m {
 	case toolModeAuto:

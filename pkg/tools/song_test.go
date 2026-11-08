@@ -25,18 +25,15 @@ const songTestKey = "song-key-for-tests"
 
 const goodLyrics = "[verse]\nباران می‌زنه روی شیشه شهر\nدلم می‌خواد برگردی دوباره\n\n[chorus]\nبمون کنارم تا صبح بشه\nشب تموم می‌شه و عشق می‌مونه"
 
-// fakeSongService plays the song service: one POST creates a task, its status
-// page (behind a redirect, like the real one) says "processing" a few times and
-// then lists the songs, the songs are mp3 files and the cover a JPEG.
 type fakeSongService struct {
 	*httptest.Server
 	created   atomic.Int32
 	polls     atomic.Int32
 	mu        sync.Mutex
 	lastBody  map[string]any
-	processed int32  // polls that say "processing" first
-	failWith  string // the task ends with this error
-	same      bool   // the second version points at the first's file
+	processed int32
+	failWith  string
+	same      bool
 	mp3       []byte
 }
 
@@ -44,7 +41,7 @@ func newFakeSongService(t *testing.T) *fakeSongService {
 	t.Helper()
 	f := &fakeSongService{processed: 2}
 	f.mp3 = []byte("ID3\x03\x00\x00\x00\x00\x00\x00" + strings.Repeat("\xff\xfb\x90\x00", 600))
-	if ff, err := exec.LookPath("ffmpeg"); err == nil { // a real mp3, so the cover can really be put in
+	if ff, err := exec.LookPath("ffmpeg"); err == nil {
 		out := t.TempDir() + "/x.mp3"
 		if exec.Command(ff, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:a", "libmp3lame", "-y", out).Run() == nil {
 			if b, err := os.ReadFile(out); err == nil {
@@ -89,7 +86,7 @@ func newFakeSongService(t *testing.T) *fakeSongService {
 		f.mu.Unlock()
 		fmt.Fprintf(w, `{"status":true,"task_id":"song_1","check_status_url":"http://%s/music?task_id=song_1","estimated_time":"60-120 seconds"}`, r.Host)
 	})
-	mux.HandleFunc("/music", func(w http.ResponseWriter, r *http.Request) { // the real one answers 301 to the slash
+	mux.HandleFunc("/music", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/music/?"+r.URL.RawQuery, http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("/music/", func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +116,7 @@ func newFakeSongService(t *testing.T) *fakeSongService {
 		_, _ = w.Write(f.mp3)
 	})
 	mux.HandleFunc("/cover.jpg", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream") // as the real CDN serves it
+		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(cover.Bytes())
 	})
 	f.Server = httptest.NewServer(mux)
@@ -181,8 +178,6 @@ func TestSongTwoVersionsWithTheirCover(t *testing.T) {
 		t.Errorf("it waited for the songs: %d polls", f.polls.Load())
 	}
 
-	// The words are kept: a file beside the song, the song's tags, and the model is
-	// told to put them in its answer (the conversation keeps answers, not tool calls).
 	for _, want := range []string{"Lyrics file: Macron_AI_-_جنگ_زرگرها.txt", "put them in your answer", "never transcribe a song you made"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the result misses %q:\n%s", want, out)
@@ -204,8 +199,6 @@ func TestSongTwoVersionsWithTheirCover(t *testing.T) {
 	}
 }
 
-// An instrumental is asked for with the bare tag and the no-voice style tags,
-// whatever words the model sent, with no voice and a title from the style.
 func TestSongInstrumentalSendsNoWordsAndNoVoice(t *testing.T) {
 	f := newFakeSongService(t)
 	r := songRegistry(t, f)
@@ -233,12 +226,11 @@ func TestSongInstrumentalSendsNoWordsAndNoVoice(t *testing.T) {
 		t.Error("an instrumental has no lyrics file")
 	}
 
-	// no style at all: the tags alone; and the title the model gave wins
 	call(t, r, "s", ToolSong, map[string]any{"instrumental": true, "title": "Rainy Window"})
 	if b := f.body(); b["style"] != "instrumental, no vocals, no singing" || b["title"] != "Rainy Window" {
 		t.Errorf("defaults: %v", b)
 	}
-	// a song still needs its words
+
 	before := f.created.Load()
 	if out := call(t, r, "s", ToolSong, map[string]any{"style": "Pop"}); !strings.HasPrefix(out, "error:") || !strings.Contains(out, "instrumental") || f.created.Load() != before {
 		t.Errorf("no lyrics and not instrumental: %s", out)
@@ -350,8 +342,6 @@ func TestSongHelpers(t *testing.T) {
 	}
 }
 
-// TestLiveSong makes a real song when WAZE_TEST_MUSIC_KEY is set (the key
-// comes from the environment only; it takes a couple of minutes).
 func TestLiveSong(t *testing.T) {
 	key := os.Getenv("WAZE_TEST_MUSIC_KEY")
 	if key == "" {
@@ -381,9 +371,6 @@ func TestLiveSong(t *testing.T) {
 	}
 }
 
-// TestLiveSongInstrumental makes a real track with no singer (same key rule as
-// TestLiveSong). It checks the files and, when WAZE_TEST_KEEP_DIR is set, keeps
-// the first one there to be listened to (speech recognition, by hand).
 func TestLiveSongInstrumental(t *testing.T) {
 	key := os.Getenv("WAZE_TEST_MUSIC_KEY")
 	if key == "" {
