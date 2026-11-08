@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
@@ -50,6 +52,7 @@ func TestLessonsAreGeneralAndSafe(t *testing.T) {
 // counts up; a rejected one is never proposed again.
 func TestLearningFromAJob(t *testing.T) {
 	h := newHarness(t)
+	_ = h.st.SetSetting(bg, settingLearnAuto, "false") // the admin approves
 	lesson := `{"key":"missing-file-first-list","category":"files","title":"List before reading","rule":"When a file is not found, list the workspace first and use the name it shows."}`
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if strings.Contains(llmText(req), "You review a job an AI assistant did") {
@@ -72,7 +75,7 @@ func TestLearningFromAJob(t *testing.T) {
 		t.Fatal("nothing reaches the agent before an admin approves it")
 	}
 	h.click(ownerID, ownerID, 9, "a:learn")
-	h.wantText("در انتظار: <b>۱</b>")
+	h.wantText("در انتظار: ۱")
 	h.click(ownerID, ownerID, 9, fmt.Sprintf("a:learn:ok:%d", pending[0].ID))
 	sk, ok := h.bot.app.Agent.Skills.Get(lessonSkill + "files")
 	if !ok || !strings.Contains(sk.Body, "list the workspace first") || !sk.Enabled {
@@ -206,4 +209,172 @@ func TestTeachingByHand(t *testing.T) {
 	if len(all) != 2 || !strings.Contains(systemOf(), "جواب‌ها رو خراب نکن و همیشه کوتاه جواب بده") {
 		t.Fatalf("the admin's own words: %+v", all)
 	}
+}
+
+// freshLearnLimits gives a test its own lesson caps (they are shared by the
+// whole process, and the daily one would run out across the suite).
+func freshLearnLimits(t *testing.T) {
+	old := learnLimits
+	learnLimits.user, learnLimits.day = guard.NewRateLimiter(lessonsPerUser, 24*time.Hour), guard.NewRateLimiter(lessonsPerDay, 24*time.Hour)
+	t.Cleanup(func() { learnLimits = old })
+}
+
+// filesJob is a job whose first try fails and the second works, and the
+// lesson the model draws from it.
+func filesJob(h *harness, lesson string) {
+	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
+		if strings.Contains(llmText(req), "You review a job an AI assistant did") {
+			return map[string]any{"role": "assistant", "content": lesson}, 0
+		}
+		switch toolResults(req) {
+		case 0:
+			return toolCall("read_file", `{"filename":"notes.txt"}`), 0
+		case 1:
+			return toolCall("list_files", `{}`), 0
+		}
+		return map[string]any{"role": "assistant", "content": "پیداش کردم ✅"}, 0
+	}
+}
+
+// By default a lesson goes into its skill at once, with no click, and the
+// next job of the field finds it. /learn undo puts the skill back as it was
+// and the lesson is never proposed again.
+func TestLearningIsAutomaticAndUndoable(t *testing.T) {
+	freshLearnLimits(t)
+	h := newHarness(t)
+	filesJob(h, `{"key":"missing-file-first-list","category":"files","title":"List before reading","rule":"When a file is not found, list the workspace first and use the name it shows."}`)
+	h.send(private(80, "فایل یادداشتم رو بخون"))
+	h.bot.wg.Wait()
+	sk, ok := h.bot.app.Agent.Skills.Get(lessonSkill + "files")
+	if !ok || !strings.Contains(sk.Body, "list the workspace first") {
+		t.Fatalf("no click, and the skill is there: %+v", sk)
+	}
+	h.wantText("یه درس تازه یاد گرفتم")
+	logs, _ := h.st.LessonLogs(bg, store.LessonAdopted, 5)
+	if len(logs) != 1 || logs[0].Before != "" || logs[0].After == "" {
+		t.Fatalf("the adoption is logged with the skill before and after: %+v", logs)
+	}
+	id := logs[0].LessonID
+
+	// The next job sees the skill.
+	h.llm.reply = say("باشه")
+	h.send(private(81, "یه فایل دیگه رو باز کن"))
+	if r := jobRequests(h, "یه فایل دیگه رو باز کن"); len(r) == 0 || !strings.Contains(llmText(r[0]), lessonSkill+"files") {
+		t.Fatal("the next job finds the skill")
+	}
+
+	// Undo: the skill is as it was before (none), and the lesson stays out.
+	h.tg.reset()
+	h.send(private(ownerID, fmt.Sprintf("/learn undo %d", id)))
+	h.wantText("پس گرفته شد")
+	if _, ok := h.bot.app.Agent.Skills.Get(lessonSkill + "files"); ok {
+		t.Fatal("the skill is back to what it was: none")
+	}
+	filesJob(h, `{"key":"missing-file-first-list","category":"files","title":"List before reading","rule":"When a file is not found, list the workspace first and use the name it shows."}`)
+	h.send(private(82, "فایل یادداشت دیگه‌ام رو بخون"))
+	h.bot.wg.Wait()
+	if _, ok := h.bot.app.Agent.Skills.Get(lessonSkill + "files"); ok {
+		t.Fatal("a lesson taken back is not adopted again")
+	}
+	if x, _ := h.st.Lesson(bg, id); x.Status != store.LessonRejected {
+		t.Fatalf("status %s", x.Status)
+	}
+}
+
+// Undo restores the exact earlier version of a skill that had lessons before.
+func TestUndoRestoresThePreviousVersion(t *testing.T) {
+	freshLearnLimits(t)
+	h := newHarness(t)
+	filesJob(h, `{"key":"first-lesson-here","category":"files","title":"First lesson","rule":"When a file is missing, list the workspace."}`)
+	h.send(private(90, "فایل یادداشتم رو بخون"))
+	h.bot.wg.Wait()
+	first, _ := h.bot.app.Agent.Skills.Get(lessonSkill + "files")
+	filesJob(h, `{"key":"second-lesson-here","category":"files","title":"Second lesson","rule":"When a name has spaces, quote it."}`)
+	h.send(private(91, "فایل گزارشم رو بخون"))
+	h.bot.wg.Wait()
+	logs, _ := h.st.LessonLogs(bg, store.LessonAdopted, 5)
+	if len(logs) != 2 {
+		t.Fatalf("%d adoptions", len(logs))
+	}
+	if _, err := h.bot.undoLesson(bg, logs[0].LessonID); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := h.bot.app.Agent.Skills.Get(lessonSkill + "files")
+	if now.Body != first.Body || strings.Contains(now.Body, "Second lesson") {
+		t.Fatalf("back to the first version:\n%s\n---\n%s", now.Body, first.Body)
+	}
+}
+
+// A lesson holding a key, a password or a home path is never saved.
+func TestATaintedLessonIsNeverSaved(t *testing.T) {
+	freshLearnLimits(t)
+	h := newHarness(t)
+	for i, lesson := range []string{
+		`{"key":"use-the-key","category":"web","title":"Use the key","rule":"When the API refuses, send sk-proj-abcdefghijklmnopqrstuvwx in the header."}`,
+		`{"key":"read-the-config","category":"files","title":"Read the config","rule":"When unsure, read /home/debian/.macron/config.env first."}`,
+		`{"key":"login-first","category":"web","title":"Log in","rule":"When asked to log in, use password: hunter2 on the site."}`,
+	} {
+		filesJob(h, lesson)
+		h.send(private(int64(100+i), "فایل یادداشتم رو بخون"))
+	}
+	h.bot.wg.Wait()
+	if all, _ := h.st.Lessons(bg, "", "", 10); len(all) != 0 {
+		t.Fatalf("tainted lessons were saved: %+v", all)
+	}
+}
+
+// Every N jobs a review runs: lessons saying the same thing are merged (the
+// count kept), and it is logged for the panel.
+func TestTheReviewMergesDuplicates(t *testing.T) {
+	h := newHarness(t)
+	_ = h.st.SetSetting(bg, settingLearnReview, "2")
+	for _, x := range []store.Lesson{
+		{Key: "files/list-first", Category: "files", Title: "List the workspace first", Rule: "When a file is not found, list the workspace first and use the name it shows."},
+		{Key: "files/list-before-read", Category: "files", Title: "List the workspace before reading", Rule: "When a file is not found, list the workspace and use the name it shows."},
+		{Key: "files/quote-names", Category: "files", Title: "Quote names", Rule: "When a file name has spaces, quote it in commands."},
+	} {
+		id, _, _, _ := h.st.AddLesson(bg, x)
+		x := x
+		_ = h.bot.applyLesson(bg, id, &x)
+	}
+	h.llm.reply = say("باشه")
+	h.send(private(110, "سلام"))
+	h.send(private(110, "خوبی؟"))
+	h.bot.wg.Wait()
+	logs, _ := h.st.LessonLogs(bg, store.LessonReviewed, 5)
+	if len(logs) != 1 || !strings.Contains(logs[0].Note, "merged 1") {
+		t.Fatalf("the review after 2 jobs: %+v", logs)
+	}
+	if left, _ := h.st.Lessons(bg, store.LessonApproved, "files", 10); len(left) != 2 {
+		t.Fatalf("one duplicate merged: %d left", len(left))
+	}
+	sk, _ := h.bot.app.Agent.Skills.Get(lessonSkill + "files")
+	if strings.Count(sk.Body, "- **") != 2 {
+		t.Fatalf("the skill is written again:\n%s", sk.Body)
+	}
+	h.click(ownerID, ownerID, 9, "a:learn:log:0")
+	h.wantText("merged 1")
+}
+
+// The panel: three sections, each reachable from 🧠 Learning.
+func TestLearningPanelSections(t *testing.T) {
+	h := newHarness(t)
+	h.click(ownerID, ownerID, 9, "a:learn")
+	v := lastOf(h, "editMessageText")
+	for _, want := range []string{"a:learn:skills", "a:learn:log:0", "a:learn:cfg"} {
+		if !hasButton(buttons(v), "→ "+want) {
+			t.Errorf("no %s", want)
+		}
+	}
+	h.click(ownerID, ownerID, 9, "a:learn:cfg")
+	h.click(ownerID, ownerID, 9, "a:learn:auto")
+	if h.st.SettingBool(settingLearnAuto, true) {
+		t.Fatal("auto off")
+	}
+	h.click(ownerID, ownerID, 9, "a:learn:rev")
+	if h.bot.learnReviewEvery() != 50 {
+		t.Fatalf("review every %d", h.bot.learnReviewEvery())
+	}
+	h.click(ownerID, ownerID, 9, "a:learn:skills")
+	h.wantText("مهارت‌های ساخته‌شده")
 }

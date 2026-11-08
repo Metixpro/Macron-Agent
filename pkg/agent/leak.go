@@ -387,3 +387,37 @@ func iAm(name string) string {
 	}
 	return name + "م"
 }
+
+// What must never be written into something kept for later (a learned
+// lesson, a skill): keys and tokens, private keys, passwords, and paths
+// inside someone's home folder.
+var secretRes = []struct {
+	kind string
+	re   *regexp.Regexp
+}{
+	{"token", regexp.MustCompile(`(?i)\b(?:sk-[a-z0-9_-]{16,}|gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|xox[abprs]-[a-z0-9-]{10,}|` +
+		`AKIA[0-9A-Z]{16}|AIza[0-9a-z_-]{30,}|glpat-[a-z0-9_-]{20,}|eyJ[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]+)`)},
+	{"token", regexp.MustCompile(`\b\d{6,12}:[A-Za-z0-9_-]{30,}`)}, // a Telegram bot token
+	{"private key", regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----`)},
+	{"password", regexp.MustCompile(`(?i)(?:password|passwd|pwd|passphrase|api[_ -]?key|secret|پسورد|رمز عبور)\s*[:=]\s*\S+`)},
+	{"credentials in a link", regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`)},
+	{"home path", regexp.MustCompile(`(?:^|[\s"'(=])(?:/home/[^/\s"']+|/root|/Users/[^/\s"']+|~)/[^\s"']*`)},
+	{"random secret", regexp.MustCompile(`[A-Za-z0-9+/_=-]{40,}`)},
+}
+
+// SecretIn reports what in s must not be kept ("" when nothing): a key or
+// token, a password, a path in a home folder, or one of the private strings
+// (the owner's ids, this machine's home folder).
+func SecretIn(s string, private ...string) string {
+	for _, p := range private {
+		if p = strings.TrimSpace(p); len(p) >= 3 && strings.Contains(s, p) {
+			return "private"
+		}
+	}
+	for _, r := range secretRes {
+		if r.re.MatchString(s) {
+			return r.kind
+		}
+	}
+	return ""
+}

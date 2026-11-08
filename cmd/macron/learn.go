@@ -24,11 +24,10 @@ import (
 // Learning from experience. A job where a step failed and another way
 // worked holds a lesson: right after it, a short model call turns its work
 // log into one general rule ("when X, do Y, because Z"), with nothing about
-// the user in it. The lesson waits in the panel (🧠 Learning); only an admin
-// approving it puts it in a skill (lessons-<category>), where every later
-// job finds it. Nothing a user says can change the agent by itself: the
-// worst a crafted job can do is propose a lesson an admin rejects (and a
-// rejected one is never proposed again).
+// the user in it. It goes into a skill (lessons-<category>) at once, where
+// every later job finds it, and can be taken back exactly (learn_auto.go);
+// with learn_auto_adopt off it waits for an admin in the panel instead. A
+// lesson taken back or rejected is never proposed again.
 
 const (
 	settingLearn = "learn_from_jobs" // "false" turns it off
@@ -60,6 +59,9 @@ var learnLimits = struct{ user, day *guard.RateLimiter }{
 // learnFrom proposes the lesson of a job that failed on the way and still
 // answered, in the background (it never holds up the user).
 func (b *Bot) learnFrom(uid int64, res *agent.Result) {
+	if res != nil && !res.Partial {
+		b.noteJobForReview()
+	}
 	if res == nil || res.Trail == "" || res.Partial || strings.TrimSpace(res.Answer) == "" || !b.learningOn() {
 		return
 	}
@@ -88,10 +90,14 @@ func (b *Bot) learnFrom(uid int64, res *agent.Result) {
 			}
 			return
 		}
+		if kind := b.lessonLeaks(x); kind != "" {
+			log.Printf("learning: a lesson was dropped, it held a %s", kind)
+			return
+		}
 		if id, fresh, status, err := b.st.AddLesson(ctx, *x); err != nil {
 			log.Printf("learning: saving a lesson: %v", err)
-		} else if fresh && b.personal && b.st.SettingBool(settingLearnAuto, true) {
-			b.adoptLesson(ctx, id, x) // its owner is the only admin: it goes straight into a skill, and they are told
+		} else if fresh && b.st.SettingBool(settingLearnAuto, true) {
+			b.adoptLesson(ctx, id, x) // straight into a skill, and the owners are told (↩️ takes it back)
 		} else if fresh {
 			log.Printf("🧠 a new lesson waits for an admin: %s (%s)", x.Title, x.Key)
 		} else if status == store.LessonApproved {
@@ -103,8 +109,8 @@ func (b *Bot) learnFrom(uid int64, res *agent.Result) {
 // procedureSteps is how long a job that went well is before it is worth a look.
 const procedureSteps = 6
 
-// settingLearnAuto: in the personal edition a lesson becomes part of the
-// skills at once ("false" asks the owner first, as the public bot's admins are asked).
+// settingLearnAuto: a lesson becomes part of the skills at once ("false"
+// asks an admin first).
 const settingLearnAuto = "learn_auto_adopt"
 
 const procedurePrompt = `You review a job an AI assistant did for its owner, and it went well, with several steps.
@@ -202,6 +208,9 @@ func parseLesson(reply string, redact func(string) string) *store.Lesson {
 	if json.Unmarshal([]byte(raw), &v) != nil || v.None {
 		return nil
 	}
+	if agent.SecretIn(v.Title+"\n"+v.Rule) != "" { // a key, a password or a home path: never kept, not even scrubbed
+		return nil
+	}
 	key := strings.Trim(strings.ToLower(strings.TrimSpace(v.Key)), "-")
 	title := textutil.OneLine(scrubLesson(redact(v.Title)))
 	rule := strings.TrimSpace(scrubLesson(redact(v.Rule)))
@@ -297,15 +306,26 @@ func (b *Bot) rebuildLessons(ctx context.Context, category string) error {
 	return sk.Save(name, desc, body.String(), category)
 }
 
+// applyLesson approves a lesson and writes it into its skill, keeping the
+// skill as it was before in the lesson log (undoLesson puts it back).
+func (b *Bot) applyLesson(ctx context.Context, id int64, x *store.Lesson) error {
+	before := b.shotOf(lessonSkill + x.Category)
+	if err := b.st.DecideLesson(ctx, id, store.LessonApproved); err != nil {
+		return err
+	}
+	if err := b.rebuildLessons(ctx, x.Category); err != nil {
+		return fmt.Errorf("writing the skill: %w", err)
+	}
+	_, err := b.st.AddLessonLog(ctx, store.LessonLog{LessonID: id, Category: x.Category, Action: store.LessonAdopted, Title: x.Title,
+		Before: before, After: b.shotOf(lessonSkill + x.Category)})
+	return err
+}
+
 // adoptLesson approves a lesson, writes it into its skill and tells the owners
 // with a button to take it back.
 func (b *Bot) adoptLesson(ctx context.Context, id int64, x *store.Lesson) {
-	if err := b.st.DecideLesson(ctx, id, store.LessonApproved); err != nil {
+	if err := b.applyLesson(ctx, id, x); err != nil {
 		log.Printf("learning: %v", err)
-		return
-	}
-	if err := b.rebuildLessons(ctx, x.Category); err != nil {
-		log.Printf("learning: writing the skill: %v", err)
 		return
 	}
 	log.Printf("🧠 a lesson went into the skills: %s (%s)", x.Title, x.Key)

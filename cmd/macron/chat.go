@@ -505,6 +505,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		},
 		Extensions:       b.agentExtensions(),
 		IdleTimeout:      b.idleTimeout(),
+		SkillNudgeEvery:  learnNudgeEvery,
 		ToolFilter:       toolFilter,
 		AnswerOnLastStep: fast,
 		Check:            check,

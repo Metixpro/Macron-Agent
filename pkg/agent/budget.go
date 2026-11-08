@@ -185,6 +185,11 @@ func extensionSize(initial int) int { return max(initial/2, 25) }
 const noticeExtended = "[system notice] The work is making progress, so this request got %d more tool rounds (extension %d). " +
 	"Carry on from where you are; do not redo finished steps. Progress so far:\n%s"
 
+// noticeSaveSkill is the reminder of Request.SkillNudgeEvery.
+const noticeSaveSkill = "[system notice] If you just finished a hard part of this job (one that took several tries, or a procedure " +
+	"worth repeating), save how you did it with save_skill, as a short general procedure without anything private. Otherwise " +
+	"ignore this and carry on."
+
 // errIdle cancels a run that saw nothing happen for its idle timeout.
 var errIdle = errors.New("agent: idle timeout")
 

@@ -8,6 +8,11 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/machine"
+	"github.com/Metixpro/macron-agent/pkg/netclient"
+	"github.com/Metixpro/macron-agent/pkg/search"
+	"github.com/Metixpro/macron-agent/pkg/skills"
+	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
 // With no limit, a job that makes progress every round is never cut by the
@@ -122,5 +127,34 @@ func TestNoExtensionWithoutProgress(t *testing.T) {
 func TestSubAgentsHaveTheirOwnBudget(t *testing.T) {
 	if delegateSteps != 50 {
 		t.Fatalf("delegateSteps %d", delegateSteps)
+	}
+}
+
+// Every n rounds the model is reminded to save a hard part as a skill.
+func TestSkillNudge(t *testing.T) {
+	a, f := newBudgetAgent(t, func(n int) (int, any) {
+		if n < 7 {
+			return 200, answer(callsTo("list_files", fmt.Sprintf(`{"path":"p%d"}`, n)), "tool_calls")
+		}
+		return 200, answer(map[string]any{"role": "assistant", "content": "done"}, "stop")
+	})
+	st, err := skills.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sb, err := machine.New(machine.Config{BaseDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := a.LLM.(*llm.Client)
+	a.Registry = tools.NewRegistry(sb, search.NewEngine(nil), client, tools.Options{HTTP: netclient.NewClient(netclient.Options{}),
+		Skills: st, SkillWrite: func(string) bool { return true }})
+	if _, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Content: "job"}, MaxSteps: 20, SkillNudgeEvery: 3}); err != nil {
+		t.Fatal(err)
+	}
+	reqs := f.all()
+	count := func(i int) int { return strings.Count(llmBody(reqs[i]), "save how you did it with save_skill") }
+	if len(reqs) < 8 || count(2) != 0 || count(3) != 1 || count(6) != 2 {
+		t.Fatalf("reminders at rounds 4 and 7: %d requests, %d %d %d", len(reqs), count(2), count(3), count(6))
 	}
 }

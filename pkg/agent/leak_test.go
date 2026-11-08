@@ -253,3 +253,29 @@ func TestToolNamesInCode(t *testing.T) {
 		t.Errorf("a bullet list in a code block: %v, want a leak", got)
 	}
 }
+
+func TestSecretIn(t *testing.T) {
+	for _, s := range []string{
+		"use the key sk-proj-abcdefghijklmnopqrstuvwx to log in",
+		"the bot token 123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw0 works",
+		"password: hunter2",
+		"read /home/debian/.macron/config.env first",
+		"keep it in ~/notes/todo.md",
+		"clone https://me:pw@github.com/x/y",
+		"-----BEGIN RSA PRIVATE KEY-----",
+		"the owner is 7741234567",
+	} {
+		if SecretIn(s, "7741234567") == "" {
+			t.Errorf("not caught: %q", s)
+		}
+	}
+	for _, s := range []string{
+		"When youtube.com asks to sign in, search SoundCloud with scsearch1: (it needs no login).",
+		"Run ffmpeg -c copy to cut a video fast; systemctl restart nginx after editing /etc/nginx.",
+		"List the workspace before reading a file.",
+	} {
+		if k := SecretIn(s, "7741234567"); k != "" {
+			t.Errorf("a clean rule flagged as %s: %q", k, s)
+		}
+	}
+}

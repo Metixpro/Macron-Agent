@@ -285,7 +285,7 @@ func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 var botCommands = map[string]bool{}
 
 func init() {
-	for _, c := range strings.Fields("/admin /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /help /lang /language /me /memory " +
+	for _, c := range strings.Fields("/admin /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /help /lang /language /learn /me /memory " +
 		"/mode /new /nolog /panel /recap /reminders /reset /schedules /settings /start /stop /tasks /teach /zaban") {
 		botCommands[c] = true
 	}
@@ -507,6 +507,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	case "/teach":
 		if admin {
 			b.teachCommand(ctx, m, l, args)
+			return
+		}
+		b.reply(m, l.t(textUnknownCommand))
+		return
+	case "/learn":
+		if admin && m.Chat.Private() {
+			b.learnCommand(ctx, m, l, args)
 			return
 		}
 		b.reply(m, l.t(textUnknownCommand))

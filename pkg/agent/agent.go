@@ -650,6 +650,9 @@ type Request struct {
 	// from the model, no tool starting, finishing or reporting progress (0:
 	// none). The time budget (the context's deadline) is the other brake.
 	IdleTimeout time.Duration
+	// SkillNudgeEvery reminds the model every so many rounds that a hard part
+	// it just finished is worth saving as a skill (0: never).
+	SkillNudgeEvery int
 	// Deep: the model runs at its highest effort (ultracode) with a bigger
 	// budget; the request is told to work to that standard.
 	Deep bool
@@ -730,7 +733,7 @@ type Result struct {
 	Partial bool
 	// Extended is how many times the step budget grew (Request.Extensions).
 	Extended int
-	WorkLog string
+	WorkLog  string
 	// StopReason says why a partial job stopped: "steps" or "time" (the budget;
 	// the job can go on in another round) or "failed" (the model stopped answering).
 	StopReason string
@@ -1116,6 +1119,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		if !warned && extLeft == 0 && maxSteps > stepsWarning+2 && step == maxSteps-stepsWarning+1 {
 			warned = true
 			messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeStepsEnding, stepsWarning)})
+		}
+		if n := req.SkillNudgeEvery; n > 0 && step > 1 && (step-1)%n == 0 && req.depth == 0 && known[tools.ToolSaveSkill] {
+			messages = append(messages, llm.Message{Role: "user", Content: noticeSaveSkill})
 		}
 		res.Steps = step
 		if l.OnStep != nil {

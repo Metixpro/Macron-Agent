@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,49 +18,165 @@ import (
 
 const lessonsPage = 8
 
+// viewLearn is 🧠 Learning: what it built, what it learned lately, and its settings.
 func (b *Bot) viewLearn(ctx context.Context, l lang) panelView {
 	counts, _ := b.st.LessonCounts(ctx)
 	var sb strings.Builder
-	sb.WriteString(l.t("🧠 <b>یادگیری از تجربه</b>\n\nوقتی یه قدم از کاری خطا بده و مکرون با یه راه دیگه انجامش بده، یه درس کلی ازش می‌نویسه (بدون هیچ اطلاعاتی از کاربر). ") +
-		l.t("درس‌ها اینجا منتظر تو می‌مونن؛ فقط درسی که تأیید کنی وارد اسکیل‌ها می‌شه و از اون به بعد توی همه کارها به کار میاد. درسی که رد کنی دیگه پیشنهاد نمی‌شه.") +
-		l.t("\n\n✍️ <b>یاد دادن دستی:</b> هر چیزی رو خودت هم می‌تونی یادش بدی (دکمه زیر یا <code>/teach</code>؛ حتی با ریپلای روی یه جواب اشتباه). درس‌هایی که «همیشه» باشن توی همه جواب‌ها رعایت می‌شن."))
-	fmt.Fprint(&sb, l.f("\n\n📝 در انتظار: <b>%s</b> · ✅ در حال استفاده: <b>%s</b> · ❌ ردشده: %s", l.num(counts[store.LessonPending]),
-		l.num(counts[store.LessonApproved]), l.num(counts[store.LessonRejected])))
-	if always, err := b.st.Lessons(ctx, store.LessonApproved, categoryAlways, maxAlwaysRules); err == nil && len(always) > 0 {
-		fmt.Fprint(&sb, l.f("\n🌐 قانون‌های همیشگی: <b>%s</b>", l.num(len(always))))
-	}
-	fmt.Fprint(&sb, l.f("\n🔁 یادگیری از کارها: %s", onOff(l, b.learningOn())))
-	if runs, err := b.st.EvalRuns(ctx, 1); err == nil && len(runs) > 0 {
-		fmt.Fprint(&sb, l.f("\n🧪 آخرین امتحان: <b>%s٪</b> (%s از %s) با <code>%s</code>، %s", l.num(runs[0].Score()), l.num(runs[0].Passed),
-			l.num(runs[0].Total), esc(runs[0].Model), ago(l, &runs[0].StartedAt)))
-	}
-	weekly := b.st.SettingBool(settingWeeklyReport, true)
-	fmt.Fprint(&sb, l.f("\n📨 گزارش هفتگی (شنبه‌ها صبح، برای مالک‌ها): %s", onOff(l, weekly)))
-	toggle := b.button(l.t("⏸ خاموش کن"), "a:learn:toggle", "")
-	if !b.learningOn() {
-		toggle = b.button(l.t("▶️ روشن کن"), "a:learn:toggle", telegram.StyleSuccess)
+	sb.WriteString(l.t("🧠 <b>یادگیری</b>\n\nبعد از کاری که یه قدمش خطا داد و با راه دیگه درست شد (یا یه کار طولانی که خوب پیش رفت)، یه قاعده کلی ازش می‌نویسم و همون لحظه توی مهارت‌هام می‌ذارم؛ بدون هیچ اطلاعات شخصی، کلید یا مسیر خونه. هر درس با ↩️ یا <code>/learn undo ID</code> دقیقاً به نسخه قبل برمی‌گرده و دیگه پیشنهاد نمی‌شه."))
+	fmt.Fprint(&sb, l.f("\n\n✅ در حال استفاده: <b>%s</b> · 📝 در انتظار: %s · ❌ ردشده یا پس‌گرفته: %s", l.num(counts[store.LessonApproved]),
+		l.num(counts[store.LessonPending]), l.num(counts[store.LessonRejected])))
+	fmt.Fprint(&sb, l.f("\n🔁 یادگیری: %s · ⚡ خودکار: %s", onOff(l, b.learningOn()), onOff(l, b.st.SettingBool(settingLearnAuto, true))))
+	if logs, err := b.st.LessonLogs(ctx, store.LessonReviewed, 1); err == nil && len(logs) > 0 {
+		fmt.Fprint(&sb, l.f("\n🔍 آخرین بازبینی: %s · %s", ago(l, &logs[0].CreatedAt), esc(firstLine(logs[0].Note))))
 	}
 	return panelView{html: sb.String(), kb: keyboard(
-		row(b.button(l.t("✍️ یاد بده"), "a:learn:teach", telegram.StyleSuccess)),
-		row(b.button(l.f("📝 در انتظار (%s)", l.num(counts[store.LessonPending])), "a:learn:list:pending:0", telegram.StylePrimary),
-			b.button(l.t("✅ در حال استفاده"), "a:learn:list:approved:0", "")),
-		row(toggle, b.button(l.t("❌ ردشده‌ها"), "a:learn:list:rejected:0", "")),
-		row(b.button(l.t("🧪 امتحان دوره‌ای"), "a:learn:exam", telegram.StylePrimary)),
-		row(b.button(l.t("📈 گزارش ۷ روز اخیر"), "a:learn:report", telegram.StylePrimary),
-			b.button(map[bool]string{true: l.t("📨 گزارش هفتگی: روشن"), false: l.t("📨 گزارش هفتگی: خاموش")}[weekly], "a:learn:weekly", "")),
+		row(b.button(l.t("🧩 مهارت‌های ساخته‌شده"), "a:learn:skills", telegram.StylePrimary)),
+		row(b.button(l.t("🕘 آخرین درس‌ها"), "a:learn:log:0", telegram.StylePrimary)),
+		row(b.button(l.t("⚙️ تنظیمات یادگیری"), "a:learn:cfg", ""), b.button(l.t("✍️ یاد بده"), "a:learn:teach", telegram.StyleSuccess)),
 		row(b.back(l, "a:home")),
+	)}
+}
+
+// viewLearnSkills lists the skills learning built (lessons-<field>).
+func (b *Bot) viewLearnSkills(ctx context.Context, l lang) panelView {
+	var rows [][]telegram.InlineKeyboardButton
+	var sb strings.Builder
+	sb.WriteString(l.t("🧩 <b>مهارت‌های ساخته‌شده</b>\n\nهر زمینه یه مهارت داره که درس‌های تأییدشده‌اش توشه."))
+	fields := make([]string, 0, len(lessonCategories))
+	for f := range lessonCategories {
+		fields = append(fields, f)
+	}
+	sort.Strings(fields)
+	for _, f := range fields {
+		list, _ := b.st.Lessons(ctx, store.LessonApproved, f, 200)
+		if len(list) == 0 {
+			continue
+		}
+		uses := 0
+		if sk := b.app.Agent.Skills; sk != nil {
+			if s, ok := sk.Get(lessonSkill + f); ok {
+				uses = s.Uses
+			}
+		}
+		fmt.Fprint(&sb, l.f("\n• <code>%s</code>: %s درس · %s بار خونده شده", esc(lessonSkill+f), l.num(len(list)), l.num(uses)))
+		rows = append(rows, row(b.button(lessonSkill+f, "a:learn:sk:"+f, "")))
+	}
+	if len(rows) == 0 {
+		sb.WriteString(l.t("\n\nهنوز مهارتی ساخته نشده."))
+	}
+	rows = append(rows, row(b.back(l, "a:learn")))
+	return panelView{html: sb.String(), kb: keyboard(rows...)}
+}
+
+// viewLearnSkill is one built skill: its lessons (each to see, edit or take
+// back) and a button that removes the whole skill.
+func (b *Bot) viewLearnSkill(ctx context.Context, l lang, field string) panelView {
+	list, _ := b.st.Lessons(ctx, store.LessonApproved, field, 200)
+	var sb strings.Builder
+	fmt.Fprint(&sb, l.f("🧩 <b>%s</b>\n%s\n", esc(lessonSkill+field), esc(lessonCategories[field])))
+	var rows [][]telegram.InlineKeyboardButton
+	for _, x := range list {
+		fmt.Fprintf(&sb, "\n• <b>%s</b>: %s", esc(x.Title), esc(textutil.TruncateRunes(x.Rule, 160, "…")))
+		rows = append(rows, row(b.button("✏️ "+textutil.TruncateRunes(x.Title, 40, "…"), fmt.Sprintf("a:learn:ln:%d", x.ID), "")))
+	}
+	if len(list) > 0 {
+		rows = append(rows, row(b.button(l.t("🗑 حذف کل مهارت"), "a:learn:skdel:"+field, telegram.StyleDanger)))
+	}
+	rows = append(rows, row(b.back(l, "a:learn:skills")))
+	return panelView{html: sb.String(), kb: keyboard(rows...)}
+}
+
+// viewLearnLog is what learning did lately, newest first, with ↩️ on each
+// lesson still in use.
+func (b *Bot) viewLearnLog(ctx context.Context, l lang, page int) panelView {
+	logs, _ := b.st.LessonLogs(ctx, "", 200)
+	var sb strings.Builder
+	sb.WriteString(l.t("🕘 <b>آخرین درس‌ها</b>"))
+	if len(logs) == 0 {
+		sb.WriteString(l.t("\n\nهنوز چیزی یاد نگرفتم."))
+		return panelView{html: sb.String(), kb: keyboard(row(b.back(l, "a:learn:cfg")))}
+	}
+	pages := (len(logs) + lessonLogPage - 1) / lessonLogPage
+	page = min(max(page, 0), pages-1)
+	var rows [][]telegram.InlineKeyboardButton
+	for _, x := range logs[page*lessonLogPage : min(len(logs), (page+1)*lessonLogPage)] {
+		mark := map[string]string{store.LessonAdopted: "🧠", store.LessonReverted: "↩️", store.LessonReviewed: "🔍"}[x.Action]
+		fmt.Fprintf(&sb, "\n%s <code>#%d</code> %s · %s", mark, x.LessonID, esc(textutil.TruncateRunes(x.Title, 60, "…")), ago(l, &x.CreatedAt))
+		if x.Action == store.LessonReviewed {
+			fmt.Fprintf(&sb, "\n   <i>%s</i>", esc(textutil.TruncateRunes(strings.ReplaceAll(x.Note, "\n", " · "), 200, "…")))
+		}
+		if x.Action == store.LessonAdopted {
+			if cur, err := b.st.Lesson(ctx, x.LessonID); err == nil && cur.Status == store.LessonApproved {
+				rows = append(rows, row(b.button("↩️ "+textutil.TruncateRunes(x.Title, 40, "…"), fmt.Sprintf("a:learn:no:%d", x.LessonID), "")))
+			}
+		}
+	}
+	var nav []telegram.InlineKeyboardButton
+	if page > 0 {
+		nav = append(nav, b.button("◀️", fmt.Sprintf("a:learn:log:%d", page-1), ""))
+	}
+	if page < pages-1 {
+		nav = append(nav, b.button("▶️", fmt.Sprintf("a:learn:log:%d", page+1), ""))
+	}
+	if len(nav) > 0 {
+		rows = append(rows, nav)
+	}
+	rows = append(rows, row(b.back(l, "a:learn")))
+	return panelView{html: sb.String(), kb: keyboard(rows...)}
+}
+
+// learnReviewSteps are the choices of the review button: 25 → 50 → 100 → off.
+var learnReviewSteps = map[int]int{learnReviewDefault: 50, 50: 100, 100: 0, 0: learnReviewDefault}
+
+// viewLearnSettings: learning on or off, at once or after an admin, the
+// caps, the review, the exam and the weekly report.
+func (b *Bot) viewLearnSettings(ctx context.Context, l lang) panelView {
+	counts, _ := b.st.LessonCounts(ctx)
+	auto := b.st.SettingBool(settingLearnAuto, true)
+	var sb strings.Builder
+	sb.WriteString(l.t("⚙️ <b>تنظیمات یادگیری</b>\n"))
+	fmt.Fprint(&sb, l.f("\n🔁 یادگیری از کارها: %s", onOff(l, b.learningOn())))
+	fmt.Fprint(&sb, l.f("\n⚡ اعمال خودکار (بدون تأیید): %s", onOff(l, auto)))
+	fmt.Fprint(&sb, l.f("\n🚦 سقف: %s درس برای هر کاربر و %s درس در روز", l.num(lessonsPerUser), l.num(lessonsPerDay)))
+	if n := b.learnReviewEvery(); n > 0 {
+		fmt.Fprint(&sb, l.f("\n🔍 بازبینی پس‌زمینه: هر %s کار (تکراری‌ها ادغام، بی‌استفاده‌ها علامت‌گذاری)", l.num(n)))
+	} else {
+		sb.WriteString(l.t("\n🔍 بازبینی پس‌زمینه: خاموش"))
+	}
+	fmt.Fprint(&sb, l.f("\n🌙 امتحان شبانه: %s · 📨 گزارش هفتگی: %s", onOff(l, b.evalsOn()), onOff(l, b.st.SettingBool(settingWeeklyReport, true))))
+	toggle := b.button(l.t("⏸ یادگیری: خاموش کن"), "a:learn:toggle", "")
+	if !b.learningOn() {
+		toggle = b.button(l.t("▶️ یادگیری: روشن کن"), "a:learn:toggle", telegram.StyleSuccess)
+	}
+	autoBtn := l.t("⚡ خودکار: روشن")
+	if !auto {
+		autoBtn = l.t("⚡ خودکار: خاموش (با تأیید)")
+	}
+	review := l.t("🔍 بازبینی: خاموش")
+	if n := b.learnReviewEvery(); n > 0 {
+		review = l.f("🔍 بازبینی: هر %s کار", l.num(n))
+	}
+	weekly := map[bool]string{true: l.t("📨 گزارش هفتگی: روشن"), false: l.t("📨 گزارش هفتگی: خاموش")}[b.st.SettingBool(settingWeeklyReport, true)]
+	return panelView{html: sb.String(), kb: keyboard(
+		row(toggle, b.button(autoBtn, "a:learn:auto", "")),
+		row(b.button(review, "a:learn:rev", ""), b.button(l.t("🔍 الان بازبینی کن"), "a:learn:revnow", "")),
+		row(b.button(l.f("📝 در انتظار (%s)", l.num(counts[store.LessonPending])), "a:learn:list:pending:0", ""),
+			b.button(l.t("❌ ردشده‌ها"), "a:learn:list:rejected:0", "")),
+		row(b.button(l.t("🧪 امتحان دوره‌ای"), "a:learn:exam", ""), b.button(weekly, "a:learn:weekly", "")),
+		row(b.button(l.t("📈 گزارش ۷ روز اخیر"), "a:learn:report", "")),
+		row(b.back(l, "a:learn")),
 	)}
 }
 
 func (b *Bot) viewLessons(ctx context.Context, l lang, status string, page int) panelView {
 	list, err := b.st.Lessons(ctx, status, "", 200)
 	if err != nil {
-		return panelView{html: l.t(textError), kb: keyboard(row(b.back(l, "a:learn")))}
+		return panelView{html: l.t(textError), kb: keyboard(row(b.back(l, "a:learn:cfg")))}
 	}
 	title := map[string]string{store.LessonPending: l.t("📝 <b>درس‌های در انتظار</b>"), store.LessonApproved: l.t("✅ <b>درس‌های در حال استفاده</b>"),
 		store.LessonRejected: l.t("❌ <b>درس‌های ردشده</b>")}[status]
 	if len(list) == 0 {
-		return panelView{html: title + "\n\n" + l.t("چیزی نیست."), kb: keyboard(row(b.back(l, "a:learn")))}
+		return panelView{html: title + "\n\n" + l.t("چیزی نیست."), kb: keyboard(row(b.back(l, "a:learn:cfg")))}
 	}
 	pages := (len(list) + lessonsPage - 1) / lessonsPage
 	page = min(max(page, 0), pages-1)
@@ -81,7 +198,7 @@ func (b *Bot) viewLessons(ctx context.Context, l lang, status string, page int) 
 	if len(nav) > 0 {
 		rows = append(rows, nav)
 	}
-	rows = append(rows, row(b.back(l, "a:learn")))
+	rows = append(rows, row(b.back(l, "a:learn:cfg")))
 	return panelView{html: title + l.f("\n\n%s درس، بیشترین تکرار اول. روی هر کدوم بزن تا ببینی و تصمیم بگیری.", l.num(len(list))), kb: keyboard(rows...)}
 }
 
@@ -121,7 +238,7 @@ func (b *Bot) viewLesson(ctx context.Context, l lang, id int64) panelView {
 		rows = append(rows, row(b.button(l.t("↩️ برگردون به انتظار"), act("undo"), "")))
 	}
 	rows = append(rows, row(b.button(l.t("✏️ ویرایش متن"), act("edit"), ""), b.button(l.t("🗂 کجا به کار بیاد"), act("where"), "")),
-		row(b.back(l, "a:learn:list:"+x.Status+":0")))
+		row(b.back(l, "a:learn:skills")))
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
 
@@ -137,9 +254,64 @@ func (b *Bot) handleLearnPanel(ctx context.Context, l lang, adminID int64, parts
 	case "toggle":
 		_ = b.st.SetSetting(ctx, settingLearn, strconv.FormatBool(!b.learningOn()))
 		answer("", false)
+		show(b.viewLearnSettings(ctx, l))
+		return
 	case "weekly":
 		_ = b.st.SetSetting(ctx, settingWeeklyReport, strconv.FormatBool(!b.st.SettingBool(settingWeeklyReport, true)))
 		answer("", false)
+		show(b.viewLearnSettings(ctx, l))
+		return
+	case "auto":
+		_ = b.st.SetSetting(ctx, settingLearnAuto, strconv.FormatBool(!b.st.SettingBool(settingLearnAuto, true)))
+		answer("", false)
+		show(b.viewLearnSettings(ctx, l))
+		return
+	case "rev":
+		next, ok := learnReviewSteps[b.learnReviewEvery()]
+		if !ok {
+			next = learnReviewDefault
+		}
+		_ = b.st.SetSetting(ctx, settingLearnReview, strconv.Itoa(next))
+		answer("", false)
+		show(b.viewLearnSettings(ctx, l))
+		return
+	case "revnow":
+		entry, err := b.reviewLessons(ctx)
+		if err != nil {
+			answer(l.t("بازبینی نشد: ")+err.Error(), true)
+		} else {
+			answer(firstLine(entry.Note), false)
+		}
+		show(b.viewLearnLog(ctx, l, 0))
+		return
+	case "cfg":
+		answer("", false)
+		show(b.viewLearnSettings(ctx, l))
+		return
+	case "skills":
+		answer("", false)
+		show(b.viewLearnSkills(ctx, l))
+		return
+	case "sk":
+		answer("", false)
+		show(b.viewLearnSkill(ctx, l, arg(3)))
+		return
+	case "skdel":
+		field := arg(3)
+		list, _ := b.st.Lessons(ctx, store.LessonApproved, field, 500)
+		for _, x := range list {
+			_ = b.st.DecideLesson(ctx, x.ID, store.LessonRejected)
+		}
+		_ = b.rebuildLessons(ctx, field)
+		_, _ = b.st.AddLessonLog(ctx, store.LessonLog{Category: field, Action: store.LessonReverted, Title: lessonSkill + field, Note: "removed by an admin"})
+		answer(l.t("🗑 حذف شد"), false)
+		show(b.viewLearnSkills(ctx, l))
+		return
+	case "log":
+		page, _ := strconv.Atoi(arg(3))
+		answer("", false)
+		show(b.viewLearnLog(ctx, l, page))
+		return
 	case "exam":
 		answer("", false)
 		show(b.viewExams(ctx, l))
@@ -159,7 +331,7 @@ func (b *Bot) handleLearnPanel(ctx context.Context, l lang, adminID int64, parts
 		return
 	case "report":
 		answer("", false)
-		show(panelView{html: b.weeklyReport(ctx, l, time.Now().Add(-reportDays*24*time.Hour)), kb: keyboard(row(b.back(l, "a:learn")))})
+		show(panelView{html: b.weeklyReport(ctx, l, time.Now().Add(-reportDays*24*time.Hour)), kb: keyboard(row(b.back(l, "a:learn:cfg")))})
 		return
 	case "list":
 		page, _ := strconv.Atoi(arg(4))
@@ -177,14 +349,22 @@ func (b *Bot) handleLearnPanel(ctx context.Context, l lang, adminID int64, parts
 			show(b.viewLearn(ctx, l))
 			return
 		}
-		status := map[string]string{"ok": store.LessonApproved, "no": store.LessonRejected, "undo": store.LessonPending}[arg(2)]
-		if err := b.st.DecideLesson(ctx, id, status); err == nil {
-			err = b.rebuildLessons(ctx, x.Category) // the skill follows what is approved
-			if err != nil {
-				answer(l.t("ذخیره شد، ولی اسکیل ساخته نشد: ")+err.Error(), true)
-				show(b.viewLesson(ctx, l, id))
-				return
+		var err2 error
+		switch {
+		case arg(2) == "ok":
+			err2 = b.applyLesson(ctx, id, x)
+		case x.Status == store.LessonApproved: // ↩️ or ❌ on a lesson in use: the skill goes back to what it was
+			_, err2 = b.undoLesson(ctx, id)
+		default:
+			status := map[string]string{"no": store.LessonRejected, "undo": store.LessonPending}[arg(2)]
+			if err2 = b.st.DecideLesson(ctx, id, status); err2 == nil {
+				err2 = b.rebuildLessons(ctx, x.Category)
 			}
+		}
+		if err2 != nil {
+			answer(l.t("ذخیره شد، ولی اسکیل ساخته نشد: ")+err2.Error(), true)
+			show(b.viewLesson(ctx, l, id))
+			return
 		}
 		answer(map[string]string{"ok": l.t("✅ تأیید شد و وارد اسکیل شد"), "no": l.t("❌ رد شد"), "undo": l.t("↩️ برگشت")}[arg(2)], false)
 		show(b.viewLesson(ctx, l, id))
@@ -282,7 +462,7 @@ func (b *Bot) viewExams(ctx context.Context, l lang) panelView {
 	}
 	return panelView{html: sb.String(), kb: keyboard(
 		row(b.button(l.t("▶️ الان امتحان بده"), "a:learn:examrun", telegram.StyleSuccess), b.button(toggle, "a:learn:examtoggle", "")),
-		row(b.back(l, "a:learn")),
+		row(b.back(l, "a:learn:cfg")),
 	)}
 }
 

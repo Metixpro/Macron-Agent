@@ -353,4 +353,21 @@ var migrations = [][]string{
 		`INSERT OR IGNORE INTO settings (k, v, updated_at) SELECT 'triage', 'local', updated_at FROM settings WHERE k = 'snap_on' AND v = 'true'`,
 		`DELETE FROM settings WHERE k IN ('snap_on', 'snap_key', 'snap_model', 'snap_timeout_ms', 'snap_route', 'snap_effort', 'snap_chat', 'snap_trim')`,
 	},
+
+	// 3: what learning did to the skills, with each skill as it was before,
+	// so a lesson can be taken back exactly (cmd/macron/learn.go)
+	{
+		`CREATE TABLE IF NOT EXISTS lesson_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			lesson_id INTEGER NOT NULL DEFAULT 0,
+			category TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL,
+			title TEXT NOT NULL DEFAULT '',
+			before TEXT NOT NULL DEFAULT '',
+			after TEXT NOT NULL DEFAULT '',
+			note TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_lesson_log_lesson ON lesson_log (lesson_id, id)`,
+	},
 }
