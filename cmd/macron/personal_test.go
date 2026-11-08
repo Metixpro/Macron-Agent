@@ -66,7 +66,7 @@ func TestPersonalEditionLeavesGroupsStrangersAddItTo(t *testing.T) {
 func TestPersonalEditionSpeaksForItself(t *testing.T) {
 	h := personalHarness(t)
 	h.send(private(ownerID, "/start"))
-	for _, want := range []string{"SOUL.md", "USER.md", "MEMORY.md", "/admin"} {
+	for _, want := range []string{"SOUL.md", "USER.md", "MEMORY.md", "/settings"} {
 		h.wantText(want)
 	}
 	h.noText("VIP")
