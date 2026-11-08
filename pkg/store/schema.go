@@ -390,4 +390,20 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_cmd_audit_at ON cmd_audit (at)`,
 	},
+
+	// 5: the owner's board of jobs (cmd/macron/kanban.go): cards in to do,
+	// doing, blocked and done; a card run on its own is a background task
+	{
+		`CREATE TABLE IF NOT EXISTS kanban (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			notes TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'todo',
+			bg_task INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_kanban_user ON kanban (user_id, status)`,
+	},
 }

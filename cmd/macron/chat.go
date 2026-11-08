@@ -1539,6 +1539,9 @@ func (b *Bot) localTools(u *store.User, m *telegram.Message, react *reactor, box
 	}
 	if !guest && !scheduled && !bg {
 		out = append(out, b.backgroundTool(u, m)) // a long job can go on by itself
+		if b.isOwner(u.ID) && m.Chat.Private() {
+			out = append(out, b.kanbanTool(u, m)) // the owner's board of jobs
+		}
 	}
 	if guest || scheduled || bg {
 		drop := map[string]bool{toolAskUser: true, toolSchedule: true, toolListSchedules: true, toolCancelSchedule: true}

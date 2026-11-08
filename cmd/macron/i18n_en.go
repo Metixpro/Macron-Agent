@@ -1185,5 +1185,11 @@ var english = map[string]string{
 	"<code>/search کلمه‌ها</code> توی همه گفتگوهای قبلی‌مون می‌گرده (حتی بعد از /new).": "<code>/search words</code> searches all our earlier conversations (even after /new).",
 	"🔎 برای «%s» چیزی پیدا نشد.":    "🔎 Nothing found for “%s”.",
 	"🔎 <b>%s</b> نتیجه برای «%s»\n": "🔎 <b>%s</b> results for “%s”\n",
-	"تو": "you",
+	"تو":                "you",
+	"[ ] انجام نشده":    "[ ] to do",
+	"[*] در جریان":      "[*] doing",
+	"[!] گیر کرده":      "[!] blocked",
+	"[+] تموم شده":      "[+] done",
+	"تخته کار خالیه.":   "The board is empty.",
+	"📋 <b>تخته کار</b>": "📋 <b>Board</b>",
 }
