@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -93,5 +94,60 @@ func TestBackupRejectsMissingHome(t *testing.T) {
 	}
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatal("left an archive behind")
+	}
+}
+
+// WorkingDirectory= must never be quoted: systemd reads a quoted value as a
+// relative path and refuses the whole unit ("path is not absolute").
+func TestSystemdWorkingDirectoryIsRaw(t *testing.T) {
+	for _, home := range []string{"/home/debian/.macron", "/home/debian/my dir/.macron"} {
+		s := renderSystemd(unit{Home: home, Binary: "/home/debian/.local/bin/macron"})
+		if !strings.Contains(s, "\nWorkingDirectory="+home+"\n") {
+			t.Errorf("WorkingDirectory not raw for %q:\n%s", home, s)
+		}
+	}
+	s := renderSystemd(unit{Home: "/home/debian/my dir/.macron", Binary: "/opt/my apps/macron"})
+	for _, want := range []string{`Environment="MACRON_HOME=/home/debian/my dir/.macron"`, `ExecStart="/opt/my apps/macron"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %s:\n%s", want, s)
+		}
+	}
+}
+
+// The unit systemd will really load: checked by systemd-analyze when the
+// machine has it (Linux CI and servers do).
+func TestSystemdUnitVerifies(t *testing.T) {
+	if _, err := exec.LookPath("systemd-analyze"); err != nil {
+		t.Skip("no systemd-analyze")
+	}
+	for _, dir := range []string{"plain", "my dir"} {
+		root := filepath.Join(t.TempDir(), dir)
+		home := filepath.Join(root, ".macron")
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		bin, _ := exec.LookPath("true")
+		u := unit{Home: home, Binary: bin}
+		path := filepath.Join(root, unitName)
+		if err := os.WriteFile(path, []byte(renderSystemd(u)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, checked, err := verifyUnit(u, path)
+		if !checked {
+			t.Skipf("systemd-analyze cannot run here: %s", out)
+		}
+		if err != nil {
+			t.Errorf("%s: unit rejected: %v\n%s\n%s", dir, err, out, renderSystemd(u))
+		}
+	}
+	// And the old quoted form really is rejected, so the check can fail.
+	root := t.TempDir()
+	path := filepath.Join(root, unitName)
+	bad := "[Service]\nWorkingDirectory=\"" + root + "\"\nExecStart=/bin/true\n"
+	if err := os.WriteFile(path, []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, checked, err := verifyUnit(unit{}, path); checked && err == nil {
+		t.Error("a quoted WorkingDirectory passed verification")
 	}
 }

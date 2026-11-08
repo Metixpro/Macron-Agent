@@ -173,7 +173,7 @@ func TestConfigCommandMasksSecrets(t *testing.T) {
 
 func TestServiceUnits(t *testing.T) {
 	sys := renderSystemd(unit{Binary: "/usr/local/bin/macron", Home: "/home/me/.macron", User: "me", System: true})
-	for _, want := range []string{"User=me", `Environment="MACRON_HOME=/home/me/.macron"`, `ExecStart="/usr/local/bin/macron"`, "Restart=always", "WantedBy=multi-user.target"} {
+	for _, want := range []string{"User=me", "Environment=MACRON_HOME=/home/me/.macron\n", "WorkingDirectory=/home/me/.macron\n", "ExecStart=/usr/local/bin/macron\n", "Restart=always", "WantedBy=multi-user.target"} {
 		if !strings.Contains(sys, want) {
 			t.Errorf("system unit lacks %q:\n%s", want, sys)
 		}

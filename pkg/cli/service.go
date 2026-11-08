@@ -33,13 +33,31 @@ type unit struct {
 // agent itself is stopped with the service (KillMode=process): a server or a
 // bot it started on its own (nohup setsid, a unit of its own) keeps running
 // through a restart or an update.
-// systemdValue protects both unit syntax and specifier/environment expansion.
-func systemdValue(s string, execValue bool) string {
-	s = strings.ReplaceAll(s, "%", "%%")
+//
+// systemd reads each setting differently, so each value is written the way its
+// own setting reads it:
+//   - WorkingDirectory= takes the raw rest of the line: no quotes (a quoted
+//     value is "not absolute" and the unit is refused) and no C escapes, so a
+//     space stays a plain space. Only specifiers (%) are escaped.
+//   - Environment= splits on spaces and honours "quotes" with C escapes.
+//   - ExecStart= is the same, and also expands $VAR, so $ is doubled.
+//
+// A line break would start a new setting, so it is always dropped.
+func systemdPath(p string) string {
+	return strings.NewReplacer("%", "%%", "\n", "", "\r", "").Replace(p)
+}
+
+// systemdWord writes one word for Environment= or ExecStart=: bare when it is
+// plain, otherwise in quotes with \ and " escaped.
+func systemdWord(s string, execValue bool) string {
+	s = systemdPath(s)
 	if execValue {
 		s = strings.ReplaceAll(s, "$", "$$")
 	}
-	return strconv.Quote(s)
+	if !strings.ContainsAny(s, " \t\"'\\;") && s != "" {
+		return s
+	}
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
 func renderSystemd(u unit) string {
@@ -48,9 +66,9 @@ func renderSystemd(u unit) string {
 	if u.System && u.User != "" {
 		fmt.Fprintf(&sb, "User=%s\n", u.User)
 	}
-	fmt.Fprintf(&sb, "Environment=%s\n", systemdValue("MACRON_HOME="+u.Home, false))
-	fmt.Fprintf(&sb, "WorkingDirectory=%s\n", systemdValue(u.Home, false))
-	fmt.Fprintf(&sb, "ExecStart=%s\n", systemdValue(u.Binary, true))
+	fmt.Fprintf(&sb, "Environment=%s\n", systemdWord("MACRON_HOME="+u.Home, false))
+	fmt.Fprintf(&sb, "WorkingDirectory=%s\n", systemdPath(u.Home))
+	fmt.Fprintf(&sb, "ExecStart=%s\n", systemdWord(u.Binary, true))
 	sb.WriteString("Restart=always\nRestartSec=5\nTimeoutStopSec=45\nKillMode=process\nLimitNOFILE=65536\nUMask=0077\n\n[Install]\n")
 	if u.System {
 		sb.WriteString("WantedBy=multi-user.target\n")
@@ -58,6 +76,41 @@ func renderSystemd(u unit) string {
 		sb.WriteString("WantedBy=default.target\n")
 	}
 	return sb.String()
+}
+
+// verifyUnit asks systemd itself whether the unit file is valid, before it is
+// enabled. ok=false with a nil error means systemd-analyze could not run here
+// (missing, or no user manager to ask, as under sudo or cron): not a bad unit.
+func verifyUnit(u unit, path string) (out string, checked bool, err error) {
+	if _, lerr := exec.LookPath("systemd-analyze"); lerr != nil {
+		return "", false, nil
+	}
+	args := []string{"verify", path}
+	if !u.System && os.Getenv("XDG_RUNTIME_DIR") != "" {
+		args = []string{"--user", "verify", path}
+	}
+	b, err := exec.Command("systemd-analyze", args...).CombinedOutput()
+	out = string(b)
+	if err != nil && strings.Contains(out, "Failed to initialize manager") {
+		// The user manager is out of reach; the plain check still reads the file.
+		b, err = exec.Command("systemd-analyze", "verify", path).CombinedOutput()
+		out = string(b)
+		if err != nil && strings.Contains(out, "Failed to initialize manager") {
+			return out, false, nil
+		}
+	}
+	if err == nil {
+		return out, true, nil
+	}
+	// Only lines about this file count: a broken unrelated unit on the host is
+	// not this install's fault.
+	base := filepath.Base(path)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, base) {
+			return out, true, err
+		}
+	}
+	return out, true, nil
 }
 
 // renderLaunchd writes the launchd property list (macOS).
@@ -180,9 +233,16 @@ func serviceInstall(io *IO) int {
 		io.printf("❌ %v\n", err)
 		return 1
 	}
-	if err := os.WriteFile(path, []byte(renderSystemd(u)), 0o644); err != nil {
+	content := renderSystemd(u)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		io.printf("❌ cannot write %s: %v\n", path, err)
 		return 1
+	}
+	if out, checked, err := verifyUnit(u, path); err != nil {
+		io.printf("❌ the generated unit is invalid: %v\n%s\n--- %s ---\n%s", err, strings.TrimSpace(out), path, content)
+		return 1
+	} else if !checked {
+		io.println("⚠️  systemd-analyze could not check the unit here; enabling it anyway.")
 	}
 	if u.System && u.User != "" && u.User != "root" { // the service runs as that user: its files must be its own
 		if tu, err := user.Lookup(u.User); err == nil {
@@ -197,7 +257,9 @@ func serviceInstall(io *IO) int {
 		}
 	}
 	ctl := systemctl(u)
-	for _, a := range [][]string{{"daemon-reload"}, {"enable", "--now", unitName}} {
+	// enable + restart (not enable --now): a second install must also replace a
+	// running agent with the current binary and unit.
+	for _, a := range [][]string{{"daemon-reload"}, {"enable", unitName}, {"restart", unitName}} {
 		if err := run(io, ctl[0], append(ctl[1:], a...)...); err != nil {
 			io.printf("❌ systemctl %s: %v\n", strings.Join(a, " "), err)
 			return 1
