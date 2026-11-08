@@ -1,0 +1,22 @@
+{
+  "macron_source_commit": "262bbcb68c921239c055458d6cf02ecba8c3efd3",
+  "macron_version": "1.2.3",
+  "hermes_commit": "e075441241b8d626789b4aae0e376f86eabf824d",
+  "local_go_version": "go version go1.26.10 linux/amd64",
+  "benchmark_binary_sha256": "325b2e32dd83b620f2adbdc0704e3ba08dfc5f921d645b0a7b249303fb006d82",
+  "github_release_binary_sha256": "f4e1e88170ab20a71ed1134e72fa1e9f24d43fabd4b878c99d5dfd61d4cade50",
+  "release_binary_go_version": "go1.26.0",
+  "benchmark_binary_go_version": "go1.26.10",
+  "benchmark_method": "3 tasks x 3 repeats; baseline 18 trials; Macron 1.2.3 follow-up 9 trials; final comparison reuses Hermes baseline, cross-phase timing uncontrolled",
+  "endpoint_model_alias": "azm",
+  "server_reported_model": "mimo-v2.6-flash",
+  "artifact_replay": "python3 benchmarks/verify_artifacts.py benchmarks/azm-1.2.3-vs-hermes.json",
+  "files_sha256": {
+    "benchmarks/compare.py": "de29ae087d6fa6106e86eaadf71c2d2b3ed003af75091aa88a81e1dd93574992",
+    "benchmarks/hermes_runner.py": "8b884b8f885bded8b61d61526de9af5aed4b24cfc62a58f21cdf699edbc65492",
+    "benchmarks/verify_artifacts.py": "583799a811c5406eb903ca35c5b8f886d6584ddc81a30484107c0f8795b1b063",
+    "benchmarks/azm-1.2.2-head-to-head.json": "bd68c1d414de31d20b1be16a822f2d5af7955e7b6e3cc3ceedeff2b45ceb82d2",
+    "benchmarks/azm-1.2.3-followup.json": "efa94e6ff471067995e0978f6a8dcba4c160e2372c3e0b28258c54a35073afd9",
+    "benchmarks/report_head_to_head.py": "45b012b5075941f072e0c17710987f866ec97e8de25dc1b597628186cee67f28"
+  }
+}

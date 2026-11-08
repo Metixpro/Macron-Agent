@@ -1,0 +1,1805 @@
+{
+  "model": "azm",
+  "macron_tools": "default built-ins",
+  "normalization": "strip exact invalid trailing data: [DONE] marker for BOTH agents",
+  "endpoint_scheme": "http",
+  "steps": 20,
+  "deadline_seconds": 180,
+  "repetitions": 3,
+  "metadata": {
+    "macron_commit": "41b61e346f732140286ea8b680a5c3a7f12f599a",
+    "macron_binary_sha256": "f0069c27110338167a80a30e050cec463befb36c4753f1723d8c6120480ce7b1",
+    "hermes_commit": "e075441241b8d626789b4aae0e376f86eabf824d",
+    "started_at_utc": "2026-11-08T13:55:38.429836+00:00",
+    "server_reported_model": "mimo-v2.6-flash",
+    "probe_calls_excluded": 2
+  },
+  "results": [
+    {
+      "repetition": 1,
+      "artifacts": {
+        "solution.py": "\"\"\"Interval merging.\"\"\"\n\n\ndef merge_intervals(intervals):\n    \"\"\"Merge overlapping or touching integer intervals.\n\n    intervals: iterable of [start, end] pairs (integers).\n    Returns new sorted list of merged [start, end] pairs.\n    Input is never mutated. Reversed pair (start > end) raises ValueError.\n    \"\"\"\n    pairs = []\n    for pair in intervals:\n        try:\n            start, end = pair\n        except (TypeError, ValueError):\n            raise ValueError(\"each interval must be a pair of two values\") from None\n        if isinstance(start, bool) or isinstance(end, bool) or \\\n                not isinstance(start, int) or not isinstance(end, int):\n            raise ValueError(\"interval endpoints must be integers\")\n        if start > end:\n            raise ValueError(\"reversed interval: start %r > end %r\" % (start, end))\n        pairs.append((start, end))\n\n    if not pairs:\n        return []\n\n    pairs.sort()\n    merged = [list(pairs[0])]\n    for start, end in pairs[1:]:\n        last = merged[-1]\n        if start <= last[1] + 1:  # overlap or touching (endpoints adjacent)\n            if end > last[1]:\n                last[1] = end\n        else:\n            merged.append([start, end])\n    return merged\n",
+        "test_solution.py": "import copy\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 5]]), [[1, 5]])\n\n    def test_overlap(self):\n        self.assertEqual(merge_intervals([[1, 5], [3, 8]]), [[1, 8]])\n\n    def test_touching(self):\n        # [1,5] and [6,9] touch (5+1 == 6) -> merged\n        self.assertEqual(merge_intervals([[1, 5], [6, 9]]), [[1, 9]])\n\n    def test_touching_reverse_order_input(self):\n        self.assertEqual(merge_intervals([[6, 9], [1, 5]]), [[1, 9]])\n\n    def test_gap_not_merged(self):\n        self.assertEqual(merge_intervals([[1, 5], [7, 9]]), [[1, 5], [7, 9]])\n\n    def test_unsorted_input(self):\n        self.assertEqual(\n            merge_intervals([[10, 12], [1, 3], [2, 6]]),\n            [[1, 6], [10, 12]],\n        )\n\n    def test_nested(self):\n        self.assertEqual(merge_intervals([[1, 10], [2, 3]]), [[1, 10]])\n\n    def test_duplicates(self):\n        self.assertEqual(merge_intervals([[1, 4], [1, 4]]), [[1, 4]])\n\n    def test_single_point_intervals_touching(self):\n        self.assertEqual(merge_intervals([[1, 1], [2, 2], [3, 3]]), [[1, 3]])\n\n    def test_negatives(self):\n        self.assertEqual(merge_intervals([[-10, -5], [-5, 0], [3, 4]]), [[-10, 0], [3, 4]])\n\n    def test_chain_merge(self):\n        self.assertEqual(\n            merge_intervals([[1, 2], [3, 4], [5, 6], [20, 21]]),\n            [[1, 6], [20, 21]],\n        )\n\n    def test_input_not_mutated(self):\n        data = [[5, 8], [1, 3], [2, 6]]\n        snapshot = copy.deepcopy(data)\n        merge_intervals(data)\n        self.assertEqual(data, snapshot)\n\n    def test_result_is_new_object(self):\n        data = [[1, 2]]\n        out = merge_intervals(data)\n        self.assertIsNot(out, data)\n        self.assertIsNot(out[0], data[0])\n        out[0][0] = 999\n        self.assertEqual(data, [[1, 2]])\n\n    def test_accepts_tuples(self):\n        self.assertEqual(merge_intervals([(1, 5), (6, 9)]), [[1, 9]])\n\n    def test_reversed_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[5, 1]])\n\n    def test_reversed_raises_among_valid(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [9, 3]])\n\n    def test_bad_shape_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2, 3]])\n        with self.assertRaises(ValueError):\n            merge_intervals([[1]])\n\n    def test_non_integer_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1.5, 2.0]])\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, \"2\"]])\n\n    def test_equal_endpoints_merge(self):\n        self.assertEqual(merge_intervals([[0, 0], [0, 0]]), [[0, 0]])\n\n    def test_large_values(self):\n        self.assertEqual(\n            merge_intervals([[10**18, 10**18 + 5], [10**18 + 6, 10**18 + 9]]),\n            [[10**18, 10**18 + 9]],\n        )\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n"
+      },
+      "agent": "macron",
+      "task": "python",
+      "pass": false,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 37.763,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 6.085,
+          "usage": {
+            "prompt_tokens": 6385,
+            "completion_tokens": 92,
+            "total_tokens": 6477,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 19753
+        },
+        {
+          "status": 200,
+          "seconds": 11.16,
+          "usage": {
+            "prompt_tokens": 6549,
+            "completion_tokens": 1405,
+            "total_tokens": 7954,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20335
+        },
+        {
+          "status": 200,
+          "seconds": 7.272,
+          "usage": {
+            "prompt_tokens": 8037,
+            "completion_tokens": 76,
+            "total_tokens": 8113,
+            "prompt_tokens_details": {
+              "cached_tokens": 4480
+            }
+          },
+          "request_bytes": 25893
+        },
+        {
+          "status": 200,
+          "seconds": 5.377,
+          "usage": {
+            "prompt_tokens": 8673,
+            "completion_tokens": 277,
+            "total_tokens": 8950,
+            "prompt_tokens_details": {
+              "cached_tokens": 6016
+            }
+          },
+          "request_bytes": 28285
+        },
+        {
+          "status": 200,
+          "seconds": 7.361,
+          "usage": {
+            "prompt_tokens": 9032,
+            "completion_tokens": 192,
+            "total_tokens": 9224,
+            "prompt_tokens_details": {
+              "cached_tokens": 6656
+            }
+          },
+          "request_bytes": 29639
+        }
+      ],
+      "stdout_tail": "Done.\n\n`/tmp/agent-azm-bench-opi2jf0q/task/solution.py` — merge_intervals:\n- sort copy of pairs, no input mutation\n- merge when `start <= last_end + 1` → covers overlap + touching\n- reversed pair (`start > end`) → ValueError; bad shape/non-int also ValueError\n- returns fresh list of lists\n\n`/tmp/agent-azm-bench-opi2jf0q/task/test_solution.py` — 21 unittest cases: empty, single, overlap, touching, gap, unsorted, nested, duplicates, negatives, chain, mutation-freedom, new-object, tuples, reversed, bad shape, non-int, large ints.\n\nResults: `Ran 21 tests ... OK`. Extra brute-force property check vs set-cover reference: 2000 random cases, no mismatch.\n",
+      "stderr_tail": "2026/11/08 13:55:38 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-opi2jf0q/home/workspaces/exec-c403673b40bd4f8882e40a7034ab7a89\n"
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "solution.py": "\"\"\"Merge integer intervals: overlaps and touching endpoints.\"\"\"\n\nfrom __future__ import annotations\n\nfrom typing import Iterable, List, Sequence, Tuple\n\n\ndef merge_intervals(intervals: Iterable[Sequence[int]]) -> List[List[int]]:\n    \"\"\"Merge overlapping or touching integer intervals.\n\n    Args:\n        intervals: iterable of [start, end] integer pairs.\n\n    Returns:\n        New list of [start, end] pairs, sorted by start, merged where\n        intervals overlap or touch (end == next start). Input untouched.\n\n    Raises:\n        TypeError: an item is not a pair of integers.\n        ValueError: a pair is reversed (start > end).\n    \"\"\"\n    normalized: List[Tuple[int, int]] = []\n    for item in intervals:\n        try:\n            start, end = item  # type: ignore[misc]\n        except (TypeError, ValueError):\n            raise TypeError(f\"interval must be a pair of integers: {item!r}\") from None\n        if isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, int) or not isinstance(end, int):\n            raise TypeError(f\"interval must be a pair of integers: {item!r}\")\n        if start > end:\n            raise ValueError(f\"reversed interval: start {start} > end {end}\")\n        normalized.append((start, end))\n\n    normalized.sort()\n\n    merged: List[List[int]] = []\n    for start, end in normalized:\n        if merged and start <= merged[-1][1]:\n            # overlap or touch: extend current interval\n            if end > merged[-1][1]:\n                merged[-1][1] = end\n        else:\n            merged.append([start, end])\n    return merged",
+        "test_solution.py": "\"\"\"Tests for merge_intervals.\"\"\"\n\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 3]]), [[1, 3]])\n        self.assertEqual(merge_intervals([(5, 5)]), [[5, 5]])\n\n    def test_overlap(self):\n        self.assertEqual(merge_intervals([[1, 4], [2, 6]]), [[1, 6]])\n\n    def test_touching_endpoints(self):\n        self.assertEqual(merge_intervals([[1, 2], [2, 3]]), [[1, 3]])\n        self.assertEqual(merge_intervals([[1, 3], [3, 5], [5, 7]]), [[1, 7]])\n\n    def test_unsorted_input_sorted_output(self):\n        self.assertEqual(\n            merge_intervals([[5, 7], [1, 3], [2, 4]]),\n            [[1, 4], [5, 7]],\n        )\n\n    def test_disjoint(self):\n        self.assertEqual(merge_intervals([[1, 2], [4, 5]]), [[1, 2], [4, 5]])\n\n    def test_contained(self):\n        self.assertEqual(merge_intervals([[1, 10], [3, 4], [5, 6]]), [[1, 10]])\n        self.assertEqual(merge_intervals([[1, 2], [1, 2]]), [[1, 2]])\n\n    def test_negatives_and_zero(self):\n        self.assertEqual(merge_intervals([[-3, -1], [-1, 0], [0, 2]]), [[-3, 2]])\n\n    def test_chained_merge_across_sorted_order(self):\n        self.assertEqual(\n            merge_intervals([[10, 12], [1, 5], [4, 8], [12, 13]]),\n            [[1, 8], [10, 13]],\n        )\n\n    def test_does_not_mutate_input(self):\n        data = [[5, 7], [1, 3], [2, 4]]\n        snapshot = [list(p) for p in data]\n        merge_intervals(data)\n        self.assertEqual(data, snapshot)\n\n    def test_returns_new_object(self):\n        src = [[1, 2]]\n        out = merge_intervals(src)\n        self.assertIsNot(out, src)\n        self.assertIsNot(out[0], src[0])\n        out[0][0] = 99\n        self.assertEqual(src, [[1, 2]])\n\n    def test_reversed_pair_raises_value_error(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[4, 1]])\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [9, 3], [4, 5]])\n\n    def test_equal_endpoints_not_reversed(self):\n        self.assertEqual(merge_intervals([[3, 3]]), [[3, 3]])\n\n    def test_tuple_input_accepted(self):\n        self.assertEqual(merge_intervals([(1, 3), (3, 4)]), [[1, 4]])\n\n    def test_non_pair_raises_type_error(self):\n        with self.assertRaises(TypeError):\n            merge_intervals([[1, 2, 3]])\n        with self.assertRaises(TypeError):\n            merge_intervals([1])\n\n    def test_non_integer_raises_type_error(self):\n        with self.assertRaises(TypeError):\n            merge_intervals([[\"a\", \"b\"]])\n        with self.assertRaises(TypeError):\n            merge_intervals([[1.5, 2.5]])\n        with self.assertRaises(TypeError):\n            merge_intervals([[True, False]])\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)"
+      },
+      "agent": "hermes",
+      "task": "python",
+      "pass": false,
+      "exit_code": -9,
+      "timeout": true,
+      "wall_seconds": 200.046,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.126,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 19.193,
+          "usage": {
+            "prompt_tokens": 4598,
+            "completion_tokens": 49,
+            "total_tokens": 4647,
+            "prompt_tokens_details": {
+              "cached_tokens": 608
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 608
+          },
+          "request_bytes": 17966
+        },
+        {
+          "status": 502,
+          "seconds": 100.01,
+          "usage": {},
+          "request_bytes": 18580
+        },
+        {
+          "status": 200,
+          "seconds": 49.917,
+          "usage": {
+            "prompt_tokens": 4720,
+            "completion_tokens": 1463,
+            "total_tokens": 6183,
+            "prompt_tokens_details": {
+              "cached_tokens": 4704
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4704
+          },
+          "request_bytes": 18580
+        },
+        {
+          "status": 200,
+          "seconds": 14.08,
+          "usage": {
+            "prompt_tokens": 6402,
+            "completion_tokens": 65,
+            "total_tokens": 6467,
+            "prompt_tokens_details": {
+              "cached_tokens": 4704
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4704
+          },
+          "request_bytes": 27072
+        },
+        {
+          "status": 200,
+          "seconds": 23.286,
+          "usage": {
+            "prompt_tokens": 6851,
+            "completion_tokens": 223,
+            "total_tokens": 7074,
+            "prompt_tokens_details": {
+              "cached_tokens": 6400
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6400
+          },
+          "request_bytes": 29260
+        }
+      ],
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "ledger.py": "\"\"\"Exact decimal arithmetic over a sequence of ledger rows.\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"total\"]\n\n\ndef _to_decimal(row):\n    \"\"\"Convert one row to a finite Decimal, or None for blank rows.\"\"\"\n    if isinstance(row, str):\n        text = row.strip()\n        if not text:\n            return None\n        try:\n            value = Decimal(text)\n        except (InvalidOperation, ValueError) as exc:\n            raise ValueError(\"malformed numeric value: {!r}\".format(row)) from exc\n    elif isinstance(row, bool):\n        raise ValueError(\"malformed numeric value: {!r}\".format(row))\n    elif isinstance(row, (Decimal, int)):\n        value = Decimal(row)\n    elif isinstance(row, float):\n        value = Decimal(repr(row))\n    else:\n        raise ValueError(\"malformed numeric value: {!r}\".format(row))\n\n    if not value.is_finite():\n        raise ValueError(\"malformed numeric value: {!r}\".format(row))\n    return value\n\n\ndef total(rows):\n    \"\"\"Return the exact sum of `rows` as a Decimal.\n\n    Signed amounts (\"+1.50\", \"-2.00\") are accepted, blank/whitespace-only\n    rows are ignored, and malformed numeric values raise ValueError.\n    \"\"\"\n    result = Decimal(\"0\")\n    for row in rows:\n        value = _to_decimal(row)\n        if value is not None:\n            result += value\n    return result",
+        "test_ledger.py": "import unittest\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\nclass TotalTests(unittest.TestCase):\n    def test_exact_decimal_sum(self):\n        # float arithmetic would give 0.30000000000000004\n        self.assertEqual(total([\"0.1\", \"0.2\"]), Decimal(\"0.3\"))\n        self.assertIsInstance(total([\"1.00\"]), Decimal)\n\n    def test_returns_decimal_for_empty_input(self):\n        self.assertEqual(total([]), Decimal(\"0\"))\n\n    def test_signed_amounts(self):\n        self.assertEqual(total([\"+1.50\", \"-0.25\"]), Decimal(\"1.25\"))\n        self.assertEqual(total([\"-1\", \"-2\", \"+3\"]), Decimal(\"0\"))\n\n    def test_blank_lines_ignored(self):\n        self.assertEqual(total([\"\", \"   \", \"\\n\", \"1.00\", \"\\t\"]), Decimal(\"1.00\"))\n        self.assertEqual(total([\"  \", \"  \"]), Decimal(\"0\"))\n\n    def test_malformed_raises_value_error(self):\n        for bad in [\"abc\", \"1.2.3\", \"1,000\", \"$5\", \"NaN\", \"Infinity\", None, 1.5 + 2j]:\n            with self.subTest(row=bad):\n                with self.assertRaises(ValueError):\n                    total([bad])\n\n    def test_malformed_raises_even_with_valid_rows(self):\n        with self.assertRaises(ValueError):\n            total([\"1.00\", \"oops\", \"2.00\"])\n\n    def test_native_numbers_accepted(self):\n        self.assertEqual(total([1, Decimal(\"0.5\"), 2.5]), Decimal(\"4.0\"))\n        # ints stay exact\n        self.assertEqual(total([10 ** 30, 1]), Decimal(10 ** 30) + 1)\n\n    def test_name_preserved(self):\n        self.assertTrue(callable(total))\n        self.assertEqual(total.__name__, \"total\")\n\n\nif __name__ == \"__main__\":\n    unittest.main()"
+      },
+      "agent": "hermes",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 147.101,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.278,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 21.163,
+          "usage": {
+            "prompt_tokens": 4585,
+            "completion_tokens": 54,
+            "total_tokens": 4639,
+            "prompt_tokens_details": {
+              "cached_tokens": 3232
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3232
+          },
+          "request_bytes": 17938
+        },
+        {
+          "status": 200,
+          "seconds": 19.508,
+          "usage": {
+            "prompt_tokens": 4674,
+            "completion_tokens": 43,
+            "total_tokens": 4717,
+            "prompt_tokens_details": {
+              "cached_tokens": 4576
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4576
+          },
+          "request_bytes": 18489
+        },
+        {
+          "status": 200,
+          "seconds": 65.521,
+          "usage": {
+            "prompt_tokens": 4778,
+            "completion_tokens": 1367,
+            "total_tokens": 6145,
+            "prompt_tokens_details": {
+              "cached_tokens": 4672
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4672
+          },
+          "request_bytes": 19117
+        },
+        {
+          "status": 200,
+          "seconds": 15.611,
+          "usage": {
+            "prompt_tokens": 6345,
+            "completion_tokens": 484,
+            "total_tokens": 6829,
+            "prompt_tokens_details": {
+              "cached_tokens": 4768
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4768
+          },
+          "request_bytes": 30638
+        },
+        {
+          "status": 200,
+          "seconds": 9.276,
+          "usage": {
+            "prompt_tokens": 6909,
+            "completion_tokens": 119,
+            "total_tokens": 7028,
+            "prompt_tokens_details": {
+              "cached_tokens": 6336
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6336
+          },
+          "request_bytes": 33350
+        },
+        {
+          "status": 200,
+          "seconds": 10.924,
+          "usage": {
+            "prompt_tokens": 7245,
+            "completion_tokens": 338,
+            "total_tokens": 7583,
+            "prompt_tokens_details": {
+              "cached_tokens": 6880
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6880
+          },
+          "request_bytes": 35214
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"Done. `/tmp/agent-azm-bench-mu8cs4ns/task/ledger.py` rewritten, `test_ledger.py` added.\\n\\nChange: `total(rows)` now folds rows into `Decimal(\\\"0\\\")` instead of `sum(float...)`.\\n- exact: `total([\\\"0.1\\\",\\\"0.2\\\"])` \\u2192 `Decimal(\\\"0.3\\\")`, not `0.30000000000000004`\\n- signed: `\\\"+1.50\\\"`, `\\\"-0.25\\\"` parsed by `Decimal` directly\\n- blank rows (`\\\"\\\"`, whitespace, `\\\"\\\\n\\\"`) skipped\\n- malformed (`\\\"abc\\\"`, `\\\"1.2.3\\\"`, `\\\"1,000\\\"`, `\\\"$5\\\"`, `NaN`/`Infinity`, non-numeric types) \\u2192 `ValueError`; `NaN`/`inf` rejected via `is_finite()` check so result can never be non-finite\\n- native `int`/`Decimal`/`float` accepted; `float` goes through `repr()` for shortest round-trip\\n- public name `total` unchanged (`__all__ = [\\\"total\\\"]`)\\n\\nVerification: `python3 -m unittest -v` \\u2192 8 tests, all pass, exit 0. No pre-existing tests or test runner in the folder (only `ledger.py`), and `pytest` isn't installed, so tests use stdlib `unittest`.\", \"tokens\": 36941}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "ledger.py": "\"\"\"Ledger totals with exact decimal arithmetic.\n\nPublic API: ``total(rows)`` -> Decimal\n\"\"\"\n\nfrom __future__ import annotations\n\nimport math\nimport re\nfrom decimal import Decimal, InvalidOperation\nfrom typing import Iterable, Union\n\nNumber = Union[str, int, float, Decimal]\n\n# Sign, digits with optional fraction, optional exponent. No underscores,\n# no internal whitespace, no NaN/Infinity.\n# re.ASCII: only 0-9 count as digits (rejects e.g. Arabic-Indic \"٣\")\n_NUMBER_RE = re.compile(r\"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?\", re.ASCII)\n\ndef _parse_amount(value: Number):\n    \"\"\"Return a Decimal for ``value``, or None when it is a blank line.\n\n    Raises ValueError for anything that is not a well-formed finite number.\n    \"\"\"\n    if isinstance(value, str):\n        text = value.strip()\n        if not text:\n            return None  # blank line -> ignored\n        if not _NUMBER_RE.fullmatch(text):\n            raise ValueError(f\"malformed numeric value: {value!r}\")\n        try:\n            amount = Decimal(text)\n        except InvalidOperation:\n            raise ValueError(f\"malformed numeric value: {value!r}\") from None\n    elif isinstance(value, Decimal):\n        amount = value\n    elif isinstance(value, int):  # bool included: Decimal(True) == 1\n        amount = Decimal(value)\n    elif isinstance(value, float):\n        if not math.isfinite(value):\n            raise ValueError(f\"malformed numeric value: {value!r}\")\n        amount = Decimal(repr(value))  # repr keeps the shortest exact decimal\n    else:\n        raise ValueError(f\"malformed numeric value: {value!r}\")\n\n    if not amount.is_finite():\n        raise ValueError(f\"malformed numeric value: {value!r}\")\n    return amount\n\n\ndef total(rows: Iterable[Number]) -> Decimal:\n    \"\"\"Sum signed decimal amounts exactly.\n\n    - ``rows``: iterable of amount strings/numbers, or one newline-separated\n      string. Entries may carry a leading ``+`` or ``-``.\n    - Blank entries (empty or whitespace-only) are skipped.\n    - Malformed values raise ValueError.\n    - Result is an exact Decimal (Decimal(\"0\") for no amounts).\n    \"\"\"\n    if isinstance(rows, (str, bytes)):\n        source = rows.decode() if isinstance(rows, bytes) else rows\n        rows = source.splitlines()\n\n    result = Decimal(0)\n    for value in rows:\n        amount = _parse_amount(value)\n        if amount is None:\n            continue\n        result += amount\n    return result\n\n\nif __name__ == \"__main__\":  # tiny smoke check\n    print(total([\"10.10\", \"-0.10\", \"\", \"   \", Decimal(\"2.5\")]))\n",
+        "test_ledger.py": "import unittest\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\nclass TotalTests(unittest.TestCase):\n    def test_exact_decimal_no_binary_float_error(self):\n        # 0.1 + 0.2 must be exactly 0.3, not 0.30000000000000004\n        self.assertEqual(total([\"0.1\", \"0.2\"]), Decimal(\"0.3\"))\n        self.assertNotEqual(total([\"0.1\", \"0.2\"]), Decimal(\"0.30000000000000004\"))\n        self.assertEqual(total([\"0.1\"] * 10), Decimal(\"1.0\"))\n\n    def test_large_amounts_are_exact(self):\n        self.assertEqual(total([\"999999999999999999.99\", \"0.01\"]),\n                         Decimal(\"1000000000000000000.00\"))\n\n    def test_signed_amounts(self):\n        self.assertEqual(total([\"+5.50\", \"-2.25\"]), Decimal(\"3.25\"))\n        self.assertEqual(total([\"-10\", \"-0.5\", \"0.5\"]), Decimal(\"-10\"))\n        self.assertEqual(total([\"-1.75\"]), Decimal(\"-1.75\"))\n\n    def test_blank_lines_ignored(self):\n        self.assertEqual(total([\"1\", \"\", \"   \", \"\\t\", \"\\n\", \"2\"]), Decimal(\"3\"))\n        self.assertEqual(total([]), Decimal(\"0\"))\n        self.assertEqual(total([\"\", \" \", \"\\t\"]), Decimal(\"0\"))\n\n    def test_malformed_raises_value_error(self):\n        for bad in [\"abc\", \"1,000\", \"0x10\", \"1.2.3\", \"--5\", \"5-\", \"12abc\",\n                    \"nan\", \"NaN\", \"Infinity\", \"-inf\", \"1_000\", \" 1 2 \", \"$5\",\n                    \"1e\", \"..\", \"٣\", \"\"]:\n            if bad == \"\":\n                continue\n            with self.subTest(bad=bad):\n                with self.assertRaises(ValueError):\n                    total([bad])\n\n    def test_non_numeric_type_raises(self):\n        for bad in [None, [1], {\"a\": 1}, object()]:\n            with self.subTest(bad=bad):\n                with self.assertRaises(ValueError):\n                    total([bad])\n\n    def test_accepts_numbers_and_decimal(self):\n        self.assertEqual(total([1, -2, 0.5, Decimal(\"0.25\")]), Decimal(\"-0.25\"))\n        self.assertEqual(total([1, -1]), Decimal(\"0\"))\n\n    def test_newline_separated_string(self):\n        self.assertEqual(total(\"10\\n\\n-2.5\\n  \\n7.5\\n\"), Decimal(\"15\"))\n\n    def test_return_type_is_decimal(self):\n        self.assertIsInstance(total([\"1\", \"2\"]), Decimal)\n        self.assertEqual(total([1, 2]), 3)\n\n    def test_float_uses_shortest_repr(self):\n        self.assertEqual(total([0.1, 0.2]), Decimal(\"0.3\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n"
+      },
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 77.458,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.962,
+          "usage": {
+            "prompt_tokens": 6375,
+            "completion_tokens": 143,
+            "total_tokens": 6518,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 19725
+        },
+        {
+          "status": 200,
+          "seconds": 19.372,
+          "usage": {
+            "prompt_tokens": 6665,
+            "completion_tokens": 2738,
+            "total_tokens": 9403,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20789
+        },
+        {
+          "status": 200,
+          "seconds": 7.593,
+          "usage": {
+            "prompt_tokens": 8167,
+            "completion_tokens": 191,
+            "total_tokens": 8358,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 27272
+        },
+        {
+          "status": 200,
+          "seconds": 8.129,
+          "usage": {
+            "prompt_tokens": 9163,
+            "completion_tokens": 288,
+            "total_tokens": 9451,
+            "prompt_tokens_details": {
+              "cached_tokens": 6144
+            }
+          },
+          "request_bytes": 30838
+        },
+        {
+          "status": 200,
+          "seconds": 3.877,
+          "usage": {
+            "prompt_tokens": 9459,
+            "completion_tokens": 212,
+            "total_tokens": 9671,
+            "prompt_tokens_details": {
+              "cached_tokens": 7040
+            }
+          },
+          "request_bytes": 31948
+        },
+        {
+          "status": 200,
+          "seconds": 4.827,
+          "usage": {
+            "prompt_tokens": 9666,
+            "completion_tokens": 233,
+            "total_tokens": 9899,
+            "prompt_tokens_details": {
+              "cached_tokens": 7424
+            }
+          },
+          "request_bytes": 32626
+        },
+        {
+          "status": 200,
+          "seconds": 6.226,
+          "usage": {
+            "prompt_tokens": 9962,
+            "completion_tokens": 666,
+            "total_tokens": 10628,
+            "prompt_tokens_details": {
+              "cached_tokens": 7552
+            }
+          },
+          "request_bytes": 33582
+        },
+        {
+          "status": 200,
+          "seconds": 7.896,
+          "usage": {
+            "prompt_tokens": 10487,
+            "completion_tokens": 373,
+            "total_tokens": 10860,
+            "prompt_tokens_details": {
+              "cached_tokens": 7936
+            }
+          },
+          "request_bytes": 35498
+        },
+        {
+          "status": 200,
+          "seconds": 5.7,
+          "usage": {
+            "prompt_tokens": 11196,
+            "completion_tokens": 255,
+            "total_tokens": 11451,
+            "prompt_tokens_details": {
+              "cached_tokens": 8448
+            }
+          },
+          "request_bytes": 37905
+        },
+        {
+          "status": 200,
+          "seconds": 10.013,
+          "usage": {
+            "prompt_tokens": 11634,
+            "completion_tokens": 307,
+            "total_tokens": 11941,
+            "prompt_tokens_details": {
+              "cached_tokens": 9088
+            }
+          },
+          "request_bytes": 39293
+        }
+      ],
+      "stdout_tail": "Fixed. `total(rows)` now exact Decimal sum.\n\nChanges in `/tmp/agent-azm-bench-x9wcu0ob/task/ledger.py`:\n- `Decimal` arithmetic instead of `float` — `total([\"0.1\",\"0.2\"]) == Decimal(\"0.3\")` exactly.\n- Signed amounts: leading `+`/`-` accepted (`[\"+5.50\",\"-2.25\"] -> 3.25`).\n- Blank/whitespace-only entries skipped (empty input, spaces, tabs, blank lines).\n- Malformed values raise `ValueError`: `abc`, `1,000`, `nan`, `Infinity`, `--5`, `1_000`, `$5`, Arabic-Indic `٣`, empty exponent `1e`, `None`, lists, dicts.\n- Guards: `re.ASCII` so only 0-9 are digits; non-finite floats rejected; plain Python floats go through `repr()` (shortest exact decimal).\n- Public name `total` kept, returns `Decimal` (also returns Decimal for string/number rows).\n\nTests: `test_ledger.py` — 10 tests, all pass.\n\n```\nRan 10 tests in 0.001s\n\nOK\n```\n\nIterating a newline-separated string also works: `total(\"10.10\\n-0.10\\n\\n2.5\\n\")` → `12.50`.\n",
+      "stderr_tail": "2026/11/08 14:02:03 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-x9wcu0ob/home/workspaces/exec-b07d518ff6d609a600ce4ea128564798\n"
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}\n"
+      },
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 15.947,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 3.419,
+          "usage": {
+            "prompt_tokens": 6403,
+            "completion_tokens": 70,
+            "total_tokens": 6473,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 20353
+        },
+        {
+          "status": 200,
+          "seconds": 2.994,
+          "usage": {
+            "prompt_tokens": 6620,
+            "completion_tokens": 183,
+            "total_tokens": 6803,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 21065
+        },
+        {
+          "status": 200,
+          "seconds": 3.381,
+          "usage": {
+            "prompt_tokens": 6826,
+            "completion_tokens": 161,
+            "total_tokens": 6987,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 21764
+        },
+        {
+          "status": 200,
+          "seconds": 3.478,
+          "usage": {
+            "prompt_tokens": 6972,
+            "completion_tokens": 160,
+            "total_tokens": 7132,
+            "prompt_tokens_details": {
+              "cached_tokens": 4736
+            }
+          },
+          "request_bytes": 22305
+        },
+        {
+          "status": 200,
+          "seconds": 2.328,
+          "usage": {
+            "prompt_tokens": 7328,
+            "completion_tokens": 141,
+            "total_tokens": 7469,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            }
+          },
+          "request_bytes": 23553
+        }
+      ],
+      "stdout_tail": "Done. `/tmp/agent-azm-bench-jvhuw4_n/task/result.json`:\n\n```json\n{\"Tehran\": 150, \"Mashhad\": 260, \"Shiraz\": 100}\n```\n\n- Tehran: 2×150 + (-1)×150 = 150 (مرجوعی حساب شد)\n- Mashhad: 3×80 + 1×20 = 260\n- Shiraz: 4×25 = 100\n\nVerified: recomputed with Python — match true. sales.csv untouched (md5 `031da3268696df142450167eb9e01401` before and after).\n",
+      "stderr_tail": "2026/11/08 14:03:20 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-jvhuw4_n/home/workspaces/exec-e782846a4e0c02903234b2794970404c\n"
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}\n",
+        "sum_sales.py": "import csv, json, hashlib, collections\n\nSRC = \"sales.csv\"\nOUT = \"result.json\"\n\nbefore = hashlib.sha256(open(SRC, \"rb\").read()).hexdigest()\n\ntotals = collections.OrderedDict()\nwith open(SRC, newline=\"\", encoding=\"utf-8\") as f:\n    for row in csv.DictReader(f):\n        city = row[\"city\"].strip()\n        amount = int(row[\"qty\"]) * int(row[\"price\"])  # negative qty = return\n        totals[city] = totals.get(city, 0) + amount\n\ntotals = {k: int(v) for k, v in totals.items()}\nwith open(OUT, \"w\", encoding=\"utf-8\") as f:\n    json.dump(totals, f, indent=2, ensure_ascii=False)\n    f.write(\"\\n\")\n\nafter = hashlib.sha256(open(SRC, \"rb\").read()).hexdigest()\nassert before == after, \"source file changed!\"\n\n# verify: re-read output and recompute independently\ncheck = json.load(open(OUT, encoding=\"utf-8\"))\nassert check == totals\nassert all(isinstance(v, int) and not isinstance(v, bool) for v in check.values())\nprint(\"totals:\", check)\nprint(\"source sha256 unchanged:\", before)"
+      },
+      "agent": "hermes",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 49.991,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.127,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 8.957,
+          "usage": {
+            "prompt_tokens": 4656,
+            "completion_tokens": 89,
+            "total_tokens": 4745,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 18566
+        },
+        {
+          "status": 200,
+          "seconds": 17.416,
+          "usage": {
+            "prompt_tokens": 4883,
+            "completion_tokens": 396,
+            "total_tokens": 5279,
+            "prompt_tokens_details": {
+              "cached_tokens": 4640
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4640
+          },
+          "request_bytes": 19621
+        },
+        {
+          "status": 200,
+          "seconds": 6.199,
+          "usage": {
+            "prompt_tokens": 5361,
+            "completion_tokens": 69,
+            "total_tokens": 5430,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4864
+          },
+          "request_bytes": 21722
+        },
+        {
+          "status": 200,
+          "seconds": 13.992,
+          "usage": {
+            "prompt_tokens": 5658,
+            "completion_tokens": 248,
+            "total_tokens": 5906,
+            "prompt_tokens_details": {
+              "cached_tokens": 5344
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5344
+          },
+          "request_bytes": 22651
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"\\u0646\\u062a\\u06cc\\u062c\\u0647 \\u062f\\u0631 `result.json`:\\n\\n```json\\n{\\n  \\\"Tehran\\\": 150,\\n  \\\"Mashhad\\\": 260,\\n  \\\"Shiraz\\\": 100\\n}\\n```\\n\\n\\u0645\\u062d\\u0627\\u0633\\u0628\\u0647: \\u0647\\u0631 \\u0631\\u062f\\u06cc\\u0641 `qty * price`\\u060c \\u0631\\u062f\\u06cc\\u0641 \\u0645\\u0631\\u062c\\u0648\\u0639\\u06cc `Tehran,-1,150` = \\u2212\\u06f1\\u06f5\\u06f0 \\u06a9\\u0645 \\u0634\\u062f.\\n- Tehran: 300 \\u2212 150 = 150\\n- Mashhad: 240 + 20 = 260\\n- Shiraz: 100\\n\\n\\u0628\\u0631\\u0631\\u0633\\u06cc: \\u0627\\u0633\\u06a9\\u0631\\u06cc\\u067e\\u062a `sum_sales.py` \\u062e\\u0631\\u0648\\u062c\\u06cc \\u0631\\u0627 \\u062f\\u0648\\u0628\\u0627\\u0631\\u0647 \\u062e\\u0648\\u0627\\u0646\\u062f\\u060c \\u0646\\u0648\\u0639 \\u0647\\u0645\\u0647 \\u0645\\u0642\\u0627\\u062f\\u06cc\\u0631 \\u0631\\u0627 `int` \\u0686\\u06a9 \\u06a9\\u0631\\u062f\\u060c \\u0648 sha256 \\u0641\\u0627\\u06cc\\u0644 `sales.csv` \\u0642\\u0628\\u0644/\\u0628\\u0639\\u062f \\u0627\\u062c\\u0631\\u0627 \\u06cc\\u06a9\\u06cc \\u0628\\u0648\\u062f (`268d25cc\\u2026696a5`) \\u2014 \\u062f\\u0627\\u062f\\u0647 \\u0627\\u0635\\u0644\\u06cc \\u062f\\u0633\\u062a \\u0646\\u062e\\u0648\\u0631\\u062f\\u0647.\", \"tokens\": 21360}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "solution.py": "\"\"\"Interval merging: overlaps and touching endpoints merged, output sorted.\"\"\"\n\nfrom typing import Iterable, List, Sequence, Tuple\n\n__all__ = [\"merge_intervals\"]\n\n\ndef merge_intervals(intervals: Iterable[Sequence[int]]) -> List[Tuple[int, int]]:\n    \"\"\"Merge integer [start, end] pairs.\n\n    Two intervals merge when they overlap or when their endpoints touch\n    (``a.end == b.start``), i.e. whenever ``b.start <= a.end``.\n\n    Raises:\n        ValueError: if any pair is reversed (start > end).\n\n    The input is never mutated; the result is a sorted list of tuples.\n    \"\"\"\n    normalized: List[Tuple[int, int]] = []\n    for interval in intervals:\n        if len(interval) != 2:\n            raise ValueError(f\"interval must have exactly 2 elements: {interval!r}\")\n        start, end = interval[0], interval[1]\n        if start > end:\n            raise ValueError(f\"reversed interval: {interval!r}\")\n        normalized.append((start, end))\n\n    normalized.sort()\n\n    merged: List[List[int]] = []\n    for start, end in normalized:\n        if merged and start <= merged[-1][1]:\n            if end > merged[-1][1]:\n                merged[-1][1] = end\n        else:\n            merged.append([start, end])\n\n    return [(start, end) for start, end in merged]",
+        "test_solution.py": "\"\"\"Tests for solution.merge_intervals. Run: python3 -m unittest -v\"\"\"\n\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass MergeIntervalsTests(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([(1, 2)]), [(1, 2)])\n\n    def test_overlap(self):\n        self.assertEqual(merge_intervals([(1, 3), (2, 6), (8, 10)]),\n                         [(1, 6), (8, 10)])\n\n    def test_touching_endpoints(self):\n        self.assertEqual(merge_intervals([(1, 3), (3, 5)]), [(1, 5)])\n\n    def test_touching_chain(self):\n        self.assertEqual(merge_intervals([(1, 2), (2, 3), (3, 4)]), [(1, 4)])\n\n    def test_adjacent_but_not_touching_stays_split(self):\n        # (1,3) ends at 3, (4,5) starts at 4: endpoints differ, no merge.\n        self.assertEqual(merge_intervals([(1, 3), (4, 5)]), [(1, 3), (4, 5)])\n\n    def test_sorts_output(self):\n        self.assertEqual(merge_intervals([(5, 6), (1, 2)]), [(1, 2), (5, 6)])\n\n    def test_unsorted_input_overlap(self):\n        self.assertEqual(merge_intervals([(8, 10), (1, 3), (2, 6)]),\n                         [(1, 6), (8, 10)])\n\n    def test_nested_intervals(self):\n        self.assertEqual(merge_intervals([(1, 10), (2, 3), (4, 5)]), [(1, 10)])\n\n    def test_contained_after_merge(self):\n        self.assertEqual(merge_intervals([(1, 2), (3, 4), (2, 3)]), [(1, 4)])\n\n    def test_negative_and_zero(self):\n        self.assertEqual(merge_intervals([(-5, -1), (-2, 0), (0, 3)]),\n                         [(-5, 3)])\n\n    def test_point_intervals(self):\n        self.assertEqual(merge_intervals([(1, 1), (1, 2), (3, 3)]),\n                         [(1, 2), (3, 3)])\n\n    def test_does_not_mutate_input(self):\n        data = [(5, 6), (1, 3), (3, 4)]\n        snapshot = list(data)\n        merge_intervals(data)\n        self.assertEqual(data, snapshot)\n\n    def test_tuple_output_not_aliases_input(self):\n        result = merge_intervals([(1, 2)])\n        self.assertIsInstance(result[0], tuple)\n\n    def test_reversed_pair_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([(3, 1)])\n\n    def test_reversed_pair_raises_even_alone(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([(0, -1)])\n\n    def test_reversed_pair_raises_inside_valid_list(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([(1, 2), (5, 4), (6, 7)])\n\n    def test_accepts_lists_and_tuples(self):\n        self.assertEqual(merge_intervals([[1, 3], (3, 5)]), [(1, 5)])\n\n    def test_generator_input(self):\n        self.assertEqual(merge_intervals(iter([(1, 2), (2, 3)])), [(1, 3)])\n\n    def test_duplicates(self):\n        self.assertEqual(merge_intervals([(1, 2), (1, 2)]), [(1, 2)])\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)"
+      },
+      "agent": "hermes",
+      "task": "python",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 126.695,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.13,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 6.547,
+          "usage": {
+            "prompt_tokens": 4594,
+            "completion_tokens": 47,
+            "total_tokens": 4641,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 17966
+        },
+        {
+          "status": 200,
+          "seconds": 18.501,
+          "usage": {
+            "prompt_tokens": 4714,
+            "completion_tokens": 674,
+            "total_tokens": 5388,
+            "prompt_tokens_details": {
+              "cached_tokens": 4576
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4576
+          },
+          "request_bytes": 18568
+        },
+        {
+          "status": 200,
+          "seconds": 42.687,
+          "usage": {
+            "prompt_tokens": 5446,
+            "completion_tokens": 1203,
+            "total_tokens": 6649,
+            "prompt_tokens_details": {
+              "cached_tokens": 4704
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4704
+          },
+          "request_bytes": 24121
+        },
+        {
+          "status": 200,
+          "seconds": 21.874,
+          "usage": {
+            "prompt_tokens": 6802,
+            "completion_tokens": 154,
+            "total_tokens": 6956,
+            "prompt_tokens_details": {
+              "cached_tokens": 5440
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5440
+          },
+          "request_bytes": 29922
+        },
+        {
+          "status": 200,
+          "seconds": 33.364,
+          "usage": {
+            "prompt_tokens": 7422,
+            "completion_tokens": 312,
+            "total_tokens": 7734,
+            "prompt_tokens_details": {
+              "cached_tokens": 6784
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6784
+          },
+          "request_bytes": 33380
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"Done. Files in `/tmp/agent-azm-bench-pyzcj971/task`:\\n\\n- `solution.py` \\u2014 `merge_intervals(intervals)`:\\n  - copies to new list, sorts \\u2192 input untouched, output sorted list of tuples\\n  - merge condition `start <= prev_end` \\u2192 covers overlap and touching endpoints (`a.end == b.start`)\\n  - `start > end` \\u2192 `ValueError` (checked before sorting, so raises even when lone)\\n  - also `ValueError` for pairs not exactly 2 elements; accepts tuples/lists/iterables incl. generators\\n- `test_solution.py` \\u2014 20 unittest cases: empty, single, overlap, touching, touching chain, adjacent non-touching stays split (`(1,3),(4,5)` \\u2192 2 intervals), nesting, negatives, point intervals, duplicates, no-mutation, output type, 3 reversed-pair variants, list/tuple/generator input.\\n\\nRun: `python3 -m unittest -v` \\u2192 `Ran 20 tests ... OK`. No pytest in env, stdlib unittest used.\\n\\nAmbiguity noted: \\\"touching\\\" read as equal endpoints only, not consecutive integers (`(1,3)` + `(4,5)` remain separate). Say if you want consecutive-integers merged too \\u2014 one-line change.\", \"tokens\": 31368}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "solution.py": "\"\"\"Interval merging utilities.\"\"\"\n\nfrom __future__ import annotations\n\n\ndef merge_intervals(intervals):\n    \"\"\"Merge overlapping or touching ``[start, end]`` intervals.\n\n    - Input is an iterable of two-element ``[start, end]`` pairs of integers.\n    - Intervals that overlap or merely touch (``a.end == b.start``) are merged.\n    - The result is sorted by start (then end) and returned as a new list of\n      ``[start, end]`` lists.\n    - The input is never mutated.\n    - A pair with ``start > end`` raises ``ValueError``.\n\n    >>> merge_intervals([[1, 3], [3, 5], [8, 10], [9, 12]])\n    [[1, 5], [8, 12]]\n    >>> merge_intervals([])\n    []\n    \"\"\"\n    if intervals is None:\n        raise ValueError(\"intervals must be an iterable of [start, end] pairs\")\n\n    cleaned = []\n    for interval in intervals:\n        try:\n            start, end = interval\n        except (TypeError, ValueError):\n            raise ValueError(f\"interval must be a pair: {interval!r}\") from None\n        if start > end:\n            raise ValueError(f\"reversed interval: [{start}, {end}]\")\n        cleaned.append((start, end))\n\n    if not cleaned:\n        return []\n\n    cleaned.sort()\n\n    merged = []\n    cur_start, cur_end = cleaned[0]\n    for start, end in cleaned[1:]:\n        if start <= cur_end:  # overlap OR touching\n            if end > cur_end:\n                cur_end = end\n        else:\n            merged.append([cur_start, cur_end])\n            cur_start, cur_end = start, end\n    merged.append([cur_start, cur_end])\n    return merged\n",
+        "test_solution.py": "\"\"\"Tests for solution.merge_intervals.\"\"\"\n\nimport copy\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 4]]), [[1, 4]])\n\n    def test_single_point(self):\n        self.assertEqual(merge_intervals([[5, 5]]), [[5, 5]])\n\n    def test_disjoint_sorted(self):\n        self.assertEqual(merge_intervals([[1, 2], [4, 5]]), [[1, 2], [4, 5]])\n\n    def test_disjoint_unsorted(self):\n        self.assertEqual(merge_intervals([[8, 9], [1, 2], [4, 5]]),\n                         [[1, 2], [4, 5], [8, 9]])\n\n    def test_touching_merges(self):\n        self.assertEqual(merge_intervals([[1, 2], [2, 3]]), [[1, 3]])\n\n    def test_touching_unsorted_chain(self):\n        self.assertEqual(merge_intervals([[5, 6], [1, 2], [2, 5]]), [[1, 6]])\n\n    def test_touching_gap_of_one_not_merged(self):\n        self.assertEqual(merge_intervals([[1, 2], [3, 4]]), [[1, 2], [3, 4]])\n\n    def test_overlapping(self):\n        self.assertEqual(merge_intervals([[1, 5], [2, 3]]), [[1, 5]])\n\n    def test_nested(self):\n        self.assertEqual(merge_intervals([[1, 10], [2, 3], [4, 5]]), [[1, 10]])\n\n    def test_duplicates(self):\n        self.assertEqual(merge_intervals([[3, 4], [3, 4], [3, 4]]), [[3, 4]])\n\n    def test_same_start(self):\n        self.assertEqual(merge_intervals([[1, 3], [1, 7]]), [[1, 7]])\n\n    def test_same_end(self):\n        self.assertEqual(merge_intervals([[1, 7], [3, 7]]), [[1, 7]])\n\n    def test_classic_case(self):\n        self.assertEqual(\n            merge_intervals([[1, 3], [2, 6], [8, 10], [9, 12]]),\n            [[1, 6], [8, 12]],\n        )\n\n    def test_negative_and_zero(self):\n        self.assertEqual(merge_intervals([[-5, -3], [-3, 0], [0, 2]]), [[-5, 2]])\n\n    def test_full_merge_to_one(self):\n        self.assertEqual(merge_intervals([[0, 1], [1, 1], [1, 2], [2, 9]]), [[0, 9]])\n\n    def test_does_not_mutate_input(self):\n        intervals = [[5, 6], [1, 2], [2, 5]]\n        snapshot = copy.deepcopy(intervals)\n        result = merge_intervals(intervals)\n        self.assertEqual(intervals, snapshot)\n        self.assertEqual(result, [[1, 6]])\n\n    def test_result_is_fresh_objects(self):\n        intervals = [[1, 2]]\n        result = merge_intervals(intervals)\n        result[0][0] = 999\n        self.assertEqual(intervals, [[1, 2]])\n\n    def test_tuple_input_accepted(self):\n        self.assertEqual(merge_intervals(((1, 3), (3, 5))), [[1, 5]])\n\n    def test_reversed_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[5, 3]])\n\n    def test_reversed_raises_even_among_valid(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [9, 4]])\n\n    def test_malformed_pair_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2, 3]])\n\n    def test_none_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals(None)\n\n    def test_generator_input(self):\n        gen = (pair for pair in [[3, 4], [1, 2], [2, 3]])\n        self.assertEqual(merge_intervals(gen), [[1, 4]])\n\n    def test_large_input_perf(self):\n        intervals = [[i * 2, i * 2 + 1] for i in range(10000)]\n        merged = merge_intervals(intervals)\n        self.assertEqual(len(merged), 10000)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n"
+      },
+      "agent": "macron",
+      "task": "python",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 37.154,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 7.497,
+          "usage": {
+            "prompt_tokens": 6384,
+            "completion_tokens": 274,
+            "total_tokens": 6658,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 19753
+        },
+        {
+          "status": 200,
+          "seconds": 14.597,
+          "usage": {
+            "prompt_tokens": 6605,
+            "completion_tokens": 1842,
+            "total_tokens": 8447,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20527
+        },
+        {
+          "status": 200,
+          "seconds": 4.855,
+          "usage": {
+            "prompt_tokens": 8315,
+            "completion_tokens": 94,
+            "total_tokens": 8409,
+            "prompt_tokens_details": {
+              "cached_tokens": 4480
+            }
+          },
+          "request_bytes": 26777
+        },
+        {
+          "status": 200,
+          "seconds": 9.593,
+          "usage": {
+            "prompt_tokens": 8861,
+            "completion_tokens": 245,
+            "total_tokens": 9106,
+            "prompt_tokens_details": {
+              "cached_tokens": 6272
+            }
+          },
+          "request_bytes": 28808
+        }
+      ],
+      "stdout_tail": "Done.\n\n`/tmp/agent-azm-bench-kgu2wgyx/task/solution.py` — `merge_intervals(intervals)`:\n- builds tuples copy → input untouched, output fresh lists\n- raises `ValueError` on reversed pair (`start > end`), malformed pair, `None`\n- sorts by `(start, end)`, merges when `start <= cur_end` (overlap + touching)\n- accepts lists, tuples, generators\n- O(n log n)\n\n`/tmp/agent-azm-bench-kgu2wgyx/task/test_solution.py` — 25 unittest cases (empty, single, disjoint, touching chain, gap-of-one not merged, nested, duplicates, same start/end, negatives, non-mutation, fresh-object check, tuple/generator input, reversed raises, 10k perf).\n\nResult: `Ran 25 tests ... OK`; doctests 2 passed.\n",
+      "stderr_tail": "2026/11/08 14:06:33 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-kgu2wgyx/home/workspaces/exec-e90fbe92b3bb10ecff9cd75d24c498d5\n"
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "ledger.py": "\"\"\"Ledger totals with exact decimal arithmetic.\"\"\"\n\nfrom decimal import Decimal, InvalidOperation, localcontext\n\n__all__ = [\"total\"]\n\n\ndef _parse(item):\n    \"\"\"Return a finite Decimal for one row, ignoring blanks; else ValueError.\"\"\"\n    if item is None:\n        return None\n    if isinstance(item, str):\n        text = item.strip()\n        if not text:  # blank / whitespace-only row -> ignore\n            return None\n        raw = text\n    elif isinstance(item, Decimal):\n        raw = item\n    elif isinstance(item, bool):\n        raise ValueError(\"malformed amount: %r\" % (item,))\n    elif isinstance(item, int):\n        raw = Decimal(item)\n    elif isinstance(item, float):\n        # repr() gives the shortest decimal that round-trips, so there is no\n        # binary expansion drift (0.1 + 0.2 == Decimal(\"0.3\"))\n        raw = repr(item)\n    else:\n        raise ValueError(\"unsupported amount type: %r\" % (item,))\n\n    try:\n        value = raw if isinstance(raw, Decimal) else Decimal(raw)\n    except (InvalidOperation, ValueError, ArithmeticError) as exc:\n        raise ValueError(\"malformed amount: %r\" % (item,)) from exc\n\n    if not value.is_finite():\n        raise ValueError(\"malformed amount: %r\" % (item,))\n    return value\n\n\ndef total(rows):\n    \"\"\"Sum monetary amounts exactly with Decimal.\n\n    rows: iterable of amount strings (also Decimal/int/float).\n    - Blank and whitespace-only entries are ignored.\n    - Signed amounts (\"-12.50\", \"+3\", \"1e3\") are accepted.\n    - A malformed numeric value raises ValueError.\n    \"\"\"\n    if rows is None:\n        raise ValueError(\"rows must be an iterable of amounts\")\n\n    values = []\n    for item in rows:\n        value = _parse(item)\n        if value is not None:\n            values.append(value)\n\n    if not values:\n        return Decimal(\"0\")\n\n    # Size the arithmetic context to the inputs so addition is exact: the\n    # default prec=28 would silently round a long sum.\n    highest = max(v.adjusted() for v in values)\n    lowest = min(v.adjusted() for v in values)\n    digits = max(len(v.as_tuple().digits) for v in values)\n    prec = highest - lowest + digits + 2\n    if prec < 1:\n        prec = 1\n\n    with localcontext() as ctx:\n        ctx.prec = prec\n        if highest + 1 > ctx.Emax:\n            ctx.Emax = highest + 1\n        if lowest - 1 < ctx.Emin:\n            ctx.Emin = lowest - 1\n        result = sum(values, Decimal(\"0\"))\n    return result\n",
+        "test_ledger.py": "import unittest\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\nclass TestTotal(unittest.TestCase):\n    def test_exact_decimal_no_float_drift(self):\n        self.assertEqual(total([\"0.1\", \"0.2\"]), Decimal(\"0.3\"))\n\n    def test_long_decimal_chain_exact(self):\n        self.assertEqual(total([\"0.1\"] * 10), Decimal(\"1.0\"))\n\n    def test_return_type_is_decimal(self):\n        self.assertIsInstance(total([\"1\"]), Decimal)\n        self.assertIsInstance(total([]), Decimal)\n\n    def test_empty_is_zero(self):\n        self.assertEqual(total([]), Decimal(\"0\"))\n\n    def test_blank_lines_ignored(self):\n        rows = [\"1.5\", \"\", \"   \", \"\\t\", \"2.5\"]\n        self.assertEqual(total(rows), Decimal(\"4\"))\n\n    def test_none_ignored(self):\n        self.assertEqual(total([None, \"2\"]), Decimal(\"2\"))\n\n    def test_signed_amounts(self):\n        self.assertEqual(total([\"-10.25\", \"+0.25\", \"10\"]), Decimal(\"0\"))\n\n    def test_negative_only(self):\n        self.assertEqual(total([\"-1\", \"-2\", \"-3.5\"]), Decimal(\"-6.5\"))\n\n    def test_whitespace_around_amount(self):\n        self.assertEqual(total([\" 3 \", \"\\t-1\\n\"]), Decimal(\"2\"))\n\n    def test_exponent_notation(self):\n        self.assertEqual(total([\"1e2\", \"-5e1\"]), Decimal(\"50\"))\n\n    def test_currency_symbol_rejected(self):\n        with self.assertRaises(ValueError):\n            total([\"$5\"])\n\n    def test_malformed_rejected(self):\n        for bad in [\"abc\", \"1.2.3\", \"1,000\", \"--5\", \"5-\", \".\", \"1 2\", \"0x10\", \"12f\"]:\n            with self.subTest(bad=bad):\n                with self.assertRaises(ValueError):\n                    total([bad])\n\n    def test_non_finite_rejected(self):\n        for bad in [\"NaN\", \"Infinity\", \"-Infinity\", \"sNaN\"]:\n            with self.subTest(bad=bad):\n                with self.assertRaises(ValueError):\n                    total([bad])\n\n    def test_parse_error_mentions_offending_value(self):\n        with self.assertRaises(ValueError) as ctx:\n            total([\"1\", \"oops\"])\n        self.assertIn(\"oops\", str(ctx.exception))\n\n    def test_error_when_malformed_after_valid(self):\n        with self.assertRaises(ValueError):\n            total([\"1\", \"\", \"  \", \"nope\", \"2\"])\n\n    def test_accepts_decimal_and_int(self):\n        self.assertEqual(total([Decimal(\"0.1\"), 1, \"0.9\"]), Decimal(\"2.0\"))\n\n    def test_accepts_float_without_binary_drift(self):\n        self.assertEqual(total([0.1, 0.2]), Decimal(\"0.3\"))\n        self.assertEqual(total([1.5, \"-0.5\"]), Decimal(\"1.0\"))\n\n    def test_rows_may_be_generator(self):\n        self.assertEqual(total(x for x in [\"1\", \"\", \"2\"]), Decimal(\"3\"))\n\n    def test_public_name_preserved(self):\n        import ledger\n        self.assertTrue(callable(ledger.total))\n\n    def test_huge_sum_is_exact_not_rounded(self):\n        self.assertEqual(total([\"1e30\", \"1\"]), Decimal(\"1000000000000000000000000000001\"))\n\n    def test_many_tiny_addends_below_default_precision(self):\n        rows = [\"1e-20\"] * 30\n        self.assertEqual(total(rows), Decimal(\"3e-19\"))\n\n    def test_mixed_magnitudes_exact(self):\n        self.assertEqual(total([\"1e40\", \"0.5\", \"-1e40\"]), Decimal(\"0.5\"))\n\n    def test_bool_rejected_as_malformed(self):\n        with self.assertRaises(ValueError):\n            total([True])\n\n    def test_bool_not_summed_as_one(self):\n        with self.assertRaises(ValueError):\n            total([\"1\", False])\n\n    def test_none_rows_argument_rejected(self):\n        with self.assertRaises(ValueError):\n            total(None)\n\n    def test_unsupported_type_rejected(self):\n        with self.assertRaises(ValueError):\n            total([[\"1\"]])\n\n    def test_all_blank_returns_zero(self):\n        self.assertEqual(total([\"\", \"  \", \"\\t\"]), Decimal(\"0\"))\n\n    def test_sum_matches_decimal_plus(self):\n        rows = [\"1234567.89\", \"-0.01\", \"+42\", \"1e-8\"]\n        expected = Decimal(\"0\")\n        for r in rows:\n            expected += Decimal(r)\n        self.assertEqual(total(rows), expected)\n\n    def test_big_list_exact(self):\n        rows = [\"0.01\"] * 1000\n        self.assertEqual(total(rows), Decimal(\"10.00\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 69.49,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 6.633,
+          "usage": {
+            "prompt_tokens": 6374,
+            "completion_tokens": 134,
+            "total_tokens": 6508,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 19725
+        },
+        {
+          "status": 200,
+          "seconds": 17.845,
+          "usage": {
+            "prompt_tokens": 6647,
+            "completion_tokens": 1453,
+            "total_tokens": 8100,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20802
+        },
+        {
+          "status": 200,
+          "seconds": 10.09,
+          "usage": {
+            "prompt_tokens": 7911,
+            "completion_tokens": 953,
+            "total_tokens": 8864,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 26510
+        },
+        {
+          "status": 200,
+          "seconds": 5.096,
+          "usage": {
+            "prompt_tokens": 8345,
+            "completion_tokens": 505,
+            "total_tokens": 8850,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            }
+          },
+          "request_bytes": 28225
+        },
+        {
+          "status": 200,
+          "seconds": 3.846,
+          "usage": {
+            "prompt_tokens": 9685,
+            "completion_tokens": 264,
+            "total_tokens": 9949,
+            "prompt_tokens_details": {
+              "cached_tokens": 6272
+            }
+          },
+          "request_bytes": 33405
+        },
+        {
+          "status": 200,
+          "seconds": 9.851,
+          "usage": {
+            "prompt_tokens": 9872,
+            "completion_tokens": 1052,
+            "total_tokens": 10924,
+            "prompt_tokens_details": {
+              "cached_tokens": 7680
+            }
+          },
+          "request_bytes": 34155
+        },
+        {
+          "status": 200,
+          "seconds": 6.588,
+          "usage": {
+            "prompt_tokens": 10602,
+            "completion_tokens": 564,
+            "total_tokens": 11166,
+            "prompt_tokens_details": {
+              "cached_tokens": 7808
+            }
+          },
+          "request_bytes": 37392
+        },
+        {
+          "status": 200,
+          "seconds": 3.234,
+          "usage": {
+            "prompt_tokens": 11567,
+            "completion_tokens": 204,
+            "total_tokens": 11771,
+            "prompt_tokens_details": {
+              "cached_tokens": 8576
+            }
+          },
+          "request_bytes": 41144
+        },
+        {
+          "status": 200,
+          "seconds": 5.633,
+          "usage": {
+            "prompt_tokens": 11935,
+            "completion_tokens": 485,
+            "total_tokens": 12420,
+            "prompt_tokens_details": {
+              "cached_tokens": 9472
+            }
+          },
+          "request_bytes": 42361
+        }
+      ],
+      "stdout_tail": "Done. `ledger.py` fixed, `test_ledger.py` added, 29/29 pass.\n\n**Fix in `/tmp/agent-azm-bench-r8ljytbe/task/ledger.py`**\n- `Decimal` throughout, return value is `Decimal` (`total([]) == Decimal(\"0\")`), no `float()`.\n- Signed amounts OK: `-12.50`, `+3`, `1e3`.\n- Blank/whitespace rows skipped; `None` skipped.\n- Malformed → `ValueError` with offending value in message. Covers `abc`, `1.2.3`, `1,000`, `--5`, `$5`, `NaN`, `Infinity`, bad types.\n- Public name preserved: `def total(rows)`.\n\n**Bug found while testing my own first draft:** default decimal context `prec=28` silently rounded long sums — `total([\"1e30\",\"1\"])` returned `1.000...E+30`, dropping the `1`. Real money bug, not just a big-number curiosity. Fixed by summing inside `localcontext()` with precision sized to the inputs (`highest - lowest + digits + 2`) and `Emax`/`Emin` widened as needed. Now exact:\n- `total([\"1e30\",\"1\"])` → `1000000000000000000000000000001`\n- `total([\"1e40\",\"0.5\",\"-1e40\"])` → `0.5`\n- `total([\"1e-20\"]*30)` → `3E-19`\n\nOther decisions worth knowing:\n- Floats accepted via `repr()` (shortest round-trip form) so `total([0.1,0.2])` → `0.3` instead of binary drift. Old behavior wasn't exact either; rather than break callers, preserved the \"numbers welcome\" surface.\n- `bool` rejected — `True` is an `int` subclass in Python; summing it as `1` would be a silent false-total in a ledger.\n\nRun: `cd /tmp/agent-azm-bench-r8ljytbe/task && python3 -m unittest -v test_ledger` — 29 tests, OK.\n",
+      "stderr_tail": "2026/11/08 14:07:10 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-r8ljytbe/home/workspaces/exec-4935207021fea1b264a4f55dd72ad9ed\n"
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "ledger.py": "\"\"\"Ledger amount totals with exact decimal arithmetic.\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"total\"]\n\n\ndef _to_amount(item):\n    \"\"\"Convert one ledger row to Decimal.\n\n    Returns None for blank lines (empty or whitespace-only strings).\n    Raises ValueError for anything that is not a finite numeric value.\n    \"\"\"\n    if isinstance(item, str):\n        text = item.strip()\n        if not text:\n            return None\n        candidate = text\n    elif isinstance(item, bool):\n        raise ValueError(\"malformed amount: {!r}\".format(item))\n    elif isinstance(item, (int, Decimal)):\n        candidate = item\n    elif isinstance(item, float):\n        candidate = repr(item)\n    else:\n        raise ValueError(\"malformed amount: {!r}\".format(item))\n\n    try:\n        amount = Decimal(candidate if isinstance(candidate, Decimal) else str(candidate))\n    except (InvalidOperation, ValueError, TypeError) as exc:\n        raise ValueError(\"malformed amount: {!r}\".format(item)) from exc\n\n    if not amount.is_finite():\n        raise ValueError(\"malformed amount: {!r}\".format(item))\n    return amount\n\n\ndef total(rows):\n    \"\"\"Return the exact Decimal sum of the amounts in ``rows``.\n\n    Accepts signed values (\"+1.50\", \"-2\"), skips blank lines, and raises\n    ValueError for malformed numeric values.\n    \"\"\"\n    running = Decimal(\"0\")\n    for row in rows:\n        amount = _to_amount(row)\n        if amount is None:\n            continue\n        running += amount\n    return running",
+        "test_ledger.py": "import unittest\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\nclass TotalTests(unittest.TestCase):\n    def test_exact_decimal_sum(self):\n        # 0.1 + 0.2 must not become 0.30000000000000004\n        self.assertEqual(total([\"0.1\", \"0.2\"]), Decimal(\"0.3\"))\n        self.assertIsInstance(total([\"1\"]), Decimal)\n\n    def test_signed_amounts(self):\n        self.assertEqual(total([\"+1.50\", \"-0.50\", \"-2\"]), Decimal(\"-1.00\"))\n        self.assertEqual(total([1, -1, Decimal(\"2.5\")]), Decimal(\"2.5\"))\n        self.assertEqual(total([-0.25, 0.75]), Decimal(\"0.50\"))\n\n    def test_blank_lines_ignored(self):\n        self.assertEqual(total([\"1\", \"\", \"  \", \"\\t\", \"2\"]), Decimal(\"3\"))\n        self.assertEqual(total([]), Decimal(\"0\"))\n        self.assertEqual(total([\"\", \"  \"]), Decimal(\"0\"))\n\n    def test_malformed_raises_value_error(self):\n        for bad in [\"abc\", \"1.2.3\", \"1,000\", \"--1\", \"NaN\", \"Infinity\", \"1e\", None, [1], {}]:\n            with self.assertRaises(ValueError, msg=repr(bad)):\n                total([\"1\", bad, \"2\"])\n\n    def test_malformed_message_and_type(self):\n        try:\n            total([\"oops\"])\n        except ValueError as exc:\n            self.assertIn(\"oops\", str(exc))\n        else:\n            self.fail(\"ValueError not raised\")\n\n    def test_float_input_uses_shortest_repr(self):\n        self.assertEqual(total([0.1, 0.2]), Decimal(\"0.3\"))\n\n    def test_generator_input(self):\n        self.assertEqual(total(line for line in [\"1\", \"\", \"2\"]), Decimal(\"3\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main()"
+      },
+      "agent": "hermes",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 192.55,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.129,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 16.3,
+          "usage": {
+            "prompt_tokens": 4585,
+            "completion_tokens": 87,
+            "total_tokens": 4672,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 17938
+        },
+        {
+          "status": 200,
+          "seconds": 16.488,
+          "usage": {
+            "prompt_tokens": 4709,
+            "completion_tokens": 102,
+            "total_tokens": 4811,
+            "prompt_tokens_details": {
+              "cached_tokens": 4576
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4576
+          },
+          "request_bytes": 18613
+        },
+        {
+          "status": 200,
+          "seconds": 17.213,
+          "usage": {
+            "prompt_tokens": 4856,
+            "completion_tokens": 89,
+            "total_tokens": 4945,
+            "prompt_tokens_details": {
+              "cached_tokens": 4704
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4704
+          },
+          "request_bytes": 19500
+        },
+        {
+          "status": 200,
+          "seconds": 11.481,
+          "usage": {
+            "prompt_tokens": 5016,
+            "completion_tokens": 92,
+            "total_tokens": 5108,
+            "prompt_tokens_details": {
+              "cached_tokens": 4832
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4832
+          },
+          "request_bytes": 20498
+        },
+        {
+          "status": 200,
+          "seconds": 43.547,
+          "usage": {
+            "prompt_tokens": 5207,
+            "completion_tokens": 1194,
+            "total_tokens": 6401,
+            "prompt_tokens_details": {
+              "cached_tokens": 4992
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4992
+          },
+          "request_bytes": 21570
+        },
+        {
+          "status": 200,
+          "seconds": 37.271,
+          "usage": {
+            "prompt_tokens": 6560,
+            "completion_tokens": 897,
+            "total_tokens": 7457,
+            "prompt_tokens_details": {
+              "cached_tokens": 5184
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5184
+          },
+          "request_bytes": 33457
+        },
+        {
+          "status": 200,
+          "seconds": 19.855,
+          "usage": {
+            "prompt_tokens": 7611,
+            "completion_tokens": 128,
+            "total_tokens": 7739,
+            "prompt_tokens_details": {
+              "cached_tokens": 6528
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6528
+          },
+          "request_bytes": 38830
+        },
+        {
+          "status": 200,
+          "seconds": 25.798,
+          "usage": {
+            "prompt_tokens": 7984,
+            "completion_tokens": 232,
+            "total_tokens": 8216,
+            "prompt_tokens_details": {
+              "cached_tokens": 7584
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 7584
+          },
+          "request_bytes": 40979
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"`/tmp/agent-azm-bench-vvlyooj8/task/ledger.py` rewritten, name `total(rows)` kept.\\n\\n- Accumulates into `Decimal(\\\"0\\\")` \\u2192 `total(\\\"0.1\\\",\\\"0.2\\\")` = `Decimal(\\\"0.3\\\")`, no float drift; `float` input via `repr()`\\n- Signed strings (`+1.50`, `-2`) and `int`/`Decimal` accepted\\n- Empty/whitespace-only rows skipped (works with generators)\\n- Malformed values (`abc`, `1.2.3`, `1,000`, `--1`, `NaN`, `Infinity`, `1e`, `None`, list, dict, `bool`) \\u2192 `ValueError` with the offending value; `InvalidOperation` wrapped since it is not a `ValueError` subclass\\n\\nAdded `test_ledger.py` (unittest, stdlib only \\u2014 no pytest in env). Ran `python3 -m unittest -v test_ledger`: 7 tests, all pass.\", \"tokens\": 49349}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}\n",
+        "sum_sales.py": "import csv, json, os\n\nBASE = os.path.dirname(os.path.abspath(__file__))\nsrc = os.path.join(BASE, \"sales.csv\")\nout = os.path.join(BASE, \"result.json\")\n\ntotals = {}\nwith open(src, newline=\"\", encoding=\"utf-8\") as f:\n    for row in csv.DictReader(f):\n        city = row[\"city\"].strip()\n        amount = int(row[\"qty\"]) * int(row[\"price\"])  # negative qty = return\n        totals[city] = totals.get(city, 0) + amount\n\ntotals = {k: int(v) for k, v in totals.items()}\nwith open(out, \"w\", encoding=\"utf-8\") as f:\n    json.dump(totals, f, ensure_ascii=False, indent=2)\n    f.write(\"\\n\")\n\nprint(json.dumps(totals, ensure_ascii=False))"
+      },
+      "agent": "hermes",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 100.278,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.137,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 23.172,
+          "usage": {
+            "prompt_tokens": 4648,
+            "completion_tokens": 87,
+            "total_tokens": 4735,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 18566
+        },
+        {
+          "status": 200,
+          "seconds": 18.871,
+          "usage": {
+            "prompt_tokens": 4878,
+            "completion_tokens": 342,
+            "total_tokens": 5220,
+            "prompt_tokens_details": {
+              "cached_tokens": 4640
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4640
+          },
+          "request_bytes": 19693
+        },
+        {
+          "status": 200,
+          "seconds": 10.332,
+          "usage": {
+            "prompt_tokens": 5299,
+            "completion_tokens": 103,
+            "total_tokens": 5402,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4864
+          },
+          "request_bytes": 21697
+        },
+        {
+          "status": 200,
+          "seconds": 16.485,
+          "usage": {
+            "prompt_tokens": 5625,
+            "completion_tokens": 225,
+            "total_tokens": 5850,
+            "prompt_tokens_details": {
+              "cached_tokens": 5280
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5280
+          },
+          "request_bytes": 22891
+        },
+        {
+          "status": 200,
+          "seconds": 26.173,
+          "usage": {
+            "prompt_tokens": 5979,
+            "completion_tokens": 340,
+            "total_tokens": 6319,
+            "prompt_tokens_details": {
+              "cached_tokens": 5600
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5600
+          },
+          "request_bytes": 24567
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"\\u062e\\u0631\\u0648\\u062c\\u06cc \\u062f\\u0631 `result.json`:\\n\\n```json\\n{\\n  \\\"Tehran\\\": 150,\\n  \\\"Mashhad\\\": 260,\\n  \\\"Shiraz\\\": 100\\n}\\n```\\n\\n\\u0645\\u062d\\u0627\\u0633\\u0628\\u0647 (`sum_sales.py`\\u060c \\u0628\\u0627 `csv.DictReader`): \\u0645\\u0628\\u0644\\u063a \\u0647\\u0631 \\u0631\\u062f\\u06cc\\u0641 = `qty * price`\\u060c \\u0645\\u0631\\u062c\\u0648\\u0639\\u06cc \\u0645\\u0646\\u0641\\u06cc \\u0647\\u0645 \\u062f\\u0627\\u062e\\u0644 \\u062c\\u0645\\u0639 \\u0647\\u0645\\u0627\\u0646 \\u0634\\u0647\\u0631:\\n- Tehran: 2\\u00d7150 + (\\u22121)\\u00d7150 = 150\\n- Mashhad: 3\\u00d780 + 1\\u00d720 = 260\\n- Shiraz: 4\\u00d725 = 100\\n\\n\\u0628\\u0631\\u0631\\u0633\\u06cc:\\n- \\u0628\\u0627 \\u0631\\u0648\\u0634 \\u062f\\u0648\\u0645 (\\u067e\\u0627\\u0631\\u0633 \\u062e\\u0637\\u06cc + `collections.Counter`) \\u0628\\u0627\\u0632\\u0645\\u062d\\u0627\\u0633\\u0628\\u0647 \\u0634\\u062f\\u060c \\u0628\\u0631\\u0627\\u0628\\u0631 \\u0628\\u0627 `result.json` \\u062e\\u0631\\u0648\\u062c\\u06cc \\u062f\\u0627\\u062f \\u2192 `verified`.\\n- \\u0647\\u0645\\u0647 \\u0645\\u0642\\u0627\\u062f\\u06cc\\u0631 `int` \\u0647\\u0633\\u062a\\u0646\\u062f (\\u0646\\u0647 \\u0631\\u0634\\u062a\\u0647\\u060c \\u0646\\u0647 \\u0627\\u0639\\u0634\\u0627\\u0631).\\n- `sha256sum sales.csv` \\u0642\\u0628\\u0644 \\u0648 \\u0628\\u0639\\u062f \\u0627\\u062c\\u0631\\u0627 \\u06cc\\u06a9\\u0633\\u0627\\u0646: `268d25cc\\u20262696a5` \\u2192 \\u062f\\u0627\\u062f\\u0647 \\u0627\\u0635\\u0644\\u06cc \\u062f\\u0633\\u062a \\u0646\\u062e\\u0648\\u0631\\u062f\\u0647.\\n- \\u0641\\u0627\\u06cc\\u0644\\u0647\\u0627 \\u062f\\u0631 \\u0647\\u0645\\u0627\\u0646 \\u067e\\u0648\\u062f\\u0647\\u0654 \\u06a9\\u0627\\u0631: `sales.csv`, `sum_sales.py`, `result.json`.\", \"tokens\": 27526}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}"
+      },
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 43.104,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 17.395,
+          "usage": {
+            "prompt_tokens": 6403,
+            "completion_tokens": 65,
+            "total_tokens": 6468
+          },
+          "request_bytes": 20353
+        },
+        {
+          "status": 200,
+          "seconds": 10.816,
+          "usage": {
+            "prompt_tokens": 6620,
+            "completion_tokens": 228,
+            "total_tokens": 6848,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 21059
+        },
+        {
+          "status": 200,
+          "seconds": 14.302,
+          "usage": {
+            "prompt_tokens": 6942,
+            "completion_tokens": 120,
+            "total_tokens": 7062,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 22147
+        }
+      ],
+      "stdout_tail": "`result.json` نوشته شد.\n\n- Tehran: 2×150 + (−1)×150 = 150\n- Mashhad: 3×80 + 1×20 = 260\n- Shiraz: 4×25 = 100\n\nجمع کل: 510. مرجوعی Tehran حساب شد.\n\nsales.csv تغییر نکرد (md5 قبل و بعد یکی: `031da3268696df142450167eb9e01401`). خروجی با پایتون بازخوانی شد و اعداد صحیح‌اند.\n",
+      "stderr_tail": "2026/11/08 14:13:13 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-qstxpvq9/home/workspaces/exec-23fd88f603cc24104819ecfd44aafbf5\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "solution.py": "\"\"\"Merge integer intervals.\n\nmerge_intervals(intervals) takes an iterable of [start, end] pairs and returns a\nnew list of merged intervals. Overlapping intervals and intervals that merely\ntouch (end + 1 == next start) are merged, the result is sorted by start, the\ninput is never mutated, and reversed pairs (start > end) raise ValueError.\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom typing import Iterable, List, Sequence\n\nInterval = List[int]\n\n\ndef _normalize(intervals: Iterable[Sequence[int]]) -> List[Interval]:\n    \"\"\"Validate the input and return a fresh list of independent copies.\"\"\"\n    if isinstance(intervals, (str, bytes)):\n        raise ValueError(f\"intervals must be a sequence of pairs, got {type(intervals).__name__}\")\n\n    try:\n        items = list(intervals)\n    except TypeError:\n        raise ValueError(f\"intervals must be iterable, got {type(intervals).__name__}\") from None\n\n    normalized: List[Interval] = []\n    for index, item in enumerate(items):\n        if isinstance(item, (str, bytes)):\n            raise ValueError(f\"interval at index {index} is not a pair: {item!r}\")\n        try:\n            pair = list(item)\n        except TypeError:\n            raise ValueError(f\"interval at index {index} is not a pair: {item!r}\") from None\n        if len(pair) != 2:\n            raise ValueError(f\"interval at index {index} must have exactly 2 values: {item!r}\")\n        start, end = pair\n        for value in (start, end):\n            if isinstance(value, bool) or not isinstance(value, int):\n                raise ValueError(f\"interval at index {index} has non-integer bound: {value!r}\")\n        if start > end:\n            raise ValueError(f\"reversed interval at index {index}: [{start}, {end}]\")\n        normalized.append([start, end])\n    return normalized\n\n\ndef merge_intervals(intervals: Iterable[Sequence[int]]) -> List[Interval]:\n    \"\"\"Merge overlapping and touching integer intervals.\n\n    Args:\n        intervals: iterable of [start, end] pairs with start <= end.\n\n    Returns:\n        Sorted list of merged [start, end] lists.\n\n    Raises:\n        ValueError: if an interval is malformed or reversed (start > end).\n    \"\"\"\n    items = _normalize(intervals)\n    if not items:\n        return []\n\n    items.sort(key=lambda pair: (pair[0], pair[1]))\n\n    merged: List[Interval] = [items[0]]\n    for start, end in items[1:]:\n        last = merged[-1]\n        if start <= last[1] + 1:  # overlap or touching endpoint\n            if end > last[1]:\n                last[1] = end\n        else:\n            merged.append([start, end])\n    return merged\n\n\nif __name__ == \"__main__\":\n    print(merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]))",
+        "test_solution.py": "import copy\nimport random\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[4, 7]]), [[4, 7]])\n\n    def test_overlapping(self):\n        self.assertEqual(\n            merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]),\n            [[1, 6], [8, 10], [15, 18]],\n        )\n\n    def test_touching_merged(self):\n        self.assertEqual(merge_intervals([[1, 3], [4, 6]]), [[1, 6]])\n        self.assertEqual(merge_intervals([[1, 3], [3, 6]]), [[1, 6]])\n\n    def test_not_touching_kept_apart(self):\n        self.assertEqual(merge_intervals([[1, 3], [5, 6]]), [[1, 3], [5, 6]])\n\n    def test_unsorted_input(self):\n        self.assertEqual(\n            merge_intervals([[15, 18], [1, 3], [8, 10], [2, 6]]),\n            [[1, 6], [8, 10], [15, 18]],\n        )\n\n    def test_nested(self):\n        self.assertEqual(merge_intervals([[1, 10], [2, 3], [4, 5]]), [[1, 10]])\n\n    def test_contained_after(self):\n        self.assertEqual(merge_intervals([[1, 4], [2, 3]]), [[1, 4]])\n\n    def test_duplicates(self):\n        self.assertEqual(merge_intervals([[1, 2], [1, 2], [1, 2]]), [[1, 2]])\n\n    def test_negative_and_zero_crossing(self):\n        self.assertEqual(merge_intervals([[-5, -1], [0, 2], [3, 3]]), [[-5, 3]])\n\n    def test_point_intervals_touching(self):\n        self.assertEqual(merge_intervals([[1, 1], [2, 2], [4, 4]]), [[1, 2], [4, 4]])\n\n    def test_reversed_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[5, 1]])\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [7, 3]])\n\n    def test_malformed_raises(self):\n        for bad in [[[1, 2, 3]], [[1]], [\"ab\"], [1], [[1, \"x\"]], [[True, 3]]]:\n            with self.assertRaises(ValueError, msg=repr(bad)):\n                merge_intervals(bad)\n        with self.assertRaises(ValueError):\n            merge_intervals(\"12\")\n        with self.assertRaises(ValueError):\n            merge_intervals(42)\n\n    def test_no_mutation(self):\n        data = [[8, 10], [1, 3], [2, 6], [4, 5]]\n        snapshot = copy.deepcopy(data)\n        out = merge_intervals(data)\n        self.assertEqual(data, snapshot)\n        self.assertEqual(out, [[1, 6], [8, 10]])\n        # returned lists are not the input's lists\n        self.assertFalse(any(a is b for a in out for b in data))\n\n    def test_does_not_mutate_with_nested_merge(self):\n        inner = [2, 6]\n        data = [inner, [1, 3]]\n        merge_intervals(data)\n        self.assertEqual(inner, [2, 6])\n\n    def test_accepts_tuples(self):\n        self.assertEqual(merge_intervals([(1, 3), (4, 5)]), [[1, 5]])\n\n    def test_accepts_generator(self):\n        self.assertEqual(merge_intervals(iter([[1, 3], [4, 5]])), [[1, 5]])\n\n    def test_idempotent(self):\n        once = merge_intervals([[1, 3], [4, 6], [9, 12]])\n        self.assertEqual(merge_intervals(once), once)\n\n    def test_brute_force_random(self):\n        \"\"\"Cross-check against a naive per-unit coverage model.\"\"\"\n        rng = random.Random(1234)\n        for _ in range(300):\n            n = rng.randint(0, 8)\n            data = []\n            for _ in range(n):\n                a = rng.randint(-8, 8)\n                b = rng.randint(-8, 8)\n                data.append([min(a, b), max(a, b)])\n            snapshot = copy.deepcopy(data)\n\n            covered = set()\n            for a, b in data:\n                covered.update(range(a, b + 1))\n\n            expected = []\n            for value in sorted(covered):\n                if expected and value == expected[-1][1] + 1:\n                    expected[-1][1] = value\n                else:\n                    expected.append([value, value])\n\n            self.assertEqual(merge_intervals(data), expected, msg=repr(data))\n            self.assertEqual(data, snapshot)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)"
+      },
+      "agent": "macron",
+      "task": "python",
+      "pass": false,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 95.903,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 21.043,
+          "usage": {
+            "prompt_tokens": 6386,
+            "completion_tokens": 128,
+            "total_tokens": 6514,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            }
+          },
+          "request_bytes": 19753
+        },
+        {
+          "status": 200,
+          "seconds": 10.789,
+          "usage": {
+            "prompt_tokens": 6559,
+            "completion_tokens": 891,
+            "total_tokens": 7450,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20341
+        },
+        {
+          "status": 200,
+          "seconds": 23.454,
+          "usage": {
+            "prompt_tokens": 7347,
+            "completion_tokens": 1247,
+            "total_tokens": 8594,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 23723
+        },
+        {
+          "status": 200,
+          "seconds": 4.586,
+          "usage": {
+            "prompt_tokens": 8640,
+            "completion_tokens": 214,
+            "total_tokens": 8854,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            }
+          },
+          "request_bytes": 28379
+        },
+        {
+          "status": 200,
+          "seconds": 5.374,
+          "usage": {
+            "prompt_tokens": 8953,
+            "completion_tokens": 282,
+            "total_tokens": 9235,
+            "prompt_tokens_details": {
+              "cached_tokens": 6400
+            }
+          },
+          "request_bytes": 29673
+        },
+        {
+          "status": 200,
+          "seconds": 14.305,
+          "usage": {
+            "prompt_tokens": 9758,
+            "completion_tokens": 139,
+            "total_tokens": 9897,
+            "prompt_tokens_details": {
+              "cached_tokens": 6912
+            }
+          },
+          "request_bytes": 32536
+        },
+        {
+          "status": 200,
+          "seconds": 15.798,
+          "usage": {
+            "prompt_tokens": 9983,
+            "completion_tokens": 212,
+            "total_tokens": 10195,
+            "prompt_tokens_details": {
+              "cached_tokens": 7680
+            }
+          },
+          "request_bytes": 33328
+        }
+      ],
+      "stdout_tail": "Done. Files in `/tmp/agent-azm-bench-3of1x4l4/task`:\n\n- `solution.py` — `merge_intervals(intervals)`: copies input, sorts by `(start,end)`, merges when `start <= last_end + 1` (overlap or touching), returns new lists. Reversed pairs → `ValueError` with index. Also rejects non-pair, non-int (incl. `bool`), non-iterable input with `ValueError`.\n- `test_solution.py` — 19 tests, all pass: overlap, touching, adjacent-not-touching, unsorted, nested, duplicates, negatives, point intervals, empty, tuples, generator, idempotency, no-mutation (incl. nested lists and output aliasing), reversed/malformed errors, plus 300-case random cross-check vs naive per-unit coverage model.\n\n`python -m unittest -v test_solution` → `Ran 19 tests ... OK`.\n",
+      "stderr_tail": "2026/11/08 14:13:56 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-3of1x4l4/home/workspaces/exec-70751c54c84a04366b0af63899a5afb4\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "solution.py": "\"\"\"Merge overlapping and touching integer intervals.\"\"\"\n\n\ndef merge_intervals(intervals):\n    \"\"\"Merge [start, end] pairs.\n\n    Overlapping AND touching (endpoint == next start) intervals merge.\n    Result is sorted by start. Input list is not mutated.\n    Raises ValueError for reversed pairs (start > end).\n\n    Args:\n        intervals: iterable of [start, end] pairs of integers.\n\n    Returns:\n        list of merged [start, end] pairs, sorted by start.\n    \"\"\"\n    pairs = [list(iv) for iv in intervals]\n\n    for iv in pairs:\n        if len(iv) != 2:\n            raise ValueError(f\"interval must have exactly 2 elements: {iv!r}\")\n        start, end = iv\n        if start > end:\n            raise ValueError(f\"reversed interval: {iv!r}\")\n\n    pairs.sort(key=lambda iv: iv[0])\n\n    merged = []\n    for start, end in pairs:\n        if merged and start <= merged[-1][1]:\n            # touching counts as overlap (start == prev end)\n            if end > merged[-1][1]:\n                merged[-1][1] = end\n        else:\n            merged.append([start, end])\n\n    return merged",
+        "test_solution.py": "import copy\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 2]]), [[1, 2]])\n\n    def test_disjoint_sorted(self):\n        self.assertEqual(merge_intervals([[1, 2], [3, 4]]), [[1, 2], [3, 4]])\n\n    def test_disjoint_unsorted_input(self):\n        self.assertEqual(merge_intervals([[3, 4], [1, 2]]), [[1, 2], [3, 4]])\n\n    def test_overlap(self):\n        self.assertEqual(merge_intervals([[1, 5], [2, 6]]), [[1, 6]])\n\n    def test_touching_merges(self):\n        # [1,2] and [2,3] share endpoint 2 -> merge\n        self.assertEqual(merge_intervals([[1, 2], [2, 3]]), [[1, 3]])\n        self.assertEqual(merge_intervals([[1, 2], [3, 4]]), [[1, 2], [3, 4]])\n\n    def test_touching_negative(self):\n        # [-1,0] and [0,1] touch at 0\n        self.assertEqual(merge_intervals([[0, 1], [-1, 0]]), [[-1, 1]])\n\n    def test_nested(self):\n        self.assertEqual(merge_intervals([[1, 10], [2, 3], [4, 5]]), [[1, 10]])\n\n    def test_chain(self):\n        self.assertEqual(\n            merge_intervals([[5, 6], [1, 2], [2, 3], [3, 4], [8, 9]]),\n            [[1, 4], [5, 6], [8, 9]],\n        )\n\n    def test_sort_output(self):\n        result = merge_intervals([[10, 12], [1, 2], [5, 6]])\n        self.assertEqual(result, [[1, 2], [5, 6], [10, 12]])\n        self.assertEqual([iv[0] for iv in result], sorted(iv[0] for iv in result))\n\n    def test_does_not_mutate_input(self):\n        intervals = [[3, 4], [1, 2], [2, 3]]\n        snapshot = copy.deepcopy(intervals)\n        merge_intervals(intervals)\n        self.assertEqual(intervals, snapshot)\n\n    def test_returns_new_objects(self):\n        intervals = [[1, 2], [3, 4]]\n        result = merge_intervals(intervals)\n        self.assertIsNot(result[0], intervals[0])\n\n    def test_reversed_pair_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[5, 1]])\n\n    def test_reversed_pair_raises_even_alone(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[2, 1]])\n\n    def test_tuple_input_accepted(self):\n        self.assertEqual(merge_intervals([(1, 3), (3, 5)]), [[1, 5]])\n\n    def test_zero_length_interval(self):\n        # start == end is valid (single point)\n        self.assertEqual(merge_intervals([[2, 2]]), [[2, 2]])\n\n    def test_points_touching_range_merge(self):\n        self.assertEqual(merge_intervals([[1, 3], [4, 5], [3, 4]]), [[1, 5]])\n\n    def test_multiple_overlaps(self):\n        self.assertEqual(\n            merge_intervals([[1, 4], [2, 3], [8, 10], [9, 11], [15, 15]]),\n            [[1, 4], [8, 11], [15, 15]],\n        )\n\n\nif __name__ == \"__main__\":\n    unittest.main()"
+      },
+      "agent": "hermes",
+      "task": "python",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 79.241,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.131,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 15.159,
+          "usage": {
+            "prompt_tokens": 4606,
+            "completion_tokens": 60,
+            "total_tokens": 4666,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 17966
+        },
+        {
+          "status": 200,
+          "seconds": 17.772,
+          "usage": {
+            "prompt_tokens": 4708,
+            "completion_tokens": 57,
+            "total_tokens": 4765,
+            "prompt_tokens_details": {
+              "cached_tokens": 4576
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4576
+          },
+          "request_bytes": 18583
+        },
+        {
+          "status": 200,
+          "seconds": 20.731,
+          "usage": {
+            "prompt_tokens": 4778,
+            "completion_tokens": 1197,
+            "total_tokens": 5975,
+            "prompt_tokens_details": {
+              "cached_tokens": 4704
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4704
+          },
+          "request_bytes": 19064
+        },
+        {
+          "status": 200,
+          "seconds": 14.809,
+          "usage": {
+            "prompt_tokens": 6140,
+            "completion_tokens": 93,
+            "total_tokens": 6233,
+            "prompt_tokens_details": {
+              "cached_tokens": 4768
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4768
+          },
+          "request_bytes": 24573
+        },
+        {
+          "status": 200,
+          "seconds": 6.725,
+          "usage": {
+            "prompt_tokens": 6637,
+            "completion_tokens": 196,
+            "total_tokens": 6833,
+            "prompt_tokens_details": {
+              "cached_tokens": 6112
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6112
+          },
+          "request_bytes": 26970
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"Done.\\n\\n**Files** (in `/tmp/agent-azm-bench-2r1y1w2z/task`):\\n- `solution.py` \\u2014 `merge_intervals(intervals)`: copies input into new lists (no mutation), validates `start > end` \\u2192 `ValueError`, sorts by start, merges when `next.start <= prev.end` (so touching endpoints merge, `start == end` points are legal).\\n- `test_solution.py` \\u2014 18 unittest cases: empty, single, disjoint sorted/unsorted, overlap, touching (positive + negative), nested, chain, output sorted, input unmutated (deepcopy compare), returned lists are new objects, reversed pair raises, tuple input, zero-length point, multiple overlaps.\\n\\n**Verified**: `python3 -m unittest -v test_solution` \\u2192 18 tests, all `OK`, exit 0.\", \"tokens\": 28472}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "ledger.py": "\"\"\"Exact-decimal ledger totals.\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"total\"]\n\n\ndef _to_decimal(row):\n    \"\"\"Convert one ledger row into an exact Decimal amount.\n\n    Blank rows (empty or whitespace-only strings) are skipped by the caller.\n    Anything that is not a finite numeric amount raises ValueError.\n    \"\"\"\n    if isinstance(row, bool):\n        raise ValueError(\"malformed numeric value: %r\" % (row,))\n    if isinstance(row, int):\n        return Decimal(row)\n    if isinstance(row, float):\n        # repr keeps the shortest round-trip form; never raises.\n        return Decimal(repr(row))\n    if isinstance(row, Decimal):\n        value = row\n    elif isinstance(row, str):\n        text = row.strip()\n        if not text:\n            return None  # blank line\n        try:\n            value = Decimal(text)\n        except (InvalidOperation, ValueError) as exc:\n            raise ValueError(\"malformed numeric value: %r\" % (row,)) from exc\n    elif isinstance(row, bytes):\n        try:\n            text = row.decode(\"utf-8\").strip()\n        except UnicodeDecodeError as exc:\n            raise ValueError(\"malformed numeric value: %r\" % (row,)) from exc\n        if not text:\n            return None\n        try:\n            value = Decimal(text)\n        except (InvalidOperation, ValueError) as exc:\n            raise ValueError(\"malformed numeric value: %r\" % (row,)) from exc\n    else:\n        raise ValueError(\"malformed numeric value: %r\" % (row,))\n\n    if not value.is_finite():\n        raise ValueError(\"malformed numeric value: %r\" % (row,))\n    return value\n\n\ndef total(rows):\n    \"\"\"Sum ``rows`` exactly as Decimal. Signed amounts allowed, blank lines ignored.\"\"\"\n    if rows is None:\n        raise ValueError(\"malformed numeric value: None\")\n    running = Decimal(0)\n    for row in rows:\n        amount = _to_decimal(row)\n        if amount is None:\n            continue\n        running += amount\n    return running",
+        "test_ledger.py": "\"\"\"Tests for ledger.total.\"\"\"\n\nimport unittest\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\nclass TotalTests(unittest.TestCase):\n    def test_exact_decimal_sum(self):\n        self.assertEqual(total([\"0.1\", \"0.2\", \"0.3\"]), Decimal(\"0.6\"))\n\n    def test_exact_decimal_not_float(self):\n        result = total([\"1.005\", \"2.005\"])\n        self.assertIsInstance(result, Decimal)\n        self.assertEqual(result, Decimal(\"3.010\"))\n\n    def test_signed_amounts(self):\n        self.assertEqual(total([\"10.00\", \"-3.50\", \"-1.25\"]), Decimal(\"5.25\"))\n        self.assertEqual(total([\"-1\", \"-2\"]), Decimal(\"-3\"))\n\n    def test_blank_lines_ignored(self):\n        self.assertEqual(total([\"1.5\", \"\", \"   \", \"\\t\", \"2.5\"]), Decimal(\"4.0\"))\n        self.assertEqual(total([]), Decimal(0))\n\n    def test_none_rows_rejected(self):\n        with self.assertRaises(ValueError):\n            total(None)\n\n    def test_malformed_rejected(self):\n        for bad in [\"abc\", \"12.3.4\", \"1,000\", \"NaN\", \"Infinity\", None, [1], object()]:\n            with self.assertRaises(ValueError):\n                total([bad])\n\n    def test_malformed_after_valid_still_raises(self):\n        with self.assertRaises(ValueError):\n            total([\"1.00\", \"oops\"])\n\n    def test_int_and_decimal_inputs(self):\n        self.assertEqual(total([1, Decimal(\"2.5\"), 3]), Decimal(\"6.5\"))\n\n    def test_public_name_preserved(self):\n        self.assertTrue(callable(total))\n\n\nif __name__ == \"__main__\":\n    unittest.main()"
+      },
+      "agent": "hermes",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 45.524,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.129,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 5.552,
+          "usage": {
+            "prompt_tokens": 4593,
+            "completion_tokens": 94,
+            "total_tokens": 4687,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 17938
+        },
+        {
+          "status": 200,
+          "seconds": 5.168,
+          "usage": {
+            "prompt_tokens": 4787,
+            "completion_tokens": 93,
+            "total_tokens": 4880,
+            "prompt_tokens_details": {
+              "cached_tokens": 4576
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4576
+          },
+          "request_bytes": 19028
+        },
+        {
+          "status": 200,
+          "seconds": 17.088,
+          "usage": {
+            "prompt_tokens": 4989,
+            "completion_tokens": 1410,
+            "total_tokens": 6399,
+            "prompt_tokens_details": {
+              "cached_tokens": 4768
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4768
+          },
+          "request_bytes": 20001
+        },
+        {
+          "status": 200,
+          "seconds": 4.783,
+          "usage": {
+            "prompt_tokens": 6561,
+            "completion_tokens": 131,
+            "total_tokens": 6692,
+            "prompt_tokens_details": {
+              "cached_tokens": 4960
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4960
+          },
+          "request_bytes": 29642
+        },
+        {
+          "status": 200,
+          "seconds": 8.668,
+          "usage": {
+            "prompt_tokens": 6930,
+            "completion_tokens": 327,
+            "total_tokens": 7257,
+            "prompt_tokens_details": {
+              "cached_tokens": 6560
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 6560
+          },
+          "request_bytes": 31561
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"9/9 tests pass.\\n\\n`/tmp/agent-azm-bench-6h6q1uxb/task/ledger.py` \\u2014 `total(rows)` rewritten:\\n\\n- Sums as `Decimal`, `Decimal(\\\"0.1\\\")+Decimal(\\\"0.2\\\")+Decimal(\\\"0.3\\\") == Decimal(\\\"0.6\\\")` (old `float` path gave `0.9999999999999999`)\\n- Signed amounts via `Decimal` (`\\\"-3.50\\\"` fine)\\n- Blank/whitespace-only rows skipped, empty input returns `Decimal(0)`\\n- Malformed input \\u2192 `ValueError`: `\\\"abc\\\"`, `\\\"12.3.4\\\"`, `\\\"1,000\\\"`, `None`, `NaN`, `Infinity`, non-numeric types, plus non-finite `Decimal`\\n- Public name `total` kept; `int`/`float`/`Decimal`/`bytes` rows accepted\\n\\n`/tmp/agent-azm-bench-6h6q1uxb/task/test_ledger.py` added (no tests shipped in task folder). Ran `python3 -m unittest -v test_ledger` \\u2192 `Ran 9 tests ... OK`, exit 0.\", \"tokens\": 29915}\n",
+      "stderr_tail": ""
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "ledger.py": "\"\"\"Ledger totals with exact decimal arithmetic.\n\nPublic API: ``total(rows)`` -> Decimal\n\"\"\"\n\nimport re\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"total\"]\n\n# Strict plain-decimal form: no underscores, no words like nan/inf, no hex.\n_NUMBER_RE = re.compile(r\"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?\\Z\")\n\n\ndef _to_decimal(value):\n    \"\"\"Convert one row value to a finite Decimal.\n\n    Raises ValueError for anything that is not a well-formed, finite number.\n    \"\"\"\n    if isinstance(value, bool):\n        raise ValueError(\"malformed numeric value: %r\" % (value,))\n\n    if isinstance(value, Decimal):\n        result = value\n    elif isinstance(value, int):\n        result = Decimal(value)\n    elif isinstance(value, float):\n        if value != value or value in (float(\"inf\"), float(\"-inf\")):\n            raise ValueError(\"malformed numeric value: %r\" % (value,))\n        result = Decimal(str(value))\n    elif isinstance(value, str):\n        result = _parse_str(value)\n    else:\n        raise ValueError(\"malformed numeric value: %r\" % (value,))\n\n    if not result.is_finite():\n        raise ValueError(\"malformed numeric value: %r\" % (value,))\n    return result\n\n\ndef _parse_str(text):\n    stripped = text.strip()\n    if not stripped or not _NUMBER_RE.match(stripped):\n        raise ValueError(\"malformed numeric value: %r\" % (text,))\n    try:\n        return Decimal(stripped)\n    except InvalidOperation as exc:\n        raise ValueError(\"malformed numeric value: %r\" % (text,)) from exc\n\n\ndef total(rows):\n    \"\"\"Sum signed amounts exactly.\n\n    - amounts may be ints, Decimals, floats or strings, positive or negative\n    - blank/whitespace-only lines are ignored\n    - malformed numeric values raise ValueError\n    - the running total is exact (Decimal), no float drift\n    \"\"\"\n    if rows is None:\n        raise ValueError(\"rows must be an iterable of amounts, got None\")\n\n    running = Decimal(0)\n    for row in rows:\n        if isinstance(row, str) and not row.strip():\n            continue\n        running += _to_decimal(row)\n    return running\n",
+        "test_ledger.py": "import unittest\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\nclass TotalTests(unittest.TestCase):\n    def test_exact_decimal_no_float_drift(self):\n        result = total([\"0.1\", \"0.2\"])\n        self.assertEqual(result, Decimal(\"0.3\"))\n        self.assertIsInstance(result, Decimal)\n\n    def test_long_chain_exact(self):\n        rows = [\"0.01\"] * 100\n        self.assertEqual(total(rows), Decimal(\"1.00\"))\n\n    def test_signed_amounts(self):\n        self.assertEqual(total([\"100.50\", \"-50.25\", \"-0.25\"]), Decimal(\"50.00\"))\n\n    def test_blank_lines_ignored(self):\n        rows = [\"10\", \"\", \"   \", \"\\t\\n\", \"-2.5\"]\n        self.assertEqual(total(rows), Decimal(\"7.5\"))\n\n    def test_empty_input_is_zero(self):\n        self.assertEqual(total([]), Decimal(\"0\"))\n        self.assertEqual(total([\"\", \"  \"]), Decimal(\"0\"))\n\n    def test_value_types(self):\n        self.assertEqual(total([1, Decimal(\"2.5\"), \"-0.5\", 3.0]), Decimal(\"6.0\"))\n\n    def test_malformed_raises_value_error(self):\n        for bad in [\"abc\", \"1.2.3\", \"12,5\", \"1_0.5\", \"nan\", \"NaN\", \"inf\", \"-Infinity\",\n                    \"0x10\", \"$5\", \"5 dollars\", None, True, [], {}]:\n            with self.subTest(bad=bad):\n                with self.assertRaises(ValueError):\n                    total([\"1\", bad, \"2\"])\n\n    def test_malformed_in_first_position(self):\n        with self.assertRaises(ValueError):\n            total([\"oops\", \"1\"])\n\n    def test_public_name_kept(self):\n        self.assertTrue(callable(total))\n        self.assertEqual(total.__name__, \"total\")\n\n    def test_generator_input(self):\n        self.assertEqual(total(Decimal(str(i)) for i in range(1, 5)), Decimal(\"10\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 41.188,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.504,
+          "usage": {
+            "prompt_tokens": 6375,
+            "completion_tokens": 156,
+            "total_tokens": 6531,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 19725
+        },
+        {
+          "status": 200,
+          "seconds": 12.15,
+          "usage": {
+            "prompt_tokens": 6710,
+            "completion_tokens": 1697,
+            "total_tokens": 8407,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20932
+        },
+        {
+          "status": 200,
+          "seconds": 2.418,
+          "usage": {
+            "prompt_tokens": 7833,
+            "completion_tokens": 183,
+            "total_tokens": 8016,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 25972
+        },
+        {
+          "status": 200,
+          "seconds": 3.877,
+          "usage": {
+            "prompt_tokens": 8401,
+            "completion_tokens": 263,
+            "total_tokens": 8664,
+            "prompt_tokens_details": {
+              "cached_tokens": 5760
+            }
+          },
+          "request_bytes": 28087
+        },
+        {
+          "status": 200,
+          "seconds": 4.487,
+          "usage": {
+            "prompt_tokens": 8664,
+            "completion_tokens": 460,
+            "total_tokens": 9124,
+            "prompt_tokens_details": {
+              "cached_tokens": 6400
+            }
+          },
+          "request_bytes": 29010
+        },
+        {
+          "status": 200,
+          "seconds": 3.782,
+          "usage": {
+            "prompt_tokens": 8979,
+            "completion_tokens": 300,
+            "total_tokens": 9279,
+            "prompt_tokens_details": {
+              "cached_tokens": 6656
+            }
+          },
+          "request_bytes": 30431
+        },
+        {
+          "status": 200,
+          "seconds": 5.321,
+          "usage": {
+            "prompt_tokens": 9284,
+            "completion_tokens": 688,
+            "total_tokens": 9972,
+            "prompt_tokens_details": {
+              "cached_tokens": 6912
+            }
+          },
+          "request_bytes": 31710
+        },
+        {
+          "status": 200,
+          "seconds": 1.707,
+          "usage": {
+            "prompt_tokens": 9915,
+            "completion_tokens": 80,
+            "total_tokens": 9995,
+            "prompt_tokens_details": {
+              "cached_tokens": 7168
+            }
+          },
+          "request_bytes": 34515
+        },
+        {
+          "status": 200,
+          "seconds": 4.227,
+          "usage": {
+            "prompt_tokens": 10308,
+            "completion_tokens": 277,
+            "total_tokens": 10585,
+            "prompt_tokens_details": {
+              "cached_tokens": 7808
+            }
+          },
+          "request_bytes": 35957
+        }
+      ],
+      "stdout_tail": "Done. `/tmp/agent-azm-bench-dmo98p5_/task/ledger.py`\n\nChanges:\n- `Decimal` accumulator; each value converted via `_to_decimal` before summing → no float drift. `total([\"0.1\",\"0.2\"])` == `Decimal(\"0.3\")`.\n- Signed amounts work (`+`/`-` prefixes, negatives).\n- Blank/whitespace-only strings skipped; `total([])` → `Decimal(\"0\")`.\n- Malformed input → `ValueError` (regex gate rejects `abc`, `1.2.3`, `1_0.5`, `nan`, `inf`, `0x10`, `$5`, `None`, `True`, lists/dicts).\n- Name `total(rows)` unchanged; returns `Decimal` where it used to return `float` (intended — exact totals).\n\nTests: `test_ledger.py`, 10 tests, all pass (`python3 -m unittest -v test_ledger` → OK). First run failed on `1_0.5` (Decimal accepts underscores); tightened with `_NUMBER_RE` and re-ran green.\n",
+      "stderr_tail": "2026/11/08 14:17:36 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-dmo98p5_/home/workspaces/exec-59e4c3078ec7f760dbf8b18aa753c8a9\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Mashhad\": 260,\n  \"Shiraz\": 100,\n  \"Tehran\": 150\n}"
+      },
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 8.477,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.56,
+          "usage": {
+            "prompt_tokens": 6403,
+            "completion_tokens": 70,
+            "total_tokens": 6473,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 20353
+        },
+        {
+          "status": 200,
+          "seconds": 2.474,
+          "usage": {
+            "prompt_tokens": 6620,
+            "completion_tokens": 236,
+            "total_tokens": 6856,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 21065
+        },
+        {
+          "status": 200,
+          "seconds": 3.09,
+          "usage": {
+            "prompt_tokens": 6933,
+            "completion_tokens": 221,
+            "total_tokens": 7154,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 22141
+        }
+      ],
+      "stdout_tail": "خوانده شد. `result.json` نوشته شد، `sales.csv` دستنخورده (md5 قبل/بعد یکسان: `031da3268696df142450167eb9e01401`).\n\n```json\n{\n  \"Mashhad\": 260,\n  \"Shiraz\": 100,\n  \"Tehran\": 150\n}\n```\n\nحساب:\n- Tehran: 2×150 + (−1)×150 = 300 − 150 = 150\n- Mashhad: 3×80 + 1×20 = 240 + 20 = 260\n- Shiraz: 4×25 = 100\n\nمرجوعی تهران اعمال شد. مسیر: `/tmp/agent-azm-bench-8nqfyyhi/task/result.json`\n",
+      "stderr_tail": "2026/11/08 14:18:18 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-8nqfyyhi/home/workspaces/exec-25cd5fa52090a0b26d6d9309bd919789\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Mashhad\": 260,\n  \"Shiraz\": 100,\n  \"Tehran\": 150\n}\n",
+        "sum_by_city.py": "import csv, json, hashlib, pathlib\n\nroot = pathlib.Path(__file__).parent\nsrc = root / \"sales.csv\"\nbefore = hashlib.sha256(src.read_bytes()).hexdigest()\n\ntotals = {}\nwith src.open(newline=\"\", encoding=\"utf-8\") as f:\n    for row in csv.DictReader(f):\n        city = row[\"city\"].strip()\n        amount = int(row[\"qty\"]) * int(row[\"price\"])\n        totals[city] = totals.get(city, 0) + amount\n\nout = {c: int(v) for c, v in sorted(totals.items())}\n(root / \"result.json\").write_text(json.dumps(out, indent=2) + \"\\n\", encoding=\"utf-8\")\n\nafter = hashlib.sha256(src.read_bytes()).hexdigest()\nassert before == after, \"sales.csv changed!\"\nprint(\"source_unchanged:\", before == after)\nprint(json.dumps(out, ensure_ascii=False))"
+      },
+      "agent": "hermes",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 44.568,
+      "calls": [
+        {
+          "status": 400,
+          "seconds": 0.132,
+          "usage": {},
+          "request_bytes": 15
+        },
+        {
+          "status": 200,
+          "seconds": 5.112,
+          "usage": {
+            "prompt_tokens": 4644,
+            "completion_tokens": 91,
+            "total_tokens": 4735,
+            "prompt_tokens_details": {
+              "cached_tokens": 3872
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 3872
+          },
+          "request_bytes": 18566
+        },
+        {
+          "status": 200,
+          "seconds": 9.546,
+          "usage": {
+            "prompt_tokens": 4878,
+            "completion_tokens": 410,
+            "total_tokens": 5288,
+            "prompt_tokens_details": {
+              "cached_tokens": 4640
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4640
+          },
+          "request_bytes": 19744
+        },
+        {
+          "status": 200,
+          "seconds": 4.941,
+          "usage": {
+            "prompt_tokens": 5367,
+            "completion_tokens": 84,
+            "total_tokens": 5451,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 4864
+          },
+          "request_bytes": 22383
+        },
+        {
+          "status": 200,
+          "seconds": 6.645,
+          "usage": {
+            "prompt_tokens": 5576,
+            "completion_tokens": 245,
+            "total_tokens": 5821,
+            "prompt_tokens_details": {
+              "cached_tokens": 5344
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5344
+          },
+          "request_bytes": 23324
+        },
+        {
+          "status": 200,
+          "seconds": 13.449,
+          "usage": {
+            "prompt_tokens": 5972,
+            "completion_tokens": 294,
+            "total_tokens": 6266,
+            "prompt_tokens_details": {
+              "cached_tokens": 5568
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 5568
+          },
+          "request_bytes": 24926
+        }
+      ],
+      "stdout_tail": "{\"final_response\": \"`result.json` \\u0646\\u0648\\u0634\\u062a\\u0647 \\u0634\\u062f:\\n\\n```json\\n{\\n  \\\"Mashhad\\\": 260,\\n  \\\"Shiraz\\\": 100,\\n  \\\"Tehran\\\": 150\\n}\\n```\\n\\n- \\u0645\\u062d\\u0627\\u0633\\u0628\\u0647: `qty * price` \\u0647\\u0631 \\u0631\\u062f\\u06cc\\u0641\\u060c \\u062c\\u0645\\u0639 \\u0628\\u0647 \\u062a\\u0641\\u06a9\\u06cc\\u06a9 \\u0634\\u0647\\u0631. \\u0645\\u0631\\u062c\\u0648\\u0639\\u06cc `Tehran,-1,150` \\u0647\\u0645 \\u0644\\u062d\\u0627\\u0638 \\u0634\\u062f\\u0647 \\u2192 Tehran = 300 \\u2212 150 = 150.\\n- `sales.csv` \\u062f\\u0633\\u062a \\u0646\\u062e\\u0648\\u0631\\u062f\\u0647 (sha256 \\u0642\\u0628\\u0644/\\u0628\\u0639\\u062f \\u06cc\\u06a9\\u06cc\\u060c md5 `031da3268696df142450167eb9e01401`).\\n- \\u0631\\u0627\\u0633\\u062a\\u06cc\\u200c\\u0622\\u0632\\u0645\\u0627\\u06cc\\u06cc \\u0645\\u0633\\u062a\\u0642\\u0644: \\u0628\\u0627\\u0632\\u062e\\u0648\\u0627\\u0646\\u06cc `result.json` + \\u0628\\u0627\\u0632\\u0645\\u062d\\u0627\\u0633\\u0628\\u0647 \\u0627\\u0632 \\u0631\\u0648\\u06cc CSV \\u0628\\u0627 \\u0631\\u0648\\u0634 \\u062f\\u0648\\u0645\\u060c \\u0628\\u0631\\u0627\\u0628\\u0631\\u06cc \\u06a9\\u0627\\u0645\\u0644 + \\u0628\\u0631\\u0631\\u0633\\u06cc \\u0646\\u0648\\u0639 \\u0645\\u0642\\u062f\\u0627\\u0631\\u0647\\u0627 `int` (\\u0646\\u0647 bool) \\u2192 `verify OK`.\\n- \\u0627\\u0633\\u06a9\\u0631\\u06cc\\u067e\\u062a: `/tmp/agent-azm-bench-orrakzp1/task/sum_by_city.py` (\\u0642\\u0627\\u0628\\u0644 \\u062d\\u0630\\u0641\\u060c \\u0641\\u0642\\u0637 \\u0628\\u0631\\u0627\\u06cc \\u0627\\u062c\\u0631\\u0627\\u0633\\u062a).\", \"tokens\": 27561}\n",
+      "stderr_tail": ""
+    }
+  ]
+}

@@ -28,9 +28,10 @@ def report(data):
     rows = data['results']
     version = data.get('metadata', {}).get('macron_version', 'macron 1.2.2').removeprefix('macron ')
     lines = [f'# Macron {version} / Hermes: repeated AZM comparison', '',
-             data.get('method_note', 'See the raw JSON alongside this report.') + ' Three shared tasks, three repetitions each, '
-             'alternating first agent by task and repetition. Same endpoint/model alias, '
-             '20 rounds, 180-second agent budget and 200-second process limit. Each run gets a fresh home/workspace.', '',
+             data.get('method_note', 'See the raw JSON alongside this report.'), '',
+             data.get('schedule_note', 'Three shared tasks, three repetitions each, alternating first agent by task and repetition.') +
+             ' Same endpoint/model alias, 20 rounds, 180-second agent budget and 200-second process limit. '
+             'Each run gets a fresh home/workspace.', '',
              '| Agent | Correct / trials | Median wall seconds (all trials) | API errors excluding shape probes |',
              '|---|---:|---:|---:|']
     summary = {}

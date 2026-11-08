@@ -130,9 +130,21 @@ Backups contain credentials. Stop the service before restoring; follow [the serv
 
 ## Measured optimization
 
-All three final `azm` pilot scenarios passed independent output checks. Aggregate reported input tokens decreased from **305,972** for the earlier broad-tool variant to **98,538**, approximately **68% in those samples**.
+Three shared tasks were run three times each with `azm` using the real agent implementations:
 
-There was one trial per scenario/variant. Sampling, cache, network and upstream load were uncontrolled; tokens are not monetary cost. Hermes was also run against the same endpoint; this does **not** establish overall superiority. Raw attempts, evaluator corrections, infrastructure failures and limitations are retained in [the comparison report](benchmarks/RESULTS.md), [optimization report](audits/OPTIMIZATION.fa.md) and [validation notes](VALIDATION.md).
+| Agent | Successful trials | Median wall time |
+|---|---:|---:|
+| Macron 1.2.3 | 8/9 | 24.8s |
+| Hermes | 8/9 | 100.3s |
+
+On seven matched successful pairs with complete usage, Macron took 76.2% less time but used
+40.1% more reported input tokens. The CLI change reduced Macron input by 17% against 1.2.2
+on those same pairs. One Macron output misinterpreted interval boundaries; one Hermes process
+hit the deadline after an upstream error. The 1.2.3 follow-up ran in a later phase; sampling,
+cache and server load were uncontrolled. Tokens include cached input and are not monetary cost.
+See [the full comparison](benchmarks/RESULTS-1.2.3.md), [the Persian review](audits/REVIEW-1.2.3.fa.md)
+and [offline artifact replay](benchmarks/verify_artifacts.py). The [older optimization measurements](audits/OPTIMIZATION.fa.md)
+are retained separately.
 
 ## Develop
 

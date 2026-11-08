@@ -1,0 +1,939 @@
+{
+  "model": "azm",
+  "macron_tools": "default built-ins",
+  "normalization": "strip exact invalid trailing data: [DONE] marker for BOTH agents",
+  "endpoint_scheme": "http",
+  "steps": 20,
+  "deadline_seconds": 180,
+  "repetitions": 3,
+  "metadata": {
+    "macron_commit": "262bbcb68c921239c055458d6cf02ecba8c3efd3",
+    "macron_binary_sha256": "325b2e32dd83b620f2adbdc0704e3ba08dfc5f921d645b0a7b249303fb006d82",
+    "hermes_commit": "e075441241b8d626789b4aae0e376f86eabf824d",
+    "started_at_utc": "2026-11-08T14:19:41.533286+00:00",
+    "macron_version": "macron 1.2.3",
+    "server_reported_model": "mimo-v2.6-flash",
+    "probe_calls_excluded": 2
+  },
+  "results": [
+    {
+      "repetition": 1,
+      "artifacts": {
+        "solution.py": "\"\"\"Merge overlapping and touching integer intervals.\n\nmerge_intervals(intervals) -> list[list[int]]\n\nRules:\n  * each interval is a pair [start, end] of ints\n  * intervals that overlap OR merely touch (end == next start) are merged\n  * output is sorted by start\n  * the input sequence/objects are never mutated\n  * a reversed pair (start > end) raises ValueError\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom typing import Iterable, List, Sequence\n\n\ndef _normalize(intervals: Iterable[Sequence[int]]) -> List[List[int]]:\n    \"\"\"Validate and copy the input into a fresh list of [start, end] lists.\"\"\"\n    if isinstance(intervals, (str, bytes)) or not isinstance(intervals, Iterable):\n        raise TypeError(\"intervals must be an iterable of [start, end] pairs\")\n\n    cleaned: List[List[int]] = []\n    for i, interval in enumerate(intervals):\n        if isinstance(interval, (str, bytes)) or not isinstance(interval, (list, tuple)):\n            raise TypeError(\n                f\"interval at index {i} must be a [start, end] pair, got {type(interval).__name__}\"\n            )\n        if len(interval) != 2:\n            raise ValueError(\n                f\"interval at index {i} must have exactly 2 elements, got {len(interval)}\"\n            )\n        start, end = interval[0], interval[1]\n        for name, value in ((\"start\", start), (\"end\", end)):\n            if isinstance(value, bool) or not isinstance(value, int):\n                raise TypeError(\n                    f\"interval at index {i}: {name} must be an int, got {type(value).__name__}\"\n                )\n        if start > end:\n            raise ValueError(\n                f\"interval at index {i} is reversed: start {start} > end {end}\"\n            )\n        cleaned.append([start, end])\n    return cleaned\n\n\ndef merge_intervals(intervals: Iterable[Sequence[int]]) -> List[List[int]]:\n    \"\"\"Merge overlapping/touching integer intervals. Input is not mutated.\"\"\"\n    cleaned = _normalize(intervals)\n    if not cleaned:\n        return []\n\n    cleaned.sort(key=lambda iv: (iv[0], iv[1]))\n\n    merged: List[List[int]] = [cleaned[0][:]]\n    for start, end in cleaned[1:]:\n        last = merged[-1]\n        # merge when overlapping or touching: start <= last_end\n        if start <= last[1]:\n            if end > last[1]:\n                last[1] = end\n        else:\n            merged.append([start, end])\n    return merged\n\n\nif __name__ == \"__main__\":  # tiny demo\n    print(merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]))\n    print(merge_intervals([[1, 4], [4, 5]]))\n    print(merge_intervals([]))\n",
+        "test_solution.py": "import copy\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 2]]), [[1, 2]])\n\n    def test_overlap(self):\n        self.assertEqual(\n            merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]),\n            [[1, 6], [8, 10], [15, 18]],\n        )\n\n    def test_touching_endpoints_merge(self):\n        self.assertEqual(merge_intervals([[1, 4], [4, 5]]), [[1, 5]])\n        self.assertEqual(merge_intervals([[1, 2], [3, 4]]), [[1, 2], [3, 4]])\n        self.assertEqual(merge_intervals([[5, 5], [5, 7]]), [[5, 7]])\n\n    def test_unsorted_input_is_sorted_output(self):\n        self.assertEqual(\n            merge_intervals([[8, 10], [1, 3], [2, 6], [15, 18]]),\n            [[1, 6], [8, 10], [15, 18]],\n        )\n\n    def test_contained_interval(self):\n        self.assertEqual(merge_intervals([[1, 10], [2, 3]]), [[1, 10]])\n\n    def test_touching_chain(self):\n        self.assertEqual(merge_intervals([[1, 2], [2, 3], [3, 4]]), [[1, 4]])\n\n    def test_duplicates(self):\n        self.assertEqual(merge_intervals([[1, 3], [1, 3], [1, 3]]), [[1, 3]])\n\n    def test_negative_and_zero(self):\n        self.assertEqual(\n            merge_intervals([[-5, -1], [-1, 0], [0, 4], [10, 10]]),\n            [[-5, 4], [10, 10]],\n        )\n\n    def test_point_intervals(self):\n        self.assertEqual(merge_intervals([[3, 3], [3, 3], [4, 4]]), [[3, 3], [4, 4]])\n        self.assertEqual(merge_intervals([[3, 3], [3, 3]]), [[3, 3]])\n\n    def test_does_not_mutate_input(self):\n        intervals = [[5, 6], [1, 2], [2, 3]]\n        before = copy.deepcopy(intervals)\n        result = merge_intervals(intervals)\n        self.assertEqual(intervals, before)\n        self.assertEqual(result, [[1, 3], [5, 6]])\n        # returned lists must be independent of the input\n        result[0][0] = 999\n        self.assertEqual(intervals, before)\n\n    def test_does_not_mutate_input_tuples(self):\n        intervals = [(5, 6), (1, 2)]\n        before = copy.deepcopy(intervals)\n        self.assertEqual(merge_intervals(intervals), [[1, 2], [5, 6]])\n        self.assertEqual(intervals, before)\n\n    def test_reversed_pair_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[5, 1]])\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [7, 3]])\n\n    def test_reversed_detected_among_valid(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [10, 8], [3, 4]])\n\n    def test_wrong_length_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2, 3]])\n\n    def test_wrong_type_raises(self):\n        with self.assertRaises(TypeError):\n            merge_intervals([[1, \"2\"]])\n        with self.assertRaises(TypeError):\n            merge_intervals([1, 2])\n\n    def test_generator_input(self):\n        gen = ([x, x + 5] for x in (0, 1, 2, 100))\n        self.assertEqual(merge_intervals(gen), [[0, 7], [100, 105]])\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n"
+      },
+      "agent": "macron",
+      "task": "python",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 26.4,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.146,
+          "usage": {
+            "prompt_tokens": 4860,
+            "completion_tokens": 155,
+            "total_tokens": 5015
+          },
+          "request_bytes": 12022
+        },
+        {
+          "status": 200,
+          "seconds": 10.647,
+          "usage": {
+            "prompt_tokens": 5139,
+            "completion_tokens": 1823,
+            "total_tokens": 6962,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 13064
+        },
+        {
+          "status": 200,
+          "seconds": 2.133,
+          "usage": {
+            "prompt_tokens": 6972,
+            "completion_tokens": 84,
+            "total_tokens": 7056,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 20028
+        },
+        {
+          "status": 200,
+          "seconds": 3.405,
+          "usage": {
+            "prompt_tokens": 7733,
+            "completion_tokens": 318,
+            "total_tokens": 8051,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            }
+          },
+          "request_bytes": 22792
+        },
+        {
+          "status": 200,
+          "seconds": 3.766,
+          "usage": {
+            "prompt_tokens": 8069,
+            "completion_tokens": 270,
+            "total_tokens": 8339,
+            "prompt_tokens_details": {
+              "cached_tokens": 5632
+            }
+          },
+          "request_bytes": 23906
+        },
+        {
+          "status": 200,
+          "seconds": 3.739,
+          "usage": {
+            "prompt_tokens": 8355,
+            "completion_tokens": 276,
+            "total_tokens": 8631,
+            "prompt_tokens_details": {
+              "cached_tokens": 6016
+            }
+          },
+          "request_bytes": 24898
+        }
+      ],
+      "stdout_tail": "Done. 17 tests pass.\n\n**Files** (`/tmp/agent-azm-bench-kjuly_1g/task/`):\n- `solution.py` — `merge_intervals(intervals)`\n- `test_solution.py` — 17 unittest cases\n\n**Logic:**\n- Validate+copy input into fresh lists (no mutation)\n- `start > end` → `ValueError`; wrong length → `ValueError`; non-int/bad type → `TypeError`\n- Sort by `(start, end)`, merge when `start <= last_end` (overlap OR touch: `[1,4]`,`[4,5]` → `[1,5]`)\n- Empty input → `[]`\n\n**Verify:**\n```\ncd /tmp/agent-azm-bench-kjuly_1g/task && python3 -m unittest discover -s . -p 'test_*.py'\n# Ran 17 tests ... OK\n```\n\nOne test expectation was wrong on my side (`[3,3]`+`[4,4]` don't touch — gap), fixed test to match correct semantics. Code `[3,3]`+`[3,3]` → `[3,3]` confirmed.\n",
+      "stderr_tail": "2026/11/08 14:19:41 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-kjuly_1g/home/workspaces/exec-f5b87e8d4e0be868ef71b09ff60c55fe\n"
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "ledger.py": "from decimal import Decimal, InvalidOperation\n\n\ndef total(rows):\n    \"\"\"Sum decimal amounts exactly.\n\n    Each entry is a string (or number) holding a signed decimal amount.\n    Blank / whitespace-only entries are ignored. Malformed values raise ValueError.\n    \"\"\"\n    result = Decimal(\"0\")\n    for row in rows:\n        if row is None:\n            continue\n        if isinstance(row, str):\n            text = row.strip()\n            if not text:\n                continue\n        elif isinstance(row, Decimal):\n            text = row\n        elif isinstance(row, (int, float)):\n            text = str(row)\n        else:\n            raise ValueError(f\"malformed numeric value: {row!r}\")\n        try:\n            value = Decimal(text)\n        except (InvalidOperation, ValueError):\n            raise ValueError(f\"malformed numeric value: {row!r}\")\n        if not value.is_finite():\n            raise ValueError(f\"malformed numeric value: {row!r}\")\n        result += value\n    return result\n",
+        "test_ledger.py": "from decimal import Decimal\n\nimport pytest\n\nfrom ledger import total\n\n\ndef test_exact_decimal_sum():\n    assert total([\"0.1\", \"0.2\"]) == Decimal(\"0.3\")\n\n\ndef test_signed_amounts():\n    assert total([\"10\", \"-3.5\", \"+2\"]) == Decimal(\"8.5\")\n\n\ndef test_blank_lines_ignored():\n    assert total([\"1\", \"\", \"  \", \"\\t\", None, \"2\"]) == Decimal(\"3\")\n\n\ndef test_empty():\n    assert total([]) == Decimal(\"0\")\n\n\ndef test_returns_decimal():\n    assert isinstance(total([\"1.1\"]), Decimal)\n\n\n@pytest.mark.parametrize(\"bad\", [\"abc\", \"1.2.3\", \"1,000\", \"nan\", \"inf\", \"$5\", [1], {}])\ndef test_malformed_raises(bad):\n    with pytest.raises(ValueError):\n        total([\"1\", bad])\n\n\ndef test_public_name_preserved():\n    assert callable(total)\n"
+      },
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 35.162,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.648,
+          "usage": {
+            "prompt_tokens": 4850,
+            "completion_tokens": 91,
+            "total_tokens": 4941
+          },
+          "request_bytes": 11994
+        },
+        {
+          "status": 200,
+          "seconds": 1.739,
+          "usage": {
+            "prompt_tokens": 5048,
+            "completion_tokens": 61,
+            "total_tokens": 5109,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 12689
+        },
+        {
+          "status": 200,
+          "seconds": 3.494,
+          "usage": {
+            "prompt_tokens": 5134,
+            "completion_tokens": 317,
+            "total_tokens": 5451,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            }
+          },
+          "request_bytes": 13089
+        },
+        {
+          "status": 200,
+          "seconds": 3.952,
+          "usage": {
+            "prompt_tokens": 5430,
+            "completion_tokens": 408,
+            "total_tokens": 5838,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 14504
+        },
+        {
+          "status": 200,
+          "seconds": 3.114,
+          "usage": {
+            "prompt_tokens": 5733,
+            "completion_tokens": 275,
+            "total_tokens": 6008,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            }
+          },
+          "request_bytes": 15862
+        },
+        {
+          "status": 200,
+          "seconds": 2.96,
+          "usage": {
+            "prompt_tokens": 5953,
+            "completion_tokens": 236,
+            "total_tokens": 6189,
+            "prompt_tokens_details": {
+              "cached_tokens": 3712
+            }
+          },
+          "request_bytes": 16787
+        },
+        {
+          "status": 200,
+          "seconds": 3.042,
+          "usage": {
+            "prompt_tokens": 6445,
+            "completion_tokens": 281,
+            "total_tokens": 6726,
+            "prompt_tokens_details": {
+              "cached_tokens": 3840
+            }
+          },
+          "request_bytes": 18966
+        },
+        {
+          "status": 200,
+          "seconds": 3.952,
+          "usage": {
+            "prompt_tokens": 6775,
+            "completion_tokens": 426,
+            "total_tokens": 7201,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 20319
+        },
+        {
+          "status": 200,
+          "seconds": 2.743,
+          "usage": {
+            "prompt_tokens": 7111,
+            "completion_tokens": 119,
+            "total_tokens": 7230,
+            "prompt_tokens_details": {
+              "cached_tokens": 4736
+            }
+          },
+          "request_bytes": 21717
+        },
+        {
+          "status": 200,
+          "seconds": 3.994,
+          "usage": {
+            "prompt_tokens": 7291,
+            "completion_tokens": 398,
+            "total_tokens": 7689,
+            "prompt_tokens_details": {
+              "cached_tokens": 4992
+            }
+          },
+          "request_bytes": 22425
+        },
+        {
+          "status": 200,
+          "seconds": 3.003,
+          "usage": {
+            "prompt_tokens": 7760,
+            "completion_tokens": 186,
+            "total_tokens": 7946,
+            "prompt_tokens_details": {
+              "cached_tokens": 5248
+            }
+          },
+          "request_bytes": 24277
+        }
+      ],
+      "stdout_tail": "Done. `/tmp/agent-azm-bench-rgd6txel/task/ledger.py` fixed.\n\nChanged:\n- `sum(float(...))` → `Decimal` accumulator, `Decimal(\"0\")` seed. Exact, no float drift.\n- Signed amounts OK (`-3.5`, `+2`).\n- Blank/whitespace-only strings and `None` ignored.\n- Bad input → `ValueError`: non-string non-number types, non-numeric strings, `NaN`/`Inf` (`is_finite()` check).\n- Public name `total(rows)` kept.\n\nTests: `test_ledger.py` written. pytest not installed on this box (`No module named pytest`), so ran same cases via inline runner — 6/6 pass. To run pytest file: `pip install pytest && python3 -m pytest test_ledger.py`.\n",
+      "stderr_tail": "2026/11/08 14:20:07 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-rgd6txel/home/workspaces/exec-86fe2d59618ee4472684e89acf6e2596\n"
+    },
+    {
+      "repetition": 1,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n \"Tehran\": 150,\n \"Mashhad\": 260,\n \"Shiraz\": 100\n}"
+      },
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 8.648,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 3.567,
+          "usage": {
+            "prompt_tokens": 4878,
+            "completion_tokens": 69,
+            "total_tokens": 4947,
+            "prompt_tokens_details": {
+              "cached_tokens": 2688
+            }
+          },
+          "request_bytes": 12622
+        },
+        {
+          "status": 200,
+          "seconds": 2.455,
+          "usage": {
+            "prompt_tokens": 5094,
+            "completion_tokens": 221,
+            "total_tokens": 5315,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 13334
+        },
+        {
+          "status": 200,
+          "seconds": 2.325,
+          "usage": {
+            "prompt_tokens": 5360,
+            "completion_tokens": 180,
+            "total_tokens": 5540,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 14248
+        }
+      ],
+      "stdout_tail": "Done. `result.json` نوشته شد:\n\n```json\n{\"Tehran\": 150, \"Mashhad\": 260, \"Shiraz\": 100}\n```\n\n- Tehran: 2×150 + (−1)×150 = 150\n- Mashhad: 3×80 + 1×20 = 260\n- Shiraz: 4×25 = 100\n\nمرجوعی (qty منفی) حساب شد. `sales.csv` تغییر نکرد — md5 قبل/بعد یکسان: `031da3268696df142450167eb9e01401`.\n",
+      "stderr_tail": "2026/11/08 14:20:43 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-ppmebpxo/home/workspaces/exec-457d3a3c883e802f372c80a215d8ab9a\n"
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "solution.py": "\"\"\"Interval merging utilities.\"\"\"\n\n\ndef merge_intervals(intervals):\n    \"\"\"Merge integer [start, end] pairs, merging overlaps and touching endpoints.\n\n    Args:\n        intervals: iterable of [start, end] pairs of ints. Not mutated.\n\n    Returns:\n        New list of merged [start, end] pairs, sorted ascending by start.\n\n    Raises:\n        ValueError: if any pair is reversed (start > end).\n    \"\"\"\n    normalized = []\n    for pair in intervals:\n        start, end = pair\n        if start > end:\n            raise ValueError(\n                \"reversed interval: start %r > end %r\" % (start, end)\n            )\n        normalized.append([start, end])\n\n    normalized.sort(key=lambda p: (p[0], p[1]))\n\n    merged = []\n    for start, end in normalized:\n        if merged and start <= merged[-1][1]:\n            if end > merged[-1][1]:\n                merged[-1][1] = end\n        else:\n            merged.append([start, end])\n\n    return merged\n",
+        "test_solution.py": "import copy\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 3]]), [[1, 3]])\n\n    def test_no_overlap(self):\n        self.assertEqual(\n            merge_intervals([[5, 7], [1, 2], [9, 10]]),\n            [[1, 2], [5, 7], [9, 10]],\n        )\n\n    def test_overlap(self):\n        self.assertEqual(\n            merge_intervals([[1, 4], [3, 6], [8, 9]]),\n            [[1, 6], [8, 9]],\n        )\n\n    def test_touching_endpoints(self):\n        # [1,2] and [2,3] share endpoint 2 -> merged\n        self.assertEqual(merge_intervals([[1, 2], [2, 3]]), [[1, 3]])\n\n    def test_touching_chain(self):\n        self.assertEqual(\n            merge_intervals([[1, 2], [2, 3], [4, 5]]),\n            [[1, 3], [4, 5]],\n        )\n\n    def test_nested(self):\n        self.assertEqual(merge_intervals([[1, 10], [2, 3]]), [[1, 10]])\n\n    def test_identical(self):\n        self.assertEqual(merge_intervals([[2, 2], [2, 2]]), [[2, 2]])\n\n    def test_single_point_touching(self):\n        # [1,1] and [2,2] are NOT touching (gap); merge only if endpoints equal\n        self.assertEqual(merge_intervals([[1, 1], [2, 2]]), [[1, 1], [2, 2]])\n        self.assertEqual(merge_intervals([[1, 1], [1, 1]]), [[1, 1]])\n\n    def test_unsorted_input_sorted_output(self):\n        self.assertEqual(\n            merge_intervals([[8, 10], [1, 3], [2, 6], [15, 18]]),\n            [[1, 6], [8, 10], [15, 18]],\n        )\n\n    def test_negative_ints(self):\n        self.assertEqual(\n            merge_intervals([[-5, -1], [-1, 0], [2, 3]]),\n            [[-5, 0], [2, 3]],\n        )\n\n    def test_no_mutation(self):\n        data = [[5, 6], [1, 3], [3, 4]]\n        snapshot = copy.deepcopy(data)\n        result = merge_intervals(data)\n        self.assertEqual(data, snapshot)\n        self.assertEqual(result, [[1, 4], [5, 6]])\n        # returned list must be fresh objects, not aliases of input rows\n        for row in result:\n            self.assertNotIn(id(row), [id(r) for r in data])\n\n    def test_accepts_tuples_and_iterables(self):\n        self.assertEqual(\n            merge_intervals(((1, 3), (2, 5), [7, 8])),\n            [[1, 5], [7, 8]],\n        )\n\n    def test_reversed_pair_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[3, 1]])\n\n    def test_reversed_pair_raises_mixed(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [9, 4]])\n\n    def test_generator_input(self):\n        self.assertEqual(\n            merge_intervals(iter([[1, 2], [2, 4], [9, 9]])),\n            [[1, 4], [9, 9]],\n        )\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n"
+      },
+      "agent": "macron",
+      "task": "python",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 45.056,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.765,
+          "usage": {
+            "prompt_tokens": 4860,
+            "completion_tokens": 106,
+            "total_tokens": 4966,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 12022
+        },
+        {
+          "status": 200,
+          "seconds": 3.025,
+          "usage": {
+            "prompt_tokens": 5047,
+            "completion_tokens": 309,
+            "total_tokens": 5356,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 12657
+        },
+        {
+          "status": 200,
+          "seconds": 9.481,
+          "usage": {
+            "prompt_tokens": 5392,
+            "completion_tokens": 990,
+            "total_tokens": 6382,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            }
+          },
+          "request_bytes": 14177
+        },
+        {
+          "status": 200,
+          "seconds": 5.212,
+          "usage": {
+            "prompt_tokens": 5584,
+            "completion_tokens": 601,
+            "total_tokens": 6185,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            }
+          },
+          "request_bytes": 14889
+        },
+        {
+          "status": 200,
+          "seconds": 6.969,
+          "usage": {
+            "prompt_tokens": 5985,
+            "completion_tokens": 1060,
+            "total_tokens": 7045,
+            "prompt_tokens_details": {
+              "cached_tokens": 3584
+            }
+          },
+          "request_bytes": 16671
+        },
+        {
+          "status": 200,
+          "seconds": 2.407,
+          "usage": {
+            "prompt_tokens": 6987,
+            "completion_tokens": 75,
+            "total_tokens": 7062,
+            "prompt_tokens_details": {
+              "cached_tokens": 3968
+            }
+          },
+          "request_bytes": 20193
+        },
+        {
+          "status": 200,
+          "seconds": 6.537,
+          "usage": {
+            "prompt_tokens": 7692,
+            "completion_tokens": 661,
+            "total_tokens": 8353,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            }
+          },
+          "request_bytes": 22813
+        },
+        {
+          "status": 200,
+          "seconds": 1.883,
+          "usage": {
+            "prompt_tokens": 7982,
+            "completion_tokens": 139,
+            "total_tokens": 8121,
+            "prompt_tokens_details": {
+              "cached_tokens": 5632
+            }
+          },
+          "request_bytes": 24016
+        },
+        {
+          "status": 200,
+          "seconds": 2.537,
+          "usage": {
+            "prompt_tokens": 8157,
+            "completion_tokens": 167,
+            "total_tokens": 8324,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            }
+          },
+          "request_bytes": 24685
+        },
+        {
+          "status": 200,
+          "seconds": 3.63,
+          "usage": {
+            "prompt_tokens": 8507,
+            "completion_tokens": 254,
+            "total_tokens": 8761,
+            "prompt_tokens_details": {
+              "cached_tokens": 6144
+            }
+          },
+          "request_bytes": 25986
+        }
+      ],
+      "stdout_tail": "Done. Files in `/tmp/agent-azm-bench-yanp3lpd/task`:\n\n- `solution.py` — `merge_intervals(intervals)`\n- `test_solution.py` — 16 tests, all pass (`python3 -m unittest -v test_solution` → OK)\n\nBehavior:\n- Copy input to `normalized`, sort by `(start, end)` — original untouched.\n- Merge when `start <= prev_end` → covers overlaps AND touching endpoints (`[1,2],[2,3]` → `[1,3]`).\n- Reversed pair (`start > end`) → `ValueError`, raised before any partial result.\n- Accepts lists, tuples, any iterable/generator.\n- Returns fresh row objects, sorted ascending.\n\nVerified: no-overlap, overlap, touching, nested, identical, gaps stay split (`[1,2],[3,4]`), negatives, unsorted input, generator input, mutation snapshot, reversed-pair errors.\n",
+      "stderr_tail": "2026/11/08 14:20:51 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-yanp3lpd/home/workspaces/exec-8a87e61599ba352dccf969d7ec052cf0\n"
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "ledger.py": "\"\"\"Ledger totals with exact decimal arithmetic.\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"total\"]\n\n\ndef _parse(value):\n    \"\"\"Return an exact Decimal for one row, or raise ValueError.\"\"\"\n    if isinstance(value, Decimal):\n        amount = value\n    elif isinstance(value, bool):\n        raise ValueError(f\"malformed numeric value: {value!r}\")\n    elif isinstance(value, int):\n        amount = Decimal(value)\n    elif isinstance(value, float):\n        amount = Decimal(str(value))\n    elif isinstance(value, str):\n        text = value.strip()\n        if not text:\n            raise ValueError(\"malformed numeric value: blank row\")\n        try:\n            amount = Decimal(text)\n        except InvalidOperation:\n            raise ValueError(f\"malformed numeric value: {value!r}\") from None\n    else:\n        raise ValueError(f\"malformed numeric value: {value!r}\")\n\n    if not amount.is_finite():\n        raise ValueError(f\"malformed numeric value: {value!r}\")\n    return amount\n\n\ndef total(rows):\n    \"\"\"Sum ledger rows exactly with Decimal.\n\n    Blank lines are skipped, signed amounts are accepted, and any\n    malformed numeric value raises ValueError.\n    \"\"\"\n    result = Decimal(0)\n    for row in rows:\n        if isinstance(row, str) and not row.strip():\n            continue\n        result += _parse(row)\n    return result\n",
+        "test_ledger.py": "from decimal import Decimal\n\nimport pytest\n\nfrom ledger import total\n\n\ndef test_exact_decimal_sum():\n    assert total([\"0.1\", \"0.2\"]) == Decimal(\"0.3\")\n    assert isinstance(total([\"1\"]), Decimal)\n\n\ndef test_signed_amounts():\n    assert total([\"-5.50\", \"10\", \"-0.25\"]) == Decimal(\"4.25\")\n    assert total([\"-5.50\", \"+2.50\"]) == Decimal(\"-3.00\")\n\n\ndef test_blank_lines_skipped():\n    assert total([\"1\", \"\", \"   \", \"\\t\", \"2\"]) == Decimal(\"3\")\n\n\ndef test_empty_input():\n    assert total([]) == Decimal(\"0\")\n\n\ndef test_malformed_raises_value_error():\n    for bad in [\"abc\", \"1,000\", \"1.2.3\", None, \"1e\", \"nan\", \"inf\"]:\n        with pytest.raises(ValueError):\n            total([bad])\n\n\ndef test_mixed_types():\n    assert total([1, 2.5, Decimal(\"0.5\"), \"1.0\"]) == Decimal(\"5.0\")\n"
+      },
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 24.823,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 1.935,
+          "usage": {
+            "prompt_tokens": 4851,
+            "completion_tokens": 119,
+            "total_tokens": 4970
+          },
+          "request_bytes": 11994
+        },
+        {
+          "status": 200,
+          "seconds": 4.393,
+          "usage": {
+            "prompt_tokens": 5100,
+            "completion_tokens": 547,
+            "total_tokens": 5647,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 12828
+        },
+        {
+          "status": 200,
+          "seconds": 3.662,
+          "usage": {
+            "prompt_tokens": 5513,
+            "completion_tokens": 370,
+            "total_tokens": 5883,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 14817
+        },
+        {
+          "status": 200,
+          "seconds": 4.557,
+          "usage": {
+            "prompt_tokens": 5877,
+            "completion_tokens": 261,
+            "total_tokens": 6138,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            }
+          },
+          "request_bytes": 16299
+        },
+        {
+          "status": 200,
+          "seconds": 3.076,
+          "usage": {
+            "prompt_tokens": 6171,
+            "completion_tokens": 202,
+            "total_tokens": 6373,
+            "prompt_tokens_details": {
+              "cached_tokens": 3840
+            }
+          },
+          "request_bytes": 17522
+        },
+        {
+          "status": 200,
+          "seconds": 3.041,
+          "usage": {
+            "prompt_tokens": 6415,
+            "completion_tokens": 314,
+            "total_tokens": 6729,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            }
+          },
+          "request_bytes": 18430
+        },
+        {
+          "status": 200,
+          "seconds": 3.709,
+          "usage": {
+            "prompt_tokens": 6771,
+            "completion_tokens": 193,
+            "total_tokens": 6964,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 19933
+        }
+      ],
+      "stdout_tail": "Done. `/tmp/agent-azm-bench-oj0yz8sn/task/ledger.py`:\n\n- `total(rows)` returns `Decimal`, sums exactly (`0.1+0.2 == Decimal(\"0.3\")`).\n- Signed amounts OK: `-5.50`, `+2.50`.\n- Blank/whitespace rows skipped.\n- Malformed values (`abc`, `1,000`, `None`, `nan`, `inf`) raise `ValueError`.\n- Public name `total` unchanged.\n\nVerified: inline assertions all pass, `total.__name__ == \"total\"`.\n\nNote: `pytest` not installed on interpreter (`No module named pytest`), so ran equivalent assertions directly. Test file `test_ledger.py` written for when pytest available.\n",
+      "stderr_tail": "2026/11/08 14:21:36 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-oj0yz8sn/home/workspaces/exec-5d701c6a49312c87bf015d4a22872106\n"
+    },
+    {
+      "repetition": 2,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}"
+      },
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 9.189,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.66,
+          "usage": {
+            "prompt_tokens": 4879,
+            "completion_tokens": 80,
+            "total_tokens": 4959
+          },
+          "request_bytes": 12622
+        },
+        {
+          "status": 200,
+          "seconds": 2.871,
+          "usage": {
+            "prompt_tokens": 5112,
+            "completion_tokens": 292,
+            "total_tokens": 5404,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 13363
+        },
+        {
+          "status": 200,
+          "seconds": 3.329,
+          "usage": {
+            "prompt_tokens": 5441,
+            "completion_tokens": 163,
+            "total_tokens": 5604,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 14537
+        }
+      ],
+      "stdout_tail": "`/tmp/agent-azm-bench-9714rnmh/task/result.json`:\n\n```json\n{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}\n```\n\nMath: Tehran 2×150 + (−1×150)=150 · Mashhad 3×80 + 1×20=260 · Shiraz 4×25=100. Negative qty counted. `md5sum -c` OK — sales.csv untouched.\n",
+      "stderr_tail": "2026/11/08 14:22:01 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-9714rnmh/home/workspaces/exec-a534f914aa8d8eaf02ce79cd6de33d2d\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "solution.py": "\"\"\"merge_intervals: merge overlapping and touching [start, end] intervals.\"\"\"\n\n\ndef merge_intervals(intervals):\n    \"\"\"Merge overlapping/touching integer intervals.\n\n    Args:\n        intervals: iterable of [start, end] pairs, start <= end.\n\n    Returns:\n        New sorted list of merged [start, end] lists.\n\n    Raises:\n        ValueError: if any pair is reversed (start > end) or malformed.\n        TypeError: if intervals is not a list/tuple.\n    \"\"\"\n    if not isinstance(intervals, (list, tuple)):\n        raise TypeError(\"intervals must be a list or tuple of pairs\")\n\n    prepared = []\n    for pair in intervals:\n        if not isinstance(pair, (list, tuple)) or len(pair) != 2:\n            raise ValueError(f\"malformed interval: {pair!r}\")\n        start, end = pair\n        if not isinstance(start, int) or not isinstance(end, int) or isinstance(start, bool) or isinstance(end, bool):\n            raise ValueError(f\"interval bounds must be ints: {pair!r}\")\n        if start > end:\n            raise ValueError(f\"reversed interval: {pair!r}\")\n        prepared.append([start, end])  # copy: input never mutated\n\n    if not prepared:\n        return []\n\n    prepared.sort(key=lambda p: (p[0], p[1]))\n\n    merged = [prepared[0]]\n    for start, end in prepared[1:]:\n        last = merged[-1]\n        # overlap OR touch (end + 1 == start)\n        if start <= last[1] + 1:\n            if end > last[1]:\n                last[1] = end\n        else:\n            merged.append([start, end])\n\n    return merged\n",
+        "test_solution.py": "import copy\nimport random\nimport unittest\n\nfrom solution import merge_intervals\n\n\nclass TestMergeIntervals(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(merge_intervals([]), [])\n\n    def test_single(self):\n        self.assertEqual(merge_intervals([[1, 3]]), [[1, 3]])\n\n    def test_no_overlap_no_touch(self):\n        self.assertEqual(merge_intervals([[1, 2], [4, 5]]), [[1, 2], [4, 5]])\n\n    def test_touching_merge(self):\n        # end 2, next start 3 -> touch, merge\n        self.assertEqual(merge_intervals([[1, 2], [3, 4]]), [[1, 4]])\n\n    def test_overlap_merge(self):\n        self.assertEqual(merge_intervals([[1, 5], [4, 8]]), [[1, 8]])\n\n    def test_contained(self):\n        self.assertEqual(merge_intervals([[1, 10], [3, 4]]), [[1, 10]])\n\n    def test_unsorted_input(self):\n        self.assertEqual(\n            merge_intervals([[8, 10], [1, 3], [2, 6], [15, 18]]),\n            [[1, 6], [8, 10], [15, 18]],\n        )\n\n    def test_chain_merge(self):\n        self.assertEqual(\n            merge_intervals([[1, 2], [3, 4], [5, 6], [8, 9]]),\n            [[1, 6], [8, 9]],\n        )\n\n    def test_negative_and_zero(self):\n        self.assertEqual(\n            merge_intervals([[-5, -3], [-2, 0], [0, 2]]),\n            [[-5, 2]],\n        )\n\n    def test_point_intervals_touch(self):\n        self.assertEqual(merge_intervals([[1, 1], [2, 2]]), [[1, 2]])\n\n    def test_duplicates(self):\n        self.assertEqual(merge_intervals([[1, 3], [1, 3]]), [[1, 3]])\n\n    def test_input_not_mutated(self):\n        data = [[8, 10], [1, 3], [2, 6]]\n        before = copy.deepcopy(data)\n        merge_intervals(data)\n        self.assertEqual(data, before)\n\n    def test_output_is_new_lists(self):\n        data = [[1, 2]]\n        out = merge_intervals(data)\n        out[0][1] = 99\n        self.assertEqual(data, [[1, 2]])\n\n    def test_reversed_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[5, 1]])\n\n    def test_reversed_raises_mixed(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2], [9, 4]])\n\n    def test_malformed_raises(self):\n        with self.assertRaises(ValueError):\n            merge_intervals([[1, 2, 3]])\n        with self.assertRaises(ValueError):\n            merge_intervals([[1]])\n\n    def test_bad_type_raises(self):\n        with self.assertRaises(TypeError):\n            merge_intervals(\"nope\")\n\n    def test_result_sorted(self):\n        data = [[10, 12], [0, 1], [5, 7]]\n        out = merge_intervals(data)\n        self.assertEqual(out, sorted(out))\n        self.assertEqual(out, [[0, 1], [5, 7], [10, 12]])\n\n    def test_random_against_reference(self):\n        def reference(intervals):\n            # brute-force sweep on integer line\n            pts = set()\n            for s, e in intervals:\n                pts.update(range(s, e + 1))\n            if not pts:\n                return []\n            pts = sorted(pts)\n            out = []\n            start = prev = pts[0]\n            for p in pts[1:]:\n                if p == prev + 1:\n                    prev = p\n                else:\n                    out.append([start, prev])\n                    start = prev = p\n            out.append([start, prev])\n            return out\n\n        rnd = random.Random(1234)\n        for _ in range(500):\n            n = rnd.randint(0, 8)\n            data = []\n            for _ in range(n):\n                a = rnd.randint(-20, 20)\n                b = rnd.randint(a, 20)\n                data.append([a, b])\n            self.assertEqual(merge_intervals(data), reference(data), data)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n"
+      },
+      "agent": "macron",
+      "task": "python",
+      "pass": false,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 23.555,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.308,
+          "usage": {
+            "prompt_tokens": 4860,
+            "completion_tokens": 87,
+            "total_tokens": 4947,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            }
+          },
+          "request_bytes": 12022
+        },
+        {
+          "status": 200,
+          "seconds": 9.906,
+          "usage": {
+            "prompt_tokens": 5019,
+            "completion_tokens": 1643,
+            "total_tokens": 6662,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 12601
+        },
+        {
+          "status": 200,
+          "seconds": 2.575,
+          "usage": {
+            "prompt_tokens": 6643,
+            "completion_tokens": 75,
+            "total_tokens": 6718,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            }
+          },
+          "request_bytes": 19027
+        },
+        {
+          "status": 200,
+          "seconds": 3.599,
+          "usage": {
+            "prompt_tokens": 7094,
+            "completion_tokens": 400,
+            "total_tokens": 7494,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 20671
+        },
+        {
+          "status": 200,
+          "seconds": 4.588,
+          "usage": {
+            "prompt_tokens": 7461,
+            "completion_tokens": 236,
+            "total_tokens": 7697,
+            "prompt_tokens_details": {
+              "cached_tokens": 4992
+            }
+          },
+          "request_bytes": 22050
+        }
+      ],
+      "stdout_tail": "Done. 19/19 tests pass.\n\nFiles in `/tmp/agent-azm-bench-bgbdyj2p/task`:\n- `solution.py` — `merge_intervals(intervals)`\n- `test_solution.py` — 19 tests, `python3 -m unittest test_solution` → OK\n\nBehavior:\n- merges overlap AND touch: `start <= last_end + 1`\n- sorts output; input not mutated (copies pairs, returns fresh lists)\n- reversed pair → `ValueError`; malformed/ non-int → `ValueError`; non-list/tuple arg → `TypeError`\n\nOne test had wrong expectation I wrote (`[1,6]`/`[8,10]` gap at 7 = no merge); fixed test, code was right. Random fuzz vs brute-force sweep (500 cases) passes.\n",
+      "stderr_tail": "2026/11/08 14:22:10 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-bgbdyj2p/home/workspaces/exec-15d3abb57912cd2cb159c4daaacbeb45\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "ledger.py": "\"\"\"Exact decimal ledger totals.\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"total\"]\n\n\ndef total(rows):\n    \"\"\"Sum amounts in `rows` exactly, using Decimal.\n\n    Rows are strings (or anything str()-able) holding a signed decimal amount.\n    Blank/whitespace-only rows are ignored. A row that is not a well-formed\n    finite decimal number raises ValueError.\n    \"\"\"\n    result = Decimal(0)\n    for index, row in enumerate(rows):\n        if row is None:\n            raise ValueError(\"row %d: missing value\" % index)\n        text = str(row).strip()\n        if not text:\n            continue  # blank line: ignore\n        try:\n            value = Decimal(text)\n        except InvalidOperation:\n            raise ValueError(\"row %d: malformed amount %r\" % (index, row))\n        if not value.is_finite():\n            raise ValueError(\"row %d: non-finite amount %r\" % (index, row))\n        result += value\n    return result\n",
+        "run_tests.py": "from decimal import Decimal\nimport traceback\nimport test_ledger as t\n\nfails = 0\nfor name in sorted(n for n in dir(t) if n.startswith(\"test_\")):\n    try:\n        getattr(t, name)()\n        print(\"PASS\", name)\n    except Exception:\n        fails += 1\n        print(\"FAIL\", name)\n        traceback.print_exc()\nprint(\"FAILURES:\", fails)\nraise SystemExit(1 if fails else 0)\n",
+        "test_ledger.py": "\"\"\"Tests for ledger.total. No third-party deps: plain asserts + raises().\"\"\"\nfrom decimal import Decimal\n\nfrom ledger import total\n\n\ndef raises(exc, fn, *args, **kwargs):\n    try:\n        fn(*args, **kwargs)\n    except exc:\n        return True\n    raise AssertionError(\"%s not raised\" % exc.__name__)\n\n\ndef test_exact_decimal_no_float_error():\n    assert total([\"0.1\", \"0.2\"]) == Decimal(\"0.3\")\n    assert total([\"0.1\", \"0.2\"]) != Decimal(0.1) + Decimal(0.2)\n\n\ndef test_public_name_and_type():\n    assert callable(total)\n    assert isinstance(total([\"1\"]), Decimal)\n\n\ndef test_signed_amounts():\n    assert total([\"5\", \"-2\", \"+3\"]) == Decimal(\"6\")\n    assert total([\"-10\", \"-0.5\"]) == Decimal(\"-10.5\")\n\n\ndef test_blank_lines_ignored():\n    assert total([\"1\", \"\", \"   \", \"\\t\", \"2\"]) == Decimal(\"3\")\n    assert total([\"\", \"  \"]) == Decimal(\"0\")\n    assert total([]) == Decimal(\"0\")\n\n\ndef test_whitespace_padded_numbers():\n    assert total([\" 1.5 \", \"\\t-2.5\\n\"]) == Decimal(\"-1\")\n\n\ndef test_malformed_raises_valueerror():\n    for bad in [\"abc\", \"1,000\", \"12abc\", \"$5\", \"1.2.3\", \"--3\", \"1 2\"]:\n        raises(ValueError, total, [\"1\", bad])\n\n\ndef test_non_finite_rejected():\n    for bad in [\"NaN\", \"Infinity\", \"-inf\"]:\n        raises(ValueError, total, [bad])\n\n\ndef test_large_precision():\n    assert total([\"9007199254740993\", \"1\"]) == Decimal(\"9007199254740994\")\n"
+      },
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 37.401,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 1.684,
+          "usage": {
+            "prompt_tokens": 4852,
+            "completion_tokens": 67,
+            "total_tokens": 4919,
+            "prompt_tokens_details": {
+              "cached_tokens": 2688
+            }
+          },
+          "request_bytes": 11994
+        },
+        {
+          "status": 200,
+          "seconds": 3.798,
+          "usage": {
+            "prompt_tokens": 5018,
+            "completion_tokens": 62,
+            "total_tokens": 5080,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 12591
+        },
+        {
+          "status": 200,
+          "seconds": 4.239,
+          "usage": {
+            "prompt_tokens": 5106,
+            "completion_tokens": 450,
+            "total_tokens": 5556,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            }
+          },
+          "request_bytes": 12991
+        },
+        {
+          "status": 200,
+          "seconds": 4.59,
+          "usage": {
+            "prompt_tokens": 5447,
+            "completion_tokens": 521,
+            "total_tokens": 5968,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 14502
+        },
+        {
+          "status": 200,
+          "seconds": 2.32,
+          "usage": {
+            "prompt_tokens": 5981,
+            "completion_tokens": 171,
+            "total_tokens": 6152,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            }
+          },
+          "request_bytes": 16703
+        },
+        {
+          "status": 200,
+          "seconds": 2.394,
+          "usage": {
+            "prompt_tokens": 6188,
+            "completion_tokens": 128,
+            "total_tokens": 6316,
+            "prompt_tokens_details": {
+              "cached_tokens": 3968
+            }
+          },
+          "request_bytes": 17467
+        },
+        {
+          "status": 200,
+          "seconds": 2.073,
+          "usage": {
+            "prompt_tokens": 6379,
+            "completion_tokens": 149,
+            "total_tokens": 6528,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            }
+          },
+          "request_bytes": 18161
+        },
+        {
+          "status": 200,
+          "seconds": 3.715,
+          "usage": {
+            "prompt_tokens": 6658,
+            "completion_tokens": 211,
+            "total_tokens": 6869,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            }
+          },
+          "request_bytes": 19160
+        },
+        {
+          "status": 200,
+          "seconds": 2.532,
+          "usage": {
+            "prompt_tokens": 6879,
+            "completion_tokens": 213,
+            "total_tokens": 7092,
+            "prompt_tokens_details": {
+              "cached_tokens": 4608
+            }
+          },
+          "request_bytes": 19933
+        },
+        {
+          "status": 200,
+          "seconds": 3.753,
+          "usage": {
+            "prompt_tokens": 7226,
+            "completion_tokens": 505,
+            "total_tokens": 7731,
+            "prompt_tokens_details": {
+              "cached_tokens": 4864
+            }
+          },
+          "request_bytes": 21182
+        },
+        {
+          "status": 200,
+          "seconds": 2.155,
+          "usage": {
+            "prompt_tokens": 7764,
+            "completion_tokens": 101,
+            "total_tokens": 7865,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            }
+          },
+          "request_bytes": 23384
+        },
+        {
+          "status": 200,
+          "seconds": 3.507,
+          "usage": {
+            "prompt_tokens": 7974,
+            "completion_tokens": 307,
+            "total_tokens": 8281,
+            "prompt_tokens_details": {
+              "cached_tokens": 5760
+            }
+          },
+          "request_bytes": 24151
+        }
+      ],
+      "stdout_tail": "Done. 8/8 tests pass.\n\n`ledger.py` — public name `total(rows)` kept:\n- `Decimal` accumulation, no float error: `total([\"0.1\",\"0.2\"]) == Decimal(\"0.3\")`\n- signed amounts ok: `\"5\", \"-2\", \"+3\"` → `Decimal(\"6\")`\n- blank/whitespace rows skipped (empty list → `Decimal(\"0\")`)\n- malformed (`abc`, `1,000`, `12abc`, `$5`, `1.2.3`, `--3`, `1 2`) and non-finite (`NaN`, `Infinity`, `-inf`) → `ValueError` with row index\n- returns `Decimal`, big ints exact\n\nTests: `/tmp/agent-azm-bench-x1hob_8e/task/test_ledger.py` + runner `run_tests.py`. pytest not installed in any interpreter here (`python -m pytest` → no module; no pip/ensurepip), so tests are dependency-free and run via:\n\n```\ncd /tmp/agent-azm-bench-x1hob_8e/task && python run_tests.py\n```\n\nOutput: `PASS` x8, `FAILURES: 0`, exit 0.\n",
+      "stderr_tail": "2026/11/08 14:22:34 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-x1hob_8e/home/workspaces/exec-3bb663cf52bb9fdb9f3af7ea54d3fa3b\n"
+    },
+    {
+      "repetition": 3,
+      "artifacts": {
+        "sales.csv": "city,qty,price\nTehran,2,150\nMashhad,3,80\nTehran,-1,150\nMashhad,1,20\nShiraz,4,25\n",
+        "result.json": "{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}"
+      },
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 7.655,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.116,
+          "usage": {
+            "prompt_tokens": 4879,
+            "completion_tokens": 70,
+            "total_tokens": 4949
+          },
+          "request_bytes": 12622
+        },
+        {
+          "status": 200,
+          "seconds": 2.436,
+          "usage": {
+            "prompt_tokens": 5096,
+            "completion_tokens": 229,
+            "total_tokens": 5325,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            }
+          },
+          "request_bytes": 13334
+        },
+        {
+          "status": 200,
+          "seconds": 2.815,
+          "usage": {
+            "prompt_tokens": 5369,
+            "completion_tokens": 196,
+            "total_tokens": 5565,
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "request_bytes": 14322
+        }
+      ],
+      "stdout_tail": "انجام شد. `result.json` در `/tmp/agent-azm-bench-e3hf9zmr/task`:\n\n```json\n{ \"Tehran\": 150, \"Mashhad\": 260, \"Shiraz\": 100 }\n```\n\nحساب: Tehran 300−150=150، Mashhad 240+20=260، Shiraz 100. مجموع کل 510. مرجوعیها (qty منفی) لحاظ شد. `sales.csv` دستنخورده (md5 `031da3268696df142450167eb9e01401`). خروجی با جمع مستقل بازبینی شد.\n",
+      "stderr_tail": "2026/11/08 14:23:11 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-e3hf9zmr/home/workspaces/exec-9940a10c61a897e1d5e98c7846ccbd0d\n"
+    }
+  ]
+}

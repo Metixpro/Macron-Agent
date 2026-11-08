@@ -1,3 +1,26 @@
+# Validation of 1.2.3 (2026-11-08)
+
+- `make check`: formatting, vet, 24 test-bearing Go packages and six installer tests passed.
+- Targeted race checks passed for the private-only handlers, removed speech behavior,
+  server navigation, updater, CLI context and real skill discovery.
+- GitHub CI and release workflows for v1.2.2 and v1.2.3 succeeded, including clean install.
+- The real GitHub Release installer and updater downloaded archives through the asset
+  API fallback, checked SHA256SUMS, ran preflight and retained the previous executable.
+  These checks used temporary prefixes and did not restart a live Telegram bot.
+- Callback flows use the Telegram test server; no live bot token was supplied for
+  end-to-end Telegram operation. Actual systemd/macOS restart remains outside these checks.
+- Eighteen baseline model trials and nine follow-up trials were completed against
+  the supplied `azm` endpoint. All attempts and generated artifacts are preserved.
+  Results: Macron 1.2.3 8/9, Hermes 8/9; the seven comparable correct pairs show less
+  observed wall time but more reported input tokens for Macron. Timing across phases
+  is uncontrolled. See [the full review](audits/REVIEW-1.2.3.fa.md) and
+  [results](benchmarks/RESULTS-1.2.3.md).
+- Saved artifacts were replayed independently with 100 generated interval cases,
+  exact Decimal checks, integer CSV totals and input preservation. The replay
+  confirms the recorded failure as well as the successes; it does not erase failures.
+
+The older evidence below describes the earlier 1.1.0-dev revision.
+
 Latest tool/dependency optimization evidence: audits/OPTIMIZATION.fa.md and audits/RELEASE.json.
 
 # Validation of 1.1.0-dev
