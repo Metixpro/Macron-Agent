@@ -17,7 +17,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-const Version = "1.2.4"
+const Version = "1.2.5"
 
 type App struct {
 	Config   *config.Config

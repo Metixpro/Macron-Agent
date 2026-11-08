@@ -475,9 +475,6 @@ func (l *liveView) flushPrivateMessage(ctx context.Context) {
 	stopData := l.stopData
 	l.mu.Unlock()
 	html := telegram.MarkdownToHTML(body)
-	if set := l.b.premium(); set != nil {
-		html = set.HTML(html)
-	}
 	var kb *telegram.InlineKeyboardMarkup
 	if withStop {
 		kb = l.b.stopKeyboard(l.lng, stopData)
@@ -486,13 +483,16 @@ func (l *liveView) flushPrivateMessage(ctx context.Context) {
 	defer cancel()
 	var err error
 	if id != 0 {
-		err = l.b.api.EditMessageText(sctx, l.chatID, id, html, kb)
+		err = l.b.editHTML(sctx, l.chatID, id, html, kb)
 	} else {
-		var sent *telegram.Message
-		sent, err = l.b.api.SendHTML(sctx, l.chatID, html, telegram.SendOptions{ReplyTo: l.replyTo, Silent: true, Markup: kb})
-		if err == nil {
-			id = sent.MessageID
+		sent := l.b.sendHTML(sctx, l.chatID, html, telegram.SendOptions{ReplyTo: l.replyTo, Silent: true, Markup: kb})
+		if sent == nil {
+			l.mu.Lock()
+			l.dirty = true
+			l.mu.Unlock()
+			return
 		}
+		id = sent.MessageID
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
