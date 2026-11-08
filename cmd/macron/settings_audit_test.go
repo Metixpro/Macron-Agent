@@ -24,6 +24,8 @@ var settingsWithoutPanel = map[string]string{
 	"settingEvalNight":    "state: the day of the last nightly exam",
 	"settingWeeklySent":   "state: when the last weekly report went",
 	"settingLearnJobs":    "state: the jobs since the last learning review",
+	"settingHookSecret":   "a secret made at random on first use; /dashboard shows it",
+	"settingDashToken":    "a secret made at random on first use; /dashboard gives the link",
 	"settingSightW":       "state: when the owner was last warned about a group's privacy mode",
 	// Kept by the agent's own tools (plugins and MCP servers are added in the chat).
 	"settingPluginPrefix": "plugin state, written by the plugin tools",

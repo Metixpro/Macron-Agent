@@ -1192,4 +1192,8 @@ var english = map[string]string{
 	"[+] تموم شده":      "[+] done",
 	"تخته کار خالیه.":   "The board is empty.",
 	"📋 <b>تخته کار</b>": "📋 <b>Board</b>",
+	"🌐 داشبورد (فقط روی همین سرور؛ از راه دور با <code>ssh -L</code>):\n<code>http://%s/?token=%s</code>":                                                                                                      "🌐 Dashboard (on this server only; from afar with <code>ssh -L</code>):\n<code>http://%s/?token=%s</code>",
+	"🌐 داشبورد خاموشه. روشنش کن: <code>macron config set MACRON_DASHBOARD_ADDR 127.0.0.1:8788</code> و ری‌استارت.":                                                                                             "🌐 The dashboard is off. Turn it on: <code>macron config set MACRON_DASHBOARD_ADDR 127.0.0.1:8788</code> and restart.",
+	"\n\n🪝 وب‌هوک خاموشه: <code>macron config set MACRON_WEBHOOK_ADDR :8787</code>":                                                                                                                            "\n\n🪝 The webhook is off: <code>macron config set MACRON_WEBHOOK_ADDR :8787</code>",
+	"\n\n🪝 وب‌هوک: <code>POST http://%s/hook/NAME</code> با <code>X-Macron-Timestamp</code> و <code>X-Macron-Signature: sha256=HMAC(secret, ts.body)</code>\nsecret: <tg-spoiler><code>%s</code></tg-spoiler>": "\n\n🪝 Webhook: <code>POST http://%s/hook/NAME</code> with <code>X-Macron-Timestamp</code> and <code>X-Macron-Signature: sha256=HMAC(secret, ts.body)</code>\nsecret: <tg-spoiler><code>%s</code></tg-spoiler>",
 }

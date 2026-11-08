@@ -220,6 +220,7 @@ func main() {
 	go bot.runWeeklyReports(rootCtx)
 	go bot.runEvalSchedule(rootCtx)
 	go bot.runUpdateNotices(rootCtx)
+	bot.serveWeb(rootCtx) // the webhook and the dashboard, when their address is set
 	go bot.reportUpdate(rootCtx)
 
 	log.Printf("🤖 @%s is online (Macron Agent %s · home %s · time zone %s)", me.Username, app.Version, config.Home(), loc)

@@ -77,6 +77,7 @@ type Bot struct {
 	triage        triageState // what a request needs, decided before the model works (triage.go)
 	// toldGroupSettings: the groups already told that /settings is not their settings
 	toldGroupSettings sync.Map
+	hookSeen          sync.Map    // webhook signatures already taken (web.go)
 	updating          atomic.Bool // an /update is in flight (update.go)
 	moaStrictBy       sync.Map    // user → *moa.Strict: destinations that need alternating roles (moa.go)
 	gateAsks          sync.Map    // id → *gateAsk: the command gate's questions waiting for the owner (cmdgate.go)
@@ -288,7 +289,7 @@ func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 var botCommands = map[string]bool{}
 
 func init() {
-	for _, c := range strings.Fields("/admin /board /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /approve /help /lang /language /learn /me /memory /moa " +
+	for _, c := range strings.Fields("/admin /board /cancel /clear /cookie /cookies /dashboard /deep /fast /files /groupsettings /approve /help /lang /language /learn /me /memory /moa " +
 		"/mode /new /nolog /panel /recap /reminders /reset /schedules /search /settings /start /stop /tasks /teach /update /yolo /zaban") {
 		botCommands[c] = true
 	}
@@ -533,6 +534,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 			return
 		}
 		b.boardCommand(ctx, m, l)
+		return
+	case "/dashboard":
+		if !b.isOwner(uid) || !m.Chat.Private() {
+			b.reply(m, l.t(textUnknownCommand))
+			return
+		}
+		b.dashboardCommand(ctx, m, l)
 		return
 	case "/search":
 		if !b.isOwner(uid) || !m.Chat.Private() {
