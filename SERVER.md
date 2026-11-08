@@ -125,3 +125,30 @@ go test -race ./pkg/cli ./pkg/config ./pkg/agent ./pkg/machine
 candidate rollback, previous-version backup, and stale `.new` symlink protection.
 The local execution test uses a mock HTTP model, performs a real file write, and
 verifies the result returns to the model. It does not measure model intelligence.
+
+## New in 1.2.0: settings at a glance
+
+UPPER_CASE keys live in `config.env`; lower_case keys are the agent's own settings in its database (the panel changes them; `macron config get|set|unset KEY` too). Restart after a change: `macron service restart`.
+
+| Key | Default | What it does |
+|---|---|---|
+| `auto_continue` | `0` | `0`: a job's budget grows for as long as it makes progress; `N`: at most N extensions; `-1`: a fixed budget (🦾 → ⏩) |
+| `idle_timeout` | `15` | minutes with nothing happening (no model reply, no tool progress) before a job stops |
+| `approvals.mode` | `smart` | the command gate: `smart` (guardian model, then you), `manual` (always ask), `off` (only the hardline floor) — 🦾 → 🛡 |
+| `approvals.denial_breaker_threshold` | `3` | refusals in a row that stop a job (`0` never) |
+| `approvals.deny` | — | globs that never run, one per line or a JSON list, e.g. `git push --force*` |
+| `approvals.smart_policy` | — | your words for the guardian, e.g. «approve docker compose restarts in ~/deploys» |
+| `approvals.checkpoints` | `false` | keep a tar of what a destructive `rm` deletes, in `~/.macron/checkpoints` |
+| `MACRON_YOLO` | — | `1` turns the gate off from start (read once; the floor still holds). `/yolo` does it for 30 minutes |
+| `learn_auto_adopt` | `true` | a lesson goes into its skill at once (`/learn undo ID` takes it back exactly) |
+| `learn_review_interval` | `25` | jobs between two background reviews of the lessons (`0` never) |
+| `moa.presets` | — | multi-model presets (JSON list; 🦾 → ⚖️ builds them); `/moa TASK` runs one request through the default one |
+| `moa.privacy_filter` | — | `display` or `full`: hide emails and phone numbers in the advisors' text |
+| `triage` | `off` | `local` or `model`: decide what a request needs before the model works (🤖 → 🧭 → 🧭 triage) |
+| `update_notice` | `true` | tell the owners once per new release (`/update` installs it) |
+| `premium_emoji` | `false` | premium emoji (then managed from 🦾 → 🖥) |
+| `MACRON_PROFILE` | — | another agent on the same machine: home `~/.macron/profiles/NAME`, service `macron-NAME` |
+| `MACRON_WEBHOOK_ADDR` | — | e.g. `:8787`: signed events on `POST /hook/NAME` become background tasks (`/dashboard` shows the secret) |
+| `MACRON_DASHBOARD_ADDR` | — | e.g. `127.0.0.1:8788`: a read-only status page (loopback only; `/dashboard` gives the link) |
+
+Commands: `/settings` (the panel; `/admin` still works), `/update`, `/moa`, `/learn undo ID`, `/approve`, `/yolo [off]`, `/board`, `/search WORDS`, `/dashboard`. Group settings: `/groupsettings`.
