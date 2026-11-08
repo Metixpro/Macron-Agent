@@ -16,6 +16,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/moa"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
@@ -234,6 +235,48 @@ func reportDatabase(ctx context.Context, r *report, dbPath string, env *envFile)
 	_ = st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM chat_archive`).Scan(&turns)
 	size, _ := st.DatabaseSize(ctx)
 	r.line(ok, "database "+dbPath+" ("+humanBytes(size)+", "+itoa(turns)+" messages kept and searchable)", "")
+	reportMoA(ctx, r, st)
+}
+
+// reportMoA checks the multi-model presets: each slot's provider resolves,
+// the aggregator has a key, and no aggregator is itself a mixture.
+func reportMoA(ctx context.Context, r *report, st *store.Store) {
+	raw, _ := st.Setting("moa.presets")
+	list, err := moa.ParsePresets(raw)
+	if err != nil {
+		r.line(fail, shorten(err), "fix it: macron config set moa.presets '[...]' (or the panel: 🦾 → ⚖️)")
+		return
+	}
+	if len(list) == 0 {
+		return
+	}
+	provs, err := st.Providers(ctx)
+	if err != nil {
+		return
+	}
+	resolve := func(name string) (bool, bool, bool) {
+		if strings.EqualFold(name, "moa") {
+			return true, true, true
+		}
+		id, _ := strconv.ParseInt(name, 10, 64)
+		for _, p := range provs {
+			if strings.EqualFold(p.Name, name) || id > 0 && p.ID == id {
+				local := strings.Contains(p.BaseURL, "127.0.0.1") || strings.Contains(p.BaseURL, "localhost")
+				return p.Enabled, p.APIKey != "" || local, false
+			}
+		}
+		return false, false, false
+	}
+	bad := 0
+	for _, p := range list {
+		for _, pr := range moa.Problems(p, resolve) {
+			r.line(fail, "multi-model preset: "+pr, "fix it in the panel: 🦾 → ⚖️")
+			bad++
+		}
+	}
+	if bad == 0 {
+		r.line(ok, itoa(len(list))+" multi-model preset(s) resolve", "")
+	}
 }
 
 func humanBytes(n int64) string {

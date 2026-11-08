@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/Metixpro/macron-agent/pkg/app"
+	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
 // testIO is a terminal nobody sits at.
@@ -440,5 +442,27 @@ func TestConfigSetsADatabaseSetting(t *testing.T) {
 	io, _ = testIO("")
 	if _, code := Run([]string{"config", "get", "premium_emoji"}, io); code == 0 {
 		t.Fatal("unset")
+	}
+}
+
+// macron doctor checks the multi-model presets against the providers.
+func TestDoctorChecksMoaPresets(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "m.db"), store.Options{SecretKey: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.AddProvider(ctx, store.Provider{Name: "opus", BaseURL: "https://api.anthropic.com", APIKey: "k", Model: "m", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.SetSetting(ctx, "moa.presets", `[{"name":"ok","aggregator":{"provider":"opus"},"reference_models":[{"provider":"ghost"}]},
+		{"name":"loop","aggregator":{"provider":"moa"}}]`)
+	io, out := testIO("")
+	r := &report{io: io}
+	reportMoA(ctx, r, st)
+	s := out.String()
+	if !strings.Contains(s, `"ghost" is not a provider`) || !strings.Contains(s, "cannot be a mixture") || r.fails != 2 {
+		t.Fatalf("%d fails:\n%s", r.fails, s)
 	}
 }

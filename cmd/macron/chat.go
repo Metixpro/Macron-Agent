@@ -55,6 +55,7 @@ type promptOptions struct {
 	schedule *store.Schedule  // run as this scheduled task
 	prefix   string           // put before the answer (the title of a scheduled task)
 	noFlood  bool             // the flood limit was already checked (a message sent during a job)
+	moa      string           // a multi-model preset for this request only (moa.go)
 	pending  []*interjection  // messages that join this request at its first step
 	tier     tierID           // the tier the first round ran on (a continuation keeps it)
 	job      *jobTracker      // auto-continue: the job the first round started (see openjob.go)
@@ -248,6 +249,13 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	defer cancelRun()
 	allow := &tools.Allowance{} // no cap on the pictures and downloads of a request
 	runCtx = tools.WithAllowance(runCtx, allow)
+	// A multi-model preset (/moa, or the owner's «every request»): the
+	// aggregator runs the job, the advisors' views in front of it.
+	if p := b.moaFor(uid, opt); p != nil && !guest && !fast {
+		mc, traced := b.moaClient(uid, *p, m.Chat.ID, b.langOf(m.From))
+		runCtx = agent.WithClient(runCtx, mc)
+		defer traced()
+	}
 	// Who the commands of this job run for (pkg/cmdgate): a job nobody
 	// watches is refused a dangerous command; the owner is asked in the chat.
 	switch {

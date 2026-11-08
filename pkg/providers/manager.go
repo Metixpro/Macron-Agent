@@ -204,6 +204,16 @@ func Prefer(ctx context.Context, id int64) context.Context {
 	return context.WithValue(ctx, preferKey{}, id)
 }
 
+type onlyKey struct{}
+
+// Only makes the requests sent with the returned context go to provider id
+// and nowhere else: no failover (a multi-model preset's slot, whose failure
+// is reported, not hidden behind another model). A provider that is gone or
+// disabled gets ErrNoProvider.
+func Only(ctx context.Context, id int64) context.Context {
+	return context.WithValue(Prefer(ctx, id), onlyKey{}, id)
+}
+
 // Preferred is the provider id Prefer set on ctx (0: none).
 func Preferred(ctx context.Context) int64 {
 	id, _ := ctx.Value(preferKey{}).(int64)
@@ -278,6 +288,14 @@ func (m *Manager) Configured() bool {
 func (m *Manager) candidates(ctx context.Context) []*entry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if id, ok := ctx.Value(onlyKey{}).(int64); ok {
+		for _, e := range m.entries {
+			if e.p.ID == id && e.p.Enabled {
+				return []*entry{e}
+			}
+		}
+		return nil
+	}
 	active := m.firstLocked(ctx)
 	if active == nil {
 		return nil

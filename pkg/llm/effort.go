@@ -46,8 +46,35 @@ func effortCapOf(ctx context.Context) string {
 	return v
 }
 
-// effortFor is the effort of one request: the provider's, under its cap.
+type effortKey struct{}
+
+// EffortNone is WithEffort's level that sends no effort at all.
+const EffortNone = "none"
+
+// WithEffort sets the effort of the calls under ctx exactly, whatever the
+// provider was given (a multi-model preset's slot): a level of Efforts, or
+// EffortNone. An unknown level changes nothing.
+func WithEffort(ctx context.Context, level string) context.Context {
+	if level != EffortNone && !slices.Contains(Efforts, level) {
+		return ctx
+	}
+	return context.WithValue(ctx, effortKey{}, level)
+}
+
+func effortOf(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(effortKey{}).(string)
+	return v, ok
+}
+
+// effortFor is the effort of one request: the provider's, under its cap
+// (or exactly what WithEffort set).
 func (c *Client) effortFor(req Request) string {
+	if req.effortSet {
+		if req.effortExact == EffortNone {
+			return ""
+		}
+		return req.effortExact
+	}
 	level := c.Effort
 	if level != "" && req.effortCap != "" && slices.Index(Efforts, req.effortCap) < slices.Index(Efforts, level) {
 		return req.effortCap

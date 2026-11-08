@@ -42,7 +42,9 @@ type Request struct {
 	// instead of retrying: the caller has another provider to go to.
 	FailFast bool
 
-	effortCap string // WithEffortCap of the call's context (Complete sets it)
+	effortCap   string // WithEffortCap of the call's context (Complete sets it)
+	effortExact string // WithEffort of the call's context
+	effortSet   bool
 }
 
 // Usage is the token accounting reported by the provider. CachedTokens is
@@ -622,6 +624,7 @@ func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 
 func (c *Client) complete1(ctx context.Context, req Request) (*Response, error) {
 	req.effortCap = effortCapOf(ctx)
+	req.effortExact, req.effortSet = effortOf(ctx)
 	req.Messages = normalizeTranscript(req.Messages, len(req.Tools) > 0)
 	resp, err := c.complete(ctx, req)
 	if err == nil {

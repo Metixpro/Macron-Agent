@@ -1661,6 +1661,22 @@ type textTools struct {
 	noImages bool
 }
 
+type clientKey struct{}
+
+// WithClient makes the agent's rounds under ctx go to c instead of its own
+// client (a multi-model preset, pkg/moa, for one request).
+func WithClient(ctx context.Context, c llm.ChatClient) context.Context {
+	return context.WithValue(ctx, clientKey{}, c)
+}
+
+// client is the model the rounds of ctx go to.
+func (a *Agent) client(ctx context.Context) llm.ChatClient {
+	if c, ok := ctx.Value(clientKey{}).(llm.ChatClient); ok && c != nil {
+		return c
+	}
+	return a.LLM
+}
+
 func (a *Agent) complete(ctx context.Context, messages []llm.Message, tools []llm.Tool, onText func(string), noTools *textTools) (*llm.Response, error) {
 	if noTools.noImages {
 		messages = withoutImages(messages)
@@ -1669,12 +1685,12 @@ func (a *Agent) complete(ctx context.Context, messages []llm.Message, tools []ll
 	if noTools.on {
 		req.Tools, req.Messages = nil, withCatalog(messages, tools)
 	}
-	resp, err := a.LLM.Complete(ctx, req)
+	resp, err := a.client(ctx).Complete(ctx, req)
 	if err != nil && !noTools.on && len(tools) > 0 && ctx.Err() == nil && toolsRejected(err) {
 		log.Printf("agent: native tools were refused (%v); using text tool calls", err)
 		noTools.on = true
 		req.Tools, req.Messages = nil, withCatalog(messages, tools)
-		if resp, err = a.LLM.Complete(ctx, req); err == nil {
+		if resp, err = a.client(ctx).Complete(ctx, req); err == nil {
 			noTools.by = resp.Provider
 		}
 		return resp, err
