@@ -1,0 +1,16 @@
+event: response.created
+data: {"type": "response.created", "response": {"id": "resp_04c7721dc31c40b4a5907112", "object": "response", "status": "in_progress", "model": "gpt-5.6-luna", "output": [{"id": "msg_04c7721dc31c40b4a5907112", "type": "message", "role": "assistant", "status": "in_progress", "content": [{"type": "output_text", "text": "", "annotations": []}]}]}}
+
+event: response.in_progress
+data: {"type": "response.in_progress", "response": {"id": "resp_04c7721dc31c40b4a5907112", "object": "response", "status": "in_progress", "model": "gpt-5.6-luna", "output": [{"id": "msg_04c7721dc31c40b4a5907112", "type": "message", "role": "assistant", "status": "in_progress", "content": [{"type": "output_text", "text": "", "annotations": []}]}]}}
+
+event: response.output_item.added
+data: {"type": "response.output_item.added", "output_index": 0, "item": {"id": "msg_04c7721dc31c40b4a5907112", "type": "message", "role": "assistant", "status": "in_progress", "content": [{"type": "output_text", "text": "", "annotations": []}]}}
+
+event: response.content_part.added
+data: {"type": "response.content_part.added", "output_index": 0, "content_index": 0, "item_id": "msg_04c7721dc31c40b4a5907112", "part": {"type": "output_text", "text": "", "annotations": []}}
+
+event: response.failed
+event: error
+data: {"sequence_number":0,"code":"upstream_error","type":"error","message":"Service temporarily unavailable"}
+

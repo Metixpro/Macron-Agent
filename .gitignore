@@ -1,0 +1,30 @@
+# Built programs and releases
+/bin/
+/dist/
+/macron
+*.exe
+
+# The agent's own data (a development run keeps it here)
+.macron/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets and local configuration
+.env
+.env.*
+config.env
+secret.key
+
+# Test and build leftovers
+coverage.out
+*.log
+*.tmp
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+
+# Python benchmark helpers
+__pycache__/

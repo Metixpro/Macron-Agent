@@ -1,0 +1,154 @@
+package main
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/store"
+	"github.com/Metixpro/macron-agent/pkg/telegram"
+	"github.com/Metixpro/macron-agent/pkg/tools"
+)
+
+// Fast mode ⚡ and deep mode 🧠. Each user picks one with /mode (or /fast,
+// /deep); it is kept in user_prefs. Answers carry no mode button. Deep mode is the full agent.
+// Fast mode answers right away: at most two steps, only light tools (a web
+// search, prices, reminders, memory), and the model is told to be brief.
+
+const (
+	modeFast = "fast"
+	modeDeep = "deep"
+
+	// fastSteps is the step budget of fast mode: one round of light tools,
+	// then the answer.
+	fastSteps = 2
+
+	// fastNote tells the model what fast mode means.
+	fastNote = "[Fast mode] The user chose fast mode: answer right away, directly and briefly, without plans or preambles. " +
+		"Use web_search at most once, only when the answer needs fresh or exact facts; otherwise answer from what you know. " +
+		"If the request needs heavy work (downloads, running code, making files or images, browsing sites, long research), " +
+		"do not try it: say in one short line that it needs deep mode 🧠 (/mode)."
+)
+
+// fastTools are the only tools of fast mode: quick and light.
+var fastTools = map[string]bool{
+	"web_search": true, "crypto_currency_price": true, toolReact: true, toolRemember: true, toolForget: true,
+	toolSchedule: true, toolListSchedules: true, toolCancelSchedule: true, toolGroupHistory: true, toolLookup: true,
+	tools.ToolListSkills: true, tools.ToolReadSkill: true, // reading a skill is light; saving one is not for fast mode
+}
+
+func fastTool(name string) bool { return fastTools[name] }
+
+// fastMode reports whether the user chose fast mode.
+func (b *Bot) fastMode(ctx context.Context, uid int64) bool {
+	v, err := b.st.UserPref(ctx, uid, store.PrefMode)
+	return err == nil && v == modeFast
+}
+
+// setMode stores the user's mode (deep is the default and is not stored).
+func (b *Bot) setMode(ctx context.Context, uid int64, fast bool) error {
+	v := ""
+	if fast {
+		v = modeFast
+	}
+	return b.st.SetUserPref(ctx, uid, store.PrefMode, v)
+}
+
+func modeName(l lang, fast bool) string {
+	if fast {
+		return l.t("⚡ سریع")
+	}
+	return l.t("🧠 عمیق")
+}
+
+// modeText is the /mode message: the answer mode, and how a private chat
+// sees the bot at work.
+func modeText(l lang, fast bool, live string) string {
+	return l.f("<b>حالت جواب‌دادن</b>: %s\n\n", modeName(l, fast)) +
+		l.t("⚡ <b>سریع</b>: جواب فوری و کوتاه؛ حداکثر یه جستجوی سریع، بدون ابزارهای سنگین (دانلود، اجرای کد، ساخت فایل و عکس، مرورگر).\n") +
+		l.t("🧠 <b>عمیق</b>: ایجنت کامل؛ با همه ابزارها و چند ده قدم، برای کارهای جدی و چندمرحله‌ای.") +
+		"\n\n" + l.f("<b>نمایش کار توی پیوی</b>: %s\n\n", liveName(l, live)) + liveHelp(l)
+}
+
+// modeKeyboard picks a mode; the current one is marked.
+func (b *Bot) modeKeyboard(l lang, fast bool, live string) *telegram.InlineKeyboardMarkup {
+	mark := func(on bool, label string) string {
+		if on {
+			return "✓ " + label
+		}
+		return label
+	}
+	rows := [][]telegram.InlineKeyboardButton{row(
+		b.button(mark(fast, l.t("⚡ سریع")), "mode:set:fast", map[bool]string{true: telegram.StylePrimary}[fast]),
+		b.button(mark(!fast, l.t("🧠 عمیق")), "mode:set:deep", map[bool]string{true: telegram.StylePrimary}[!fast]),
+	)}
+	for _, v := range liveModes {
+		rows = append(rows, row(b.button(mark(v == live, liveName(l, v)), "mode:live:"+v, map[bool]string{true: telegram.StylePrimary}[v == live])))
+	}
+	return keyboard(rows...)
+}
+
+// sendMode answers /mode.
+func (b *Bot) sendMode(ctx context.Context, m *telegram.Message) {
+	l := b.langOf(m.From)
+	fast, live := b.fastMode(ctx, m.From.ID), b.liveModeOf(ctx, m.From.ID)
+	b.sendPanel(ctx, m, modeText(l, fast, live), b.modeKeyboard(l, fast, live))
+}
+
+// handleModeCallback switches the presser's own mode from the /mode message.
+func (b *Bot) handleModeCallback(ctx context.Context, q *telegram.CallbackQuery, answer func(string, bool)) {
+	l := b.langOf(&q.From)
+	uid := q.From.ID
+	parts := strings.Split(q.Data, ":")
+	if len(parts) < 3 {
+		answer("", false)
+		return
+	}
+	if parts[1] == "t" {
+		// A button left under an older answer (1.13.0): the mode is chosen
+		// with /mode now, so the button just goes away.
+		answer(l.t("حالت جواب رو با /mode عوض کن."), false)
+		if q.Message != nil {
+			ectx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			_ = b.api.EditMarkup(ectx, q.Message.Chat.ID, q.Message.MessageID, nil)
+		}
+		return
+	}
+	if parts[1] == "live" {
+		if !validLive(parts[2]) {
+			answer("", false)
+			return
+		}
+		if err := b.st.SetUserPref(ctx, uid, store.PrefLive, parts[2]); err != nil {
+			answer(l.t(textError), true)
+			return
+		}
+		answer(liveName(l, parts[2]), false)
+		if q.Message != nil {
+			fast := b.fastMode(ctx, uid)
+			_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, modeText(l, fast, parts[2]), b.modeKeyboard(l, fast, parts[2]))
+		}
+		return
+	}
+	if parts[1] != "set" {
+		answer("", false)
+		return
+	}
+	fast := parts[2] == modeFast
+	if err := b.setMode(ctx, uid, fast); err != nil {
+		answer(l.t(textError), true)
+		return
+	}
+	if fast {
+		answer(l.t("⚡ حالت سریع روشن شد: جواب‌ها فوری و کوتاه می‌رسن."), false)
+	} else {
+		answer(l.t("🧠 حالت عمیق روشن شد: ایجنت کامل با همه ابزارها."), false)
+	}
+	if q.Message == nil {
+		return
+	}
+	// The /mode message shows the new choice.
+	live := b.liveModeOf(ctx, uid)
+	_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, modeText(l, fast, live), b.modeKeyboard(l, fast, live))
+}

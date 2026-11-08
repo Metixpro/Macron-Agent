@@ -1,0 +1,285 @@
+{
+  "model": "azm",
+  "endpoint_scheme": "http",
+  "steps": 20,
+  "deadline_seconds": 180,
+  "repetitions": 1,
+  "results": [
+    {
+      "agent": "macron",
+      "task": "python",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 36.948,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 3.766,
+          "usage": {
+            "prompt_tokens": 17807,
+            "completion_tokens": 168,
+            "total_tokens": 17975
+          },
+          "request_bytes": 73770
+        },
+        {
+          "status": 200,
+          "seconds": 5.974,
+          "usage": {
+            "prompt_tokens": 17989,
+            "completion_tokens": 477,
+            "total_tokens": 18466,
+            "prompt_tokens_details": {
+              "cached_tokens": 15744
+            }
+          },
+          "request_bytes": 74403
+        },
+        {
+          "status": 200,
+          "seconds": 9.494,
+          "usage": {
+            "prompt_tokens": 18498,
+            "completion_tokens": 941,
+            "total_tokens": 19439,
+            "prompt_tokens_details": {
+              "cached_tokens": 15872
+            }
+          },
+          "request_bytes": 76527
+        },
+        {
+          "status": 200,
+          "seconds": 6.135,
+          "usage": {
+            "prompt_tokens": 19487,
+            "completion_tokens": 84,
+            "total_tokens": 19571,
+            "prompt_tokens_details": {
+              "cached_tokens": 16384
+            }
+          },
+          "request_bytes": 79869
+        },
+        {
+          "status": 200,
+          "seconds": 4.144,
+          "usage": {
+            "prompt_tokens": 20103,
+            "completion_tokens": 400,
+            "total_tokens": 20503,
+            "prompt_tokens_details": {
+              "cached_tokens": 17408
+            }
+          },
+          "request_bytes": 82123
+        },
+        {
+          "status": 200,
+          "seconds": 2.528,
+          "usage": {
+            "prompt_tokens": 20664,
+            "completion_tokens": 92,
+            "total_tokens": 20756,
+            "prompt_tokens_details": {
+              "cached_tokens": 18048
+            }
+          },
+          "request_bytes": 83877
+        },
+        {
+          "status": 200,
+          "seconds": 4.304,
+          "usage": {
+            "prompt_tokens": 21213,
+            "completion_tokens": 312,
+            "total_tokens": 21525,
+            "prompt_tokens_details": {
+              "cached_tokens": 18560
+            }
+          },
+          "request_bytes": 85943
+        }
+      ],
+      "stdout_tail": "Done. 17/17 tests pass.\n\nFiles, in `/tmp/agent-azm-bench-i5dlmdbj/task`:\n- `solution.py` — `merge_intervals(intervals)`\n- `test_solution.py` — unittest suite\n\nBehavior:\n- merge on `start <= last_end + 1` → overlaps AND touching endpoints (`[1,3]` + `[4,6]` → `[1,6]`)\n- output sorted by start, disjoint, plain lists\n- input untouched: copied to tuples up front; also mutating the returned list leaves input alone (test `test_input_not_mutated`)\n- `start > end` → `ValueError`; wrong arity → `ValueError`; tuples accepted\n- negatives, point intervals, duplicates, unsorted input, 400-element sweep covered\n\nOne test caught a real bug — mine: `test_large_list` expected `[[0,398]]` from `range(0,400,2)`, but step-2 points are gap-of-1 apart (not touching), so correct output is 200 separate pairs. Fixed test to assert that gap stays separate, and added `range(0,400)` as the true chained case.\n\nRun: `python3 -m unittest test_solution -v` → `OK`.\n",
+      "stderr_tail": "2026/11/08 08:01:12 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-i5dlmdbj/home/workspaces/exec-1627713a739fbcdf0ddc11313c1fe478\n"
+    },
+    {
+      "agent": "hermes",
+      "task": "python",
+      "pass": false,
+      "exit_code": 1,
+      "timeout": false,
+      "wall_seconds": 1.763,
+      "calls": [],
+      "stdout_tail": "",
+      "stderr_tail": "\n\u001b[0;36m☤ Hermes Agent Setup\u001b[0m\n\n\u001b[0;36m→\u001b[0m Checking for uv...\n\u001b[0;32m✓\u001b[0m pinned uv found (uv 0.13.5 (x86_64-unknown-linux-gnu))\n\u001b[0;36m→\u001b[0m Installing python + tools + dependencies via pm (hash-verified via uv.lock)...\n\u001b[0;36m→\u001b[0m (first run on a fresh checkout can take 1-5 minutes)\nPython 3.14 is already installed\nPreparing the isolated Hermes runtime…\n  → Installing Python dependencies…\n  ✓ Installing Python dependencies\n✓ ffmpeg\n✓ node\n✓ npm\n✓ pnpm\n✓ python\n✓ ripgrep\n✓ venv\n  → Resolving Python dependencies…\n  ✓ Resolving Python dependencies\n✓ test environment\n✓ chromium\n✓ cua-driver\n\u001b[0;32m✓\u001b[0m Tools + dependencies installed (hash-verified via pm + uv.lock)\nhermes: no dependency environment is committed for this install; run `hermes pm repair`\n"
+    },
+    {
+      "agent": "hermes",
+      "task": "repair",
+      "pass": false,
+      "exit_code": 1,
+      "timeout": false,
+      "wall_seconds": 1.412,
+      "calls": [],
+      "stdout_tail": "",
+      "stderr_tail": "\n\u001b[0;36m☤ Hermes Agent Setup\u001b[0m\n\n\u001b[0;36m→\u001b[0m Checking for uv...\n\u001b[0;32m✓\u001b[0m pinned uv found (uv 0.13.5 (x86_64-unknown-linux-gnu))\n\u001b[0;36m→\u001b[0m Installing python + tools + dependencies via pm (hash-verified via uv.lock)...\n\u001b[0;36m→\u001b[0m (first run on a fresh checkout can take 1-5 minutes)\nPython 3.14 is already installed\n✓ ffmpeg\n✓ node\n✓ npm\n✓ pnpm\n✓ python\n✓ ripgrep\n✓ venv\n  → Resolving Python dependencies…\n  ✓ Resolving Python dependencies\n✓ test environment\n✓ chromium\n✓ cua-driver\n\u001b[0;32m✓\u001b[0m Tools + dependencies installed (hash-verified via pm + uv.lock)\nhermes: no dependency environment is committed for this install; run `hermes pm repair`\n"
+    },
+    {
+      "agent": "macron",
+      "task": "repair",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 27.416,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 1.853,
+          "usage": {
+            "prompt_tokens": 17797,
+            "completion_tokens": 129,
+            "total_tokens": 17926,
+            "prompt_tokens_details": {
+              "cached_tokens": 15616
+            }
+          },
+          "request_bytes": 73742
+        },
+        {
+          "status": 200,
+          "seconds": 7.926,
+          "usage": {
+            "prompt_tokens": 18057,
+            "completion_tokens": 1027,
+            "total_tokens": 19084,
+            "prompt_tokens_details": {
+              "cached_tokens": 15744
+            }
+          },
+          "request_bytes": 74758
+        },
+        {
+          "status": 200,
+          "seconds": 1.879,
+          "usage": {
+            "prompt_tokens": 19036,
+            "completion_tokens": 75,
+            "total_tokens": 19111,
+            "prompt_tokens_details": {
+              "cached_tokens": 16000
+            }
+          },
+          "request_bytes": 78911
+        },
+        {
+          "status": 200,
+          "seconds": 3.082,
+          "usage": {
+            "prompt_tokens": 19179,
+            "completion_tokens": 114,
+            "total_tokens": 19293,
+            "prompt_tokens_details": {
+              "cached_tokens": 17024
+            }
+          },
+          "request_bytes": 79494
+        },
+        {
+          "status": 200,
+          "seconds": 2.977,
+          "usage": {
+            "prompt_tokens": 19487,
+            "completion_tokens": 221,
+            "total_tokens": 19708,
+            "prompt_tokens_details": {
+              "cached_tokens": 17152
+            }
+          },
+          "request_bytes": 80723
+        },
+        {
+          "status": 200,
+          "seconds": 4.131,
+          "usage": {
+            "prompt_tokens": 19774,
+            "completion_tokens": 280,
+            "total_tokens": 20054,
+            "prompt_tokens_details": {
+              "cached_tokens": 17408
+            }
+          },
+          "request_bytes": 81819
+        }
+      ],
+      "stdout_tail": "Done. 10/10 pass.\n\n```text\n..........                                                               [100%]\n10 passed in 0.01s\n```\n\n`ledger.py`:\n```python\ndef total(rows):\n    ...\n    return Decimal  # exact, e.g. Decimal('0.3') for ['0.1','0.2']\n```\n\n- `Decimal` accumulation → `0.1+0.2 = 0.3` exactly, no float drift.\n- Signed accepted: `'-30.25'`, `'+10.75'`.\n- Blank/whitespace/`None` rows skipped.\n- Malformed (`abc`, `1,5`, `--3`, `1.2.3`) and non-finite (`nan`, `inf`) → `ValueError`.\n- Public name `total` unchanged; `__all__ = [\"total\"]`.\n\nTests: `test_ledger.py` (pytest, in venv `.venv` since system python lacks pytest and `~/.local` read-only). Run: `cd /tmp/agent-azm-bench-yhujo50p/task && .venv/bin/python -m pytest -q`\n",
+      "stderr_tail": "2026/11/08 08:01:53 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-yhujo50p/home/workspaces/exec-964ee2d153f8e5a9b45987124792cbca\n"
+    },
+    {
+      "agent": "macron",
+      "task": "persian",
+      "pass": true,
+      "exit_code": 0,
+      "timeout": false,
+      "wall_seconds": 7.617,
+      "calls": [
+        {
+          "status": 200,
+          "seconds": 2.009,
+          "usage": {
+            "prompt_tokens": 17828,
+            "completion_tokens": 97,
+            "total_tokens": 17925,
+            "prompt_tokens_details": {
+              "cached_tokens": 6144
+            }
+          },
+          "request_bytes": 74370
+        },
+        {
+          "status": 200,
+          "seconds": 2.634,
+          "usage": {
+            "prompt_tokens": 18073,
+            "completion_tokens": 231,
+            "total_tokens": 18304,
+            "prompt_tokens_details": {
+              "cached_tokens": 15744
+            }
+          },
+          "request_bytes": 75137
+        },
+        {
+          "status": 200,
+          "seconds": 2.679,
+          "usage": {
+            "prompt_tokens": 18425,
+            "completion_tokens": 208,
+            "total_tokens": 18633,
+            "prompt_tokens_details": {
+              "cached_tokens": 16000
+            }
+          },
+          "request_bytes": 76287
+        }
+      ],
+      "stdout_tail": "`result.json` ساخته شد کنار `sales.csv`:\n\n```json\n{\n  \"Tehran\": 150,\n  \"Mashhad\": 260,\n  \"Shiraz\": 100\n}\n```\n\nحساب: Tehran ۲×۱۵۰=۳۰۰ منهای مرجوعی ۱×۱۵۰=۱۵۰ → ۱۵۰. Mashhad ۲۴۰+۲۰=۲۶۰. Shiraz ۴×۲۵=۱۰۰.\n\n`sales.csv` دستنخورده (md5 `031da3268696df142450167eb9e01401`). بازگشت منفی حساب شد، خروجی اعتبارسنجی شد.\n",
+      "stderr_tail": "2026/11/08 08:02:20 🖥  running on this machine with the rights of agent\nworkspace: /tmp/agent-azm-bench-o7l2xqo7/home/workspaces/exec-8c9a971dcd9340897f42c70f8127a64d\n"
+    },
+    {
+      "agent": "hermes",
+      "task": "persian",
+      "pass": false,
+      "exit_code": 1,
+      "timeout": false,
+      "wall_seconds": 1.613,
+      "calls": [],
+      "stdout_tail": "",
+      "stderr_tail": "\n\u001b[0;36m☤ Hermes Agent Setup\u001b[0m\n\n\u001b[0;36m→\u001b[0m Checking for uv...\n\u001b[0;32m✓\u001b[0m pinned uv found (uv 0.13.5 (x86_64-unknown-linux-gnu))\n\u001b[0;36m→\u001b[0m Installing python + tools + dependencies via pm (hash-verified via uv.lock)...\n\u001b[0;36m→\u001b[0m (first run on a fresh checkout can take 1-5 minutes)\nPython 3.14 is already installed\n✓ ffmpeg\n✓ node\n✓ npm\n✓ pnpm\n✓ python\n✓ ripgrep\n✓ venv\n  → Resolving Python dependencies…\n  ✓ Resolving Python dependencies\n✓ test environment\n✓ chromium\n✓ cua-driver\n\u001b[0;32m✓\u001b[0m Tools + dependencies installed (hash-verified via pm + uv.lock)\nhermes: no dependency environment is committed for this install; run `hermes pm repair`\n"
+    }
+  ],
+  "purpose": "direct-endpoint Macron diagnostics; Hermes setup failures are NOT scored",
+  "hermes_setup_valid": false
+}

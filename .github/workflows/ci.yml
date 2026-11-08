@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y python3 ffmpeg
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare document and media tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/macron-tools"
+          "$RUNNER_TEMP/macron-tools/bin/python" -m pip install --require-hashes -r requirements-tools.lock
+          echo "$RUNNER_TEMP/macron-tools/bin" >> "$GITHUB_PATH"
+      - run: make check
+      - name: the installer parses
+        run: bash -n install.sh

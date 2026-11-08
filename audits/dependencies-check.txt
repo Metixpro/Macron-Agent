@@ -1,0 +1,21 @@
+✅ python3 (scripts, data, documents)
+✅ git (projects and updates)
+✅ curl (downloads)
+✅ ssh (other servers (the agent connects to them from the chat))
+⚠️  sshpass is missing (servers that give a password instead of a key)
+     → sudo apt install sshpass
+⚠️  rsync is missing (copying files to and from servers)
+     → sudo apt install rsync
+✅ gh (GitHub (pull requests, issues; git alone does the rest))
+✅ ffmpeg (audio and video)
+✅ node (web projects, MCP servers)
+✅ yt-dlp (YouTube and social media downloads)
+✅ pdftotext (reading PDFs)
+✅ Python package qrcode
+✅ Python package matplotlib
+✅ Python package reportlab
+✅ Python package pypdf
+✅ Python package PyMuPDF
+✅ Python package arabic-reshaper
+✅ Python package python-bidi
+✅ Python package playwright

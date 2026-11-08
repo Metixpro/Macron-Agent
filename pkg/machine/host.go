@@ -1,0 +1,68 @@
+package machine
+
+import (
+	"os"
+	"os/user"
+	"regexp"
+	"strings"
+)
+
+// The model, the skills and the tools speak of "/workspace", the work folder
+// of a conversation. On this machine that is a real folder, so in a command
+// or a file name "/workspace" means it.
+
+var reMount = regexp.MustCompile(`/workspace\b`)
+
+// hostPath replaces the name "/workspace" in text by the real work folder.
+func (s *Machine) hostPath(ws, text string) string {
+	if !strings.Contains(text, MountPoint) {
+		return text
+	}
+	return reMount.ReplaceAllLiteralString(text, ws)
+}
+
+// hostArgv gives a command the real work folder.
+func (s *Machine) hostArgv(ws string, argv []string) []string {
+	out := make([]string, len(argv))
+	for i, a := range argv {
+		out[i] = s.hostPath(ws, a)
+	}
+	return out
+}
+
+func currentUser() string {
+	if u, err := user.Current(); err == nil {
+		return u.Username
+	}
+	return "this user"
+}
+
+// secretEnv names the variables a command never inherits: the agent's own
+// tokens and keys. (A command can still read the files they came from; this
+// only keeps them out of every child process's environment.)
+var secretEnv = regexp.MustCompile(`(?i)(^(MACRON|WAZE)_)|(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|DSN|CREDENTIAL)`)
+
+// hostEnv is the environment of a command: the service user's own, without
+// the agent's secrets.
+func hostEnv() map[string]string {
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok || k == "" || secretEnv.MatchString(k) {
+			continue
+		}
+		env[k] = v
+	}
+	if env["PATH"] == "" {
+		env["PATH"] = defaultPath
+	}
+	if home, err := os.UserHomeDir(); err == nil && env["HOME"] == "" {
+		env["HOME"] = home
+	}
+	if _, ok := env["LANG"]; !ok {
+		env["LANG"] = "C.UTF-8"
+	}
+	// Nothing waits for a terminal: pagers off.
+	env["PAGER"], env["GIT_PAGER"] = "cat", "cat"
+	return env
+}

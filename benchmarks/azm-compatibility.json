@@ -1,0 +1,11 @@
+{
+  "model_requested": "azm",
+  "server_reported_model": "mimo-v2.6-flash",
+  "models_endpoint_status": 200,
+  "chat_completion_status": 200,
+  "probe_reply": "AZM_OK",
+  "nonstandard_nonstream_trailer": "data: [DONE]",
+  "production_key_saved": false,
+  "direct_macron_valid_tasks": 3,
+  "direct_hermes_compatibility": "not measured with a valid runtime; initial setup failures excluded"
+}

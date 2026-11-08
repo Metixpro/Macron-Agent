@@ -1,0 +1,139 @@
+// Package cli is what the macron program does besides running the agent:
+// setting it up, checking it, keeping it alive as a service and updating it.
+package cli
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"golang.org/x/term"
+
+	"github.com/Metixpro/macron-agent/pkg/app"
+	"github.com/Metixpro/macron-agent/pkg/config"
+)
+
+// IO is where the commands read from and write to (replaced in tests).
+type IO struct {
+	In  *bufio.Reader
+	Out io.Writer
+	Err io.Writer
+	// Secret reads a line without showing it (a terminal), or normally.
+	Secret func(prompt string) (string, error)
+	// Interactive says whether a person answers (a terminal).
+	Interactive bool
+}
+
+// Std is the real terminal.
+func Std() *IO {
+	io := &IO{In: bufio.NewReader(os.Stdin), Out: os.Stdout, Err: os.Stderr,
+		Interactive: term.IsTerminal(int(os.Stdin.Fd()))}
+	io.Secret = func(prompt string) (string, error) {
+		fmt.Fprint(io.Out, prompt)
+		if io.Interactive {
+			b, err := term.ReadPassword(int(os.Stdin.Fd()))
+			fmt.Fprintln(io.Out)
+			return strings.TrimSpace(string(b)), err
+		}
+		s, err := io.In.ReadString('\n')
+		return strings.TrimSpace(s), err
+	}
+	return io
+}
+
+func (io *IO) printf(format string, a ...any) { fmt.Fprintf(io.Out, format, a...) }
+func (io *IO) println(a ...any)               { fmt.Fprintln(io.Out, a...) }
+
+// ask prints a question with a default and returns the answer.
+func (io *IO) ask(question, def string) string {
+	if def != "" {
+		io.printf("%s [%s]: ", question, def)
+	} else {
+		io.printf("%s: ", question)
+	}
+	s, _ := io.In.ReadString('\n')
+	if s = strings.TrimSpace(s); s != "" {
+		return s
+	}
+	return def
+}
+
+func (io *IO) yes(question string, def bool) bool {
+	d := "Y/n"
+	if !def {
+		d = "y/N"
+	}
+	io.printf("%s [%s]: ", question, d)
+	s, _ := io.In.ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "y", "yes", "بله", "آره":
+		return true
+	case "n", "no", "نه":
+		return false
+	}
+	return def
+}
+
+const usage = `Macron Agent %s: a personal AI agent that lives in your Telegram.
+
+Usage:
+  macron                 start the agent (what the service runs)
+  macron exec [FLAGS] TASK  run a local task without Telegram
+  macron setup           first-time setup: bot token, your Telegram id, a model
+  macron doctor          check that everything works, and say what to fix
+  macron service ACTION  install | uninstall | start | stop | restart | status
+  macron logs [-f]       the agent's log
+  macron update          update to the newest release (--check: only look)
+  macron config ACTION   list | get KEY | set KEY VALUE | unset KEY | path
+  macron backup [FILE]   save the home folder (database and notes) as one archive
+  macron version
+
+Everything the agent is lives in one folder: %s
+  SOUL.md  USER.md  MEMORY.md   its personality and what it knows (edit them freely)
+  skills/                       what it knows how to do
+  macron.db                     conversations, schedules, providers
+  config.env                    settings and keys (readable by you only)
+`
+
+// Run runs a command. It reports false when args are not a command (the
+// agent starts). code is the exit status of a command.
+func Run(args []string, io *IO) (handled bool, code int) {
+	if len(args) == 0 {
+		return false, 0
+	}
+	cmd, rest := args[0], args[1:]
+	switch cmd {
+	case "exec":
+		return true, execTask(io, rest)
+	case "setup", "init":
+		return true, setup(io, rest)
+	case "doctor", "check":
+		return true, doctor(io, rest)
+	case "service":
+		return true, service(io, rest)
+	case "logs":
+		return true, logs(io, rest)
+	case "update", "upgrade":
+		return true, update(io, rest)
+	case "config":
+		return true, configCmd(io, rest)
+	case "backup":
+		return true, backup(io, rest)
+	case "version", "--version", "-v":
+		io.println("macron", app.Version)
+		return true, 0
+	case "help", "--help", "-h":
+		io.printf(usage, app.Version, config.Home())
+		return true, 0
+	case "start", "run":
+		return false, 0
+	}
+	if strings.HasPrefix(cmd, "-") { // a flag of the agent: -db, -check…
+		return false, 0
+	}
+	io.printf("macron: unknown command %q\n\n", cmd)
+	io.printf(usage, app.Version, config.Home())
+	return true, 2
+}

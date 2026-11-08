@@ -1,0 +1,52 @@
+#!/bin/bash
+# A stand-in for yt-dlp: behaves according to the URL (the last argument).
+n=$(cat .attempts 2>/dev/null || echo 0); n=$((n+1)); echo $n > .attempts
+printf '%s\n' "$@" > ".args_$n"
+url="${@: -1}"
+audio=0; out=""; prev=""
+for a in "$@"; do [ "$a" = "-x" ] && audio=1; [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+name=$(printf '%s' "$out" | sed -e 's|^\./||' -e 's/%(title)\.80B/Test Song/' -e 's/%(playlist_autonumber[^)]*)s//' -e 's/\.%(ext)s$//')
+[ -z "$name" ] && name="Test Song"
+if printf '%s\n' "$@" | grep -q -- '--flat-playlist'; then
+  case "$url" in
+    ytsearch*) printf 'https://www.youtube.com/watch?v=remix\tSinger - Song Name (Remix)\t200\tDJ\nhttps://www.youtube.com/watch?v=blocked\tSinger - Song Name (Official Audio)\t201\tSinger\nhttps://www.youtube.com/watch?v=long\tSinger - Song Name (Official Video)\t260\tSinger VEVO\n' ;;
+    scsearch*) printf 'https://api.soundcloud.com/tracks/drm\tSong Name\t200.5\tSinger\nhttps://api.soundcloud.com/tracks/mashup\tSinger & Other - Song Name / Other Hit\t199\tmixer\nhttps://api.soundcloud.com/tracks/42\tSinger - Song Name\t203\tsomeone\n' ;;
+  esac
+  exit 0
+fi
+subs=0; skip=0
+for a in "$@"; do [ "$a" = "--write-subs" ] && subs=1; [ "$a" = "--skip-download" ] && skip=1; done
+if [ "$subs" = 1 ]; then
+  vname="Test Video"; case "$url" in *subclip*) vname="Sub Clip" ;; esac
+  case "$url" in
+    *nosubs*) echo "WARNING: [youtube] x: There are no subtitles for the requested languages" >&2 ;;
+    *) printf '1\n00:00:00,000 --> 00:00:02,000\nسلام دنیا\n' > "$vname.fa.srt"; printf '1\n00:00:00,000 --> 00:00:02,000\nHello world\n' > "$vname.en.srt" ;;
+  esac
+  [ "$skip" = 1 ] && exit 0
+fi
+case "$url" in
+  *_GuOjXYl5ew*)
+    cf=""; prev=""; for a in "$@"; do [ "$prev" = "--cookies" ] && cf="$a"; prev="$a"; done
+    if [ -n "$cf" ] && grep -q 'LOGIN_INFO' "$cf" 2>/dev/null; then echo "YouTube Turns 20"; exit 0; fi
+    echo "ERROR: [youtube] _GuOjXYl5ew: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies" >&2; exit 1 ;;
+  *subclip*) cp sub_src.mp4 "Sub Clip.mp4"; printf 'WAZEFILE\t./Sub Clip.mp4\tSub Clip\tUploader\t4\t360\n'; exit 0 ;;
+  *watch?v=blocked*)
+    if printf '%s\n' "$@" | grep -q -- '--skip-download'; then printf 'Hamim\tKhorshido Mah (Official Video)\n'; exit 0; fi
+    echo "thumb" > "$name.webp"
+    echo "ERROR: unable to download video data: HTTP Error 403: Forbidden" >&2; exit 1 ;;
+  *tracks/drm*) echo "ERROR: [soundcloud] 1: This video is DRM protected" >&2; exit 1 ;;
+  scsearch1:*) echo "$url" > .scquery ;;
+  *botcheck*) if [ "$n" -lt 3 ]; then echo "ERROR: [youtube] abc: Sign in to confirm you're not a bot" >&2; exit 1; fi ;;
+  *private*) echo "ERROR: [youtube] abc: Private video. Sign in if you've been granted access to this video" >&2; exit 1 ;;
+  *geoblock*) echo "ERROR: [youtube] abc: The uploader has not made this video available in your country" >&2; exit 1 ;;
+  *agegate*) echo "ERROR: [youtube] abc: Sign in to confirm your age. This video may be inappropriate for some users." >&2; exit 1 ;;
+  *forbid*) echo "ERROR: unable to download video data: HTTP Error 403: Forbidden" >&2; exit 1 ;;
+  *photos*) echo "ERROR: [Instagram] abc: No video formats found!" >&2; exit 1 ;;
+  *big*) cp big_src.mp4 "Big Clip.mp4"; printf 'WAZEFILE\t./Big Clip.mp4\tBig Clip\tUploader\t6\t720\n'; exit 0 ;;
+esac
+if [ "$audio" = 1 ]; then
+  if [ -f song_src.mp3 ]; then cp song_src.mp3 "$name.mp3"; else echo "ID3 fake mp3" > "$name.mp3"; fi
+  printf 'WAZEFILE\t./%s.mp3\tTest Song\tSinger\t215\tNA\n' "$name"
+else
+  echo "fake mp4" > "Test Video.mp4"; printf 'WAZEFILE\t/workspace/Test Video.mp4\tTest Video\tNA\t95\t720\n'
+fi
