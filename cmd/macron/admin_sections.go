@@ -558,12 +558,7 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 	m, _ := b.st.PremiumEmoji(ctx)
 	enabled := b.st.SettingBool(store.SettingPremiumEmoji, false)
-	html := l.f(`🎨 <b>ایموجی پریمیوم</b>: %s
-تعداد: <b>%d</b>
-
-وقتی روشن باشه، هر ایموجی معمولی که توی متن‌ها و دکمه‌های ربات بیاد و نسخه پریمیومش ثبت شده باشه، خودکار پریمیوم نشون داده می‌شه.
-
-⚠️ تلگرام فقط وقتی اجازه می‌ده که صاحب ربات <b>تلگرام پریمیوم</b> داشته باشه (یا ربات یوزرنیم Fragment خریده باشه).`, onOff(l, enabled), len(m))
+	html := l.f("🎨 <b>ایموجی پریمیوم</b>: %s\nتعداد: <b>%d</b>", onOff(l, enabled), len(m))
 	toggleStyle := telegram.StyleSuccess
 	if enabled {
 		toggleStyle = ""
@@ -574,7 +569,7 @@ func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 		row(b.button(l.t("📦 وارد کردن پک"), "a:em:pack", telegram.StylePrimary)),
 		row(b.button(l.t("📋 لیست"), "a:em:list", ""), b.button(l.t("🧪 تست"), "a:em:test", "")),
 		row(b.button(l.t("🗑 حذف"), "a:em:del", ""), b.button(l.t("🧹 حذف همه"), "a:em:clear", telegram.StyleDanger)),
-		row(b.back(l, "a:ws")),
+		row(b.back(l, "a:st")),
 	)}
 }
 

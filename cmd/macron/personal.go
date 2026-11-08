@@ -159,6 +159,7 @@ const personalHomeFmt = `
 
 func personalCommands(l lang) []telegram.BotCommand {
 	return []telegram.BotCommand{
+		{Command: "queue", Description: l.t("کار مستقل بعدی")},
 		{Command: "start", Description: l.t("شروع و معرفی")},
 		{Command: "new", Description: l.t("گفتگوی تازه")},
 		{Command: "memory", Description: l.t("حافظه و فایل‌هام (SOUL.md، USER.md، MEMORY.md)")},

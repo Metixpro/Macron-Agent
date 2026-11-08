@@ -54,8 +54,8 @@ func TestFastMode(t *testing.T) {
 		t.Error("the second step answers without tools")
 	}
 
-	rich := h.tg.of("sendRichMessage")
-	if kb := rich[len(rich)-1].body["reply_markup"]; kb != nil {
+	rich := richAnswers(h)
+	if kb := rich[len(rich)-1].body["reply_markup"]; kb != nil && len(buttons(rich[len(rich)-1])) > 0 {
 		t.Fatalf("no mode button under answers: %v", kb)
 	}
 	h.send(private(90, "/deep"))

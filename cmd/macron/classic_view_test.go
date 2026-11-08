@@ -27,7 +27,7 @@ func TestClassicTraceIgnoresRemovedDisplaySettings(t *testing.T) {
 	}
 	h.send(private(ownerID, "فایل‌های پوشه را بررسی کن"))
 	frames := strings.Join(liveFrames(h), "\n")
-	if !strings.Contains(frames, "<pre><code") || !strings.Contains(frames, "Files") {
+	if !strings.Contains(frames, "```bash") || !strings.Contains(frames, "Files") {
 		t.Fatalf("classic trace missing: %s", frames)
 	}
 	if len(h.tg.of("sendRichMessageDraft")) != 0 {
@@ -60,7 +60,7 @@ func TestPrivateLiveMessageKeepsCodeAndStopWhenPremiumIsRejected(t *testing.T) {
 	_ = h.st.SetPremiumEmoji(bg, "💭", "99999")
 	h.bot.reloadEmoji(bg)
 	h.tg.reject = func(method string, body map[string]any) string {
-		if (method == "sendMessage" || method == "editMessageText") && strings.Contains(fmt.Sprint(body["text"]), "tg-emoji") {
+		if (method == "sendRichMessage" || method == "editMessageText") && strings.Contains(fmt.Sprint(body["rich_message"]), "custom_emoji") {
 			return "Bad Request: custom emoji not allowed"
 		}
 		return ""
@@ -72,15 +72,15 @@ func TestPrivateLiveMessageKeepsCodeAndStopWhenPremiumIsRejected(t *testing.T) {
 	if l.traceMsg == 0 {
 		t.Fatal("premium rejection hid the live message")
 	}
-	shown := lastOf(h, "sendMessage")
-	if !strings.Contains(fmt.Sprint(shown.body["text"]), "<pre><code") || !hasButton(buttons(shown), "→ "+l.stopData) {
+	shown := lastOf(h, "sendRichMessage")
+	if !strings.Contains(richPayloadText(shown.body["rich_message"].(map[string]any)), "```bash") || !hasButton(buttons(shown), "→ "+l.stopData) {
 		t.Fatal("fallback lost code formatting or stop keyboard")
 	}
 	l.toolEnd(0, "list_files", "Files listed")
 	l.lastEdit = time.Time{}
 	l.flush(bg)
 	edited := lastOf(h, "editMessageText")
-	if strings.Contains(fmt.Sprint(edited.body["text"]), "tg-emoji") || !hasButton(buttons(edited), "→ "+l.stopData) {
+	if strings.Contains(fmt.Sprint(edited.body["rich_message"]), "custom_emoji") || !hasButton(buttons(edited), "→ "+l.stopData) {
 		t.Fatal("edit did not fall back while keeping stop")
 	}
 }

@@ -71,8 +71,8 @@ func TestSettingsScreen(t *testing.T) {
 	}
 	h.wantText("گفتگوی همراه هر درخواست: <b>12.0K</b>")
 	h.click(ownerID, ownerID, 9, "a:st:react")
-	if h.st.SettingBool(store.SettingReactions, true) {
-		t.Fatal("reactions toggle")
+	if !h.st.SettingBool(store.SettingReactions, true) {
+		t.Fatal("retired reaction callback changed preference")
 	}
 
 	h.click(ownerID, ownerID, 9, "a:st:ctx")
@@ -218,7 +218,7 @@ func TestPremiumEmojiMappingAndUse(t *testing.T) {
 	h.llm.reply = say("عالیه 🔥 بزن بریم")
 	h.tg.reset()
 	h.send(private(50, "پروژه تموم شد"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	md := rich[len(rich)-1].body["rich_message"].(map[string]any)["markdown"].(string)
 	if !strings.Contains(md, "![🔥](tg://emoji?id=5368324170671202286)") {
 		t.Fatalf("answer without premium emoji: %s", md)
@@ -333,7 +333,7 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	hubs := map[string][]string{
 		"a:stats": {"a:sys:1h"},
 		"a:ai":    {"a:sr", "a:dl", "a:ig", "a:ie", "a:mu", "a:soul", "a:ws", "a:st:steps", "a:st:window", "a:st:ctx"},
-		"a:st":    {"a:st:react", "a:st:remoji:0"},
+		"a:st":    {"a:em"},
 		"a:pv":    {"a:rt"},
 	}
 	where := map[string]string{}
@@ -377,7 +377,7 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	}
 }
 
-func TestSettingsIsReactionsOnly(t *testing.T) {
+func TestSettingsExposesPremiumAndRetiresReactions(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(ownerID, "/admin"))
 	if !strings.Contains(lastMarkup(h), "⚙️ تنظیمات") || strings.Contains(lastMarkup(h), "تنظیمات عمومی") {
@@ -385,29 +385,22 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 	}
 	h.click(ownerID, ownerID, 9, "a:st")
 	st := lastOf(h, "editMessageText")
-	for _, gone := range []string{"a:em", "a:st:trace", "a:st:tstyle", "a:st:worklog", "a:st:live"} {
+	for _, gone := range []string{"a:st:react", "a:st:remoji", "a:st:trace", "a:st:tstyle", "a:st:worklog", "a:st:live"} {
 		if hasButton(buttons(st), "→ "+gone) {
 			t.Errorf("the settings page still has %s", gone)
 		}
 	}
-	if n := len(buttons(st)); n != 1+len(reactionEmojis)+1 {
-		t.Errorf("%d buttons: the switch, %d emojis and back", n, len(reactionEmojis))
+	if !hasButton(buttons(st), "→ a:em") {
+		t.Fatal("premium panel unreachable while disabled")
+	}
+	h.click(ownerID, ownerID, 9, "a:em")
+	if !hasButton(buttons(lastOf(h, "editMessageText")), "→ a:st") {
+		t.Fatal("premium panel must return to settings")
 	}
 	h.click(ownerID, ownerID, 9, "a:st:remoji:3")
-	if h.bot.seenReaction() != reactionEmojis[3] {
-		t.Fatalf("default reaction %q", h.bot.seenReaction())
-	}
-	h.click(ownerID, ownerID, 9, "a:st:remoji:99")
-	if h.bot.seenReaction() != reactionEmojis[3] {
-		t.Fatal("an emoji that is not offered")
-	}
-	_ = h.st.SetSetting(bg, store.SettingReactionEmoji, "💩")
-	if h.bot.seenReaction() != "👀" {
-		t.Fatal("an unknown stored emoji falls back to 👀")
-	}
 	h.click(ownerID, ownerID, 9, "a:st:react")
-	if h.st.SettingBool(store.SettingReactions, true) {
-		t.Fatal("reactions toggle")
+	if h.bot.seenReaction() != "👀" || !h.st.SettingBool(store.SettingReactions, true) {
+		t.Fatal("retired callbacks changed reaction preferences")
 	}
 
 	h.click(ownerID, ownerID, 9, "a:ws")
@@ -437,9 +430,9 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 		t.Fatalf("a change stays on its page: %s", v)
 	}
 	_ = h.st.SetSetting(bg, store.SettingPremiumEmoji, "true")
-	h.click(ownerID, ownerID, 9, "a:ws")
+	h.click(ownerID, ownerID, 9, "a:st")
 	if !hasButton(buttons(lastOf(h, "editMessageText")), "→ a:em") {
-		t.Error("once on, premium emoji's packs are managed from showing the work")
+		t.Error("premium packs must remain reachable in settings")
 	}
 }
 

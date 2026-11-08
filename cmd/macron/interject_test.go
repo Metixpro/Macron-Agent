@@ -62,7 +62,7 @@ func TestPrivateMessageDuringJobRunsNext(t *testing.T) {
 	first := private(60, "فایل‌های پوشه را بررسی کن")
 	wait := h.background(first)
 	<-started
-	h.bot.handleMessage(followUpMsg(first, 78, "حالا پیام بعدی را پاسخ بده"))
+	h.bot.handleMessage(followUpMsg(first, 78, "/queue حالا پیام بعدی را پاسخ بده"))
 	close(proceed)
 	wait()
 	if h.llm.count() != 3 {
@@ -380,7 +380,7 @@ func TestAMessageAfterTheAnswerRunsNext(t *testing.T) {
 	var once sync.Once
 	answering, proceed := make(chan struct{}), make(chan struct{})
 	h.tg.setReject(func(method string, body map[string]any) string {
-		if method == "sendRichMessage" {
+		if method == "editMessageText" && body["rich_message"] != nil && !strings.Contains(fmt.Sprint(body["reply_markup"]), "run:stop:") {
 			once.Do(func() { close(answering); <-proceed })
 		}
 		return ""
@@ -585,8 +585,8 @@ func TestPrivateMessagesRunOneAtATimeInArrivalOrder(t *testing.T) {
 	first := private(63, "درخواست شماره اول")
 	wait := h.background(first)
 	<-started
-	h.bot.handleMessage(followUpMsg(first, 78, "درخواست شماره دوم"))
-	h.bot.handleMessage(followUpMsg(first, 79, "درخواست شماره سوم"))
+	h.bot.handleMessage(followUpMsg(first, 78, "/queue درخواست شماره دوم"))
+	h.bot.handleMessage(followUpMsg(first, 79, "/queue درخواست شماره سوم"))
 	if h.llm.count() != 1 {
 		t.Error("queued requests started before the current one ended")
 	}
@@ -618,7 +618,7 @@ func TestStoppingPrivateTaskStillRunsTheQueuedMessage(t *testing.T) {
 	first := private(64, "اولین درخواست را انجام بده")
 	wait := h.background(first)
 	<-started
-	h.bot.handleMessage(followUpMsg(first, 78, "پیام منتظر در صف را پاسخ بده"))
+	h.bot.handleMessage(followUpMsg(first, 78, "/queue پیام منتظر در صف را پاسخ بده"))
 	stopLiveMessage(h, 64)
 	close(release)
 	wait()

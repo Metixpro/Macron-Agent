@@ -199,3 +199,28 @@ inline Stop keyboard underneath. It does not use Telegram drafts for ordinary
 messages. New messages wait in FIFO order and start separate requests after the
 active request finishes. Stopping the active request keeps the waiting tasks.
 The queue accepts up to eight waiting messages; a full queue is reported explicitly.
+
+
+### 1.2.7: native live cards and active-task corrections
+
+Private progress uses native RichMessage blocks: heading, checklist, expandable
+execution details with a code block, and an elapsed-time footer. Stop stays in
+an inline keyboard below the message. Text answers replace the live card;
+files and effects retain their separate delivery paths. Unsupported rich APIs
+fall back to the classic HTML card. Premium emoji rejection retries without
+custom emoji, and temporary server failures keep rich rendering enabled.
+
+A new plain-text message during a model request cancels only that request and
+continues the same task with the correction. During tool execution the guidance
+waits for the tool boundary. Messages received during delegation, and attachments,
+wait for a separate turn. `/queue TEXT` always requests a separate FIFO turn;
+it accepts up to eight waiting tasks and Stop preserves them.
+
+Settings exposes Premium emoji even while disabled: import a pack, add mappings,
+preview, toggle, or delete. Reaction controls and their old mutation callbacks
+have been retired.
+
+Telegram API references: [InputRichMessage](https://core.telegram.org/bots/api#inputrichmessage),
+[sendRichMessage](https://core.telegram.org/bots/api#sendrichmessage),
+[editMessageText](https://core.telegram.org/bots/api#editmessagetext).
+Persistent cards do not use the draft-only `thinking` block.

@@ -17,7 +17,7 @@ func TestConversationFlow(t *testing.T) {
 	h.llm.reply = say("سلام علی جان! **خوبم** مرسی 😊")
 	h.send(private(7, "سلام خوبی؟"))
 
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 {
 		t.Fatalf("expected one rich answer, got %d; calls: %v", len(rich), h.tg.allText())
 	}
@@ -26,11 +26,15 @@ func TestConversationFlow(t *testing.T) {
 	if rm["markdown"] != "سلام علی جان! **خوبم** مرسی 😊" || rm["is_rtl"] != true {
 		t.Errorf("rich message: %v", rm)
 	}
-	if rp := body["reply_parameters"].(map[string]any); rp["message_id"].(float64) != 77 {
-		t.Errorf("the answer must reply to the user's message: %v", rp)
+	initial := h.tg.of("sendRichMessage")
+	if len(initial) != 1 || body["message_id"] == nil {
+		t.Fatalf("live message was not reused: %v", body)
 	}
-	if body["reply_markup"] != nil {
-		t.Error("no buttons under the assistant's answers (the mode is chosen with /mode)")
+	if rp := initial[0].body["reply_parameters"].(map[string]any); rp["message_id"].(float64) != 77 {
+		t.Fatal("live message must reply to the user's message")
+	}
+	if strings.Contains(fmt.Sprint(body["reply_markup"]), "run:stop:") {
+		t.Fatal("final answer retained stop")
 	}
 
 	reacts := h.tg.of("setMessageReaction")
@@ -79,7 +83,7 @@ func TestLongAnswerIsSplitIntoSeveralMessages(t *testing.T) {
 	}
 	h.llm.reply = say(sb.String())
 	h.send(private(8, "یه گزارش بلند بده"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) < 2 {
 		t.Fatalf("a long answer must arrive as several messages, got %d", len(rich))
 	}
@@ -89,7 +93,7 @@ func TestLongAnswerIsSplitIntoSeveralMessages(t *testing.T) {
 			t.Errorf("part %d has %d chars", i, n)
 		}
 		_, replied := c.body["reply_parameters"]
-		if replied != (i == 0) {
+		if replied != (i == 0 && c.method == "sendRichMessage") {
 			t.Errorf("only the first part replies to the user (part %d)", i)
 		}
 	}

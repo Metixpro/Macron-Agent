@@ -46,13 +46,16 @@ func TestToolkitInAPrivateChat(t *testing.T) {
 	for _, c := range h.tg.calls {
 		switch c.method {
 		case "sendDice", "sendRichMessage", "sendVenue", "sendPoll":
+			if rm, ok := c.body["rich_message"].(map[string]any); ok && rm["blocks"] != nil {
+				continue
+			}
 			order = append(order, c.method)
 		}
 	}
 	if strings.Join(order, " ") != "sendDice sendRichMessage sendVenue sendPoll" {
 		t.Errorf("the die first, then the answer, then the pin and the quiz: %v", order)
 	}
-	answer := lastOf(h, "sendRichMessage")
+	answer := lastRichAnswer(h)
 	if answer.body["message_effect_id"] != telegram.MessageEffects["🎉"] {
 		t.Errorf("the answer plays the effect: %v", answer.body["message_effect_id"])
 	}
@@ -82,7 +85,7 @@ func TestEffectRefusedStillSendsTheAnswer(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "تولدت مبارک!"}, 0
 	}
 	h.send(private(72, "امروز تولدمه"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	last := rich[len(rich)-1]
 	if last.body["message_effect_id"] != nil || !strings.Contains(h.tg.allText(), "تولدت مبارک!") {
 		t.Errorf("the answer goes without the effect: %v", last.body)

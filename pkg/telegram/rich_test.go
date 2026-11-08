@@ -268,3 +268,32 @@ func TestRichMessagesGoWithHardBreaks(t *testing.T) {
 		t.Fatalf("guest: %q", md)
 	}
 }
+
+func TestNativeRichBlocksWirePayload(t *testing.T) {
+	bot, f := newFakeTG(t)
+	rm := RichMessage{IsRTL: true, SkipEntityDetection: true, Blocks: []InputRichBlock{
+		{Type: "heading", Size: 4, Text: []any{RichTextSpan{Type: "custom_emoji", CustomEmojiID: "777", AlternativeText: "💭"}, " Agent"}},
+		{Type: "list", Items: []InputRichListItem{{HasCheckbox: true, IsChecked: true, Blocks: []InputRichBlock{{Type: "paragraph", Text: RichTextSpan{Type: "bold", Text: "<b>literal</b>"}}}}}},
+		{Type: "details", Summary: "Execution", IsOpen: true, Blocks: []InputRichBlock{{Type: "pre", Language: "bash", Text: "✓ Files"}}},
+		{Type: "footer", Text: "0:03"},
+	}}
+	if _, err := bot.SendRichMessage(context.Background(), 5, rm, SendOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	body := f.bodies[0]["rich_message"].(map[string]any)
+	if body["markdown"] != nil || body["html"] != nil || body["skip_entity_detection"] != true {
+		t.Fatalf("content modes mixed: %v", body)
+	}
+	blocks := body["blocks"].([]any)
+	if len(blocks) != 4 {
+		t.Fatal("native blocks lost")
+	}
+	items := blocks[1].(map[string]any)["items"].([]any)
+	if item := items[0].(map[string]any); item["has_checkbox"] != true || item["is_checked"] != true {
+		t.Fatalf("checkbox: %v", item)
+	}
+	raw, _ := json.Marshal(body)
+	if text := (&Message{RichMessage: raw}).RichText(); !strings.Contains(text, "<b>literal</b>") || !strings.Contains(text, "✓ Files") {
+		t.Fatalf("native text/formatting lost: %s", text)
+	}
+}

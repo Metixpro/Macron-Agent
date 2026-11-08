@@ -201,19 +201,12 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 
 	case "st":
 		switch arg(2) {
-		case "remoji":
-			i, err := strconv.Atoi(arg(3))
-			if err != nil || i < 0 || i >= len(reactionEmojis) {
-				answer("", false)
-				break
-			}
-			_ = b.st.SetSetting(ctx, store.SettingReactionEmoji, reactionEmojis[i])
-			answer(reactionEmojis[i], false)
-		case "react", "premium", "failover", "trace", "gapprove":
-			key := map[string]string{"react": store.SettingReactions, "premium": store.SettingPremiumEmoji, "failover": store.SettingFailover,
+		case "remoji", "react":
+			answer("", false)
+		case "premium", "failover", "trace", "gapprove":
+			key := map[string]string{"premium": store.SettingPremiumEmoji, "failover": store.SettingFailover,
 				"trace": store.SettingLiveTrace, "gapprove": store.SettingGroupApproval}[arg(2)]
-			def := map[string]bool{store.SettingReactions: true, store.SettingFailover: true,
-				store.SettingLiveTrace: true, store.SettingGroupApproval: true}[key]
+			def := key != store.SettingPremiumEmoji
 			_ = b.st.SetSetting(ctx, key, strconv.FormatBool(!b.st.SettingBool(key, def)))
 			answer(l.t("انجام شد"), false)
 		case "steps":
@@ -635,32 +628,14 @@ func (b *Bot) seenReaction() string {
 }
 
 func (b *Bot) viewSettings(l lang) panelView {
-	on := b.st.SettingBool(store.SettingReactions, true)
-	html := l.f("⚙️ <b>تنظیمات</b>\n\n😍 ری‌اکشن روی پیام‌ها: %s\nایموجی پیش‌فرض (وقتی پیام خونده شد): %s", onOff(l, on), b.seenReaction())
-	toggle := l.t("😍 ری‌اکشن: روشن")
-	if !on {
-		toggle = l.t("😍 ری‌اکشن: خاموش")
-	}
-	var emojis []telegram.InlineKeyboardButton
-	for i, e := range reactionEmojis {
-		label := e
-		if e == b.seenReaction() {
-			label = "✅ " + e
-		}
-		emojis = append(emojis, b.button(label, "a:st:remoji:"+strconv.Itoa(i), ""))
-	}
-	return panelView{html: html, kb: keyboard(
-		row(b.button(toggle, "a:st:react", "")),
-		row(emojis...),
+	return panelView{html: l.f("⚙️ <b>تنظیمات</b>\n\n✨ ایموجی پریمیوم: %s", onOff(l, b.st.SettingBool(store.SettingPremiumEmoji, false))), kb: keyboard(
+		row(b.button(l.t("✨ ایموجی پریمیوم"), "a:em", telegram.StylePrimary)),
 		row(b.back(l, "a:home")),
 	)}
 }
 
 func (b *Bot) viewShowWork(l lang) panelView {
 	rows := [][]telegram.InlineKeyboardButton{row(b.button(l.t("🖥 ترمینال زنده"), "a:st:trace:ws", ""))}
-	if b.st.SettingBool(store.SettingPremiumEmoji, false) {
-		rows = append(rows, row(b.button(l.t("✨ ایموجی پریمیوم"), "a:em", "")))
-	}
 	rows = append(rows, row(b.back(l, "a:ai")))
 	return panelView{html: l.f("🖥 <b>نمایش کار</b>\n\nنمایش مراحل: %s", onOff(l, b.st.SettingBool(store.SettingLiveTrace, true))), kb: keyboard(rows...)}
 }

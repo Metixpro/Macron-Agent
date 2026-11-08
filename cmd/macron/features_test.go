@@ -116,7 +116,7 @@ func TestTerminalShowsEachStep(t *testing.T) {
 	h.send(private(20, "چه فایل‌هایی دارم؟"))
 	all := liveFrames(h)
 	joined := strings.Join(all, "\n=====\n")
-	for _, want := range []string{"دارم فکر", "MACRON ⟫ live", "✓ Files"} {
+	for _, want := range []string{"دارم فکر", "مکرون ایجنت", "✓ Files"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the terminal misses %q:\n%s", want, joined)
 		}
@@ -203,7 +203,7 @@ func TestSendFileDeliversAFixedScript(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "باگ تقسیم بر صفر بود؛ فایل درست‌شده رو فرستادم."}, 0
 	}
 	h.send(private(24, "این کد رو درست کن"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 || rich[0].body["m0_name"] != "app_fixed.py" || len(h.tg.of("sendDocument")) != 0 {
 		t.Fatalf("the fixed file must be sent once, inside the answer: %v", rich)
 	}
@@ -261,7 +261,7 @@ func TestGroupWakeWord(t *testing.T) {
 	if h.llm.count() != 1 || !strings.Contains(llmText(h.llm.last()), `"ساعت چنده؟"`) {
 		t.Fatalf("the wake word must start a request without the word itself: %s", llmText(h.llm.last()))
 	}
-	if rich := h.tg.of("sendRichMessage"); len(rich) == 0 || rich[0].body["reply_parameters"] == nil {
+	if rich := richAnswers(h); len(rich) == 0 || rich[0].body["reply_parameters"] == nil {
 		t.Error("in groups the answer replies to the person who asked")
 	}
 	h.send(group(32, "بچه‌ها کی میاد بیرون؟"))

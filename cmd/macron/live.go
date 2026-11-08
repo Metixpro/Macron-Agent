@@ -64,14 +64,15 @@ type liveView struct {
 	urgent    bool
 	lastFlush time.Time
 
-	traceMsg int64
-	lastEdit time.Time
-	firstAt  time.Time
-	rich     bool
-	stopData string
-	shown    string
-	shownKB  bool
-	gone     bool
+	traceMsg  int64
+	lastEdit  time.Time
+	firstAt   time.Time
+	rich      bool
+	stopData  string
+	shown     string
+	shownKB   bool
+	richPlain bool
+	gone      bool
 
 	stopOnce sync.Once
 	done     chan struct{}
@@ -100,7 +101,7 @@ func (b *Bot) newLive(m *telegram.Message, userID int64) *liveView {
 		}
 	}
 
-	l.rich = !l.private && !l.drafts && !l.muted && m.MessageID != 0 && !b.richOff.Load()
+	l.rich = !l.drafts && !l.muted && m.MessageID != 0 && !b.richOff.Load()
 	return l
 }
 
@@ -630,6 +631,10 @@ func (l *liveView) wantsStop() bool {
 }
 
 func (l *liveView) flushRich(ctx context.Context) {
+	if l.private {
+		l.flushPrivateRich(ctx)
+		return
+	}
 	l.mu.Lock()
 	id := l.traceMsg
 	if l.gone || (id != 0 && (!l.dirty || time.Since(l.lastEdit) < l.editEvery())) {

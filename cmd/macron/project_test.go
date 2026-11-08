@@ -67,7 +67,7 @@ func TestProjectWorkflowThroughTheBot(t *testing.T) {
 	if !strings.Contains(string(data), "1.09") || strings.Contains(string(data), "TODO") {
 		t.Errorf("edited file:\n%s", data)
 	}
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) == 0 || rich[len(rich)-1].body["m0_name"] != "shop_fixed.zip" {
 		t.Fatalf("the packed project is delivered: %v", rich)
 	}

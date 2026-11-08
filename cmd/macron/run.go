@@ -33,12 +33,16 @@ type activeRun struct {
 	key     string
 	tier    tierID
 
-	mu        sync.Mutex
-	pending   []*interjection
-	seen      []*interjection
-	answering bool
-	queueNext bool
-	closed    bool
+	mu            sync.Mutex
+	pending       []*interjection
+	seen          []*interjection
+	answering     bool
+	queueNext     bool
+	closed        bool
+	steering      []*interjection
+	modelCancel   context.CancelFunc
+	modelRedirect bool
+	delegates     int
 }
 
 type interjection struct {
@@ -53,6 +57,45 @@ func newRun(uid int64, m *telegram.Message, cancel context.CancelFunc, pending [
 	_, _ = rand.Read(key)
 	return &activeRun{cancel: cancel, userID: uid, chatID: m.Chat.ID, msgID: m.MessageID, guest: m.GuestQueryID != "", queueNext: m.Chat.Private(),
 		key: hex.EncodeToString(key), pending: append([]*interjection(nil), pending...), tier: tier}
+}
+
+func (r *activeRun) modelRequest(ctx context.Context) (context.Context, func() bool) {
+	r.mu.Lock()
+	requestCtx, cancel := context.WithCancel(ctx)
+	r.modelCancel, r.modelRedirect = cancel, false
+	if len(r.steering) > 0 {
+		r.modelRedirect = true
+		cancel()
+	}
+	r.mu.Unlock()
+	return requestCtx, func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		redirected := r.modelRedirect
+		r.modelCancel, r.modelRedirect = nil, false
+		cancel()
+		return redirected
+	}
+}
+
+func (r *activeRun) steer(x *interjection) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed || r.answering || r.stopped.Load() || r.delegates > 0 || len(r.steering) >= maxPending {
+		return false
+	}
+	r.steering = append(r.steering, x)
+	if r.modelCancel != nil {
+		r.modelRedirect = true
+		r.modelCancel()
+	}
+	return true
+}
+
+func (r *activeRun) delegation(delta int) {
+	r.mu.Lock()
+	r.delegates += delta
+	r.mu.Unlock()
 }
 
 func (r *activeRun) stopData() string { return fmt.Sprintf("run:stop:%d:%s", r.userID, r.key) }
@@ -104,6 +147,12 @@ func (x *interjection) merge(y *interjection) *interjection {
 func (r *activeRun) take() []*interjection {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if len(r.steering) > 0 && !r.answering {
+		xs := r.steering
+		r.steering = nil
+		r.seen = append(r.seen, xs...)
+		return xs
+	}
 	if r.queueNext || r.answering || len(r.pending) == 0 {
 		return nil
 	}
@@ -132,8 +181,8 @@ func (r *activeRun) finish() []*interjection {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.closed = true
-	xs := r.pending
-	r.pending = nil
+	xs := append(r.steering, r.pending...)
+	r.steering, r.pending = nil, nil
 	return xs
 }
 
@@ -148,6 +197,10 @@ func (r *activeRun) memo() string {
 }
 
 func (b *Bot) interject(u *store.User, m *telegram.Message, text string) bool {
+	return b.interjectMode(u, m, text, false)
+}
+
+func (b *Bot) interjectMode(u *store.User, m *telegram.Message, text string, queue bool) bool {
 	v, ok := b.runs.Load(u.ID)
 	if !ok {
 		return false
@@ -174,6 +227,13 @@ func (b *Bot) interject(u *store.User, m *telegram.Message, text string) bool {
 	defer cancel()
 	var x *interjection
 	var err error
+	if !queue && run.queueNext && !m.HasMedia() && strings.TrimSpace(text) != "" {
+		x = &interjection{m: m, text: strings.TrimSpace(text), msg: llm.Message{Role: "user", Content: strings.TrimSpace(text)}, memo: strings.TrimSpace(text)}
+		if run.steer(x) {
+			react.set("✍", false)
+			return true
+		}
+	}
 	if run.queueNext {
 		x = &interjection{m: m, text: strings.TrimSpace(text)}
 	} else {

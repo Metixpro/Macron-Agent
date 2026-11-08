@@ -124,7 +124,7 @@ func TestResultsArriveInsideTheAnswer(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "سه تا نسخه ساختم."}, 0
 	}
 	h.send(private(51, "سه نسخه بساز"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 {
 		t.Fatalf("one message carries the text and the files: %d\n%s", len(rich), h.tg.allText())
 	}
@@ -181,7 +181,7 @@ func TestModelPlacesFilesInItsText(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "قبل:\n![عکس اصلی](before.jpg)\n\nبعد:\n![](./after.png \"بدون \\\"واترمارک\")\n\n![x](missing.png)\n\n```md\n![a](after.png)\n```"}, 0
 	}
 	h.send(private(53, "واترمارک رو پاک کن"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 {
 		t.Fatalf("messages: %d", len(rich))
 	}
@@ -213,7 +213,7 @@ func TestFilesFollowAsAlbumsWhenTheMessageCannotCarryThem(t *testing.T) {
 	for i := 0; i < maxMediaStrikes+1; i++ {
 		h.tg.reset()
 		h.send(private(54, "سه نسخه بساز"))
-		rich := h.tg.of("sendRichMessage")
+		rich := richAnswers(h)
 		text := rich[len(rich)-1].body["rich_message"].(map[string]any)["markdown"]
 		if text != "سه تا نسخه:  \n*اولی*" {
 			t.Errorf("round %d: the text still arrives, without file links: %q", i, text)
@@ -447,7 +447,7 @@ func TestFilesCarryTheModelsCaption(t *testing.T) {
 	}
 
 	h.send(private(55, "آهنگ رو بفرست"))
-	md := lastOf(h, "sendRichMessage").body["rich_message"].(map[string]any)["markdown"].(string)
+	md := lastRichAnswer(h).body["rich_message"].(map[string]any)["markdown"].(string)
 	for _, want := range []string{`![](tg://audio?id=`, `"🎵 رز سفید — حامیم")`, `"نسخه 'اول'")`, `![](tg://document?id=`} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown misses %q:\n%s", want, md)

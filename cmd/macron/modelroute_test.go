@@ -67,7 +67,7 @@ func TestSmartModelRouting(t *testing.T) {
 	h.click(ownerID, ownerID, 9, "a:rt:test")
 	h.tg.reset()
 	h.send(private(ownerID, "یه مقاله کامل و حرفه‌ای درباره تاریخ ایران بنویس با منابع معتبر"))
-	v := fmt.Sprint(lastOf(h, "sendMessage").body["text"])
+	v := fmt.Sprint(lastTextDelivery(h).body["text"])
 	if !strings.Contains(v, "تحقیق") || !strings.Contains(v, "مدل قوی") {
 		t.Errorf("the test: %s", v)
 	}

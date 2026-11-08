@@ -64,7 +64,7 @@ func TestThePremiumStopLinkShowsItsIconOnce(t *testing.T) {
 func TestTheGroupThinkingLineIsNotAQuote(t *testing.T) {
 	h := newHarness(t)
 	h.send(group(84, "مکرون سلام"))
-	sent := h.tg.of("sendRichMessage")
+	sent := richAnswers(h)
 	if len(sent) == 0 {
 		t.Fatal("no live message")
 	}

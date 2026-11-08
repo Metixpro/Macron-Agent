@@ -22,7 +22,7 @@ func TestFeedbackAndTheWeeklyReport(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "اینم جواب"}, 0
 	}
 	h.send(private(90, "فایلم رو بخون"))
-	sent := h.tg.of("sendRichMessage")
+	sent := richAnswers(h)
 	if len(sent) == 0 {
 		t.Fatal("an answer")
 	}

@@ -343,7 +343,7 @@ func TestTriagePanel(t *testing.T) {
 	h.click(ownerID, ownerID, 9, "a:tri:test")
 	h.tg.reset()
 	h.send(private(ownerID, "یه اسکریپت پایتون برای بکاپ دیتابیس بنویس"))
-	v := fmt.Sprint(lastOf(h, "sendMessage").body["text"])
+	v := fmt.Sprint(lastTextDelivery(h).body["text"])
 	if !strings.Contains(v, "کد") || !strings.Contains(v, "۹۳٪") || !strings.Contains(v, "code") || !strings.Contains(v, "فقط ابزارهای لازم") {
 		t.Fatalf("the test: %s", v)
 	}

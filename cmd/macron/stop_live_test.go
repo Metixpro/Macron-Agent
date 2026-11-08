@@ -54,7 +54,7 @@ func TestAStoppedJobKeepsItsWorkAndGoesOn(t *testing.T) {
 	<-done
 	h.noText("the late answer")
 	h.wantText("متوقفش کردم")
-	notice := lastOf(h, "sendMessage")
+	notice := lastTextDelivery(h)
 	if !hasButton(buttons(notice), fmt.Sprintf("run:go:%d", uid)) {
 		t.Fatalf("no ▶️ continue button: %v", buttons(notice))
 	}
@@ -92,7 +92,7 @@ func TestThePlanShowsInTheLiveCard(t *testing.T) {
 	h.wantText("گزارش آماده‌ست")
 	found := false
 	for _, md := range liveFrames(h) {
-		if strings.Contains(md, "📋 <code>0/2</code>") && strings.Contains(md, "• [ ] ⏳ <b>پیدا کردن فایل‌ها</b>") && strings.Contains(md, "• [ ] نوشتن گزارش") {
+		if strings.Contains(md, "طرح کار · ۰/۲") && strings.Contains(md, "☐ ⏳ پیدا کردن فایل‌ها") && strings.Contains(md, "☐ نوشتن گزارش") {
 			found = true
 		}
 	}

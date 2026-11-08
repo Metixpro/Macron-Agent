@@ -365,10 +365,16 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		return &agent.EventListener{
 			OnToolStart: func(name, args string) {
 				files.start(name)
+				if sub == 0 && name == agent.ToolDelegate {
+					run.delegation(1)
+				}
 				live.toolStartWith(sub, name, args)
 			},
 			OnToolEnd: func(name, args, result string, took time.Duration) {
 				files.end(name, result)
+				if sub == 0 && name == agent.ToolDelegate {
+					run.delegation(-1)
+				}
 				go b.recordStat(store.StatTool, name, failedResult(result), 0, 0)
 				live.toolEnd(sub, name, result)
 			},
@@ -386,6 +392,10 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		}
 	}
 	listener.OnText = func(partial string) {
+		if partial == "" {
+			live.setText("")
+			return
+		}
 		if !live.streams(partial) {
 			return
 		}
@@ -475,6 +485,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		Deep:             deep,
 		Tools:            localTools,
 		Listener:         listener,
+		ModelRequest:     run.modelRequest,
 		Inbox: func() []llm.Message {
 			xs := run.take()
 			msgs := make([]llm.Message, len(xs))

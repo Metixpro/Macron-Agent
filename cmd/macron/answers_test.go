@@ -66,7 +66,7 @@ func TestAnAnswerThatClaimsAFileIsCheckedOnce(t *testing.T) {
 	if h.llm.count() != 4 {
 		t.Errorf("model calls: %d", h.llm.count())
 	}
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 || rich[0].body["m0_name"] != "notes.md" {
 		t.Fatalf("the file goes with the answer: %v", rich)
 	}

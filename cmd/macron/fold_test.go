@@ -11,7 +11,7 @@ func TestLongAnswersFold(t *testing.T) {
 		"\n\n## روز دوم\n\n" + strings.Repeat("سی‌وسه‌پل و پل خواجو رو عصر برو. ", 40) + "\n\n## روز سوم\n\n" + strings.Repeat("کلیسای وانک و بازار. ", 40)
 	h.llm.reply = say(long)
 	h.send(private(91, "برنامه سه روزه اصفهان"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 {
 		t.Fatalf("one message: %d", len(rich))
 	}

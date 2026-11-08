@@ -24,7 +24,7 @@ func TestASubAgentsFileReachesTheChat(t *testing.T) {
 		return map[string]any{"role": "assistant", "content": "شعرت آماده‌ست."}, 0
 	}
 	h.send(private(62, "یه شعر بنویس و بفرست"))
-	rich := h.tg.of("sendRichMessage")
+	rich := richAnswers(h)
 	if len(rich) != 1 || rich[0].body["m0_name"] != "poem.md" {
 		t.Fatalf("the sub-agent's file goes with the answer: %v", rich)
 	}

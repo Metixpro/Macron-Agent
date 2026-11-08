@@ -17,7 +17,7 @@ func TestAFailedJobIsWhatContinueMeans(t *testing.T) {
 	h.llm.reply = func(map[string]any, int) (map[string]any, int) { return nil, 503 }
 	h.send(private(uid, "یه سایت فروشگاهی با سبد خرید برام بساز"))
 	h.wantText("به مغزم دسترسی ندارم")
-	notice := lastOf(h, "sendMessage")
+	notice := lastTextDelivery(h)
 	if !hasButton(buttons(notice), fmt.Sprintf("run:go:%d:77", uid)) || !hasButton(buttons(notice), "دوباره امتحان کن") {
 		t.Fatalf("no 🔁 button for the failed job: %v", buttons(notice))
 	}
@@ -48,7 +48,7 @@ func TestARestartTellsTheUserAndGoesOn(t *testing.T) {
 	h.bot.tellRestarted(bg, jobs)
 	h.wantText("ری‌استارت شد")
 	h.wantText("ویدیوی تبلیغاتی")
-	notice := lastOf(h, "sendMessage")
+	notice := lastTextDelivery(h)
 	if !hasButton(buttons(notice), fmt.Sprintf("run:go:%d:500", uid)) {
 		t.Fatalf("no ▶️ button: %v", buttons(notice))
 	}

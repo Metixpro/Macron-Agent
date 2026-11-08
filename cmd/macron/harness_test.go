@@ -253,11 +253,11 @@ func (f *fakeTG) texts() []string {
 				out = append(out, telegram.UnmarkRTL(t))
 			}
 			if rm, ok := c.body["rich_message"].(map[string]any); ok {
-				out = append(out, fmt.Sprint(rm["markdown"], rm["html"]))
+				out = append(out, richPayloadText(rm))
 			}
 		case "sendRichMessage", "editRichMessage":
 			if rm, ok := c.body["rich_message"].(map[string]any); ok {
-				out = append(out, fmt.Sprint(rm["markdown"], rm["html"]))
+				out = append(out, richPayloadText(rm))
 			}
 		}
 	}
@@ -458,6 +458,17 @@ func llmText(req map[string]any) string {
 	return string(b)
 }
 
+func richPayloadText(rm map[string]any) string {
+	if v, ok := rm["markdown"].(string); ok {
+		return v
+	}
+	if v, ok := rm["html"].(string); ok {
+		return v
+	}
+	raw, _ := json.Marshal(rm)
+	return (&telegram.Message{RichMessage: raw}).RichText()
+}
+
 func liveFrames(h *harness) []string {
 	h.tg.mu.Lock()
 	defer h.tg.mu.Unlock()
@@ -467,8 +478,12 @@ func liveFrames(h *harness) []string {
 			out = append(out, fmt.Sprint(c.body["rich_message"]))
 			continue
 		}
-		if (c.method == "sendMessage" || c.method == "editMessageText") && strings.Contains(fmt.Sprint(c.body["reply_markup"]), "run:stop:") {
-			out = append(out, telegram.UnmarkRTL(fmt.Sprint(c.body["text"])))
+		if (c.method == "sendMessage" || c.method == "sendRichMessage" || c.method == "editMessageText") && strings.Contains(fmt.Sprint(c.body["reply_markup"]), "run:stop:") {
+			if rm, ok := c.body["rich_message"].(map[string]any); ok {
+				out = append(out, richPayloadText(rm))
+			} else {
+				out = append(out, telegram.UnmarkRTL(fmt.Sprint(c.body["text"])))
+			}
 		}
 	}
 	return out
@@ -483,7 +498,7 @@ func stopLiveMessage(h *harness, uid int64) {
 	data := v.(*activeRun).stopData()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		for _, method := range []string{"sendMessage", "editMessageText"} {
+		for _, method := range []string{"sendMessage", "sendRichMessage", "editMessageText"} {
 			for _, c := range h.tg.of(method) {
 				if hasButton(buttons(c), "→ "+data) {
 					h.click(uid, uid, 77, data)
@@ -494,4 +509,53 @@ func stopLiveMessage(h *harness, uid int64) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	h.t.Fatal("live message has no stop keyboard")
+}
+
+func richAnswers(h *harness) []tgCall {
+	h.tg.mu.Lock()
+	defer h.tg.mu.Unlock()
+	var out []tgCall
+	for _, c := range h.tg.calls {
+		if c.method != "sendRichMessage" && c.method != "editMessageText" {
+			continue
+		}
+		rm, ok := c.body["rich_message"].(map[string]any)
+		if !ok || rm["markdown"] == nil || strings.Contains(fmt.Sprint(c.body["reply_markup"]), "run:stop:") {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+func lastRichAnswer(h *harness) tgCall {
+	h.t.Helper()
+	calls := richAnswers(h)
+	if len(calls) == 0 {
+		h.t.Fatal("no rich answer")
+	}
+	return calls[len(calls)-1]
+}
+
+func lastTextDelivery(h *harness) tgCall {
+	h.t.Helper()
+	h.tg.mu.Lock()
+	defer h.tg.mu.Unlock()
+	for i := len(h.tg.calls) - 1; i >= 0; i-- {
+		c := h.tg.calls[i]
+		if c.method != "sendMessage" && c.method != "sendRichMessage" && c.method != "editMessageText" {
+			continue
+		}
+		if rm, ok := c.body["rich_message"].(map[string]any); ok {
+			body := make(map[string]any, len(c.body)+1)
+			for k, v := range c.body {
+				body[k] = v
+			}
+			body["text"] = richPayloadText(rm)
+			c.body = body
+		}
+		return c
+	}
+	h.t.Fatal("no text delivery")
+	return tgCall{}
 }

@@ -420,6 +420,15 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	case "/start":
 		b.reply(m, l.f(personalWelcome, esc(m.From.FirstName), greeting(l, b.st.Now().In(b.loc))))
 		return
+	case "/queue":
+		text = strings.TrimSpace(args)
+		if text == "" && !m.HasMedia() {
+			b.reply(m, l.t("متن کار بعدی را بعد از /queue بنویس."))
+			return
+		}
+		if b.interjectMode(user, m, text, true) {
+			return
+		}
 	case "/help":
 		b.reply(m, l.t(personalHelp))
 		return

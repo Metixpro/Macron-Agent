@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.
 
 The installer prepares the program and tools, checks the download and guides you through bot and model setup. Enter your bot token, owner ID and model credentials in the setup wizard.
 
-Talk to the bot in a **private chat**. It answers configured owners only and does not operate in groups or channels. Progress appears in an editable message with a code block and a **Stop** button underneath. New messages wait in a queue and run in order after the active task finishes.
+Talk to the bot in a **private chat**. It answers configured owners only and does not operate in groups or channels. Progress appears in a native rich card with a checklist, expandable execution details, code blocks and a **Stop** button underneath. The final answer replaces the card. New text guides the active task; use `/queue next task` for a separate turn. Manage premium emoji packs and mappings under **Settings → Premium emoji**.
 
 ## Capabilities
 

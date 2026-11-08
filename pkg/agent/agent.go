@@ -580,7 +580,8 @@ type Request struct {
 
 	TokensLeft func() int
 
-	Inbox func() []llm.Message
+	Inbox        func() []llm.Message
+	ModelRequest func(context.Context) (context.Context, func() bool)
 
 	AutoContinue bool
 
@@ -992,7 +993,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		if l.OnStep != nil {
 			l.OnStep(step, maxSteps)
 		}
-		if req.Inbox != nil && step < maxSteps {
+		if req.Inbox != nil {
 			messages = append(messages, req.Inbox()...)
 		}
 
@@ -1028,7 +1029,19 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		if noTools.noStream {
 			stream = nil
 		}
-		resp, err := a.completeRobust(ctx, messages, lay.input, offered, stream, noTools, work.len() > 0)
+		modelCtx := ctx
+		modelDone := func() bool { return false }
+		if req.ModelRequest != nil {
+			modelCtx, modelDone = req.ModelRequest(ctx)
+		}
+		resp, err := a.completeRobust(modelCtx, messages, lay.input, offered, stream, noTools, work.len() > 0)
+		if modelDone() && ctx.Err() == nil {
+			if l.OnText != nil {
+				l.OnText("")
+			}
+			step--
+			continue
+		}
 		if n := toolLimitFrom(err); n > 0 && n < len(offered) && !toolsCapped && ctx.Err() == nil {
 
 			toolsCapped = true

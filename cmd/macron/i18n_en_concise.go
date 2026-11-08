@@ -1,6 +1,15 @@
 package main
 
 func init() {
+	english["کار مستقل بعدی"] = "Queue a separate task"
+	english["کار پس‌زمینه: %s"] = "Background task: %s"
+	english["متن کار بعدی را بعد از /queue بنویس."] = "Write the next task after /queue."
+	english["⚙️ <b>تنظیمات</b>\n\n✨ ایموجی پریمیوم: %s"] = "⚙️ <b>Settings</b>\n\n✨ Premium emoji: %s"
+	english["🎨 <b>ایموجی پریمیوم</b>: %s\nتعداد: <b>%d</b>"] = "🎨 <b>Premium emoji</b>: %s\nCount: <b>%d</b>"
+	english["مکرون ایجنت"] = "Macron Agent"
+	english["مراحل اجرا · %s"] = "Execution steps · %s"
+	english["طرح کار · %s/%s"] = "Plan · %s/%s"
+	english["عملیات: %s"] = "Operations: %s"
 	english["صف پر شده؛ بعد از تمام‌شدن یکی از کارها دوباره بفرست."] = "The queue is full. Send this again after a task finishes."
 	english["[!] نسخه نصب شد؛ راه‌اندازی مجدد ناموفق بود: %s\n<code>macron service restart</code>"] = "[!] Version installed; restart failed: %s\n<code>macron service restart</code>"
 	english["🖥 <b>نمایش کار</b>\n\nنمایش مراحل: %s"] = "🖥 <b>Work display</b>\n\nProgress: %s"

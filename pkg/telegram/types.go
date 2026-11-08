@@ -600,12 +600,37 @@ type BotCommandScope struct {
 	ChatID int64  `json:"chat_id,omitempty"`
 }
 
+type InputRichBlock struct {
+	Type     string              `json:"type"`
+	Text     any                 `json:"text,omitempty"`
+	Size     int                 `json:"size,omitempty"`
+	Language string              `json:"language,omitempty"`
+	Summary  any                 `json:"summary,omitempty"`
+	Blocks   []InputRichBlock    `json:"blocks,omitempty"`
+	Items    []InputRichListItem `json:"items,omitempty"`
+	IsOpen   bool                `json:"is_open,omitempty"`
+}
+
+type InputRichListItem struct {
+	Blocks      []InputRichBlock `json:"blocks"`
+	HasCheckbox bool             `json:"has_checkbox,omitempty"`
+	IsChecked   bool             `json:"is_checked,omitempty"`
+}
+
+type RichTextSpan struct {
+	Type            string `json:"type"`
+	Text            any    `json:"text,omitempty"`
+	CustomEmojiID   string `json:"custom_emoji_id,omitempty"`
+	AlternativeText string `json:"alternative_text,omitempty"`
+}
+
 type RichMessage struct {
-	Markdown            string          `json:"markdown,omitempty"`
-	HTML                string          `json:"html,omitempty"`
-	IsRTL               bool            `json:"is_rtl,omitempty"`
-	SkipEntityDetection bool            `json:"skip_entity_detection,omitempty"`
-	Media               []RichMediaSpec `json:"media,omitempty"`
+	Blocks              []InputRichBlock `json:"blocks,omitempty"`
+	Markdown            string           `json:"markdown,omitempty"`
+	HTML                string           `json:"html,omitempty"`
+	IsRTL               bool             `json:"is_rtl,omitempty"`
+	SkipEntityDetection bool             `json:"skip_entity_detection,omitempty"`
+	Media               []RichMediaSpec  `json:"media,omitempty"`
 }
 
 type RichMediaSpec struct {

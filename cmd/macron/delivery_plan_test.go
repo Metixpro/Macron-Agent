@@ -50,7 +50,7 @@ func sentReport(h *harness) bool {
 			return true
 		}
 	}
-	for _, r := range h.tg.of("sendRichMessage") {
+	for _, r := range richAnswers(h) {
 		if strings.Contains(fmt.Sprint(r.body), "report.pdf") {
 			return true
 		}
