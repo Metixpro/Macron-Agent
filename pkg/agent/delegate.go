@@ -28,8 +28,8 @@ import (
 const ToolDelegate = "delegate_task"
 
 const (
-	delegateSteps    = 25
-	delegateMaxSteps = 40
+	delegateSteps    = 50 // its own budget: it never spends the main agent's
+	delegateMaxSteps = 100
 	delegateReport   = 8000
 )
 

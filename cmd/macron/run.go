@@ -405,10 +405,41 @@ func (b *Bot) handleContinueCallback(ctx context.Context, q *telegram.CallbackQu
 		Text: text, ReplyToMessage: &notice})
 }
 
-// maxAutoRounds bounds the auto-continue setting.
-const maxAutoRounds = 5
+// autoContinue is the auto-continue setting: autoForever (0, the default)
+// lets a job's budget grow for as long as it makes progress, N > 0 at most N
+// times, autoOff never (the budget is fixed).
+const (
+	autoForever = 0
+	autoOff     = -1
+)
 
-// autoRounds is how many more rounds a job whose budget ran out gets by itself.
-func (b *Bot) autoRounds() int {
-	return min(max(b.st.SettingInt(store.SettingAutoContinue, 2), 0), maxAutoRounds)
+func (b *Bot) autoContinue() int {
+	n := b.st.SettingInt(store.SettingAutoContinue, autoForever)
+	if n < 0 {
+		return autoOff
+	}
+	return n
 }
+
+// agentExtensions is autoContinue as the agent takes it.
+func (b *Bot) agentExtensions() int {
+	switch n := b.autoContinue(); n {
+	case autoForever:
+		return agent.ExtendForever
+	case autoOff:
+		return 0
+	default:
+		return n
+	}
+}
+
+// autoSteps are the choices of the ⏩ button: forever → 3 → 10 → off → forever.
+var autoSteps = map[int]int{autoForever: 3, 3: 10, 10: autoOff, autoOff: autoForever}
+
+// idleTimeout stops a job in which nothing happened for this long (the
+// idle_timeout setting, in minutes; 15 by default, 0 for none).
+func (b *Bot) idleTimeout() time.Duration {
+	return time.Duration(max(b.st.SettingInt(settingIdleTimeout, 15), 0)) * time.Minute
+}
+
+const settingIdleTimeout = "idle_timeout"

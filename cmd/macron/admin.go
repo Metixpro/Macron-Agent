@@ -258,14 +258,12 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 			ask(&adminInput{kind: "st_window"}, l.t("🪟 اندازه پنجره context مدل رو به توکن بفرست، مثلاً <code>256000</code> یا <code>256k</code> یا <code>1m</code>. <code>0</code> = خودکار (از <code>WAZE_CONTEXT_WINDOW</code>، وگرنه از اسم مدل).\n\nکارهای طولانی از ۷۵٪ این عدد فشرده می‌شن (مثلاً پنجره 1M از 750k)."))
 			return
 		case "auto":
-			// 0 → 1 → 2 → 3 → 5 → 0
-			next := map[int]int{0: 1, 1: 2, 2: 3, 3: maxAutoRounds}[b.autoRounds()]
-			_ = b.st.SetSetting(ctx, store.SettingAutoContinue, strconv.Itoa(next))
-			if next > 0 {
-				answer(l.f("ادامه خودکار: تا %d دور", next), false)
-			} else {
-				answer(l.t("ادامه خودکار خاموش شد"), false)
+			next, ok := autoSteps[b.autoContinue()]
+			if !ok {
+				next = autoForever
 			}
+			_ = b.st.SetSetting(ctx, store.SettingAutoContinue, strconv.Itoa(next))
+			answer(autoName(l, next), false)
 		default:
 			answer("", false)
 		}
@@ -725,6 +723,17 @@ func (b *Bot) viewShowWork(l lang) panelView {
 	return panelView{html: html, kb: keyboard(rows...)}
 }
 
+// autoName says how far a job goes on by itself.
+func autoName(l lang, n int) string {
+	switch n {
+	case autoForever:
+		return l.t("⏩ تا تمام شدن کار (بی‌نهایت)")
+	case autoOff:
+		return l.t("⏩ ادامه خودکار: خاموش")
+	}
+	return l.f("⏩ تا %d تمدید", n)
+}
+
 // viewAgent is everything about how the agent works: its budget, how much
 // of the conversation it gets, its soul, skills, plugins and tools.
 func (b *Bot) viewAgent(l lang) panelView {
@@ -734,12 +743,8 @@ func (b *Bot) viewAgent(l lang) panelView {
 		ctxMode = l.t("دستی؛ قدیمی‌ترها خلاصه می‌شن")
 	}
 	steps, timeout := b.agentBudget()
-	html := l.f("🦾 <b>ایجنت و ابزارها</b>\n\n🤖 قدرت ایجنت: <b>%d</b> قدم و <b>%d</b> دقیقه برای هر درخواست", steps, int(timeout.Minutes()))
-	if n := b.autoRounds(); n > 0 {
-		html += l.f("\n⏩ ادامه خودکار کارهای طولانی: تا <b>%d</b> دور دیگه (هر دور با همین بودجه)", n)
-	} else {
-		html += l.t("\n⏩ ادامه خودکار کارهای طولانی: خاموش")
-	}
+	html := l.f("🦾 <b>ایجنت و ابزارها</b>\n\n🤖 قدرت ایجنت: %s — هر بار %d قدم، و تا وقتی کار پیش می‌ره خودش تمدید می‌شه؛ ترمز: %d دقیقه، یا %d دقیقه بی‌کاری",
+		autoName(l, b.autoContinue()), steps, int(timeout.Minutes()), int(b.idleTimeout().Minutes()))
 	if w := b.app.Agent.ContextWindow; w != nil {
 		html += l.f("\n🪟 پنجره context مدل: <b>%s</b> توکن (فشرده‌سازی خودکار کارهای طولانی)", agent.HumanTokens(w()))
 	}

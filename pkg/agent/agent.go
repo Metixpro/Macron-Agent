@@ -642,6 +642,14 @@ type Request struct {
 	About         string // facts about the user, the replied message, attachments…
 	Lang          string // "en" makes the agent's own fallback replies English; Persian otherwise
 	MaxSteps      int    // tool rounds for this request (0 = the agent's default)
+	// Extensions: how many times the step budget grows by itself when it runs
+	// out while the work is making progress (a successful call it had not
+	// made before): 0 never (a fixed budget), ExtendForever without limit.
+	Extensions int
+	// IdleTimeout stops the run when nothing happens for this long: no reply
+	// from the model, no tool starting, finishing or reporting progress (0:
+	// none). The time budget (the context's deadline) is the other brake.
+	IdleTimeout time.Duration
 	// Deep: the model runs at its highest effort (ultracode) with a bigger
 	// budget; the request is told to work to that standard.
 	Deep bool
@@ -720,6 +728,8 @@ type Result struct {
 	// Partial: the budget ran out or the model stopped answering before the job
 	// was done; Answer reports the progress and WorkLog lists the steps taken.
 	Partial bool
+	// Extended is how many times the step budget grew (Request.Extensions).
+	Extended int
 	WorkLog string
 	// StopReason says why a partial job stopped: "steps" or "time" (the budget;
 	// the job can go on in another round) or "failed" (the model stopped answering).
@@ -1042,12 +1052,51 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			l.OnEscalate(why)
 		}
 	}
+	// The budget grows while the work makes progress (Request.Extensions);
+	// a model that keeps making the same call is stopped instead.
+	initialSteps, extLeft := maxSteps, req.Extensions
+	if req.AnswerOnLastStep {
+		extLeft = 0
+	}
+	stalled := 0 // steps in a row made only of calls repeated past repeatLimit
+	// The idle watchdog: any event moves it on.
+	touch := func() {}
+	if req.IdleTimeout > 0 {
+		var cancelIdle context.CancelCauseFunc
+		ctx, cancelIdle = context.WithCancelCause(ctx)
+		defer cancelIdle(nil)
+		var last atomic.Int64
+		last.Store(time.Now().UnixNano())
+		touch = func() { last.Store(time.Now().UnixNano()) }
+		l = l.touching(touch)
+		go func() {
+			tick := time.NewTicker(min(max(req.IdleTimeout/8, 10*time.Millisecond), 30*time.Second))
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-tick.C:
+					if time.Since(time.Unix(0, last.Load())) > req.IdleTimeout {
+						log.Printf("agent: nothing happened in session %s for %s; stopping", req.SessionID, req.IdleTimeout)
+						cancelIdle(errIdle)
+						return
+					}
+				}
+			}
+		}()
+	}
+	idle := func() bool { return errors.Is(context.Cause(ctx), errIdle) }
 	stop := func(why stopReason) (*Result, error) {
 		res.Partial, res.WorkLog, res.StopReason = true, work.String(), why.String()
 		res.Answer = stoppedText(req.Lang, work.len(), why, req.AutoContinue)
 		return res, nil
 	}
 	for step := 1; step <= maxSteps; step++ {
+		touch()
+		if idle() {
+			return a.finishEarly(ctx, res, work, messages, known, leak, req, stopIdle), nil
+		}
 		if err := ctx.Err(); err != nil {
 			if errors.Is(err, context.DeadlineExceeded) && work.len() > 0 {
 				return a.finishEarly(ctx, res, work, messages, known, leak, req, stopTime), nil // wrapUp has time of its own
@@ -1064,7 +1113,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			messages = append(messages, llm.Message{Role: "user", Content: noticeTokensEnding})
 			return a.finishEarly(ctx, res, work, messages, known, leak, req, stopTokens), nil
 		}
-		if !warned && maxSteps > stepsWarning+2 && step == maxSteps-stepsWarning+1 {
+		if !warned && extLeft == 0 && maxSteps > stepsWarning+2 && step == maxSteps-stepsWarning+1 {
 			warned = true
 			messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeStepsEnding, stepsWarning)})
 		}
@@ -1135,6 +1184,10 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			// Stopped while the reply was arriving (the HTTP client may still
 			// hand it over): a stop is a stop, the reply is not used.
 			err = ctx.Err()
+		}
+		touch()
+		if err != nil && idle() && work.len() > 0 {
+			return a.finishEarly(ctx, res, work, messages, known, leak, req, stopIdle), nil
 		}
 		if err != nil {
 			if work.len() > 0 && !errors.Is(err, context.Canceled) && !llm.IsPolicyViolation(err) {
@@ -1392,6 +1445,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			images    []llm.Part
 			responses []string
 		)
+		progressed, repeated := false, 0
 		for i, tc := range toolCalls {
 			name, out := tc.Function.Name, outs[i]
 			if name != ToolPlan { // the plan is kept on its own (planState)
@@ -1414,6 +1468,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			key := callKey(name, tc.Function.Arguments)
 			if calls[key]++; calls[key] > repeatLimit {
 				out.msg.Content = fmt.Sprintf(noticeRepeat, calls[key]-1) + out.msg.Content
+				repeated++
+			} else if calls[key] == 1 && !failedOutput(out.msg.Content) && !out.refused {
+				progressed = true // a successful call it had not made before
 			}
 			if textMode {
 				responses = append(responses, toolResponse(name, out.msg.Content))
@@ -1426,6 +1483,28 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			if out.end && res.EndedBy == "" {
 				res.EndedBy = name
 			}
+		}
+		touch()
+		if repeated > 0 && repeated == len(toolCalls) {
+			stalled++
+		} else {
+			stalled = 0
+		}
+		if req.Extensions != 0 && stalled >= 2 {
+			// Told once that it repeats itself, and it did again: more rounds would
+			// only spend the budget on the same call.
+			log.Printf("agent: session %s keeps repeating the same call; stopping", req.SessionID)
+			return a.finishEarly(ctx, res, work, messages, known, leak, req, stopRepeat), nil
+		}
+		if step == maxSteps && extLeft != 0 && progressed && ctx.Err() == nil {
+			by := extensionSize(initialSteps)
+			maxSteps += by
+			if extLeft > 0 {
+				extLeft--
+			}
+			res.Extended++
+			log.Printf("agent: session %s is making progress; its budget grows by %d rounds to %d (extension %d)", req.SessionID, by, maxSteps, res.Extended)
+			messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeExtended, by, res.Extended, work.brief(12, 1500))})
 		}
 		if failures >= 2 {
 			escalate("steps failed")
@@ -1700,7 +1779,10 @@ func runLocal(ctx context.Context, lt LocalTool, argsJSON string) (out ToolOutpu
 // wrapUp asks for a report of what was achieved when the budget is spent.
 func (a *Agent) wrapUp(ctx context.Context, messages []llm.Message, req Request, steps int, why stopReason) string {
 	if errors.Is(ctx.Err(), context.Canceled) {
-		return stoppedText(req.Lang, steps, stopTime, req.AutoContinue)
+		if why != stopIdle {
+			why = stopTime
+		}
+		return stoppedText(req.Lang, steps, why, req.AutoContinue)
 	}
 	// The report has time of its own, even when the job's ran out, and a
 	// lighter conversation (old outputs shortened, no pictures), so it comes quickly.

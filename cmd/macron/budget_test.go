@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
@@ -24,7 +25,8 @@ func TestAgentBudgetFromThePanelAndContinuation(t *testing.T) {
 	}
 	h.tg.reset()
 	h.click(ownerID, ownerID, 9, "a:ai")
-	h.wantText("قدرت ایجنت: <b>6</b> قدم و <b>45</b> دقیقه")
+	h.wantText("قدرت ایجنت: ⏩ ادامه خودکار: خاموش — هر بار 6 قدم")
+	h.wantText("ترمز: 45 دقیقه، یا 15 دقیقه بی‌کاری")
 
 	// A job bigger than the budget: a report, and the work log in memory.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -68,5 +70,29 @@ func TestAnAnswerIsNeverLost(t *testing.T) {
 	}
 	if !delivered {
 		t.Errorf("the answer was lost:\n%s", h.tg.allText())
+	}
+}
+
+// The ⏩ button goes forever → 3 → 10 → off → forever; forever is the default.
+func TestAutoContinueButton(t *testing.T) {
+	h := newHarness(t)
+	_ = h.st.DeleteSetting(bg, store.SettingAutoContinue)
+	if h.bot.autoContinue() != autoForever || h.bot.agentExtensions() != agent.ExtendForever {
+		t.Fatalf("default %d", h.bot.autoContinue())
+	}
+	for _, want := range []int{3, 10, autoOff, autoForever} {
+		h.click(ownerID, ownerID, 9, "a:st:auto")
+		if got := h.bot.autoContinue(); got != want {
+			t.Fatalf("after a click: %d, want %d", got, want)
+		}
+	}
+	h.click(ownerID, ownerID, 9, "a:st:auto")
+	h.wantText("قدرت ایجنت: ⏩ تا 3 تمدید")
+	if h.bot.agentExtensions() != 3 {
+		t.Fatal("3 extensions")
+	}
+	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "-1")
+	if h.bot.agentExtensions() != 0 {
+		t.Fatal("off is a fixed budget")
 	}
 }

@@ -55,9 +55,6 @@ type promptOptions struct {
 	prefix   string           // put before the answer (the title of a scheduled task)
 	noFlood  bool             // the flood limit was already checked (a message sent during a job)
 	pending  []*interjection  // messages that join this request at its first step
-	bridge   *activeRun       // the previous round's run, taken over by this one
-	round    int              // auto-continue: 0 for the request itself, then 1, 2…
-	rounds   int              // auto-continue: how many extra rounds the job may take
 	tier     tierID           // the tier the first round ran on (a continuation keeps it)
 	job      *jobTracker      // auto-continue: the job the first round started (see openjob.go)
 	bg       *bgRun           // run as this background task (see bgtasks.go)
@@ -96,65 +93,30 @@ func (r *responder) answer(ctx context.Context, md string) {
 
 // promptOutcome is what a round of a request leaves for the next one.
 type promptOutcome struct {
-	goOn      bool            // the budget ran out and the job continues by itself
 	leftovers []*interjection // messages that came after the answer
-	bridge    *activeRun      // the job goes on: its run stays open until the next round takes it over
 	tier      tierID          // the tier it ran on
 	job       *jobTracker     // the job as written down (nil: not tracked)
 }
-
-// betweenRounds runs between two rounds of a job that goes on by itself (for the tests).
-var betweenRounds func()
 
 // answerSendBudget is the time to deliver an answer once the work is done (a
 // variable for the tests).
 var answerSendBudget = 5 * time.Minute
 
-// handlePrompt answers one request. A long job whose budget runs out goes on
-// by itself for a few more rounds (see autoRounds), and the messages the user
-// sent after the answer was written are handled right after it.
+// handlePrompt answers one request; the messages the user sent after the
+// answer was written are handled right after it. A long job does not stop
+// at a fixed budget: the agent extends it while the work makes progress
+// (see agentExtensions).
 func (b *Bot) handlePrompt(u *store.User, m *telegram.Message, text string, opt promptOptions) error {
-	if opt.round == 0 {
-		opt.rounds = b.autoRounds()
-	}
 	out, err := b.runPrompt(u, m, text, opt)
-	job := out.job
-	// Whatever ended the rounds, the job never stays "running" (a no-op once it ended).
-	defer func() { job.interrupt(store.JobFailed) }()
-	for err == nil && out.goOn {
-		if betweenRounds != nil {
-			betweenRounds()
-		}
-		if out.bridge != nil && out.bridge.stopped.Load() { // stopped between the rounds
-			out.leftovers = append(out.leftovers, out.bridge.finish()...)
-			b.runs.CompareAndDelete(u.ID, out.bridge)
-			job.interrupt(store.JobStopped)
-			break
-		}
-		l := b.langOf(m.From)
-		next := promptOptions{free: true, noReact: true, noFlood: true, pending: out.leftovers, bridge: out.bridge, round: opt.round + 1, rounds: opt.rounds, tier: out.tier, job: job,
-			about: fmt.Sprintf("This is an automatic continuation (round %d of up to %d) of the job in the conversation above: its previous "+
-				"round ran out of budget. Carry on from the work log where it stopped and do not redo finished steps (look at the workspace "+
-				"if unsure). When everything is done, give the final answer for the whole job.", opt.round+2, opt.rounds+1)}
-		opt = next
-		out, err = b.runPrompt(u, m, l.t("ادامه بده"), opt)
-		if out.job != nil {
-			job = out.job
-		}
-	}
+	// Whatever ended it, the job never stays "running" (a no-op once it ended).
+	defer func() { out.job.interrupt(store.JobFailed) }()
 	b.followUp(u, out.leftovers)
 	return err
 }
 
-// runPrompt is one round of a request.
+// runPrompt runs a request.
 func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt promptOptions) (out promptOutcome, _ error) {
 	uid := u.ID
-	defer func() {
-		if opt.bridge != nil { // this round ended before it took the job over
-			out.leftovers = append(out.leftovers, opt.bridge.finish()...)
-			b.runs.CompareAndDelete(uid, opt.bridge)
-		}
-	}()
 	admin := b.isAdmin(uid)
 	key := strconv.FormatInt(uid, 10)
 	scheduled := opt.schedule != nil
@@ -175,13 +137,13 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			return say(l.f(textFloodWait, int(wait.Seconds())+1))
 		}
 	}
-	if opt.round == 0 && !detached && !opt.vote {
+	if !detached && !opt.vote {
 		b.noteRequest(nctx, uid, m.Chat.ID, text) // a complaint about the last answer, or the same request again
 	}
 	st := standing{tier: tierOwner}
 	// The triage starts now, beside the queue and the checks below: its
 	// decision is ready by the time the request needs it (triage.go).
-	tc := b.startTriage(uid, m, text, !detached && opt.round == 0 && !opt.vote && opt.bridge == nil)
+	tc := b.startTriage(uid, m, text, !detached && !opt.vote)
 	var release func()
 	if detached {
 		// A scheduled or background task never blocks its owner, and waits for a free slot.
@@ -204,7 +166,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		case guard.KeyBusy:
 			// The job that holds the key may still be starting (not yet open to
 			// messages): by now it is, and this message joins it.
-			if opt.round == 0 && !opt.vote && opt.bridge == nil && b.interject(u, m, text) {
+			if !opt.vote && b.interject(u, m, text) {
 				return promptOutcome{}, errNotDone
 			}
 			return say(l.t(textBusy))
@@ -274,7 +236,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			return triageVerdict(tri), tri.Context != router.ContextStandalone
 		}
 	}
-	rt = b.chooseModel(uid, st.tier, routeInput(m, text), opt.round > 0, triaged)
+	rt = b.chooseModel(uid, st.tier, routeInput(m, text), false, triaged)
 	routed = rt.prefer(routed)
 	window = rt.window(b, conf, window)
 	deep := false
@@ -292,25 +254,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	case !scheduled:
 		b.runs.Store(uid, run)
 	}
-	if opt.bridge != nil {
-		// The job goes on from the previous round: what was sent in between joins it.
-		run.add(opt.bridge.finish())
-		if opt.bridge.stopped.Load() {
-			run.stop()
-		}
-		opt.bridge = nil
-	}
 	defer func() {
-		if run.stopped.Load() {
-			out.goOn = false // stopped while the answer was being sent: the job does not go on by itself
-		}
-		if out.goOn && !detached {
-			// The run stays registered and open until the next round takes it
-			// over: a message sent in between joins the job instead of
-			// starting another one beside it.
-			out.bridge = run
-			return
-		}
 		// Messages that came after the answer are handled next (see handlePrompt).
 		out.leftovers = run.finish()
 		switch {
@@ -341,7 +285,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	live.start(runCtx)
 	defer live.discard() // after the answer: removes the live message unless it became the answer
 
-	in, err := b.buildInput(withListening(runCtx, live.listening), u, m, text, opt.round > 0)
+	in, err := b.buildInput(withListening(runCtx, live.listening), u, m, text, false)
 	if errors.Is(err, errTooBig) || errors.Is(err, errWorkspaceFull) {
 		react.clear()
 		return say(b.fileRefusal(l, err))
@@ -357,9 +301,6 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if opt.about != "" {
 		in.about = strings.TrimSpace(in.about + "\n" + opt.about)
 	}
-	if opt.round > 0 {
-		in.memoryText = fmt.Sprintf("(automatic continuation, round %d)", opt.round+1)
-	}
 	if bg {
 		in.memoryText = opt.bg.memoryText()
 	}
@@ -367,7 +308,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		in.about = strings.TrimSpace(in.about + "\n" + fastNote)
 	}
 	// A greeting or a thank-you goes without the tools until the model asks for them.
-	smallTalk := in.plain && !detached && opt.round == 0 && agent.IsSmallTalk(text)
+	smallTalk := in.plain && !detached && agent.IsSmallTalk(text)
 	// The triage's decision (triage.go): ready by now.
 	trec := b.triageDecision(tc, rt)
 	triageOK := trec != nil && trec.ok
@@ -417,9 +358,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	out.job = track
 	defer func() {
-		if !out.goOn {
-			track.interrupt(store.JobFailed) // a panic: never left "running" (a no-op once it ended)
-		}
+		track.interrupt(store.JobFailed) // a panic: never left "running" (a no-op once it ended)
 	}()
 
 	session := sessionFor(uid)
@@ -472,8 +411,6 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		sub.OnFiles = func(moved map[string]string) { files.adopt(subFiles, moved) }
 		return sub
 	}
-	// The job may go on by itself when its budget runs out.
-	auto := opt.round < opt.rounds && !opt.noMemory && !guest && !detached && !fast
 	var toolFilter func(string) bool
 	if fast {
 		toolFilter = fastTool
@@ -544,7 +481,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		History:   history,
 		Memory:    mc.Summary,
 		Chat:      smallTalk,
-		Earlier:   continuing || opt.round > 0, // the work of an earlier round has its receipts there
+		Earlier:   continuing, // the work of an earlier run has its receipts there
 		// The memory keeps the conversation under this; the agent only
 		// catches what grew past it since.
 		HistoryTokens:    historyBudget(b.st, window),
@@ -566,7 +503,8 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			}
 			return msgs
 		},
-		AutoContinue:     auto,
+		Extensions:       b.agentExtensions(),
+		IdleTimeout:      b.idleTimeout(),
 		ToolFilter:       toolFilter,
 		AnswerOnLastStep: fast,
 		Check:            check,
@@ -695,12 +633,8 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	refund = false
 	answer := textutil.PersianEzafe(scrubFileNotes(b.redact(res.Answer))) // «همه فایل‌ها», even when the model writes «همه‌ی»
-	if auto && res.Partial && (res.StopReason == "steps" || res.StopReason == "time") && !run.stopped.Load() {
-		out.goOn = true
-		answer = strings.TrimSpace(answer) + "\n\n" + l.f("⏩ خودم ادامه می‌دم… (دور %d از حداکثر %d)", opt.round+2, opt.rounds+1)
-	}
-	sent, held := chosenFiles(files, box, allow) // what the answer shows with ![…](file) goes too (planAnswer)
-	if held > 0 {                                // pictures made with code and sent one by one
+	sent, held := chosenFiles(files, box, allow)                          // what the answer shows with ![…](file) goes too (planAnswer)
+	if held > 0 {                                                         // pictures made with code and sent one by one
 		answer = strings.TrimSpace(answer + "\n\n" + l.f(textPicturesHeld, l.num(held)))
 	}
 	captions := box.captionMap()
@@ -753,8 +687,6 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	switch {
 	case run.stopped.Load() && res.Partial:
 		track.interrupt(store.JobStopped)
-	case out.goOn:
-		track.flush() // the next round takes it over
 	case res.Partial:
 		track.interrupt(partialReason(res.StopReason))
 	default:
@@ -846,9 +778,9 @@ func unfinishedLine(reason string) string {
 // partialReason is why a job that answered early is unfinished.
 func partialReason(stop string) string {
 	switch stop {
-	case "time":
+	case "time", "idle":
 		return store.JobTimeout
-	case "failed":
+	case "failed", "repeat":
 		return store.JobFailed
 	}
 	return store.JobBudget // steps or tokens

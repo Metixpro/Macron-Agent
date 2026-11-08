@@ -168,7 +168,25 @@ const (
 	stopSteps                      // the step budget ran out
 	stopTokens                     // the user's tokens ran out
 	stopCanceled                   // the user stopped it
+	stopRepeat                     // the model kept making the same call: no progress
+	stopIdle                       // nothing happened for the idle timeout
 )
+
+// ExtendForever is Request.Extensions with no limit: the budget grows for as
+// long as the work makes progress.
+const ExtendForever = -1
+
+// extensionSize is how many rounds an extension adds: half the first budget,
+// at least 25.
+func extensionSize(initial int) int { return max(initial/2, 25) }
+
+// noticeExtended tells the model its budget grew, with where the work stands,
+// so nothing of the job is lost across the extension.
+const noticeExtended = "[system notice] The work is making progress, so this request got %d more tool rounds (extension %d). " +
+	"Carry on from where you are; do not redo finished steps. Progress so far:\n%s"
+
+// errIdle cancels a run that saw nothing happen for its idle timeout.
+var errIdle = errors.New("agent: idle timeout")
 
 func (r stopReason) String() string {
 	switch r {
@@ -180,6 +198,10 @@ func (r stopReason) String() string {
 		return "tokens"
 	case stopCanceled:
 		return "stopped"
+	case stopRepeat:
+		return "repeat"
+	case stopIdle:
+		return "idle"
 	}
 	return "failed"
 }
@@ -195,7 +217,8 @@ func stoppedText(lang string, steps int, why stopReason, auto bool) string {
 	if lang == "en" {
 		reason := map[stopReason]string{stopFailed: "I lost the connection to my brain in the middle of the job",
 			stopTime: "The time for this request ran out", stopSteps: "This job needed more steps than one request allows",
-			stopTokens: "Your tokens ran out in the middle of the job"}[why]
+			stopTokens: "Your tokens ran out in the middle of the job", stopRepeat: "I stopped because I kept making the same call without getting anywhere",
+			stopIdle: "I stopped because nothing happened for a long time (no answer from the model, no tool finishing)"}[why]
 		s := fmt.Sprintf("⏸ %s. %d steps of the work are done and what I made is kept in the workspace.", reason, steps)
 		if !auto {
 			s += " Say «continue» and I'll pick it up from here."
@@ -203,7 +226,8 @@ func stoppedText(lang string, steps int, why stopReason, auto bool) string {
 		return s
 	}
 	reason := map[stopReason]string{stopFailed: "ارتباطم با مغزم وسط کار قطع شد", stopTime: "وقت این درخواست تموم شد",
-		stopSteps: "این کار از تعداد قدم‌های مجاز یه درخواست بیشتر بود", stopTokens: "توکن‌هات وسط کار تموم شد"}[why]
+		stopSteps: "این کار از تعداد قدم‌های مجاز یه درخواست بیشتر بود", stopTokens: "توکن‌هات وسط کار تموم شد",
+		stopRepeat: "متوقف شدم چون داشتم همون کار رو بی‌نتیجه تکرار می‌کردم", stopIdle: "متوقف شدم چون مدت زیادی هیچ اتفاقی نیفتاد (نه جوابی از مدل، نه ابزاری که تموم بشه)"}[why]
 	s := fmt.Sprintf("⏸ %s. %s مرحله از کار انجام شد و هرچی ساختم توی فضای کاری مونده.", reason, persianDigits(steps))
 	if !auto {
 		s += " بگو «ادامه بده» تا از همین‌جا ادامه بدم."
@@ -418,4 +442,35 @@ func withoutImages(messages []llm.Message) []llm.Message {
 		out[i].Parts, out[i].Content = nil, strings.Join(texts, "\n")
 	}
 	return out
+}
+
+// touching is the listener with each event also counted as activity (the
+// idle watchdog); the original listener is unchanged.
+func (l *EventListener) touching(touch func()) *EventListener {
+	c := *l
+	c.OnToolStart = func(name, args string) {
+		touch()
+		if l.OnToolStart != nil {
+			l.OnToolStart(name, args)
+		}
+	}
+	c.OnToolEnd = func(name, args, result string, took time.Duration) {
+		touch()
+		if l.OnToolEnd != nil {
+			l.OnToolEnd(name, args, result, took)
+		}
+	}
+	c.OnToolProgress = func(name, text string, output bool) {
+		touch()
+		if l.OnToolProgress != nil {
+			l.OnToolProgress(name, text, output)
+		}
+	}
+	if l.OnText != nil {
+		c.OnText = func(s string) { touch(); l.OnText(s) }
+	}
+	if l.OnThought != nil {
+		c.OnThought = func(s string) { touch(); l.OnThought(s) }
+	}
+	return &c
 }

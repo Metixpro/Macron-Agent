@@ -18,6 +18,7 @@ import (
 var settingsWithoutPanel = map[string]string{
 	"SettingPremiumEmoji":   "off by default; turned on with «macron config set premium_emoji true» (then managed from 🖥 showing the work)",
 	"SettingActiveProvider": "set by choosing ⭐ in the providers panel (a:pv), not a switch of its own",
+	"settingIdleTimeout":    "the idle brake of a job, 15 minutes by default (shown in 🦾 the agent); «macron config set idle_timeout 30»",
 	// The bot's own bookkeeping, not choices of the owner.
 	"settingEvalProvider": "state: the provider and model the last exam ran on",
 	"settingEvalNight":    "state: the day of the last nightly exam",

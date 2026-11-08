@@ -424,37 +424,52 @@ func TestAMessageAfterTheAnswerRunsNext(t *testing.T) {
 	h.noText("هنوز دارم روی")
 }
 
-func TestALongJobContinuesByItself(t *testing.T) {
+// A long job does not stop at the end of its budget while it makes
+// progress: the budget grows in the same run (no progress report in the
+// middle, nothing lost), and it finishes with one answer.
+func TestALongJobRunsToTheEnd(t *testing.T) {
 	h := newHarness(t)
-	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "1")
+	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "0") // to the end of the job
+	const parts = 30                                        // far more than the 4-step budget
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		switch {
-		case n < 4:
+		if n < parts {
 			return toolCall("list_files", fmt.Sprintf(`{"path":"part%d"}`, n)), 0
-		case n == 4:
-			return map[string]any{"role": "assistant", "content": "نصف کار انجام شد."}, 0
 		}
 		return map[string]any{"role": "assistant", "content": "کل پروژه تموم شد ✅"}, 0
 	}
 	h.send(private(68, "یه پروژه بزرگ بساز"))
 	text := h.tg.allText()
-	if !strings.Contains(text, "نصف کار انجام شد.") || !strings.Contains(text, "⏩") || !strings.Contains(text, "کل پروژه تموم شد ✅") {
-		t.Fatalf("a progress report, then the job goes on and finishes:\n%s", text)
+	if !strings.Contains(text, "کل پروژه تموم شد ✅") || strings.Contains(text, "⏩") || strings.Contains(text, "⏸") {
+		t.Fatalf("the job runs to its end without stopping:\n%s", text)
 	}
-	if strings.Index(text, "⏩") > strings.Index(text, "کل پروژه") {
-		t.Error("the progress report comes first")
+	if n := h.llm.count(); n != parts+1 {
+		t.Errorf("%d model calls, want %d: one run, no wrap-ups", n, parts+1)
 	}
 	h.llm.mu.Lock()
-	wrap, next := llmText(h.llm.requests[4]), llmText(h.llm.requests[5])
+	last := llmText(h.llm.requests[len(h.llm.requests)-1])
 	h.llm.mu.Unlock()
-	if !strings.Contains(wrap, "goes on automatically") {
-		t.Errorf("the report does not ask the user to continue:\n%s", wrap)
-	}
-	if !strings.Contains(next, "automatic continuation") || !strings.Contains(next, "work log before stopping") {
-		t.Errorf("the next round starts from the work log:\n%s", next)
+	if !strings.Contains(last, "got 25 more tool rounds") || !strings.Contains(last, "Progress so far") {
+		t.Errorf("the model is told its budget grew, with the progress so far:\n%s", last)
 	}
 	if used, _ := h.st.UsedToday(bg, 68); used != 1 {
-		t.Errorf("one request, however many rounds: %d used", used)
+		t.Errorf("one request: %d used", used)
+	}
+}
+
+// With a limit of N extensions, the job stops after them as before.
+func TestAutoContinueLimitIsKept(t *testing.T) {
+	h := newHarness(t)
+	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "1")
+	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
+		if req["tools"] == nil { // the wrap-up
+			return map[string]any{"role": "assistant", "content": "تا اینجا انجام شد."}, 0
+		}
+		return toolCall("list_files", fmt.Sprintf(`{"path":"part%d"}`, n)), 0
+	}
+	h.send(private(73, "یه پروژه بزرگ بساز"))
+	// 4 steps, one extension of 25, then the wrap-up.
+	if n := h.llm.count(); n != 4+25+1 {
+		t.Errorf("%d model calls", n)
 	}
 }
 
@@ -521,75 +536,6 @@ func TestActiveRunInbox(t *testing.T) {
 	}
 	if agent.InterjectionNote == "" {
 		t.Error("the note")
-	}
-}
-
-// Stopping while the progress report is being sent ends the job: it does
-// not go on by itself.
-func TestStopDuringTheReportEndsTheAutoContinue(t *testing.T) {
-	h := newHarness(t)
-	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "1")
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		switch {
-		case n < 4:
-			return toolCall("list_files", fmt.Sprintf(`{"path":"part%d"}`, n)), 0
-		case n == 4:
-			return map[string]any{"role": "assistant", "content": "نصف کار انجام شد."}, 0
-		}
-		return map[string]any{"role": "assistant", "content": "کل پروژه تموم شد ✅"}, 0
-	}
-	h.tg.mu.Lock()
-	h.tg.reject = func(method string, body map[string]any) string {
-		if strings.Contains(fmt.Sprint(body), "⏩") {
-			if r, ok := h.bot.runs.Load(int64(70)); ok {
-				r.(*activeRun).stop() // the user taps stop while the report goes out
-			}
-		}
-		return ""
-	}
-	h.tg.mu.Unlock()
-	h.send(private(70, "یه پروژه بزرگ بساز"))
-	if text := h.tg.allText(); strings.Contains(text, "کل پروژه تموم شد") {
-		t.Fatalf("the job does not go on after a stop:\n%s", text)
-	}
-	if n := h.llm.count(); n != 5 {
-		t.Errorf("no round after the stop: %d model calls", n)
-	}
-}
-
-// A message sent between two rounds of a job that goes on by itself joins
-// the next round instead of starting a second job beside it.
-func TestAMessageBetweenRoundsJoinsTheJob(t *testing.T) {
-	h := newHarness(t)
-	_ = h.st.SetSetting(bg, store.SettingAutoContinue, "1")
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		switch {
-		case n < 4:
-			return toolCall("list_files", fmt.Sprintf(`{"path":"part%d"}`, n)), 0
-		case n == 4:
-			return map[string]any{"role": "assistant", "content": "نصف کار انجام شد."}, 0
-		}
-		return map[string]any{"role": "assistant", "content": "کل پروژه تموم شد ✅"}, 0
-	}
-	once := sync.Once{}
-	betweenRounds = func() {
-		once.Do(func() { h.bot.handleMessage(private(72, "یه README هم بنویس")) })
-	}
-	t.Cleanup(func() { betweenRounds = nil })
-	h.send(private(72, "یه پروژه بزرگ بساز"))
-	h.llm.mu.Lock()
-	defer h.llm.mu.Unlock()
-	joined := false
-	for _, r := range h.llm.requests[5:] {
-		if strings.Contains(llmText(r), "یه README هم بنویس") {
-			joined = true
-		}
-	}
-	if !joined {
-		t.Error("the message reaches the next round of the job")
-	}
-	if n := len(h.llm.requests); n != 6 {
-		t.Errorf("one job, not two side by side: %d model calls", n)
 	}
 }
 
