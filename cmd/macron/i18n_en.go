@@ -1088,4 +1088,5 @@ var english = map[string]string{
 	"🖥 <b>نمایش کار</b>\n\n🖥 ترمینال زنده (نمایش مراحل کار): %s\n🎨 ظاهر ترمینال: %s\n🧰 گزارش کار بالای جواب (کارهای چندمرحله‌ای): %s\n👁 نمایش کار توی پیوی (پیش‌فرض؛ با /mode عوض می‌شه): %s": "🖥 <b>Showing the work</b>\n\n🖥 Live terminal (the steps of the work): %s\n🎨 Terminal look: %s\n🧰 Work log above the answer (multi-step jobs): %s\n👁 Work shown in private chats (default; /mode changes it): %s",
 	"🖥 نمایش کار": "🖥 Showing the work",
 	"⚙️ تنظیمات":  "⚙️ Settings",
+	"⚙️ تنظیمات گروه با /groupsettings باز می‌شه؛ /settings پنل مدیریت ربات توی پیویه.": "⚙️ A group's settings open with /groupsettings; /settings is the bot's admin panel in a private chat.",
 }

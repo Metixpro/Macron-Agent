@@ -102,7 +102,7 @@ func main() {
 		log.Fatalf("❌ providers: %v", err)
 	}
 	if !prov.Configured() {
-		log.Printf("⚠️  no LLM provider yet: add one in the admin panel (/admin → پروایدرها)")
+		log.Printf("⚠️  no LLM provider yet: add one in the admin panel (/settings → پروایدرها)")
 	}
 
 	// A local Bot API server (larger files, lower latency) can replace
@@ -249,7 +249,7 @@ func seedProvider(ctx context.Context, st *store.Store, cfg *config.Config) {
 		log.Printf("⚠️  could not create the default provider: %v", err)
 		return
 	}
-	log.Printf("created the model provider %q from the settings; more are added in /admin → providers", "default")
+	log.Printf("created the model provider %q from the settings; more are added in /settings → providers", "default")
 }
 
 // poll fetches updates until ctx ends, backing off on errors.

@@ -75,10 +75,12 @@ type Bot struct {
 	skillMu       sync.Mutex  // learnToolSkill's read and write of a provider's counts
 	routes        sync.Map    // user id → routeMemo (their last routed request, modelroute.go)
 	triage        triageState // what a request needs, decided before the model works (triage.go)
-	suspended     sync.Map    // poll ID → suspension: jobs waiting for a poll's answer (polls.go)
-	readsAll      atomic.Bool // privacy mode is off: every group message reaches the bot (groupsight.go)
-	sights        sync.Map    // chatID → sight (whether the bot sees all of a group)
-	sightHints    sync.Map    // chatID → when its admins were last told the bot misses messages
+	// toldGroupSettings: the groups already told that /settings is not their settings
+	toldGroupSettings sync.Map
+	suspended         sync.Map    // poll ID → suspension: jobs waiting for a poll's answer (polls.go)
+	readsAll          atomic.Bool // privacy mode is off: every group message reaches the bot (groupsight.go)
+	sights            sync.Map    // chatID → sight (whether the bot sees all of a group)
+	sightHints        sync.Map    // chatID → when its admins were last told the bot misses messages
 
 	ffmpegOnce sync.Once
 	ffmpeg     bool // ffmpeg runs here (frame previews)
@@ -431,7 +433,7 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 		text = strings.TrimSpace(l.t("چی از دستم رفت؟") + " " + args)
 		opt.about = "The user ran /recap: summarize what they missed in this group with " + toolGroupHistory + " (since their last message unless they asked otherwise)."
-	case "/groupsettings", "/settings":
+	case "/groupsettings":
 		b.openGroupSettings(ctx, m)
 		return
 	case "/nolog":
@@ -488,7 +490,14 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 		b.reply(m, l.t(textNothingToCancel))
 		return
-	case "/admin", "/panel":
+	case "/settings", "/panel", "/admin": // /admin: the old name, kept for scripts, not in the menu
+		if !m.Chat.Private() {
+			// A group's settings are /groupsettings: said once per group, then quiet.
+			if _, told := b.toldGroupSettings.LoadOrStore(m.Chat.ID, true); !told {
+				b.reply(m, l.t("⚙️ تنظیمات گروه با /groupsettings باز می‌شه؛ /settings پنل مدیریت ربات توی پیویه."))
+			}
+			return
+		}
 		if admin {
 			b.openPanel(ctx, m)
 			return

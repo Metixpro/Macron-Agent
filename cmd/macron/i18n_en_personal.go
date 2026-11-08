@@ -34,7 +34,7 @@ I do whatever a person at a computer can: search, files, code, servers, download
 /files — my files
 /reminders — reminders and scheduled jobs
 /tasks — background jobs
-/admin — the panel: models, search, learning and settings
+/settings — the panel: models, search, learning and settings
 /language — language (فارسی / English)
 /help — help`,
 		personalHelp: `<b>How to work with me</b>
@@ -56,7 +56,7 @@ Write the way you talk to a colleague. I work out what is needed: search, files,
 /files — my files
 /reminders — reminders
 /tasks — background jobs
-/admin — the panel
+/settings — the panel
 /language — language (فارسی / English)
 /cancel — stop the current job`,
 		personalHomeFmt: `

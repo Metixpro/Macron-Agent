@@ -452,3 +452,41 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 		t.Error("once on, premium emoji's packs are managed from showing the work")
 	}
 }
+
+// /settings opens the panel in the owner's private chat; /admin still works
+// but is not in the menu. In a group /settings is not the group's settings:
+// it says so once, and /groupsettings is the group's.
+func TestSettingsCommand(t *testing.T) {
+	h := newHarness(t)
+	h.send(private(ownerID, "/settings"))
+	h.wantText("پنل مدیریت مکرون")
+	h.tg.reset()
+	h.send(private(ownerID, "/admin"))
+	h.wantText("پنل مدیریت مکرون")
+
+	h.tg.reset()
+	h.bot.registerAdminCommands(bg)
+	for _, c := range h.tg.of("setMyCommands") {
+		menu := fmt.Sprint(c.body["commands"])
+		if !strings.Contains(menu, "command:settings") || strings.Contains(menu, "command:admin") {
+			t.Errorf("the admin menu shows /settings, not /admin: %s", menu)
+		}
+	}
+
+	h.tg.reset()
+	h.send(groupMsgIn(-100777, ownerID, "/settings"))
+	h.send(groupMsgIn(-100777, ownerID, "/settings"))
+	n := 0
+	for _, c := range h.tg.of("sendMessage") {
+		v := fmt.Sprint(c.body["text"])
+		if strings.Contains(v, "پنل مدیریت") && !strings.Contains(v, "/groupsettings") {
+			t.Fatalf("/settings opened the panel in a group: %s", v)
+		}
+		if strings.Contains(v, "/groupsettings") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("the hint is said once per group, not %d times", n)
+	}
+}

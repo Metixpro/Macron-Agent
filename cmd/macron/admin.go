@@ -64,7 +64,7 @@ func (b *Bot) back(l lang, to string) telegram.InlineKeyboardButton {
 	return b.button(l.t("⬅️ برگشت"), to, "")
 }
 
-// openPanel sends a fresh panel message (from /admin).
+// openPanel sends a fresh panel message (from /settings).
 func (b *Bot) openPanel(ctx context.Context, m *telegram.Message) {
 	b.inputs.Delete(m.From.ID)
 	v := b.viewHome(ctx, m.From.ID)
@@ -786,14 +786,15 @@ func (b *Bot) registerCommands(ctx context.Context) error {
 	return first
 }
 
-// registerAdminCommands shows /admin in the command menu of every admin.
+// registerAdminCommands shows /settings in the command menu of every admin
+// (/admin still works, unlisted).
 func (b *Bot) registerAdminCommands(ctx context.Context) {
 	ids, _ := b.st.Admins(ctx)
 	for id := range b.owner {
 		ids = append(ids, id)
 	}
 	for _, m := range menuLangs {
-		cmds := append(b.userCommands(m.l), telegram.BotCommand{Command: "admin", Description: m.l.t("پنل مدیریت")},
+		cmds := append(b.userCommands(m.l), telegram.BotCommand{Command: "settings", Description: m.l.t("پنل مدیریت")},
 			telegram.BotCommand{Command: "teach", Description: m.l.t("یاد دادن یه درس به ربات")})
 		for _, id := range ids {
 			_ = b.api.SetMyCommandsFor(ctx, cmds, &telegram.BotCommandScope{Type: "chat", ChatID: id}, m.code)

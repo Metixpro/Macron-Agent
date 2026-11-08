@@ -113,7 +113,7 @@ const personalWelcome = `سلام %s، %s
 /files — فایل‌هام
 /reminders — یادآورها و کارهای زمان‌بندی‌شده
 /tasks — کارهای پس‌زمینه
-/admin — پنل: مدل‌ها، جستجو، یادگیری و تنظیمات
+/settings — پنل: مدل‌ها، جستجو، یادگیری و تنظیمات
 /language — زبان (فارسی / English)
 /help — راهنما`
 
@@ -136,7 +136,7 @@ const personalHelp = `<b>چطوری باهام کار کنی؟</b>
 /files — فایل‌هام
 /reminders — یادآورها
 /tasks — کارهای پس‌زمینه
-/admin — پنل
+/settings — پنل
 /language — زبان (فارسی / English)
 /cancel — توقف کار فعلی`
 
