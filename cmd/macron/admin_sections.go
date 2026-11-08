@@ -252,14 +252,14 @@ func (b *Bot) saveProvider(ctx context.Context, l lang, p store.Provider) (int64
 }
 
 func (b *Bot) viewProviders(ctx context.Context, l lang) panelView {
-	snap := b.prov.Snapshot()
+	list := b.prov.Snapshot()
 	var sb strings.Builder
 	sb.WriteString(l.t("🤖 <b>پروایدرها</b>\n⭐ فعال (پیش‌فرض) · ▫️ روشن · ⏸ خاموش · 🧊 موقتاً کنار گذاشته شده\n\n"))
 	var rows [][]telegram.InlineKeyboardButton
-	if len(snap) == 0 {
+	if len(list) == 0 {
 		sb.WriteString(l.t("هنوز پروایدری اضافه نشده. بدون پروایدر ربات نمی‌تونه جواب بده!\n"))
 	}
-	for i, p := range snap {
+	for i, p := range list {
 		mark := "▫️"
 		switch {
 		case p.Active:
@@ -285,7 +285,6 @@ func (b *Bot) viewProviders(ctx context.Context, l lang) panelView {
 	sb.WriteString(l.t("\n\nℹ️ <b>روشن/خاموش</b> یعنی این مدل اصلاً استفاده بشه یا نه؛ خاموش هیچ‌جا به کار نمی‌ره. <b>⭐ فعال</b> یعنی درخواست‌ها اول سراغ کدوم برن. توی 💎 سطح‌ها می‌شه برای Free و VIP پروایدر جدا گذاشت؛ اونجا «خودکار» همین ⭐ هست. بقیه روشن‌ها به ترتیب اولویت فقط جای خطا جواب می‌دن."))
 	rows = append(rows,
 		row(b.button(l.t("➕ افزودن پروایدر"), "a:pv:add", telegram.StyleSuccess), b.button(l.t("🧭 مسیریابی هوشمند"), "a:rt", telegram.StylePrimary)),
-		row(b.button(l.t("⚡ Snap: تصمیم‌گیر سریع"), "a:sn", telegram.StylePrimary)),
 		row(b.button(l.t("🔁 سوییچ خودکار"), "a:st:failover:pv", ""), b.back(l, "a:home")))
 	return panelView{html: sb.String(), kb: keyboard(rows...)}
 }
@@ -693,7 +692,7 @@ func (b *Bot) cacheLine(l lang, id int64) string {
 		return ""
 	}
 	line := l.f("\n📦 کش پرامپت: %s٪ از %s درخواست", l.num(int(r*100+0.5)), l.num(n))
-	if known && r < snapCacheLow {
+	if known && r < triageCacheLow {
 		line += l.t(" (کمه؛ هر قدم کار پرامپت کامل حساب می‌شه. اگه پشتش روتر یا کامبو هست، چک کن کش رو نگه می‌داره)")
 	}
 	return line

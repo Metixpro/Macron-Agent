@@ -130,15 +130,15 @@ func TestSamplerRatesTopAndHistory(t *testing.T) {
 		f.set(busy, uint64(9000+i*400), 400000+uint64(i)*10000, 1_000_000+uint64(i)*150_000, 500_000+uint64(i)*30_000, uint64(i)*1500, uint64(i)*30)
 		s.Sample()
 	}
-	snap := s.Latest()
-	if !snap.Ready || int(snap.CPU+0.5) != 60 || len(snap.Cores) != 1 {
-		t.Errorf("cpu: %+v", snap)
+	sample := s.Latest()
+	if !sample.Ready || int(sample.CPU+0.5) != 60 || len(sample.Cores) != 1 {
+		t.Errorf("cpu: %+v", sample)
 	}
-	if int(snap.NetRx) != 10_000 || int(snap.NetTx) != 2_000 {
-		t.Errorf("network, bytes a second: %v %v", snap.NetRx, snap.NetTx)
+	if int(sample.NetRx) != 10_000 || int(sample.NetTx) != 2_000 {
+		t.Errorf("network, bytes a second: %v %v", sample.NetRx, sample.NetTx)
 	}
-	if snap.Load[0] != 1.5 || snap.Uptime != 3600*time.Second+500*time.Millisecond || int(snap.MemPct()+0.5) != 48 {
-		t.Errorf("load, uptime, memory: %+v %.1f", snap.Load, snap.MemPct())
+	if sample.Load[0] != 1.5 || sample.Uptime != 3600*time.Second+500*time.Millisecond || int(sample.MemPct()+0.5) != 48 {
+		t.Errorf("load, uptime, memory: %+v %.1f", sample.Load, sample.MemPct())
 	}
 	top := s.Top(2, "cpu")
 	if len(top) != 2 || top[0].Name != "ffmpeg" || top[0].Cmd != "ffmpeg -i in.mp4" || int(top[0].CPU+0.5) != 100 {
@@ -280,9 +280,9 @@ func TestRealProc(t *testing.T) {
 	s := New(Options{Disks: []string{"/"}})
 	s.Sample()
 	time.Sleep(50 * time.Millisecond)
-	snap := s.Sample()
-	if snap.MemTotal == 0 || snap.CoreCount == 0 || len(snap.Disks) != 1 || snap.Service.Threads == 0 {
-		t.Errorf("%+v", snap)
+	sample := s.Sample()
+	if sample.MemTotal == 0 || sample.CoreCount == 0 || len(sample.Disks) != 1 || sample.Service.Threads == 0 {
+		t.Errorf("%+v", sample)
 	}
 	if len(s.Top(3, "mem")) == 0 {
 		t.Error("processes")

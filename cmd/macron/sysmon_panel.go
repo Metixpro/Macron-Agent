@@ -177,10 +177,10 @@ func rateText(bps float64) string { return sizeText(int64(bps)) + "/s" }
 
 func (b *Bot) viewServer(l lang, key string) panelView {
 	win, winName, key := sysWindow(key)
-	snap := b.sampler().Latest()
+	sample := b.sampler().Latest()
 	var sb strings.Builder
-	fmt.Fprint(&sb, l.f("🖥 <b>سرور</b> · روشن از %s\n", uptime(l, snap.Uptime)))
-	if !snap.Ready {
+	fmt.Fprint(&sb, l.f("🖥 <b>سرور</b> · روشن از %s\n", uptime(l, sample.Uptime)))
+	if !sample.Ready {
 		sb.WriteString(l.t("\n⏳ هنوز دو بار اندازه نگرفته؛ چند ثانیه بعد «🔄 بروزرسانی» رو بزن.\n"))
 	}
 	hist := b.sampler().History(win, sysSparkWidth)
@@ -210,36 +210,36 @@ func (b *Bot) viewServer(l lang, key string) panelView {
 	}
 
 	cpuHist := series(func(h sysmon.Bucket) float64 { return h.CPU })
-	fmt.Fprint(&sb, l.f("\n⚙️ <b>CPU</b> %s %s <b>%.0f٪</b> · %d هسته\n", levelIcon(snap.CPU), bar(snap.CPU), snap.CPU, snap.CoreCount))
-	fmt.Fprint(&sb, l.f("load: <code>%.2f · %.2f · %.2f</code>\n", snap.Load[0], snap.Load[1], snap.Load[2]))
+	fmt.Fprint(&sb, l.f("\n⚙️ <b>CPU</b> %s %s <b>%.0f٪</b> · %d هسته\n", levelIcon(sample.CPU), bar(sample.CPU), sample.CPU, sample.CoreCount))
+	fmt.Fprint(&sb, l.f("load: <code>%.2f · %.2f · %.2f</code>\n", sample.Load[0], sample.Load[1], sample.Load[2]))
 	if len(hist) > 1 {
 		fmt.Fprint(&sb, l.f("<code>%s</code> %s: میانگین %.0f٪ · اوج %.0f٪\n", spark(cpuHist, 100), winName, mean(cpuHist), peak(series(func(h sysmon.Bucket) float64 { return h.CPUMax }))))
 	}
-	if n := len(snap.Cores); n > 1 && n <= 16 {
+	if n := len(sample.Cores); n > 1 && n <= 16 {
 		cores := make([]float64, n)
-		copy(cores, snap.Cores)
+		copy(cores, sample.Cores)
 		fmt.Fprint(&sb, l.f("هسته‌ها: <code>%s</code>\n", spark(cores, 100)))
 	}
 
 	memHist := series(func(h sysmon.Bucket) float64 { return h.Mem })
-	fmt.Fprint(&sb, l.f("\n🧠 <b>RAM</b> %s %s <b>%.0f٪</b> · %s از %s\n", levelIcon(snap.MemPct()), bar(snap.MemPct()), snap.MemPct(),
-		sizeText(int64(snap.MemUsed)), sizeText(int64(snap.MemTotal))))
-	if snap.SwapTotal > 0 {
-		fmt.Fprint(&sb, l.f("swap: %s از %s\n", sizeText(int64(snap.SwapUsed)), sizeText(int64(snap.SwapTotal))))
+	fmt.Fprint(&sb, l.f("\n🧠 <b>RAM</b> %s %s <b>%.0f٪</b> · %s از %s\n", levelIcon(sample.MemPct()), bar(sample.MemPct()), sample.MemPct(),
+		sizeText(int64(sample.MemUsed)), sizeText(int64(sample.MemTotal))))
+	if sample.SwapTotal > 0 {
+		fmt.Fprint(&sb, l.f("swap: %s از %s\n", sizeText(int64(sample.SwapUsed)), sizeText(int64(sample.SwapTotal))))
 	}
 	if len(hist) > 1 {
 		fmt.Fprint(&sb, l.f("<code>%s</code> %s: میانگین %.0f٪ · اوج %.0f٪\n", spark(memHist, 100), winName, mean(memHist), peak(series(func(h sysmon.Bucket) float64 { return h.MemMax }))))
 	}
 
-	for _, d := range snap.Disks {
+	for _, d := range sample.Disks {
 		fmt.Fprint(&sb, l.f("\n💾 <b>دیسک</b> <code>%s</code> %s %s <b>%.0f٪</b> · %s آزاد از %s\n", esc(d.Path), levelIcon(d.UsedPct()), bar(d.UsedPct()), d.UsedPct(),
 			sizeText(int64(d.Free)), sizeText(int64(d.Total))))
 	}
-	if snap.Ready {
-		fmt.Fprint(&sb, l.f("\n🌐 <b>شبکه</b> ↓ %s · ↑ %s\n", rateText(snap.NetRx), rateText(snap.NetTx)))
+	if sample.Ready {
+		fmt.Fprint(&sb, l.f("\n🌐 <b>شبکه</b> ↓ %s · ↑ %s\n", rateText(sample.NetRx), rateText(sample.NetTx)))
 	}
 
-	sv := snap.Service
+	sv := sample.Service
 	fmt.Fprint(&sb, l.f("\n🤖 <b>خود ربات</b> (با برنامه‌هایی که راه انداخته)\nCPU: %.1f هسته · RAM: %s", sv.Cores, sizeText(int64(sv.Mem))))
 	switch {
 	case sv.MemMax > 0:
@@ -256,7 +256,7 @@ func (b *Bot) viewServer(l lang, key string) panelView {
 	}
 	sb.WriteString("\n")
 
-	if snap.Ready {
+	if sample.Ready {
 		var busy []string
 		for i, p := range b.sampler().Top(5, "cpu") {
 			if p.CPU < 0.5 {
@@ -392,19 +392,19 @@ func (b *Bot) sendSysChart(ctx context.Context, chatID, admin int64, key string)
 		return
 	}
 	defer func() { f.Close(); _ = b.app.Machine.Remove(session, "server.png") }()
-	snap := b.sampler().Latest()
-	caption := l.f("🖥 CPU و RAM · %s\nالان: CPU %.0f٪ · RAM %.0f٪", winName, snap.CPU, snap.MemPct())
+	sample := b.sampler().Latest()
+	caption := l.f("🖥 CPU و RAM · %s\nالان: CPU %.0f٪ · RAM %.0f٪", winName, sample.CPU, sample.MemPct())
 	_ = b.api.SendPhoto(ctx, chatID, telegram.File{Name: "server.png", Reader: f}, caption)
 }
 
 // sysLine is the server in one line, for the stats panel.
 func (b *Bot) sysLine(l lang) string {
-	snap := b.sampler().Latest()
-	if !snap.Ready {
+	sample := b.sampler().Latest()
+	if !sample.Ready {
 		return l.t("سرور: هنوز اندازه‌گیری نشده")
 	}
-	line := l.f("سرور: CPU %.0f٪ (load %.2f) · RAM %.0f٪", snap.CPU, snap.Load[0], snap.MemPct())
-	for _, d := range snap.Disks {
+	line := l.f("سرور: CPU %.0f٪ (load %.2f) · RAM %.0f٪", sample.CPU, sample.Load[0], sample.MemPct())
+	for _, d := range sample.Disks {
 		line += l.f(" · دیسک %s %.0f٪", esc(d.Path), d.UsedPct())
 	}
 	return line

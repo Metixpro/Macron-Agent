@@ -25,7 +25,7 @@ func (r *Registry) RunDeepResearch(ctx context.Context, sessionID, topic string,
 	if r.LLM == nil {
 		return "", fmt.Errorf("deep research needs a language model")
 	}
-	subqueries := r.planQueries(ctx, topic, breadth)
+	planned := r.planQueries(ctx, topic, breadth)
 
 	// Search + fetch with bounded parallelism.
 	var (
@@ -35,7 +35,7 @@ func (r *Registry) RunDeepResearch(ctx context.Context, sessionID, topic string,
 		wg      sync.WaitGroup
 		sem     = make(chan struct{}, 6)
 	)
-	for _, sq := range subqueries {
+	for _, sq := range planned {
 		wg.Add(1)
 		go func(query string) {
 			defer wg.Done()

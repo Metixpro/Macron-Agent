@@ -25,8 +25,6 @@ const (
 	EnvAPIKey        = "WAZE_API_KEY"
 	EnvModel         = "WAZE_MODEL"
 	EnvWorkspaceDir  = "WAZE_WORKSPACE_DIR"
-	EnvSnapKey       = "WAZE_SNAP_KEY" // SubQ's key for the fast classifier (the admin panel's wins; see cmd/bot/snap.go)
-	EnvSnapURL       = "WAZE_SNAP_URL" // SubQ's API address (default https://api.subq.ai/v1)
 	EnvEnvProxy      = "WAZE_USE_ENV_PROXY"
 	EnvGitHubToken   = "GITHUB_TOKEN"
 	EnvBotToken      = "TELEGRAM_BOT_TOKEN"
@@ -102,8 +100,6 @@ type Config struct {
 	Model         string
 	WorkspaceDir  string
 	WorkspaceTTL  time.Duration
-	SnapKey       string // SubQ's API key from the environment ("" = the panel's, or none)
-	SnapURL       string
 	UseEnvProxy   bool
 	GitHubToken   string
 	TregToken     string
@@ -197,8 +193,6 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.Model, "model", envOr(EnvModel, DefaultModel), "model id (env "+EnvModel+")")
 	fs.StringVar(&c.WorkspaceDir, "workspace-dir", envOr(EnvWorkspaceDir, HomePath("workspaces")), "base directory of the per-user workspaces (env "+EnvWorkspaceDir+")")
 	fs.DurationVar(&c.WorkspaceTTL, "workspace-ttl", 0, "delete work-folder files (uploads and results) older than this (0 = never, the default)")
-	c.SnapKey = strings.TrimSpace(os.Getenv(EnvSnapKey))
-	c.SnapURL = strings.TrimSpace(os.Getenv(EnvSnapURL))
 	fs.BoolVar(&c.UseEnvProxy, "use-env-proxy", envBool(EnvEnvProxy), "send outbound tool traffic through HTTP(S)_PROXY (weakens the SSRF guard)")
 	fs.IntVar(&c.MaxSteps, "max-steps", 200, "maximum tool-calling rounds per request (the bot's admin panel can change it)")
 	fs.DurationVar(&c.RunTimeout, "run-timeout", 3*time.Hour, "time limit for one request (the bot's admin panel can change it)")

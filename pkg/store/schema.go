@@ -323,25 +323,6 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_bg_tasks_user ON bg_tasks (user_id, id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bg_tasks_status ON bg_tasks (status)`,
 
-		// the fast classifier's decisions (see snap.go): figures only, never
-		// a message or who sent it
-		`CREATE TABLE IF NOT EXISTS snap_log (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			at DATETIME NOT NULL,
-			tier TEXT NOT NULL DEFAULT '',
-			kind TEXT NOT NULL DEFAULT '',
-			kind_conf REAL NOT NULL DEFAULT 0,
-			needs_tools REAL NOT NULL DEFAULT 0,
-			work REAL NOT NULL DEFAULT 0,
-			context TEXT NOT NULL DEFAULT '',
-			applied TEXT NOT NULL DEFAULT '',
-			latency_ms INTEGER NOT NULL DEFAULT 0,
-			snap_tokens INTEGER NOT NULL DEFAULT 0,
-			saved_tokens INTEGER NOT NULL DEFAULT 0,
-			error TEXT NOT NULL DEFAULT ''
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_snap_log_at ON snap_log (at)`,
-
 		// every exchange, kept for good and searchable (full text): the
 		// conversation window forgets and summarizes, the archive does not
 		`CREATE TABLE IF NOT EXISTS chat_archive (
@@ -359,5 +340,17 @@ var migrations = [][]string{
 		`CREATE TRIGGER IF NOT EXISTS chat_archive_ad AFTER DELETE ON chat_archive BEGIN
 			INSERT INTO chat_archive_fts(chat_archive_fts, rowid, content) VALUES ('delete', old.id, old.content);
 		END`,
+	},
+
+	// 2: the outside classifier is gone; requests are triaged on this machine
+	// (cmd/macron/triage.go). Its log goes, the owner's choices carry over to
+	// the new keys, and its settings (with its sealed key) are removed.
+	{
+		`DROP INDEX IF EXISTS idx_snap_log_at`,
+		`DROP TABLE IF EXISTS snap_log`,
+		`INSERT OR IGNORE INTO settings (k, v, updated_at) SELECT 'triage_trim', v, updated_at FROM settings WHERE k = 'snap_trim'`,
+		`INSERT OR IGNORE INTO settings (k, v, updated_at) SELECT 'triage_chat', v, updated_at FROM settings WHERE k = 'snap_chat'`,
+		`INSERT OR IGNORE INTO settings (k, v, updated_at) SELECT 'triage', 'local', updated_at FROM settings WHERE k = 'snap_on' AND v = 'true'`,
+		`DELETE FROM settings WHERE k IN ('snap_on', 'snap_key', 'snap_model', 'snap_timeout_ms', 'snap_route', 'snap_effort', 'snap_chat', 'snap_trim')`,
 	},
 }

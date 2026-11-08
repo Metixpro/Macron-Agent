@@ -95,7 +95,7 @@ func TestProviderPageWarnsAboutAnUnknownModelsWindowAndShowsItsCache(t *testing.
 		t.Errorf("a known model has no warning:\n%s", view)
 	}
 
-	for range snapCacheSamples {
+	for range triageCacheSamples {
 		h.bot.noteCache(p.ID, llm.Usage{PromptTokens: 18000, CachedTokens: 600})
 	}
 	view = h.bot.viewProvider(bg, fa, p.ID).html

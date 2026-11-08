@@ -80,7 +80,7 @@ func (w *Watch) fire(key string, over bool, recovered bool, a Alert) {
 	}
 }
 
-func (w *Watch) check(s *Sampler, snap Snapshot) {
+func (w *Watch) check(s *Sampler, sample Snapshot) {
 	if w.Limits == nil {
 		return
 	}
@@ -106,7 +106,7 @@ func (w *Watch) check(s *Sampler, snap Snapshot) {
 		}
 	}
 	if lim.Disk > 0 {
-		for _, d := range snap.Disks {
+		for _, d := range sample.Disks {
 			pct := d.UsedPct()
 			w.fire(AlertDisk+d.Path, pct >= float64(lim.Disk), pct < float64(lim.Disk)-recoverGap,
 				Alert{Kind: AlertDisk, Value: pct, Limit: lim.Disk, Path: d.Path})

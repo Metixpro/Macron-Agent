@@ -198,64 +198,64 @@ type raw struct {
 // Sample reads the server now.
 func (s *Sampler) Sample() Snapshot {
 	now := s.now()
-	snap := Snapshot{At: now}
+	sample := Snapshot{At: now}
 	cur := raw{at: now, ok: true}
 	cur.cpu, cur.cores = parseCPU(s.read("stat"))
-	snap.CoreCount = len(cur.cores)
-	snap.Load = parseLoad(s.read("loadavg"))
-	snap.MemTotal, snap.MemUsed, snap.SwapTotal, snap.SwapUsed = parseMem(s.read("meminfo"))
-	snap.Uptime = parseUptime(s.read("uptime"))
+	sample.CoreCount = len(cur.cores)
+	sample.Load = parseLoad(s.read("loadavg"))
+	sample.MemTotal, sample.MemUsed, sample.SwapTotal, sample.SwapUsed = parseMem(s.read("meminfo"))
+	sample.Uptime = parseUptime(s.read("uptime"))
 	cur.rx, cur.tx = parseNet(s.read("net/dev"))
 	for _, p := range s.opt.Disks {
 		var st unix.Statfs_t
 		if unix.Statfs(p, &st) == nil {
-			snap.Disks = append(snap.Disks, Disk{Path: p, Total: st.Blocks * uint64(st.Bsize), Free: st.Bavail * uint64(st.Bsize)})
+			sample.Disks = append(sample.Disks, Disk{Path: p, Total: st.Blocks * uint64(st.Bsize), Free: st.Bavail * uint64(st.Bsize)})
 		}
 	}
 	svc, usec := s.service()
-	snap.Service = svc
+	sample.Service = svc
 	cur.svcUsec = usec
 
 	s.mu.Lock()
 	if s.prev.ok {
 		dt := now.Sub(s.prev.at).Seconds()
 		if dt > 0 {
-			snap.CPU = cur.cpu.pct(s.prev.cpu)
-			snap.Cores = make([]float64, len(cur.cores))
+			sample.CPU = cur.cpu.pct(s.prev.cpu)
+			sample.Cores = make([]float64, len(cur.cores))
 			for i := range cur.cores {
 				if i < len(s.prev.cores) {
-					snap.Cores[i] = cur.cores[i].pct(s.prev.cores[i])
+					sample.Cores[i] = cur.cores[i].pct(s.prev.cores[i])
 				}
 			}
-			snap.NetRx, snap.NetTx = rate(cur.rx, s.prev.rx, dt), rate(cur.tx, s.prev.tx, dt)
+			sample.NetRx, sample.NetTx = rate(cur.rx, s.prev.rx, dt), rate(cur.tx, s.prev.tx, dt)
 			if svc.Cgroup && cur.svcUsec >= s.prev.svcUsec {
-				snap.Service.Cores = float64(cur.svcUsec-s.prev.svcUsec) / 1e6 / dt
+				sample.Service.Cores = float64(cur.svcUsec-s.prev.svcUsec) / 1e6 / dt
 			}
-			snap.Ready = true
+			sample.Ready = true
 		}
 	}
 	s.prev = cur
 	s.scanProcs(now)
-	if snap.Ready && !svc.Cgroup {
-		snap.Service.Cores = s.treeCores()
+	if sample.Ready && !svc.Cgroup {
+		sample.Service.Cores = s.treeCores()
 	}
-	s.last = snap
+	s.last = sample
 
-	pt := Point{At: now, CPU: float32(snap.CPU), Mem: float32(snap.MemPct()), Load1: float32(snap.Load[0]),
-		NetRx: float32(snap.NetRx), NetTx: float32(snap.NetTx)}
-	for _, d := range snap.Disks {
+	pt := Point{At: now, CPU: float32(sample.CPU), Mem: float32(sample.MemPct()), Load1: float32(sample.Load[0]),
+		NetRx: float32(sample.NetRx), NetTx: float32(sample.NetTx)}
+	for _, d := range sample.Disks {
 		pt.DiskPct = max(pt.DiskPct, float32(d.UsedPct()))
 	}
-	if snap.Ready {
+	if sample.Ready {
 		s.ring[s.head] = pt
 		s.head = (s.head + 1) % len(s.ring)
 		s.n = min(s.n+1, len(s.ring))
 	}
 	s.mu.Unlock()
-	if w := s.opt.Alerts; w != nil && snap.Ready { // outside the lock: it asks the sampler for the history
-		w.check(s, snap)
+	if w := s.opt.Alerts; w != nil && sample.Ready { // outside the lock: it asks the sampler for the history
+		w.check(s, sample)
 	}
-	return snap
+	return sample
 }
 
 func rate(cur, prev uint64, dt float64) float64 {

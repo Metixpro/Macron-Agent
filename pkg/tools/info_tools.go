@@ -157,11 +157,11 @@ func (r *Registry) tomanRate(ctx context.Context) (float64, string) {
 		}},
 		// The exchanges answer only inside Iran; tgju answers everywhere.
 		{"tgju.org", func() float64 {
-			snap, err := r.marketSnapshot(ctx, []string{"usdt"})
+			board, err := r.marketSnapshot(ctx, []string{"usdt"})
 			if err != nil {
 				return 0
 			}
-			return snap.quotes["usdt"].value
+			return board.quotes["usdt"].value
 		}},
 	}
 	rates := make([]float64, len(sources))

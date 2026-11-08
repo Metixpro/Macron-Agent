@@ -77,7 +77,7 @@ func TestMarketPrice(t *testing.T) {
 	}
 
 	tgjuUp = false
-	r.market.snap = nil
+	r.market.board = nil
 	out = call(t, r, "m", ToolMarketPrice, nil)
 	if !strings.Contains(out, "💵 دلار آمریکا (USD): ۲۷۲٬۴۰۰\n") || !strings.Contains(out, "منبع: bonbast.com · به‌روز ۱۴:۰۵") || !strings.Contains(out, "🪙 سکه گرمی: ۳۹٬۰۰۰٬۰۰۰") {
 		t.Errorf("the fallback:\n%s", out)

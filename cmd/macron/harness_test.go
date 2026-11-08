@@ -276,6 +276,10 @@ type fakeLLM struct {
 	requests []map[string]any
 	reply    func(req map[string]any, n int) (map[string]any, int)
 	cached   int // prompt tokens each answer says it read from the cache
+	// triage answers a model triage's prompt (triage.go) apart from the
+	// requests above, so a test's counts stay those of the work itself.
+	triage    func(req map[string]any) (map[string]any, int)
+	triageLog []string // the triage prompts it was sent
 }
 
 func (f *fakeLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -286,6 +290,18 @@ func (f *fakeLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	f.mu.Lock()
+	if tr := f.triage; tr != nil && strings.Contains(llmText(req), "You sort requests for an assistant") {
+		f.triageLog = append(f.triageLog, llmText(req))
+		f.mu.Unlock()
+		msg, status := tr(req)
+		if status != 0 {
+			http.Error(w, "triage exploded", status)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "m", "choices": []any{map[string]any{"message": msg}},
+			"usage": map[string]any{"prompt_tokens": 300, "completion_tokens": 40, "total_tokens": 340}})
+		return
+	}
 	n := len(f.requests)
 	f.requests = append(f.requests, req)
 	cached := f.cached

@@ -82,8 +82,8 @@ type marketSnapshot struct {
 }
 
 type marketCache struct {
-	mu   sync.Mutex
-	snap *marketSnapshot
+	mu    sync.Mutex
+	board *marketSnapshot
 }
 
 func (r *Registry) registerMarketTool() {
@@ -100,11 +100,11 @@ func (r *Registry) marketPrice(ctx context.Context, _ string, args map[string]an
 		return "error: unknown items " + strings.Join(unknown, ", ") + "; use usd, eur, aed, gbp, try, cny, cad, aud, usdt, gold18, gold24, " +
 			"mithqal, ounce, emami, bahar, nim, rob, gerami, or currencies, gold, coins, all", nil
 	}
-	snap, err := r.marketSnapshot(ctx, keys)
+	board, err := r.marketSnapshot(ctx, keys)
 	if err != nil {
 		return "could not fetch the rates right now (" + err.Error() + "); try again in a minute", nil
 	}
-	return formatMarket(snap, keys, unknown), nil
+	return formatMarket(board, keys, unknown), nil
 }
 
 // marketKeys reads the requested items, groups and Persian names included.
@@ -160,33 +160,33 @@ func marketItemByKey(key string) *marketItem {
 func (r *Registry) marketSnapshot(ctx context.Context, keys []string) (*marketSnapshot, error) {
 	r.market.mu.Lock()
 	defer r.market.mu.Unlock()
-	if s := r.market.snap; s != nil && time.Since(s.at) < marketTTL && s.has(keys) {
+	if s := r.market.board; s != nil && time.Since(s.at) < marketTTL && s.has(keys) {
 		return s, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	bonbast := make(chan *marketSnapshot, 1)
 	go func() { bonbast <- r.bonbastRates(ctx) }() // asked at once: it is slower, and tgju may not answer
-	snap := r.tgjuRates(ctx)
-	if snap == nil || !snap.has(keys) {
+	board := r.tgjuRates(ctx)
+	if board == nil || !board.has(keys) {
 		if b := <-bonbast; b != nil {
-			if snap == nil {
-				snap = b
+			if board == nil {
+				board = b
 			} else {
 				for k, q := range b.quotes {
-					if _, ok := snap.quotes[k]; !ok {
-						snap.quotes[k] = q
+					if _, ok := board.quotes[k]; !ok {
+						board.quotes[k] = q
 					}
 				}
-				snap.source += " + " + b.source
+				board.source += " + " + b.source
 			}
 		}
 	}
-	if snap == nil {
+	if board == nil {
 		return nil, errors.New("tgju.org and bonbast.com did not answer")
 	}
-	r.market.snap = snap
-	return snap, nil
+	r.market.board = board
+	return board, nil
 }
 
 func (s *marketSnapshot) has(keys []string) bool {
@@ -211,7 +211,7 @@ func (r *Registry) tgjuRates(ctx context.Context) *marketSnapshot {
 		if err := r.getJSONWithin(ctx, 8*time.Second, api, &data); err != nil || len(data.Current) == 0 {
 			continue
 		}
-		snap := &marketSnapshot{quotes: map[string]quote{}, source: "tgju.org", at: time.Now()}
+		board := &marketSnapshot{quotes: map[string]quote{}, source: "tgju.org", at: time.Now()}
 		for _, it := range marketItems {
 			c, ok := data.Current[it.tgju]
 			if !ok {
@@ -231,13 +231,13 @@ func (r *Registry) tgjuRates(ctx context.Context) *marketSnapshot {
 					q.change = -dp
 				}
 			}
-			snap.quotes[it.key] = q
+			board.quotes[it.key] = q
 			if it.key == "usd" && len(c.TS) >= 16 {
-				snap.updated = c.TS[11:16]
+				board.updated = c.TS[11:16]
 			}
 		}
-		if len(snap.quotes) > 0 {
-			return snap
+		if len(board.quotes) > 0 {
+			return board
 		}
 	}
 	return nil
@@ -277,22 +277,22 @@ func (r *Registry) bonbastRates(ctx context.Context) *marketSnapshot {
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&data) != nil {
 		return nil
 	}
-	snap := &marketSnapshot{quotes: map[string]quote{}, source: "bonbast.com", at: time.Now()}
+	board := &marketSnapshot{quotes: map[string]quote{}, source: "bonbast.com", at: time.Now()}
 	for _, it := range marketItems {
 		if it.bonbast == "" {
 			continue
 		}
 		if v := marketNumber(data[it.bonbast]); v > 0 {
-			snap.quotes[it.key] = quote{value: v} // already Toman
+			board.quotes[it.key] = quote{value: v} // already Toman
 		}
 	}
 	if h, mi := marketNumber(data["hour"]), marketNumber(data["minute"]); h > 0 || mi > 0 {
-		snap.updated = fmt.Sprintf("%02d:%02d", int(h), int(mi))
+		board.updated = fmt.Sprintf("%02d:%02d", int(h), int(mi))
 	}
-	if len(snap.quotes) == 0 {
+	if len(board.quotes) == 0 {
 		return nil
 	}
-	return snap
+	return board
 }
 
 // marketNumber reads "2,722,000", "4,091.38", 1.04 or "1.04".

@@ -234,9 +234,9 @@ func TestCooldownSkipsBrokenProvider(t *testing.T) {
 		m.Complete(ctx, ask)
 	}
 	before := b.calls.Load()
-	snap := m.Snapshot()
+	list := m.Snapshot()
 	var cooling bool
-	for _, x := range snap {
+	for _, x := range list {
 		if x.Name == "beta" {
 			cooling = x.Cooling
 		}

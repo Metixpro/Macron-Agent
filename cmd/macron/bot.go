@@ -74,7 +74,7 @@ type Bot struct {
 	guestStubOff  atomic.Bool // the server gives no inline_message_id: no placeholder
 	skillMu       sync.Mutex  // learnToolSkill's read and write of a provider's counts
 	routes        sync.Map    // user id → routeMemo (their last routed request, modelroute.go)
-	snap          snapState   // the fast classifier (snap.go)
+	triage        triageState // what a request needs, decided before the model works (triage.go)
 	suspended     sync.Map    // poll ID → suspension: jobs waiting for a poll's answer (polls.go)
 	readsAll      atomic.Bool // privacy mode is off: every group message reaches the bot (groupsight.go)
 	sights        sync.Map    // chatID → sight (whether the bot sees all of a group)

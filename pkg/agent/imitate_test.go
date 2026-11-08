@@ -152,7 +152,7 @@ func TestAQuestionASearchWouldAnswerIsSentBack(t *testing.T) {
 }
 
 func TestAsksFirst(t *testing.T) {
-	for _, s := range []string{"ترمکس چیه؟", "منظورت از Snap Decisions چیه؟", "کدوم نسخه رو می‌خوای؟", "لینکش رو بفرست تا دانلود کنم؟",
+	for _, s := range []string{"ترمکس چیه؟", "منظورت از Fast Decisions چیه؟", "کدوم نسخه رو می‌خوای؟", "لینکش رو بفرست تا دانلود کنم؟",
 		"میشه بیشتر توضیح بدی؟ کدوم رو مد نظرته؟", "What do you mean by Tabler?", "Which version do you want?", "Could you clarify which app?"} {
 		if !asksFirst(s) {
 			t.Errorf("not seen: %q", s)

@@ -84,8 +84,8 @@ var focusGroups = []focusGroup{
 		[]string{ToolDelegate}},
 }
 
-// toolGroupInfo names focusGroups, in their order, for a fast classifier
-// (snap) that is asked about each group by its description.
+// toolGroupInfo names focusGroups, in their order, for a triage that asks
+// about each group by its description (cmd/macron/triage.go).
 var toolGroupInfo = []struct{ key, about string }{
 	{"media", "download, convert, split or transcribe videos, music or audio"},
 	{"images", "make, find, edit or look at pictures"},

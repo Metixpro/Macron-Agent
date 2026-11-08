@@ -47,8 +47,8 @@ func TestAModelOutageReachesTheOwnersAndRetryStartsFresh(t *testing.T) {
 			t.Errorf("the alert says who, which provider and why: misses %q\n%s", want, all)
 		}
 	}
-	if snap := h.bot.prov.Snapshot(); len(snap) == 0 || !snap[0].Cooling {
-		t.Fatalf("three failures put the provider on cooldown: %+v", snap)
+	if list := h.bot.prov.Snapshot(); len(list) == 0 || !list[0].Cooling {
+		t.Fatalf("three failures put the provider on cooldown: %+v", list)
 	}
 
 	// The user presses «try again»: the cooldown is gone when the request goes out.
@@ -65,7 +65,7 @@ func TestAModelOutageReachesTheOwnersAndRetryStartsFresh(t *testing.T) {
 	if coolingAtRetry.Load() {
 		t.Error("a provider was still on cooldown when «try again» sent the request")
 	}
-	if snap := h.bot.prov.Snapshot(); snap[0].Cooling {
-		t.Errorf("and it answered, so it is healthy: %+v", snap)
+	if list := h.bot.prov.Snapshot(); list[0].Cooling {
+		t.Errorf("and it answered, so it is healthy: %+v", list)
 	}
 }

@@ -131,9 +131,9 @@ type routeMemo struct {
 
 // chooseModel routes a request of a tier (nil: the tier does not route).
 // continuation: an automatic continuation round, which goes on where the
-// first round went. snap: the fast classifier's verdict, when it has one
-// (snap.go); a nil one waits for nothing and the words decide.
-func (b *Bot) chooseModel(uid int64, t tierID, in router.Input, continuation bool, snap func() (*router.Verdict, bool)) *modelRoute {
+// first round went. triaged: the triage's verdict, when it has one
+// (triage.go); a nil one waits for nothing and the words decide.
+func (b *Bot) chooseModel(uid int64, t tierID, in router.Input, continuation bool, triaged func() (*router.Verdict, bool)) *modelRoute {
 	rc := b.routerConf(t)
 	if !rc.on {
 		return nil
@@ -141,8 +141,8 @@ func (b *Bot) chooseModel(uid int64, t tierID, in router.Input, continuation boo
 	r := &modelRoute{conf: rc, verdict: router.Classify(in), uid: uid, b: b, why: "kind"}
 	followUp := r.verdict.Signals[0].Why == "none" // «آره»، «ادامه بده»، «اینم همینطور»
 	r.strong = router.Decide(r.verdict, rc.kinds, rc.sens)
-	if snap != nil { // Snap only ever moves a request up: what the words send to the strong model stays there
-		if v, leans := snap(); v != nil {
+	if triaged != nil { // the triage only ever moves a request up: what the words send to the strong model stays there
+		if v, leans := triaged(); v != nil {
 			if !r.strong && router.Decide(*v, rc.kinds, rc.sens) {
 				r.verdict, r.strong = *v, true // a hard job the words did not show
 			}
@@ -359,8 +359,8 @@ func signalText(l lang, s router.Signal) string {
 		out = l.t("فهرست چندتایی خواسته‌ها")
 	case "thorough":
 		out = l.t("یه کار کامل و دقیق می‌خواد")
-	case "snap":
-		out = l.f("⚡ تصمیم Snap (اطمینان و حجم کار: %s)", s.Arg)
+	case "triage":
+		out = l.f("🧭 تشخیص درخواست (اطمینان و حجم کار: %s)", s.Arg)
 	default:
 		out = s.String()
 	}
@@ -448,6 +448,7 @@ func (b *Bot) viewRouter(ctx context.Context, l lang) panelView {
 		row(b.button(l.t("🗂 کدوم کارها با مدل قوی"), "a:rt:kinds", "")),
 		row(sensBtn(router.Cheap), sensBtn(router.Balanced), sensBtn(router.Quality)),
 		row(b.button(escLabel, "a:rt:esc", ""), b.button(l.t("🧪 امتحان یه پیام"), "a:rt:test", "")),
+		row(b.button(l.t("🧭 تشخیص درخواست")+": "+triageModeName(l, b.triageMode()), "a:tri", telegram.StylePrimary)),
 		row(b.back(l, "a:pv")),
 	)}
 }

@@ -287,8 +287,8 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		b.handleProviderPanel(ctx, q, parts, answer, show, ask)
 	case "rt":
 		b.handleRouterPanel(ctx, l, parts, answer, show, ask)
-	case "sn":
-		b.handleSnapPanel(ctx, l, chatID, parts, answer, show, ask)
+	case "tri":
+		b.handleTriagePanel(ctx, l, parts, answer, show, ask)
 	case "em":
 		b.handleEmojiPanel(ctx, q, parts, answer, show, ask)
 	case "gr":
@@ -425,14 +425,12 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 			return true
 		}
 		done(b.viewRouterTest(l, text))
-	case "sn_key":
-		b.snapKeyInput(ctx, l, m, done)
-	case "sn_test":
+	case "tri_test":
 		if text == "" {
 			b.reply(m, l.t("یه پیام متنی بفرست."))
 			return true
 		}
-		done(b.viewSnapTest(ctx, l, text))
+		done(b.viewTriageTest(ctx, l, text))
 	case "st_window":
 		n, ok := parseTokens(text)
 		if !ok {

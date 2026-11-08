@@ -22,7 +22,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/memory"
 	"github.com/Metixpro/macron-agent/pkg/providers"
 	"github.com/Metixpro/macron-agent/pkg/router"
-	"github.com/Metixpro/macron-agent/pkg/snap"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
@@ -180,9 +179,9 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		b.noteRequest(nctx, uid, m.Chat.ID, text) // a complaint about the last answer, or the same request again
 	}
 	st := standing{tier: tierOwner}
-	// The fast classifier starts now, beside the queue and the checks below:
-	// its decision is ready by the time the request needs it (snap.go).
-	sc := b.startSnap(uid, m, text, st.tier, !detached && opt.round == 0 && !opt.vote && opt.bridge == nil)
+	// The triage starts now, beside the queue and the checks below: its
+	// decision is ready by the time the request needs it (triage.go).
+	tc := b.startTriage(uid, m, text, !detached && opt.round == 0 && !opt.vote && opt.bridge == nil)
 	var release func()
 	if detached {
 		// A scheduled or background task never blocks its owner, and waits for a free slot.
@@ -265,17 +264,17 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	routed := b.route(b.jobCtx, st.tier) // the provider requests go to first
 	// A hard request goes to the tier's strong model (modelroute.go).
 	var rt *modelRoute
-	var snapRoute func() (*router.Verdict, bool)
-	if sc != nil && b.st.SettingBool(settingSnapRoute, true) {
-		snapRoute = func() (*router.Verdict, bool) {
-			tri, ok := sc.result()
+	var triaged func() (*router.Verdict, bool)
+	if tc != nil {
+		triaged = func() (*router.Verdict, bool) {
+			tri, ok := tc.result()
 			if !ok {
 				return nil, false
 			}
-			return snapVerdict(tri), tri.Context != snap.ContextStandalone
+			return triageVerdict(tri), tri.Context != router.ContextStandalone
 		}
 	}
-	rt = b.chooseModel(uid, st.tier, routeInput(m, text), opt.round > 0, snapRoute)
+	rt = b.chooseModel(uid, st.tier, routeInput(m, text), opt.round > 0, triaged)
 	routed = rt.prefer(routed)
 	window = rt.window(b, conf, window)
 	deep := false
@@ -369,23 +368,22 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	// A greeting or a thank-you goes without the tools until the model asks for them.
 	smallTalk := in.plain && !detached && opt.round == 0 && agent.IsSmallTalk(text)
-	// The fast classifier's decision (snap.go): ready by now, or the request
-	// goes on exactly as it would have without it.
-	srec := b.snapDecision(sc, st.tier, rt)
-	snapOK := srec != nil && srec.ok
+	// The triage's decision (triage.go): ready by now.
+	trec := b.triageDecision(tc, rt)
+	triageOK := trec != nil && trec.ok
 	// The lighter settings only outside a job: in the middle of one, the next
 	// message is more of it, however small it looks.
-	lighter := snapOK && !srec.job
-	if lighter && !smallTalk && in.plain && !fast && b.snapDecides(settingSnapChat) && snapChat(srec.tri, text) {
-		smallTalk, srec.tools = true, true // a reply with the light prompt, no tools until it asks for them
-		srec.did(snapDidChat)
+	lighter := triageOK && !trec.job
+	if lighter && !smallTalk && in.plain && !fast && b.triageChatOn() && triageChat(trec.tri, text) {
+		smallTalk = true // a reply with the light prompt, no tools until it asks for them
+		trec.did(triageDidChat)
 	}
 	var unCap bool // the effort cap is lifted if the conversation turns into a job
-	if lighter && smallTalk && b.st.SettingBool(settingSnapEffort, true) {
-		level := snapEffort(true)
+	if lighter && smallTalk {
+		level := triageEffort(true)
 		runCtx, unCap = llm.WithEffortCap(runCtx, level), true // it only lowers: a failover provider too
 		if p, ok := b.prov.ActiveFor(runCtx); ok && effortLowered(p.Effort, level) {
-			srec.did(snapDidEffort + level)
+			trec.did(triageDidEffort + level)
 		}
 	}
 
@@ -495,11 +493,12 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		toolFilter = func(name string) bool { return name != tools.ToolTranscribe && (keep == nil || keep(name)) }
 	}
 
-	// Snap's choice of history and tools: where the provider does not cache
-	// prompts (or always, if the admin says so), a request that stands on its
-	// own goes with the last turns (recall_history brings the rest) and the
-	// tools it will likely use (more_tools brings the rest); a weak model's
-	// focus picks by Snap's reading rather than by the words alone.
+	// The triage's choice of history and tools: where the provider does not
+	// cache prompts (or always, if the owner says so), a request that stands
+	// on its own goes with the last turns (recall_history brings the rest) and
+	// the tools it will likely use (more_tools brings the rest); a weak
+	// model's focus picks by a model triage's reading rather than by the
+	// words alone.
 	history, localTools := mc.History, b.localTools(u, m, react, box, opt)
 	focus, provID := b.focusTools(runCtx), int64(0)
 	if p, ok := b.prov.ActiveFor(runCtx); ok {
@@ -507,24 +506,23 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	}
 	var focusPick []string
 	trimmed := 0
-	if snapOK && !smallTalk && !fast && !continuing {
-		if lighter && b.snapTrims(provID) {
-			if keep := snapKeep(srec.tri); keep > 0 {
+	if triageOK && !smallTalk && !fast && !continuing {
+		if lighter && b.triageTrims(provID) {
+			if keep := triageKeep(trec.tri); keep > 0 {
 				if kept, dropped := splitHistory(history, keep); len(dropped) > 0 {
 					history, trimmed = kept, len(dropped)
 					localTools = append(localTools, recallTool(dropped))
-					srec.history = historyTokens(dropped)
-					srec.did(snapDidTrim)
+					trec.did(triageDidTrim)
 				}
 			}
 		}
-		if focus {
-			focusPick = snapPick(srec.tri, trimmed > 0)
-			srec.did(snapDidFocus)
+		if focus && trec.tri.Groups != nil { // a local triage leaves the groups to the focus's own reading
+			focusPick = triagePick(trec.tri, trimmed > 0)
+			trec.did(triageDidFocus)
 		}
 	}
 	if trimmed > 0 { // how to get back what was left out
-		in.about = strings.TrimSpace(in.about + "\n" + snapHint(trimmed))
+		in.about = strings.TrimSpace(in.about + "\n" + triageHint(trimmed))
 	}
 	escalate := rt.escalation()
 	if esc := escalate; esc != nil && unCap {
@@ -583,9 +581,9 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		Escalate: escalate,
 	})
 	run.answered()
-	b.saveSnap(srec, res)
+	logTriage(trec)
 	if res != nil && !res.Escalated && !smallTalk && trimmed == 0 && focusPick == nil {
-		b.noteCache(provID, res.Usage) // how much this provider caches: whether trimming pays (snap.go)
+		b.noteCache(provID, res.Usage) // how much this provider caches: whether trimming pays (triage.go)
 	}
 	if res != nil {
 		lctx, lcancel := b.ctx(5 * time.Second)
