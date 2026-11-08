@@ -201,7 +201,7 @@ active request finishes. Stopping the active request keeps the waiting tasks.
 The queue accepts up to eight waiting messages; a full queue is reported explicitly.
 
 
-### 1.2.7: native live cards and active-task corrections
+### 1.2.8: native live cards and active-task corrections
 
 Private progress uses native RichMessage blocks: heading, checklist, expandable
 execution details with a code block, and an elapsed-time footer. Stop stays in

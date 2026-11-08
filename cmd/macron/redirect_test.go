@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/store"
 )
 
 func TestPrivateCorrectionCancelsOnlyModelAndContinuesSameTurn(t *testing.T) {
@@ -89,5 +90,37 @@ func TestCorrectionsAtRequestBoundaryAreNotLost(t *testing.T) {
 	}
 	if !done() || len(r.take()) != 1 {
 		t.Fatal("boundary correction disappeared")
+	}
+}
+
+func TestStopDiscardsTaskCorrectionsButKeepsExplicitQueue(t *testing.T) {
+	r := newRun(1, private(1, "task"), func() {}, nil, tierOwner)
+	r.steer(&interjection{text: "change current task"})
+	r.push(&interjection{text: "separate task"})
+	r.stop()
+	if r.steer(&interjection{text: "late correction"}) {
+		t.Fatal("stopped task accepted guidance")
+	}
+	next := r.finish()
+	if len(next) != 1 || next[0].text != "separate task" {
+		t.Fatal("stop restarted a correction or lost explicit queue")
+	}
+}
+
+func TestQueueStopWordsDoNotStopCurrentTask(t *testing.T) {
+	h := newHarness(t)
+	first := private(ownerID, "task")
+	user := &store.User{ID: ownerID}
+	var cancelled bool
+	r := newRun(ownerID, first, func() { cancelled = true }, nil, tierOwner)
+	h.bot.runs.Store(int64(ownerID), r)
+	if !h.bot.interjectMode(user, followUpMsg(first, 78, "stop"), "stop", true) {
+		t.Fatal("explicit queue refused")
+	}
+	if cancelled || r.stopped.Load() {
+		t.Fatal("explicit queued text was mistaken for active stop")
+	}
+	if next := r.finish(); len(next) != 1 || next[0].text != "stop" {
+		t.Fatal("queued text lost")
 	}
 }

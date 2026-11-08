@@ -102,11 +102,12 @@ func (r *activeRun) stopData() string { return fmt.Sprintf("run:stop:%d:%s", r.u
 
 func (r *activeRun) stop() {
 	r.mu.Lock()
+	r.steering = nil
+	r.stopped.Store(true)
 	if !r.queueNext {
 		r.pending = nil
 	}
 	r.mu.Unlock()
-	r.stopped.Store(true)
 	r.cancel()
 }
 
@@ -212,7 +213,7 @@ func (b *Bot) interjectMode(u *store.User, m *telegram.Message, text string, que
 	l := b.langOf(m.From)
 	react := b.newReactor(m)
 	defer react.wait()
-	if isStopRequest(text) && !m.HasMedia() {
+	if !queue && isStopRequest(text) && !m.HasMedia() {
 		run.stop()
 		react.set("👌", false)
 		return true
