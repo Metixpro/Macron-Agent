@@ -166,8 +166,6 @@ const (
 	SettingAgentSteps     = "agent_steps"
 	SettingAgentMinutes   = "agent_minutes"
 	SettingAutoContinue   = "auto_continue"
-	SettingLogChat        = "log_chat"
-	SettingGroupApproval  = "group_approval"
 )
 
 func (s *Store) Setting(key string) (string, bool) {

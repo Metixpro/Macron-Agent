@@ -146,10 +146,6 @@ func (b *Bot) lookup(ctx context.Context, asker *store.User, m *telegram.Message
 			lt.id, lt.chat = info.ID, info
 		} else if found, _ := b.st.FindUsers(ctx, "@"+lt.username, 1); len(found) > 0 {
 			lt.id = found[0].ID
-		} else if !m.Chat.Private() && m.GuestQueryID == "" {
-			if id, _, err := b.st.GroupMemberByUsername(ctx, m.Chat.ID, lt.username); err == nil && id != 0 {
-				lt.id = id
-			}
 		}
 		if lt.id == 0 {
 			return fmt.Sprintf("not found: @%s is not a public group, channel or bot Telegram knows, and no one by that name has talked to "+
@@ -308,14 +304,6 @@ func (b *Bot) lookupUser(ctx context.Context, sb *strings.Builder, asker *store.
 	if inGroup {
 		if member != nil {
 			line("in this group: %s", memberStatus(member.Status))
-		}
-		if s := b.groupLogFor(ctx, m.Chat.ID); s.hours > 0 && !s.optedOut[lt.id] {
-			if ids, err := b.st.GroupMessageIDsBy(ctx, m.Chat.ID, lt.id, 1000); err == nil {
-				line("messages here in the last %d hours: %d", s.hours, len(ids))
-			}
-			if last, err := b.st.LastGroupMessageBy(ctx, m.Chat.ID, lt.id, 0); err == nil && last != nil {
-				line("last message here: %s ago", agoText(time.Since(last.CreatedAt)))
-			}
 		}
 	}
 

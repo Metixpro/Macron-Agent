@@ -104,12 +104,12 @@ func TestAStoppedJobSendsNoFiles(t *testing.T) {
 		}
 		return map[string]any{"role": "assistant", "content": "تموم شد"}, 0
 	}
-	wait := h.background(group(uid, "مکرون گزارش رو بفرست"))
+	wait := h.background(private(uid, "مکرون گزارش رو بفرست"))
 	<-second
 	for i := 0; i < 50 && stopButtonData(h) == ""; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
-	h.click(uid, -100500, 501, stopButtonData(h))
+	h.click(uid, uid, 501, stopButtonData(h))
 	let()
 	wait()
 	h.wantText("متوقفش کردم")

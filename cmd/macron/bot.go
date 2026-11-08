@@ -55,8 +55,6 @@ type Bot struct {
 	drafts      sync.Map
 	fileJobs    sync.Map
 	cookieWaits sync.Map
-	groupLogs   sync.Map
-	approvals   sync.Map
 	panels      sync.Map
 	fb          feedbackState
 	evalBusy    atomic.Bool
@@ -74,16 +72,11 @@ type Bot struct {
 	skillMu       sync.Mutex
 	routes        sync.Map
 	triage        triageState
-
-	toldGroupSettings sync.Map
-	hookSeen          sync.Map
-	updating          atomic.Bool
-	moaStrictBy       sync.Map
-	gateAsks          sync.Map
-	suspended         sync.Map
-	readsAll          atomic.Bool
-	sights            sync.Map
-	sightHints        sync.Map
+	hookSeen      sync.Map
+	updating      atomic.Bool
+	moaStrictBy   sync.Map
+	gateAsks      sync.Map
+	suspended     sync.Map
 
 	ffmpegOnce sync.Once
 	ffmpeg     bool
@@ -170,8 +163,6 @@ func (b *Bot) dispatch(u telegram.Update) {
 			b.handlePollAnswer(u.PollAnswer)
 		case u.GuestMessage != nil:
 			b.handleGuest(u.GuestMessage)
-		case u.EditedMessage != nil:
-			b.handleEdit(u.EditedMessage)
 		case u.MessageReaction != nil:
 			b.handleReaction(u.MessageReaction)
 		}
@@ -271,15 +262,6 @@ func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 	return strings.ToLower(name), strings.TrimSpace(rest), false, hasTarget
 }
 
-var botCommands = map[string]bool{}
-
-func init() {
-	for _, c := range strings.Fields("/admin /board /cancel /clear /cookie /cookies /dashboard /deep /fast /files /groupsettings /approve /help /lang /language /learn /me /memory /moa " +
-		"/mode /new /nolog /panel /recap /reminders /reset /schedules /search /settings /start /stop /tasks /teach /update /yolo /zaban") {
-		botCommands[c] = true
-	}
-}
-
 var wakeRe = regexp.MustCompile(`^(?i)\s*(?:م(?:ا)?[کك]رون|macron)(?:\s*(?:ai|ای[\s\x{200c}]?آی))?(?:$|[\s\p{P}]+)`)
 
 const (
@@ -322,23 +304,8 @@ func userInfo(u *telegram.User) store.UserInfo {
 }
 
 func (b *Bot) handleMessage(m *telegram.Message) {
-	if m.From == nil || m.From.IsBot || m.Chat.Type == "channel" || (b.personal && !m.Chat.Private()) {
+	if m.From == nil || m.From.IsBot || m.Chat.Type == "channel" || !m.Chat.Private() {
 		return
-	}
-
-	if !m.Chat.Private() {
-		actx, acancel := b.ctx(5 * time.Second)
-		active := b.groupActive(actx, m.Chat.ID)
-		acancel()
-		if !active {
-			return
-		}
-		if !m.AlbumDone {
-			b.logGroupMessage(m)
-		}
-		if m.FromChannel() {
-			return
-		}
 	}
 
 	if m.MediaGroupID != "" && !m.AlbumDone {
@@ -346,27 +313,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		return
 	}
 
-	cmd, args, ignore, named := b.parseCommand(m.Text)
-	if ignore || (cmd != "" && !m.Chat.Private() && !named && !botCommands[cmd]) {
+	cmd, args, ignore, _ := b.parseCommand(m.Text)
+	if ignore {
 		return
 	}
 	text := m.Body()
-	if !m.Chat.Private() && cmd == "" {
-		ok, stripped := b.addressed(m)
-		if !ok && !b.repliesToOwnJob(m) {
-			return
-		}
-		text = stripped
-	}
-	if !m.Chat.Private() {
-		go b.checkSight(m)
-	}
-
 	ctx, cancel := b.ctx(20 * time.Second)
 	defer cancel()
-	if !m.Chat.Private() {
-		b.touchChat(m.Chat)
-	}
 
 	l := b.langOf(m.From)
 	user, _, err := b.st.TouchUser(ctx, userInfo(m.From))
@@ -400,23 +353,6 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	opt := promptOptions{}
 	switch cmd {
 	case "":
-	case "/recap":
-		if m.Chat.Private() {
-			b.reply(m, l.t("این دستور توی گروه‌ها کار می‌کنه: خلاصه چیزهایی که از گروه از دست دادی."))
-			return
-		}
-		if b.groupLogFor(ctx, m.Chat.ID).hours == 0 {
-			b.reply(m, l.t(textGroupLogOff))
-			return
-		}
-		text = strings.TrimSpace(l.t("چی از دستم رفت؟") + " " + args)
-		opt.about = "The user ran /recap: summarize what they missed in this group with " + toolGroupHistory + " (since their last message unless they asked otherwise)."
-	case "/groupsettings":
-		b.openGroupSettings(ctx, m)
-		return
-	case "/nolog":
-		b.toggleNoLog(ctx, m)
-		return
 	case "/start":
 		b.reply(m, l.f(personalWelcome, esc(m.From.FirstName), greeting(l, b.st.Now().In(b.loc))))
 		return
@@ -478,13 +414,6 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		b.reply(m, l.t(textNothingToCancel))
 		return
 	case "/settings", "/panel", "/admin":
-		if !m.Chat.Private() {
-
-			if _, told := b.toldGroupSettings.LoadOrStore(m.Chat.ID, true); !told {
-				b.reply(m, l.t("⚙️ تنظیمات گروه با /groupsettings باز می‌شه؛ /settings پنل مدیریت ربات توی پیویه."))
-			}
-			return
-		}
 		if admin {
 			b.openPanel(ctx, m)
 			return
@@ -580,7 +509,6 @@ func sessionFor(userID int64) string { return "tg-" + strconv.FormatInt(userID, 
 
 func (b *Bot) handleMembership(u *telegram.ChatMemberUpdated) {
 	if !u.Chat.Private() {
-		b.handleGroupMembership(u)
 		return
 	}
 	ctx, cancel := b.ctx(10 * time.Second)
@@ -619,7 +547,7 @@ func (b *Bot) handleStop(s *telegram.MessageGenerationStopped) {
 }
 
 func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
-	if b.personal && q.Message != nil && !q.Message.Chat.Private() {
+	if q.Message != nil && !q.Message.Chat.Private() {
 		return
 	}
 	ctx, cancel := b.ctx(60 * time.Second)
@@ -647,16 +575,14 @@ func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
 		b.handleModeCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "sc:"):
 		b.handleScheduleCallback(ctx, q, answer)
-	case strings.HasPrefix(q.Data, "ga:"):
-		b.handleApprovalCallback(ctx, q, answer)
+	case strings.HasPrefix(q.Data, "ga:"), strings.HasPrefix(q.Data, "gl:"):
+		answer("", false)
 	case strings.HasPrefix(q.Data, "cg:"):
 		b.handleGateCallback(q, answer)
 	case strings.HasPrefix(q.Data, "up:go:"):
 		b.handleUpdateCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "me:"):
 		b.handleMeCallback(ctx, q, answer)
-	case strings.HasPrefix(q.Data, "gl:"):
-		b.handleGroupSettingsCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "m:"):
 		b.handleMemoryCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "f:"):

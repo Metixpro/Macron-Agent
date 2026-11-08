@@ -157,22 +157,6 @@ const personalHomeFmt = `
 📁 پوشه خونه: <code>%s</code>
 ⏱ آنلاین از %s پیش`
 
-func personalCommands(l lang) []telegram.BotCommand {
-	return []telegram.BotCommand{
-		{Command: "queue", Description: l.t("کار مستقل بعدی")},
-		{Command: "start", Description: l.t("شروع و معرفی")},
-		{Command: "new", Description: l.t("گفتگوی تازه")},
-		{Command: "memory", Description: l.t("حافظه و فایل‌هام (SOUL.md، USER.md، MEMORY.md)")},
-		{Command: "mode", Description: l.t("حالت جواب: ⚡ سریع / 🧠 عمیق")},
-		{Command: "files", Description: l.t("پنل فایل‌ها (دسته‌بندی، ارسال، zip)")},
-		{Command: "reminders", Description: l.t("یادآورها و کارهای زمان‌بندی‌شده")},
-		{Command: "tasks", Description: l.t("کارهای پس‌زمینه (بیلد، رندر، دانلود طولانی)")},
-		{Command: "language", Description: l.t("زبان: فارسی / English")},
-		{Command: "cancel", Description: l.t("توقف کار فعلی")},
-		{Command: "help", Description: l.t("راهنما")},
-	}
-}
-
 func (b *Bot) viewHome(ctx context.Context, admin int64) panelView {
 	l := b.lang(admin)
 	reminders, tasks, _ := b.st.ScheduleCounts(ctx)

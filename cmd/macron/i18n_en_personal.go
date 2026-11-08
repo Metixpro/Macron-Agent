@@ -63,13 +63,13 @@ Write the way you talk to a colleague. I work out what is needed: search, files,
 💬 Archived conversations: %s messages
 📁 Home folder: <code>%s</code>
 ⏱ Online for %s`,
-		"حافظه و فایل‌هام (SOUL.md، USER.md، MEMORY.md)":         "My memory and files (SOUL.md, USER.md, MEMORY.md)",
+
 		"🧠 <b>یه درس تازه یاد گرفتم</b> و توی مهارت‌هام نوشتمش:": "🧠 <b>I learned a new lesson</b> and wrote it into my skills:",
 		"↩️ پس بگیر":                                "↩️ Take it back",
 		"👁 دیدن و ویرایش":                           "👁 See and edit",
 		"\n🧑 <b>درباره تو</b> (USER.md)":            "\n🧑 <b>About you</b> (USER.md)",
 		"\n🛠 <b>درباره کار و سیستم</b> (MEMORY.md)": "\n🛠 <b>About your work and machine</b> (MEMORY.md)",
-		"زبان: فارسی / English":                     "Language: Persian / English",
+
 		"\n⏳ فایل\u200cها %s بعد از آخرین تغییر خودکار پاک می\u200cشن.": "\n⏳ Files are deleted %s after their last change.",
 		"\n\nیه دسته رو انتخاب کن 👇":                                    "\n\nPick a category 👇",
 		"📊 <b>آمار کامل</b>\n\n<b>پیام‌ها</b>\n• امروز: <b>%d</b> · ۷ روز: %d · کل: %d\n\n<b>مدل زبانی (امروز)</b>\n• توکن ورودی: %s · خروجی: %s\n• پروایدرها: %d (فعال: %d)\n\n<b>حافظه و فایل</b>\n• پیام‌های توی پنجره گفتگو: %d\n• فایل‌های من: %d (%s)%s\n• دیتابیس: %s\n\n<b>سیستم</b>\n• %s\n• رم ربات: %s · گوروتین: %d": "📊 <b>Full stats</b>\n\n<b>Messages</b>\n• Today: <b>%d</b> · 7 days: %d · total: %d\n\n<b>Language model (today)</b>\n• Input tokens: %s · output: %s\n• Providers: %d (enabled: %d)\n\n<b>Memory and files</b>\n• Messages in the conversation window: %d\n• My files: %d (%s)%s\n• Database: %s\n\n<b>System</b>\n• %s\n• Bot RAM: %s · goroutines: %d",

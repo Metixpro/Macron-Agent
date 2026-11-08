@@ -24,7 +24,7 @@ const (
 
 var fastTools = map[string]bool{
 	"web_search": true, "crypto_currency_price": true, toolReact: true, toolRemember: true, toolForget: true,
-	toolSchedule: true, toolListSchedules: true, toolCancelSchedule: true, toolGroupHistory: true, toolLookup: true,
+	toolSchedule: true, toolListSchedules: true, toolCancelSchedule: true, toolLookup: true,
 	tools.ToolListSkills: true, tools.ToolReadSkill: true,
 }
 

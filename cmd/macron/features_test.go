@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
+
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -139,38 +139,6 @@ func TestThinkingBubbleWhenTerminalIsOff(t *testing.T) {
 	}
 }
 
-func TestGroupTraceMessageIsRemovedAfterTheAnswer(t *testing.T) {
-	h := newHarness(t)
-	h.bot.richOff.Store(true)
-	oldDelay, oldEdit := traceMsgDelay, groupEditEvery
-	traceMsgDelay, groupEditEvery = 0, 0
-	t.Cleanup(func() { traceMsgDelay, groupEditEvery = oldDelay, oldEdit })
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if n == 0 {
-			return toolCall("list_files", `{}`), 0
-		}
-		time.Sleep(900 * time.Millisecond)
-		return map[string]any{"role": "assistant", "content": "فضای کاری خالیه."}, 0
-	}
-	h.send(group(22, "مکرون فایل‌هام چیه؟"))
-	var traceID float64
-	for _, c := range h.tg.of("sendMessage") {
-		if s, _ := c.body["text"].(string); strings.Contains(s, "MACRON ⟫ live") {
-			traceID = -1
-			if rp, ok := c.body["reply_parameters"].(map[string]any); !ok || rp["message_id"].(float64) != 77 {
-				t.Errorf("the trace replies to the user's message: %v", c.body)
-			}
-		}
-	}
-	if traceID == 0 {
-		t.Fatalf("no trace message in the group:\n%s", h.tg.allText())
-	}
-	if len(h.tg.of("deleteMessage")) == 0 {
-		t.Error("the trace message must be deleted once the answer is sent")
-	}
-	h.wantText("فضای کاری خالیه.")
-}
-
 func TestViewImageLetsTheModelCheckItsOutput(t *testing.T) {
 	h := newHarness(t)
 	_ = h.bot.app.Machine.WriteFile(sessionFor(23), "cat_clean.png", testPNG(2000, 1000))
@@ -228,149 +196,6 @@ func TestDeveloperModePromptIsPresentWhenCodeCanRun(t *testing.T) {
 	}
 }
 
-func TestGroupWakeWord(t *testing.T) {
-	h := newHarness(t)
-	cases := []struct {
-		text, want string
-		ok         bool
-	}{
-		{"مکرون قیمت دلار؟", "قیمت دلار؟", true},
-		{"مکرون، یه جوک بگو", "یه جوک بگو", true},
-		{"مكرون سلام", "سلام", true},
-		{"ماکرون چطوری؟", "چطوری؟", true},
-		{"Macron what's up", "what's up", true},
-		{"macron: hi", "hi", true},
-		{"Macron Ai what's up", "what's up", true},
-		{"Macron AI, hi", "hi", true},
-		{"مکرون ای‌آی سلام", "سلام", true},
-		{"Macron aims high", "aims high", true},
-		{"مکرون", textOnlyName, true},
-		{"مکرونی پختم امشب", "", false},
-		{"سلام مکرون", "", false},
-		{"macronutrients matter", "", false},
-		{"ویز سلام", "", false},
-	}
-	for _, c := range cases {
-		ok, got := h.bot.addressed(group(30, c.text))
-		if ok != c.ok || (ok && got != c.want) {
-			t.Errorf("%q → %v %q, want %v %q", c.text, ok, got, c.ok, c.want)
-		}
-	}
-
-	h.send(group(31, "مکرون ساعت چنده؟"))
-	if h.llm.count() != 1 || !strings.Contains(llmText(h.llm.last()), `"ساعت چنده؟"`) {
-		t.Fatalf("the wake word must start a request without the word itself: %s", llmText(h.llm.last()))
-	}
-	if rich := richAnswers(h); len(rich) == 0 || rich[0].body["reply_parameters"] == nil {
-		t.Error("in groups the answer replies to the person who asked")
-	}
-	h.send(group(32, "بچه‌ها کی میاد بیرون؟"))
-	if _, err := h.st.User(bg, 32); err == nil {
-		t.Error("members who never talked to the bot must not become users")
-	}
-	if c, err := h.st.Chat(bg, -100500); err != nil || c.Title != "بچه‌های Go" || !c.Active() {
-		t.Errorf("a group the bot is used in is recorded: %+v %v", c, err)
-	}
-}
-
-func TestGroupUsersWorkInParallel(t *testing.T) {
-	h := newHarness(t)
-	release := make(chan struct{})
-	started := make(chan int64, 2)
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		text := llmText(req)
-		for _, id := range []int64{41, 42} {
-			if strings.Contains(text, fmt.Sprintf("Ali%d", id)) {
-				started <- id
-			}
-		}
-		<-release
-		return map[string]any{"role": "assistant", "content": "باشه"}, 0
-	}
-	done := make(chan struct{}, 2)
-	for _, id := range []int64{41, 42} {
-		m := group(id, "مکرون یه کار طولانی")
-		m.From.FirstName = fmt.Sprintf("Ali%d", id)
-		go func() { h.bot.handleMessage(m); done <- struct{}{} }()
-	}
-	timeout := time.After(10 * time.Second)
-	for i := 0; i < 2; i++ {
-		select {
-		case <-started:
-		case <-timeout:
-			t.Fatal("two users of one group must be served at the same time")
-		}
-	}
-	close(release)
-	<-done
-	<-done
-	h.bot.wg.Wait()
-}
-
-func TestBotAddedToGroupNotifiesTheOwner(t *testing.T) {
-	h := newHarness(t)
-	chat := telegram.Chat{ID: -100777, Type: "supergroup", Title: "گروه برنامه‌نویس‌ها", Username: "go_devs"}
-	adder := telegram.User{ID: 555, FirstName: "Reza", Username: "reza"}
-	_ = h.st.SetSetting(bg, store.SettingGroupApproval, "false")
-	h.bot.handleMembership(&telegram.ChatMemberUpdated{Chat: chat, From: adder,
-		OldChatMember: telegram.ChatMember{Status: "left"}, NewChatMember: telegram.ChatMember{Status: "member"}})
-
-	var notice, hello string
-	for _, c := range h.tg.of("sendMessage") {
-		text, _ := c.body["text"].(string)
-		switch int64(c.body["chat_id"].(float64)) {
-		case ownerID:
-			notice = text
-		case chat.ID:
-			hello = text
-		}
-	}
-	for _, want := range []string{"اضافه شد", "گروه برنامه‌نویس‌ها", "-100777", "@go_devs", "57", "Reza", "@reza", "555"} {
-		if !strings.Contains(notice, want) {
-			t.Errorf("the owner's notice misses %q:\n%s", want, notice)
-		}
-	}
-	if !strings.Contains(hello, "مکرون") {
-		t.Errorf("the bot greets the group and explains the wake word: %q", hello)
-	}
-	c, err := h.st.Chat(bg, chat.ID)
-	if err != nil || !c.Active() || c.Members != 57 || c.AddedBy != 555 {
-		t.Fatalf("the group is logged: %+v %v", c, err)
-	}
-
-	h.tg.reset()
-	_ = h.st.SetSetting(bg, store.SettingLogChat, "-1009999")
-	h.bot.handleMembership(&telegram.ChatMemberUpdated{Chat: chat, From: adder,
-		OldChatMember: telegram.ChatMember{Status: "member"}, NewChatMember: telegram.ChatMember{Status: "kicked"}})
-	sent := h.tg.of("sendMessage")
-	if len(sent) != 1 || int64(sent[0].body["chat_id"].(float64)) != -1009999 || !strings.Contains(sent[0].body["text"].(string), "حذف شد") {
-		t.Errorf("the removal notice goes to the log chat: %v", sent)
-	}
-	if c, _ := h.st.Chat(bg, chat.ID); c.Active() || c.LeftAt == nil || c.AddedBy != 555 {
-		t.Errorf("the removal is recorded: %+v", c)
-	}
-
-	v := h.bot.viewGroups(bg, fa)
-	if !strings.Contains(v.html, "خارج‌شده: 1") || !strings.Contains(fmt.Sprint(v.kb), "گروه برنامه‌نویس‌ها") {
-		t.Errorf("groups view:\n%s\n%v", v.html, v.kb)
-	}
-}
-
-func TestOwnerSetsTheLogChannel(t *testing.T) {
-	h := newHarness(t)
-	h.click(ownerID, ownerID, 9, "a:gr:log")
-	h.send(&telegram.Message{MessageID: 80, From: &telegram.User{ID: ownerID, FirstName: "Owner"},
-		Chat: telegram.Chat{ID: ownerID, Type: "private"}, Text: "@my_logs"})
-	if v, _ := h.st.Setting(store.SettingLogChat); v != "-1001234" {
-		t.Fatalf("log chat = %q; sent:\n%s", v, h.tg.allText())
-	}
-	h.wantText("کانال لاگ تنظیم شد")
-	h.click(ownerID, ownerID, 9, "a:gr:logdel")
-	if v, ok := h.st.Setting(store.SettingLogChat); ok && v != "" {
-		t.Errorf("the log chat is reset to the owners: %q", v)
-	}
-}
-
 func TestStopWorksWhenTheDraftIDIsUnknown(t *testing.T) {
 	h := newHarness(t)
 	started, release := make(chan struct{}), make(chan struct{})
@@ -405,4 +230,10 @@ func TestHiddenToolsKeepTheStreamedText(t *testing.T) {
 	if out := l.tr.render(time.Now(), time.Now(), false); !strings.Contains(out, "✓ Search") {
 		t.Errorf("render: %s", out)
 	}
+}
+
+func groupMsgIn(chatID, user int64, text string) *telegram.Message {
+	m := private(user, text)
+	m.Chat = telegram.Chat{ID: chatID, Type: "supergroup", Title: "گروه تست"}
+	return m
 }

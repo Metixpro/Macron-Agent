@@ -60,17 +60,32 @@ Configure the model through setup or `MACRON_API_URL`, `MACRON_MODEL` and `MACRO
 
 | Command | Purpose |
 |---|---|
-| `/settings` | Admin panel |
-| `/new` | New conversation |
-| `/mode` | Fast or deep mode |
-| `/memory` | Memory |
-| `/files` | Files |
-| `/reminders` | Reminders and schedules |
+| `/start` | Start and introduction |
+| `/help` | Help |
+| `/queue` | Queue a separate task |
+| `/new` · `/reset` · `/clear` | New conversation |
+| `/memory` | Memory and files |
+| `/mode` | Choose response mode |
+| `/fast` | Fast response mode |
+| `/deep` | Deep response mode |
+| `/files` | Manage files |
+| `/cookies` · `/cookie` | Manage download cookies |
+| `/reminders` · `/schedules` | Reminders and schedules |
 | `/tasks` | Background tasks |
+| `/search` | Search past conversations |
 | `/board` | Task board |
-| `/search` | Conversation search |
-| `/cancel` | Stop the active task |
-| `/update` | Install a new GitHub release |
+| `/dashboard` | Web dashboard |
+| `/settings` · `/panel` · `/admin` | Administration panel |
+| `/update` | Update from GitHub |
+| `/learn` | Manage learning |
+| `/teach` | Teach a lesson |
+| `/moa` | Multi-model voting |
+| `/approve` | Approve a pending command |
+| `/yolo` | Configure command approval |
+| `/language` · `/lang` · `/zaban` | Bot language |
+| `/id` | User and chat IDs |
+| `/me` | Account and usage |
+| `/cancel` · `/stop` | Stop the current task |
 
 ## Your memory, your files
 

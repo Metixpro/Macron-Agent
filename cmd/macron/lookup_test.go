@@ -9,7 +9,7 @@ import (
 
 func TestLookupTargets(t *testing.T) {
 	sara := &telegram.User{ID: 777000123, FirstName: "Sara", Username: "sara_dev"}
-	m := group(40, "آمار اینو دربیار")
+	m := private(40, "آمار اینو دربیار")
 	m.ReplyToMessage = &telegram.Message{MessageID: 9, From: sara, Chat: m.Chat, Text: "hi"}
 	for target, want := range map[string]int64{"": 777000123, "reply": 777000123, "me": 40, "123456789": 123456789, "id:42": 42,
 		"-1001234567": -1001234567, "https://t.me/c/1234567/89": -1001234567} {
@@ -57,11 +57,11 @@ func TestLookupTool(t *testing.T) {
 		result = llmText(req)
 		return map[string]any{"role": "assistant", "content": "آمارش 👇"}, 0
 	}
-	m := group(40, "مکرون آمار اینو دربیار")
+	m := private(40, "مکرون آمار اینو دربیار")
 	m.ReplyToMessage = &telegram.Message{MessageID: 9, From: &telegram.User{ID: 777000123, FirstName: "Sara", IsPremium: true}, Chat: m.Chat, Text: "hi"}
 	h.send(m)
 	for _, want := range []string{"id: 777000123", "name: Ali", "bio: عاشق Go", "telegram premium: yes", "profile photos: 1",
-		"account made: about", "in this group: member"} {
+		"account made: about"} {
 		if !strings.Contains(result, want) {
 			t.Errorf("lookup result misses %q:\n%s", want, result)
 		}

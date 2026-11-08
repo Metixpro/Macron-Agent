@@ -791,13 +791,6 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 	if facts := b.factsAbout(ctx, u.ID, !m.Chat.Private()); facts != "" {
 		about = append(about, facts)
 	}
-	if !m.Chat.Private() && m.GuestQueryID == "" {
-		if s := b.groupLogFor(ctx, m.Chat.ID); s.hours > 0 {
-			about = append(about, fmt.Sprintf("This group keeps its messages for %d hours: for \"what did I miss?\", a summary of the chat "+
-				"or questions about earlier messages, use %s.", s.hours, toolGroupHistory))
-		}
-	}
-
 	withMessage := len(about)
 	lead := "The user sent"
 	if continuation {
@@ -1440,14 +1433,6 @@ func (b *Bot) requestTools(u *store.User, m *telegram.Message, react *reactor, b
 	}
 	if m.GuestQueryID == "" {
 		out = append(out, b.recallTool(u))
-	}
-	if !m.Chat.Private() && m.GuestQueryID == "" {
-		if s := b.groupLogFor(fctx, m.Chat.ID); s.hours > 0 {
-			out = append(out, b.groupHistoryTool(u, m, s.hours))
-		}
-		if b.moderator(fctx, m) {
-			out = append(out, b.groupAdminTool(m))
-		}
 	}
 	fcancel()
 	out = append(out, b.scheduleTools(u, m)...)

@@ -92,33 +92,6 @@ func TestEffectRefusedStillSendsTheAnswer(t *testing.T) {
 	}
 }
 
-func TestToolkitInGroupsAndGuestReplies(t *testing.T) {
-	h := newHarness(t)
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if lastRole(req) == "user" && strings.Contains(llmText(req), "چند نفریم") {
-			return toolCall(toolChatInfo, `{}`), 0
-		}
-		return map[string]any{"role": "assistant", "content": "۵۷ نفریم."}, 0
-	}
-	h.send(group(73, "مکرون چند نفریم؟"))
-	names := toolNames(h.llm.last())
-	if !strings.Contains(names, ","+toolChatInfo+",") || strings.Contains(names, ","+toolEffect+",") || !strings.Contains(names, ","+toolDice+",") {
-		t.Errorf("groups: %s", names)
-	}
-	if !strings.Contains(llmText(h.llm.last()), "members: 57") {
-		t.Error("chat_info reports the member count")
-	}
-
-	h.bot.dispatch(telegram.Update{UpdateID: 2, GuestMessage: guestMsg(74, "@WazeBot یه تاس بنداز")})
-	h.bot.wg.Wait()
-	names = toolNames(h.llm.last())
-	for _, n := range []string{toolDice, toolLocation, toolCreatePoll, toolEffect, toolChatInfo, toolSendFile} {
-		if strings.Contains(names, ","+n+",") {
-			t.Errorf("a guest reply is one message; %s is not offered: %s", n, names)
-		}
-	}
-}
-
 func TestDiceMeaning(t *testing.T) {
 	for _, c := range []struct {
 		emoji string

@@ -1,7 +1,7 @@
 package main
 
 func init() {
-	english["کار مستقل بعدی"] = "Queue a separate task"
+
 	english["کار پس‌زمینه: %s"] = "Background task: %s"
 	english["متن کار بعدی را بعد از /queue بنویس."] = "Write the next task after /queue."
 	english["⚙️ <b>تنظیمات</b>\n\n✨ ایموجی پریمیوم: %s"] = "⚙️ <b>Settings</b>\n\n✨ Premium emoji: %s"

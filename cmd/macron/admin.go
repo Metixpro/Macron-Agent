@@ -203,9 +203,9 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		switch arg(2) {
 		case "remoji", "react":
 			answer("", false)
-		case "premium", "failover", "trace", "gapprove":
+		case "premium", "failover", "trace":
 			key := map[string]string{"premium": store.SettingPremiumEmoji, "failover": store.SettingFailover,
-				"trace": store.SettingLiveTrace, "gapprove": store.SettingGroupApproval}[arg(2)]
+				"trace": store.SettingLiveTrace}[arg(2)]
 			def := key != store.SettingPremiumEmoji
 			_ = b.st.SetSetting(ctx, key, strconv.FormatBool(!b.st.SettingBool(key, def)))
 			answer(l.t("انجام شد"), false)
@@ -241,8 +241,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 			show(b.viewEmoji(ctx, l))
 		case arg(3) == "pv":
 			show(b.viewProviders(ctx, l))
-		case arg(3) == "gr":
-			show(b.viewGroups(ctx, l))
 		case arg(3) == "ws":
 			show(b.viewShowWork(l))
 		case arg(2) == "auto":
@@ -277,8 +275,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		b.handleTriagePanel(ctx, l, parts, answer, show, ask)
 	case "em":
 		b.handleEmojiPanel(ctx, q, parts, answer, show, ask)
-	case "gr":
-		b.handleGroupPanel(ctx, q, parts, answer, show, ask)
 	case "ie":
 		b.handleImageEditPanel(ctx, q, parts, answer, show, ask)
 	case "ig":
@@ -438,14 +434,6 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 		}
 		_ = b.st.SetSetting(ctx, store.SettingHistoryTokens, strconv.Itoa(n))
 		done(b.viewAgent(l))
-	case "gr_log":
-		v, err := b.setLogChat(ctx, l, m)
-		if err != nil {
-			b.reply(m, esc(err.Error())+l.t("\n\n<i>دوباره بفرست، یا /cancel</i>"))
-			return true
-		}
-		b.reply(m, l.t("✅ کانال لاگ تنظیم شد."))
-		done(v)
 	case "ln_edit":
 		b.learnInput(ctx, l, m, in, done)
 	case "ln_teach":
@@ -684,56 +672,6 @@ func (b *Bot) viewAgent(l lang) panelView {
 		row(b.back(l, "a:home")),
 	)}
 }
-
-var menuLangs = []struct {
-	l    lang
-	code string
-}{{en, ""}, {fa, "fa"}}
-
-func (b *Bot) registerCommands(ctx context.Context) error {
-	var first error
-	for _, m := range menuLangs {
-		if err := b.api.SetMyCommandsFor(ctx, b.userCommands(m.l), nil, m.code); err != nil && first == nil {
-			first = err
-		}
-		if b.personal {
-
-			_ = b.api.SetMyCommandsFor(ctx, nil, nil, m.code)
-			_ = b.api.SetMyCommandsFor(ctx, nil, &telegram.BotCommandScope{Type: "all_group_chats"}, m.code)
-			_ = b.api.SetMyCommandsFor(ctx, b.userCommands(m.l), &telegram.BotCommandScope{Type: "all_private_chats"}, m.code)
-		} else {
-			_ = b.api.SetMyCommandsFor(ctx, groupCommands(m.l), &telegram.BotCommandScope{Type: "all_group_chats"}, m.code)
-		}
-	}
-	b.registerAdminCommands(ctx)
-	return first
-}
-
-func (b *Bot) registerAdminCommands(ctx context.Context) {
-	ids, _ := b.st.Admins(ctx)
-	for id := range b.owner {
-		ids = append(ids, id)
-	}
-	for _, m := range menuLangs {
-		cmds := append(b.userCommands(m.l), telegram.BotCommand{Command: "settings", Description: m.l.t("پنل مدیریت")},
-			telegram.BotCommand{Command: "teach", Description: m.l.t("یاد دادن یه درس به ربات")})
-		for _, id := range ids {
-			_ = b.api.SetMyCommandsFor(ctx, cmds, &telegram.BotCommandScope{Type: "chat", ChatID: id}, m.code)
-		}
-	}
-}
-
-func groupCommands(l lang) []telegram.BotCommand {
-	return []telegram.BotCommand{
-		{Command: "recap", Description: l.t("چی از دستم رفت؟ (خلاصه گفتگو)")},
-		{Command: "nolog", Description: l.t("پیام‌هام برای خلاصه نگه داشته نشه")},
-		{Command: "groupsettings", Description: l.t("تنظیمات گروه (برای ادمین‌ها)")},
-		{Command: "mode", Description: l.t("حالت جواب: ⚡ سریع / 🧠 عمیق")},
-		{Command: "help", Description: l.t("راهنما")},
-	}
-}
-
-func (b *Bot) userCommands(l lang) []telegram.BotCommand { return personalCommands(l) }
 
 const maxSoulRunes = 30000
 

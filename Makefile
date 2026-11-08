@@ -14,8 +14,8 @@ release:
 		os=$${p%/*}; arch=$${p#*/}; name=macron-$(VERSION)-$$os-$$arch; \
 		mkdir -p dist/$$name; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(GOFLAGS_REL) -o dist/$$name/macron ./cmd/macron || exit 1; \
-		cp README.md README.en.md LICENSE config.env.example requirements-tools.txt requirements-browser-agent.txt requirements-tools.lock requirements-browser-agent.lock dist/$$name/; \
-		cp -R assets dist/$$name/; \
+		cp README.md README.en.md SERVER.md LICENSE config.env.example requirements-tools.txt requirements-browser-agent.txt requirements-tools.lock requirements-browser-agent.lock dist/$$name/; \
+		cp -R assets docs dist/$$name/; \
 		tar -C dist -czf dist/$$name.tar.gz $$name; \
 	done
 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS

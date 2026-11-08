@@ -237,49 +237,6 @@ func TestStopButtonCancels(t *testing.T) {
 	}
 }
 
-func TestGroupsBansAndCommands(t *testing.T) {
-	h := newHarness(t)
-	group := func(text string) *telegram.Message {
-		m := private(15, text)
-		m.Chat = telegram.Chat{ID: -100500, Type: "supergroup", Title: "گروه"}
-		return m
-	}
-	h.send(group("سلام بچه‌ها"))
-	if h.llm.count() != 0 {
-		t.Fatal("unaddressed group messages must be ignored")
-	}
-	h.send(group("@WazeBot قیمت دلار؟"))
-	if h.llm.count() != 1 || !strings.Contains(llmText(h.llm.last()), "group «گروه»") || strings.Contains(llmText(h.llm.last()), "@WazeBot") {
-		t.Fatal("a mention must be answered, without the mention text")
-	}
-	if len(h.tg.of("sendRichMessageDraft")) != 0 {
-		t.Error("drafts are for private chats only")
-	}
-
-	h.tg.reset()
-	h.send(private(16, "/start"))
-	h.wantText("من <b>مکرون</b> هستم")
-	h.wantText("/new")
-	h.send(private(16, "/me"))
-	h.wantText("توکن امروز")
-	h.send(private(16, "/admin"))
-	h.wantText(textUnknownCommand)
-	h.send(private(16, "/start@OtherBot"))
-
-	h.send(private(17, "یه چیزی"))
-	h.send(private(17, "/new"))
-	if mem, _ := h.bot.mem.Load(bg, 17); mem.Messages != 0 {
-		t.Error("/new must clear the memory")
-	}
-	h.wantText(textMemoryReset)
-
-	h.bot.handleMembership(&telegram.ChatMemberUpdated{Chat: telegram.Chat{ID: 17, Type: "private"}, From: telegram.User{ID: 17},
-		NewChatMember: telegram.ChatMember{Status: "kicked"}})
-	if u, _ := h.st.User(bg, 17); !u.BlockedBot {
-		t.Error("blocked flag")
-	}
-}
-
 func TestBusyUserGetsANotice(t *testing.T) {
 	h := newHarness(t)
 	release, _ := h.bot.gate.TryAcquire("21")
@@ -353,13 +310,13 @@ func TestGroupIgnoresOtherBotsAndChannelPosts(t *testing.T) {
 		t.Error("another bot's command is ignored in a group")
 	}
 	h.send(group("/warn@WazeBot"))
-	if !strings.Contains(h.tg.allText(), textUnknownCommand) {
-		t.Error("a command named for this bot is answered")
+	if len(h.tg.calls) != 0 {
+		t.Error("a command named for this bot must also be ignored in groups")
 	}
 	h.tg.reset()
 	h.send(group("/help"))
-	if h.tg.allText() == "" {
-		t.Error("this bot's own commands work in groups")
+	if len(h.tg.calls) != 0 {
+		t.Error("private commands must not work in groups")
 	}
 
 	post := group("مکرون این خبر رو ببین")

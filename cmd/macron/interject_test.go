@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"regexp"
+
 	"strings"
 	"sync"
 	"testing"
@@ -107,146 +107,26 @@ func TestSayingStopDuringAJobStopsIt(t *testing.T) {
 	}
 }
 
-func TestReplyingToYourOwnRequestInAGroupJoinsTheJob(t *testing.T) {
-	h := newHarness(t)
-	old := groupEditEvery
-	groupEditEvery = 0
-	t.Cleanup(func() { groupEditEvery = old })
-	started, proceed := make(chan struct{}), make(chan struct{})
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if n == 0 {
-			close(started)
-			<-proceed
-			return toolCall("list_files", `{}`), 0
-		}
-		return map[string]any{"role": "assistant", "content": "انجام شد، به انگلیسی هم نوشتم."}, 0
-	}
-	first := group(62, "مکرون یه متن تبریک بنویس")
-	wait := h.background(first)
-	<-started
-	reply := followUpMsg(first, 78, "انگلیسیش رو هم بنویس")
-	reply.ReplyToMessage = &telegram.Message{MessageID: 77, From: first.From, Chat: first.Chat, Text: first.Text}
-	h.bot.handleMessage(reply)
-
-	other := followUpMsg(first, 79, "منم می‌خوام")
-	other.From = &telegram.User{ID: 63, FirstName: "Sara"}
-	other.ReplyToMessage = reply.ReplyToMessage
-	h.bot.handleMessage(other)
-	close(proceed)
-	wait()
-	if req := llmText(h.llm.last()); !strings.Contains(req, "انگلیسیش رو هم بنویس") || strings.Contains(req, "منم می‌خوام") {
-		t.Errorf("the reply joins the job, the other member's does not:\n%s", req)
-	}
-	h.wantText("انجام شد، به انگلیسی هم نوشتم.")
-}
-
-func TestTheGroupLiveMessageBecomesTheAnswer(t *testing.T) {
-	h := newHarness(t)
-	old := groupEditEvery
-	groupEditEvery = 0
-	t.Cleanup(func() { groupEditEvery = old })
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if n == 0 {
-			time.Sleep(400 * time.Millisecond)
-			return toolCall("list_files", `{}`), 0
-		}
-		time.Sleep(600 * time.Millisecond)
-		return map[string]any{"role": "assistant", "content": "فضای کاری **خالیه**."}, 0
-	}
-	h.send(group(64, "مکرون فایل‌هام چیه؟"))
-
-	sent := h.tg.of("sendRichMessage")
-	if len(sent) != 1 {
-		t.Fatalf("one message from the start to the answer, got %d:\n%s", len(sent), h.tg.allText())
-	}
-	body := sent[0].body
-	if md := fmt.Sprint(body["rich_message"]); !strings.Contains(md, "💭") || !strings.Contains(md, thinkingText) {
-		t.Errorf("it starts by thinking: %s", md)
-	}
-	if rp, _ := body["reply_parameters"].(map[string]any); rp == nil || rp["message_id"].(float64) != 77 {
-		t.Errorf("it replies to the request: %v", body["reply_parameters"])
-	}
-	if body["reply_markup"] != nil {
-		t.Errorf("a stop button only once the job takes a while: %v", body["reply_markup"])
-	}
-	edits := h.tg.of("editMessageText")
-	if len(edits) < 2 {
-		t.Fatalf("edited along: %d edits", len(edits))
-	}
-	first := fmt.Sprint(edits[0].body["rich_message"])
-	if !strings.Contains(first, `<tg-button type="callback_data" style="link" data="run:stop:64:`) || edits[0].body["reply_markup"] != nil {
-		t.Errorf("working with tools: a borderless stop link inside the message, no keyboard under it: %s %v", first, edits[0].body["reply_markup"])
-	}
-	terminal := false
-	for _, e := range edits {
-		if strings.Contains(fmt.Sprint(e.body["rich_message"]), "MACRON ⟫ live") {
-			terminal = true
-		}
-	}
-	if !terminal {
-		t.Errorf("the same message shows the terminal:\n%s", h.tg.allText())
-	}
-	last := edits[len(edits)-1].body
-	if md := fmt.Sprint(last["rich_message"]); !strings.Contains(md, "فضای کاری **خالیه**.") || strings.Contains(md, "tg-button") {
-		t.Errorf("it ends as the answer: %s", md)
-	}
-	if kb := fmt.Sprint(last["reply_markup"]); strings.Contains(kb, "run:stop") {
-		t.Errorf("the answer has no stop button: %s", kb)
-	}
-	if n := len(h.tg.of("deleteMessage")); n != 0 {
-		t.Errorf("nothing is deleted: %d", n)
-	}
-}
-
-func TestTheStopButtonMovesUnderTheMessageOnOlderServers(t *testing.T) {
-	h := newHarness(t)
-	old := groupEditEvery
-	groupEditEvery = 0
-	t.Cleanup(func() { groupEditEvery = old })
-	h.tg.setReject(func(method string, body map[string]any) string {
-		if strings.Contains(fmt.Sprint(body["rich_message"]), "tg-button-row") {
-			return "Bad Request: can't parse rich message: unknown tag tg-button-row"
-		}
-		return ""
-	})
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if n == 0 {
-			time.Sleep(300 * time.Millisecond)
-			return toolCall("list_files", `{}`), 0
-		}
-		time.Sleep(600 * time.Millisecond)
-		return map[string]any{"role": "assistant", "content": "تموم شد."}, 0
-	}
-	h.send(group(70, "مکرون فایل‌هام چیه؟"))
-	if !h.bot.stopRowOff.Load() {
-		t.Fatal("the server refused buttons inside the message: remember it")
-	}
-	withKB := false
-	for _, e := range h.tg.of("editMessageText") {
-		if kb := fmt.Sprint(e.body["reply_markup"]); strings.Contains(kb, "run:stop:70:") {
-			withKB = true
-			if strings.Contains(kb, "danger") {
-				t.Errorf("a calm button, not a red alarm: %s", kb)
-			}
-		}
-	}
-	if !withKB {
-		t.Errorf("the stop button goes under the message instead:\n%s", h.tg.allText())
-	}
-	h.wantText("تموم شد.")
-}
-
 func stopButtonData(h *harness) string {
-	re := regexp.MustCompile(`data="(run:stop:[^"]+)"`)
-	for _, c := range append(h.tg.of("sendRichMessage"), h.tg.of("editMessageText")...) {
-		if m := re.FindStringSubmatch(fmt.Sprint(c.body["rich_message"])); m != nil {
-			return m[1]
+	for _, method := range []string{"sendRichMessage", "sendMessage", "editMessageText"} {
+		for _, c := range h.tg.of(method) {
+			kb, _ := c.body["reply_markup"].(map[string]any)
+			rows, _ := kb["inline_keyboard"].([]any)
+			for _, r := range rows {
+				for _, v := range r.([]any) {
+					button := v.(map[string]any)
+					data, _ := button["callback_data"].(string)
+					if strings.HasPrefix(data, "run:stop:") {
+						return data
+					}
+				}
+			}
 		}
 	}
 	return ""
 }
 
-func blockedGroupJob(t *testing.T, h *harness, uid int64) (proceed func(), wait func()) {
+func blockedActiveJob(t *testing.T, h *harness, uid int64) (proceed func(), wait func()) {
 	old := stopButtonAfter
 	stopButtonAfter = 0
 	t.Cleanup(func() { stopButtonAfter = old })
@@ -261,7 +141,7 @@ func blockedGroupJob(t *testing.T, h *harness, uid int64) (proceed func(), wait 
 		}
 		return map[string]any{"role": "assistant", "content": "کار تموم شد ✅"}, 0
 	}
-	wait = h.background(group(uid, "مکرون یه کار طولانی بکن"))
+	wait = h.background(private(uid, "مکرون یه کار طولانی بکن"))
 	<-started
 	for i := 0; i < 50 && stopButtonData(h) == ""; i++ {
 		time.Sleep(20 * time.Millisecond)
@@ -279,7 +159,7 @@ func lastCallbackAnswer(h *harness) string {
 
 func TestOnlyTheAskerOrABotAdminCanStopAJob(t *testing.T) {
 	h := newHarness(t)
-	proceed, wait := blockedGroupJob(t, h, 65)
+	proceed, wait := blockedActiveJob(t, h, 65)
 	data := stopButtonData(h)
 	if !strings.HasPrefix(data, "run:stop:65:") || len(data) <= len("run:stop:65:") {
 		t.Fatalf("the button names the job: %q", data)
@@ -287,16 +167,16 @@ func TestOnlyTheAskerOrABotAdminCanStopAJob(t *testing.T) {
 	run, _ := h.bot.runs.Load(int64(65))
 	stopped := func() bool { return run.(*activeRun).stopped.Load() }
 
-	h.click(66, -100500, 501, data)
+	h.click(66, 65, 501, data)
 	if !strings.Contains(lastCallbackAnswer(h), "مال کسیه") || stopped() {
 		t.Fatalf("another member must not stop it: %q", lastCallbackAnswer(h))
 	}
 
-	h.click(66, -100500, 501, strings.Replace(data, "run:stop:65:", "run:stop:66:", 1))
+	h.click(66, 65, 501, strings.Replace(data, "run:stop:65:", "run:stop:66:", 1))
 
-	h.click(65, -100500, 501, "run:stop:65:deadbeef")
+	h.click(65, 65, 501, "run:stop:65:deadbeef")
 	h.click(65, -100999, 501, data)
-	h.click(65, -100500, 501, "run:stop:65")
+	h.click(65, 65, 501, "run:stop:65")
 	if stopped() {
 		t.Fatal("a button stops only its own job, in its own chat")
 	}
@@ -308,7 +188,7 @@ func TestOnlyTheAskerOrABotAdminCanStopAJob(t *testing.T) {
 		t.Fatal("another member's «بیخیال» must not stop someone else's job")
 	}
 
-	h.click(65, -100500, 501, data)
+	h.click(65, 65, 501, data)
 	if !strings.Contains(lastCallbackAnswer(h), "متوقفش کردم") {
 		t.Errorf("the asker stops it: %q", lastCallbackAnswer(h))
 	}
@@ -322,8 +202,8 @@ func TestOnlyTheAskerOrABotAdminCanStopAJob(t *testing.T) {
 
 func TestABotAdminCanStopAnyJob(t *testing.T) {
 	h := newHarness(t)
-	proceed, wait := blockedGroupJob(t, h, 67)
-	h.click(ownerID, -100500, 501, stopButtonData(h))
+	proceed, wait := blockedActiveJob(t, h, 67)
+	h.click(ownerID, 67, 501, stopButtonData(h))
 	if !strings.Contains(lastCallbackAnswer(h), "متوقفش کردم") {
 		t.Errorf("a bot admin may stop it: %q", lastCallbackAnswer(h))
 	}
@@ -338,41 +218,11 @@ func TestAStoppedJobsTextHasPremiumEmoji(t *testing.T) {
 	_ = h.st.SetSetting(bg, store.SettingPremiumEmoji, "true")
 	_ = h.st.SetPremiumEmoji(bg, "✋", "5294096239464295059")
 	h.bot.reloadEmoji(bg)
-	proceed, wait := blockedGroupJob(t, h, 68)
-	h.click(68, -100500, 501, stopButtonData(h))
+	proceed, wait := blockedActiveJob(t, h, 68)
+	h.click(68, 68, 501, stopButtonData(h))
 	proceed()
 	wait()
 	h.wantText(`<tg-emoji emoji-id="5294096239464295059">✋</tg-emoji>`)
-}
-
-func TestTheStopButtonUnderTheGroupLiveMessage(t *testing.T) {
-	h := newHarness(t)
-	started, proceed := make(chan struct{}), make(chan struct{})
-	t.Cleanup(func() { close(proceed) })
-	old := stopButtonAfter
-	stopButtonAfter = 0
-	t.Cleanup(func() { stopButtonAfter = old })
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if n == 0 {
-			close(started)
-			<-proceed
-		}
-		return map[string]any{"role": "assistant", "content": "نباید برسه"}, 0
-	}
-	wait := h.background(group(65, "مکرون یه کار طولانی بکن"))
-	<-started
-	for i := 0; i < 50 && stopButtonData(h) == ""; i++ {
-		time.Sleep(20 * time.Millisecond)
-	}
-	h.click(65, -100500, 501, stopButtonData(h))
-	wait()
-	h.wantText(textCancelled)
-	h.noText("نباید برسه")
-
-	edits := h.tg.of("editMessageText")
-	if len(edits) == 0 || !strings.Contains(fmt.Sprint(edits[len(edits)-1].body["rich_message"]), "ولش کردم") {
-		t.Errorf("the live message says it stopped: %v", edits)
-	}
 }
 
 func TestAMessageAfterTheAnswerRunsNext(t *testing.T) {

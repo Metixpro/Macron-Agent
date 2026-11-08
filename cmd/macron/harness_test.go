@@ -398,7 +398,6 @@ func newHarness(t *testing.T) *harness {
 		jobCtx: context.Background(), started: time.Now(), brain: br,
 	}
 	b.app.Agent.Teachings = b.teachings
-	b.readsAll.Store(true)
 	b.api.OnSent = b.noteSent
 	b.reloadEmoji(ctx)
 	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))

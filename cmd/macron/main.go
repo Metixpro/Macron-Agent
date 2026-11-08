@@ -199,8 +199,6 @@ func main() {
 	go bot.tellBgRestarted(rootCtx, bgOrphans)
 	go housekeeping(rootCtx, st)
 	bot.startSysmon(rootCtx)
-	bot.readsAll.Store(me.CanReadAllGroupMessages)
-	go bot.refreshMe(rootCtx)
 	go bot.runScheduler(rootCtx)
 	go bot.runWeeklyReports(rootCtx)
 	go bot.runEvalSchedule(rootCtx)

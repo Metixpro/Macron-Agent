@@ -224,3 +224,21 @@ Telegram API references: [InputRichMessage](https://core.telegram.org/bots/api#i
 [sendRichMessage](https://core.telegram.org/bots/api#sendrichmessage),
 [editMessageText](https://core.telegram.org/bots/api#editmessagetext).
 Persistent cards do not use the draft-only `thinking` block.
+
+
+### 1.2.9: remove obsolete modules and synchronize command menus
+
+The group administration, membership approval, group history and privacy-warning
+modules have been removed along with their unused settings, translated copy and
+obsolete tests. Existing database migrations remain so upgrading an old Snap
+installation still removes its tables and secrets safely. The old group-message
+expiry cleanup is retained solely for databases from previous versions.
+
+All 35 supported private commands and aliases are registered from one bilingual
+catalog. Owner, administrator and common menus follow handler access permissions;
+unsupported group commands are excluded. Default, English and Persian scopes are
+replaced on startup. Owner-menu registration errors now reach startup logging.
+An AST-based test checks every private command handler against the owner menu.
+
+The source distribution contains no Snap classifier or speech-recognition program.
+See [Telegram commands](docs/telegram-commands.md).

@@ -307,31 +307,3 @@ func TestCommandMenus(t *testing.T) {
 		t.Errorf("menus: Persian %v, English %v", sawFa, sawEn)
 	}
 }
-
-func TestEnglishGroup(t *testing.T) {
-	h := newHarness(t)
-	const g = -100901
-	h.send(englishMsg(7005, "/start"))
-	h.tg.reset()
-	addedBy(h, g, 7005)
-	var toGroup, toOwner string
-	for _, c := range h.tg.of("sendMessage") {
-		switch int64(c.body["chat_id"].(float64)) {
-		case g:
-			toGroup += c.body["text"].(string)
-		case ownerID:
-			toOwner += c.body["text"].(string)
-		}
-	}
-	if !strings.Contains(toGroup, "has to approve") || persianLeft(toGroup) {
-		t.Errorf("an English adder's group is told in English: %q", toGroup)
-	}
-	if !strings.Contains(toOwner, "منتظر تأیید") {
-		t.Errorf("the owner keeps their own language: %q", toOwner)
-	}
-	h.tg.reset()
-	h.bot.handleCallback(&telegram.CallbackQuery{ID: "q", From: telegram.User{ID: ownerID}, Data: fmt.Sprintf("ga:%d:ok", g),
-		Message: &telegram.Message{MessageID: 3, Chat: telegram.Chat{ID: ownerID, Type: "private"}}})
-	h.bot.wg.Wait()
-	h.wantText("start your message with «<b>Macron</b>»")
-}

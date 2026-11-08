@@ -76,9 +76,10 @@ func TestLongTermMemory(t *testing.T) {
 		t.Error("turned back on")
 	}
 
+	before := h.llm.count()
 	h.send(group(uid, "مکرون سلام"))
-	if !strings.Contains(llmText(h.llm.last()), "never reveal private ones") {
-		t.Error("group note")
+	if h.llm.count() != before {
+		t.Error("group message reached private memory")
 	}
 }
 

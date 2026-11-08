@@ -98,7 +98,7 @@ func TestPersonalEditionSpeaksForItself(t *testing.T) {
 	for _, c := range h.bot.userCommands(fa) {
 		cmds[c.Command] = true
 	}
-	for _, gone := range []string{"plan", "providers", "cookies", "github", "servers", "me"} {
+	for _, gone := range []string{"plan", "providers", "github", "servers"} {
 		if cmds[gone] {
 			t.Errorf("/%s is in the personal menu", gone)
 		}

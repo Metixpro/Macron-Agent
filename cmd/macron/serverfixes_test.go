@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/store"
-	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
 func TestRemindersCostNoTokens(t *testing.T) {
@@ -59,18 +58,4 @@ func TestThePremiumStopLinkShowsItsIconOnce(t *testing.T) {
 	if label, id := h.bot.premium().Button("⏹"); label != "‌" || id == "" {
 		t.Errorf("an emoji-only button shows the icon, not the emoji twice: %q %q", label, id)
 	}
-}
-
-func TestTheGroupThinkingLineIsNotAQuote(t *testing.T) {
-	h := newHarness(t)
-	h.send(group(84, "مکرون سلام"))
-	sent := richAnswers(h)
-	if len(sent) == 0 {
-		t.Fatal("no live message")
-	}
-	md := fmt.Sprint(sent[0].body["rich_message"].(map[string]any)["markdown"])
-	if !strings.HasPrefix(md, "💭") {
-		t.Errorf("a plain line, no quote bar next to 💭: %q", md)
-	}
-	_ = telegram.SendOptions{}
 }
