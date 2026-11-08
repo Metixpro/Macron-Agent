@@ -29,9 +29,9 @@ func triageModeName(l lang, mode string) string {
 func (b *Bot) viewTriage(l lang) panelView {
 	var sb strings.Builder
 	mode := b.triageMode()
-	sb.WriteString(l.t("🧭 <b>تشخیص درخواست</b>\n\nقبل از اینکه پیام به مدل برسه، همین‌جا روی سرور خودت تشخیص داده می‌شه چه کاریه، چقدر کار داره، ابزار لازم داره یا نه و به چقدر از گفتگو تکیه داره. هیچ چیزی به سرویس بیرونی فرستاده نمی‌شه.\n\n"))
+	sb.WriteString(l.t("🧭 <b>تشخیص درخواست</b>\n\nانتخاب ابزار، مدل و میزان تاریخچه برای هر پیام.\n\n"))
 	sb.WriteString(l.f("وضعیت: <b>%s</b>\n", triageModeName(l, mode)))
-	sb.WriteString(l.t("• محلی: رایگان و فوری، از روی کلمات پیام.\n• با مدل: یه درخواست کوتاه به همون مدل خودت (چند صد توکن)؛ دقیق‌تره و ابزارهای لازم رو هم انتخاب می‌کنه. اگه دیر یا با خطا جواب بده، تشخیص محلی جاش رو می‌گیره.\n"))
+	sb.WriteString(l.t("• محلی: بدون درخواست به مدل.\n• با مدل: درخواست کوتاه به پروایدر فعال؛ در خطا، بازگشت به محلی.\n"))
 	if till := b.triage.pausedTill.Load(); till > 0 && time.Now().UnixNano() < till {
 		sb.WriteString(l.f("⏸ بعد از چند خطای پشت‌سرهم تا %s فقط تشخیص محلی کار می‌کنه.\n", time.Unix(0, till).In(b.loc).Format("15:04")))
 	}

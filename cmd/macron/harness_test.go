@@ -379,7 +379,6 @@ func newHarness(t *testing.T) *harness {
 
 	ctx := context.Background()
 	_ = st.SetSetting(ctx, store.SettingAutoContinue, "-1") // a fixed budget; the tests that need extensions turn them on
-	_ = st.SetSetting(ctx, store.SettingLiveMode, liveStop) // the draft with its stop button; the live message's tests choose it
 	if _, err := st.AddProvider(ctx, store.Provider{Name: "main", BaseURL: llmSrv.URL, APIKey: "sk-provider-secret-1234", Model: "m",
 		Priority: 10, Enabled: true, Vision: true}); err != nil {
 		t.Fatal(err)

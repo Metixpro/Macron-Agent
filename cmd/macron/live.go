@@ -119,19 +119,8 @@ func (b *Bot) newLive(m *telegram.Message, userID int64) *liveView {
 			l.muted, l.guest, l.lastEdit, l.dirty = false, g, time.Now(), false
 		}
 	}
-	// A private chat shows the work as its user chose (see livemode.go); a
-	// scheduled task, with no message to reply to, keeps the draft.
-	if l.drafts && m.MessageID != 0 {
-		switch b.liveModeNow(userID) {
-		case liveMsg:
-			l.drafts = false // a live message, like a group's
-		case liveDots:
-			l.canStop = false
-		}
-	}
 	// Scheduled tasks (no message to reply to) keep the classic trace.
 	l.rich = !l.drafts && !l.muted && m.MessageID != 0 && !b.richOff.Load()
-	l.tr.console, l.tr.icons = b.consoleStyle(), b.iconPicker()
 	return l
 }
 
@@ -326,7 +315,7 @@ func (l *liveView) subAgent(title string) int {
 		l.text, l.dirty, l.urgent = "", true, true
 		return l.think.subStart(l.lng.f("دستیار کمکی: %s", textutil.TruncateRunes(l.redact(title), 40, "…")), time.Now())
 	}
-	id := l.tr.subStart(l.redact(title), time.Now()) // it stays in the work log above the answer
+	id := l.tr.subStart(l.redact(title), time.Now()) // keep the sub-agent in the live trace
 	if !l.tracing {
 		l.tracing, l.firstAt = true, time.Now()
 	}

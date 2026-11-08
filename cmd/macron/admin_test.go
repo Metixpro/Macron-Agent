@@ -427,7 +427,7 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 	// Showing the work: one page, under the agent.
 	h.click(ownerID, ownerID, 9, "a:ws")
 	ws := lastOf(h, "editMessageText")
-	for _, want := range []string{"a:st:trace:ws", "a:st:tstyle:ws", "a:st:worklog:ws", "a:st:live:ws"} {
+	for _, want := range []string{"a:st:trace:ws"} {
 		if !hasButton(buttons(ws), "→ "+want) {
 			t.Errorf("showing the work lacks %s", want)
 		}
@@ -439,10 +439,15 @@ func TestSettingsIsReactionsOnly(t *testing.T) {
 	h.click(ownerID, ownerID, 9, "a:st:worklog:ws")
 	h.click(ownerID, ownerID, 9, "a:st:tstyle:ws")
 	h.click(ownerID, ownerID, 9, "a:st:live:ws")
-	if h.st.SettingBool(store.SettingLiveTrace, true) || h.st.SettingBool(store.SettingWorkLog, true) || h.bot.consoleStyle() ||
-		h.bot.liveDefault() == liveModes[0] {
-		t.Fatal("the work settings did not change")
+	if h.st.SettingBool(store.SettingLiveTrace, true) {
+		t.Fatal("trace toggle did not change")
 	}
+	for _, removed := range []string{"trace_style", "work_log", "live_mode"} {
+		if _, ok := h.st.Setting(removed); ok {
+			t.Fatalf("obsolete callback wrote %s", removed)
+		}
+	}
+
 	if v := fmt.Sprint(lastOf(h, "editMessageText").body["text"]); !strings.Contains(v, "نمایش کار") {
 		t.Fatalf("a change stays on its page: %s", v)
 	}

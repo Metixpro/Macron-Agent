@@ -20,7 +20,7 @@ func offeredTools(req map[string]any) []string {
 func TestFastMode(t *testing.T) {
 	h := newHarness(t)
 	h.send(private(90, "/mode"))
-	h.wantText("حالت جواب‌دادن")
+	h.wantText("حالت پاسخ")
 	h.wantText("🧠 عمیق")
 	h.click(90, 90, 600, "mode:set:fast")
 	if v, _ := h.st.UserPref(bg, 90, store.PrefMode); v != modeFast {

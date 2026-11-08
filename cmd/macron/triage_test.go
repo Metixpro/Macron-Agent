@@ -357,7 +357,7 @@ func TestTriagePanel(t *testing.T) {
 		t.Fatal("no door to the triage from smart routing")
 	}
 	h.click(ownerID, ownerID, 9, "a:tri")
-	if v := fmt.Sprint(lastOf(h, "editMessageText").body["text"]); !strings.Contains(v, "هیچ چیزی به سرویس بیرونی فرستاده نمی‌شه") {
+	if v := fmt.Sprint(lastOf(h, "editMessageText").body["text"]); !strings.Contains(v, "بدون درخواست به مدل") {
 		t.Fatalf("the panel: %s", v)
 	}
 	h.click(ownerID, ownerID, 9, "a:tri:mode:model")

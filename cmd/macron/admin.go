@@ -216,33 +216,16 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 			}
 			_ = b.st.SetSetting(ctx, store.SettingReactionEmoji, reactionEmojis[i])
 			answer(reactionEmojis[i], false)
-		case "react", "premium", "failover", "trace", "gapprove", "worklog":
+		case "react", "premium", "failover", "trace", "gapprove":
 			key := map[string]string{"react": store.SettingReactions, "premium": store.SettingPremiumEmoji, "failover": store.SettingFailover,
-				"trace": store.SettingLiveTrace, "gapprove": store.SettingGroupApproval, "worklog": store.SettingWorkLog}[arg(2)]
+				"trace": store.SettingLiveTrace, "gapprove": store.SettingGroupApproval}[arg(2)]
 			def := map[string]bool{store.SettingReactions: true, store.SettingFailover: true,
-				store.SettingLiveTrace: true, store.SettingGroupApproval: true, store.SettingWorkLog: true}[key]
+				store.SettingLiveTrace: true, store.SettingGroupApproval: true}[key]
 			_ = b.st.SetSetting(ctx, key, strconv.FormatBool(!b.st.SettingBool(key, def)))
 			answer(l.t("انجام شد"), false)
-		case "tstyle":
-			style := traceStyleCode
-			if !b.consoleStyle() {
-				style = ""
-			}
-			_ = b.st.SetSetting(ctx, store.SettingTraceStyle, style)
-			answer(traceStyleName(l, style != traceStyleCode), false)
-		case "live":
-			// The default of how private chats see the work: msg → stop → dots → msg.
-			next := liveModes[0]
-			for i, v := range liveModes {
-				if v == b.liveDefault() {
-					next = liveModes[(i+1)%len(liveModes)]
-				}
-			}
-			_ = b.st.SetSetting(ctx, store.SettingLiveMode, next)
-			answer(liveName(l, next), false)
 		case "steps":
 			answer("", false)
-			ask(&adminInput{kind: "st_steps"}, l.f("🤖 حداکثر قدم‌های ایجنت برای هر درخواست رو بفرست (%d تا %d؛ هر قدم یعنی یه بار استفاده از ابزارها). <code>0</code> = پیش‌فرض سرور:", minAgentSteps, config.MaxAgentSteps))
+			ask(&adminInput{kind: "st_steps"}, l.f("🤖 قدم‌ها در هر دور: %d تا %d\n<code>0</code> = پیش‌فرض سرور", minAgentSteps, config.MaxAgentSteps))
 			return
 		case "minutes":
 			answer("", false)
@@ -250,12 +233,12 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 			return
 		case "ctx":
 			answer("", false)
-			ask(&adminInput{kind: "st_ctx"}, l.f("🧠 چند توکن از آخرین پیام‌های گفتگو کلمه‌به‌کلمه همراه هر درخواست بره؟\n\n<code>0</code> = <b>خودکار</b> (پیش‌فرض): گفتگو تا پر شدن context مدل (همون جایی که فشرده‌سازی شروع می‌شه) کامل می‌مونه، بعد نصفش خلاصه می‌شه. الان: %s توکن.\n\nیا یه عدد کمتر بین %s و %s بفرست تا توکن کمتری مصرف بشه (هر درخواست کل این مقدار رو می‌فرسته). قدیمی‌ترها خلاصه می‌شن و خلاصه همیشه همراهه.",
+			ask(&adminInput{kind: "st_ctx"}, l.f("🧠 حافظهٔ گفتگو (توکن)\n<code>0</code> = خودکار (%s)\nبازهٔ دستی: %s تا %s",
 				humanInt(agent.FillHistoryTokens(b.contextWindowNow())), humanInt(memory.MinBudget), humanInt(memory.MaxBudget)))
 			return
 		case "window":
 			answer("", false)
-			ask(&adminInput{kind: "st_window"}, l.t("🪟 اندازه پنجره context مدل رو به توکن بفرست، مثلاً <code>256000</code> یا <code>256k</code> یا <code>1m</code>. <code>0</code> = خودکار (از <code>WAZE_CONTEXT_WINDOW</code>، وگرنه از اسم مدل).\n\nکارهای طولانی از ۷۵٪ این عدد فشرده می‌شن (مثلاً پنجره 1M از 750k)."))
+			ask(&adminInput{kind: "st_window"}, l.t("🪟 پنجره context (توکن)\nمثال: <code>256k</code> یا <code>1m</code>\n<code>0</code> = خودکار"))
 			return
 		case "auto":
 			next, ok := autoSteps[b.autoContinue()]
@@ -498,14 +481,6 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 	return true
 }
 
-// traceStyleName names the terminal's look.
-func traceStyleName(l lang, console bool) string {
-	if console {
-		return l.t("کنسول آیکون‌دار (ایموجی پریمیوم)")
-	}
-	return l.t("بلوک کد (قدیمی)")
-}
-
 func onOff(l lang, v bool) string {
 	if v {
 		return l.t("روشن ✅")
@@ -713,23 +688,14 @@ func (b *Bot) viewSettings(l lang) panelView {
 	)}
 }
 
-// viewShowWork is how the work is shown while the agent works: the live
-// terminal, its look, the work log, and the private chats' default.
+// viewShowWork controls progress visibility.
 func (b *Bot) viewShowWork(l lang) panelView {
-	html := l.f("🖥 <b>نمایش کار</b>\n\n🖥 ترمینال زنده (نمایش مراحل کار): %s\n🎨 ظاهر ترمینال: %s\n🧰 گزارش کار بالای جواب (کارهای چندمرحله‌ای): %s\n👁 نمایش کار توی پیوی (پیش‌فرض؛ با /mode عوض می‌شه): %s",
-		onOff(l, b.st.SettingBool(store.SettingLiveTrace, true)), traceStyleName(l, b.consoleStyle()),
-		onOff(l, b.st.SettingBool(store.SettingWorkLog, true)), liveName(l, b.liveDefault()))
-	rows := [][]telegram.InlineKeyboardButton{
-		row(b.button(l.t("🖥 ترمینال زنده"), "a:st:trace:ws", ""), b.button(l.t("🎨 ظاهر ترمینال"), "a:st:tstyle:ws", "")),
-		row(b.button(l.t("🧰 گزارش کار"), "a:st:worklog:ws", ""), b.button(l.t("👁 نمایش کار توی پیوی"), "a:st:live:ws", "")),
-	}
-	// Premium emoji is off by default and turned on outside the panel
-	// (macron config set premium_emoji true); once on, its packs are managed here.
+	rows := [][]telegram.InlineKeyboardButton{row(b.button(l.t("🖥 ترمینال زنده"), "a:st:trace:ws", ""))}
 	if b.st.SettingBool(store.SettingPremiumEmoji, false) {
 		rows = append(rows, row(b.button(l.t("✨ ایموجی پریمیوم"), "a:em", "")))
 	}
 	rows = append(rows, row(b.back(l, "a:ai")))
-	return panelView{html: html, kb: keyboard(rows...)}
+	return panelView{html: l.f("🖥 <b>نمایش کار</b>\n\nنمایش مراحل: %s", onOff(l, b.st.SettingBool(store.SettingLiveTrace, true))), kb: keyboard(rows...)}
 }
 
 // autoName says how far a job goes on by itself.
@@ -747,20 +713,20 @@ func autoName(l lang, n int) string {
 // of the conversation it gets, its soul, skills, plugins and tools.
 func (b *Bot) viewAgent(l lang) panelView {
 	ctxTokens := b.historyTokens()
-	ctxMode := l.t("خودکار: تا پر شدن context، بعد خلاصه")
+	ctxMode := l.t("خودکار")
 	if b.st.SettingInt(store.SettingHistoryTokens, 0) > 0 {
-		ctxMode = l.t("دستی؛ قدیمی‌ترها خلاصه می‌شن")
+		ctxMode = l.t("دستی")
 	}
 	steps, timeout := b.agentBudget()
-	html := l.f("🦾 <b>ایجنت و ابزارها</b>\n\n🤖 قدرت ایجنت: %s — هر بار %d قدم، و تا وقتی کار پیش می‌ره خودش تمدید می‌شه؛ ترمز: %d دقیقه، یا %d دقیقه بی‌کاری",
+	html := l.f("🦾 <b>ایجنت و ابزارها</b>\n\n🤖 ادامهٔ کار: %s\nقدم‌ها: %d · زمان: %d دقیقه · توقف بی‌کاری: %d دقیقه",
 		autoName(l, b.autoContinue()), steps, int(timeout.Minutes()), int(b.idleTimeout().Minutes()))
 	if w := b.app.Agent.ContextWindow; w != nil {
-		html += l.f("\n🪟 پنجره context مدل: <b>%s</b> توکن (فشرده‌سازی خودکار کارهای طولانی)", agent.HumanTokens(w()))
+		html += l.f("\n🪟 پنجره context مدل: <b>%s</b> توکن", agent.HumanTokens(w()))
 	}
 	html += l.f("\n🧠 گفتگوی همراه هر درخواست: <b>%s</b> توکن (%s)", humanInt(ctxTokens), ctxMode)
 	html += l.f("\n🧬 روح ربات (SOUL.md): %s", b.soulSource(l))
 	if se := b.app.Search; se != nil {
-		html += l.f("\n🔎 جستجوی وب: treg.to %s · DuckDuckGo و Bing همیشه", onOff(l, se.Treg.Token() != ""))
+		html += l.f("\n🔎 جستجوی وب: treg.to %s", onOff(l, se.Treg.Token() != ""))
 	}
 	html += l.f("\n🎨 ساخت عکس با استایل: %s", onOff(l, b.app.Registry.StudioReady()))
 	html += l.f("\n🎤 ساخت آهنگ با خواننده: %s", onOff(l, b.app.Registry.SongReady()))
@@ -768,7 +734,6 @@ func (b *Bot) viewAgent(l lang) panelView {
 		html += l.f("\n🖼 ویرایش عکس با هوش مصنوعی: %s", onOff(l, b.app.Registry.ImageEditKey() != ""))
 	}
 	html += l.f("\n🎙 صدا به متن (ویس‌ها): %s", onOff(l, b.app.Registry.CanTranscribe()))
-	html += l.t("\n\n<i>سهم هر سطح از context و توکن روزانه‌اش توی 💰 فروش و درآمد ← 💎 VIP و سطح‌ها.</i>")
 	return panelView{html: html, kb: keyboard(
 		row(b.button(l.t("🤖 قدم‌های ایجنت"), "a:st:steps", ""), b.button(l.t("⏱ زمان هر درخواست"), "a:st:minutes", "")),
 		row(b.button(l.t("⏩ ادامه خودکار"), "a:st:auto", ""), b.button(l.t("🪟 پنجره context"), "a:st:window", "")),

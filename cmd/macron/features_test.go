@@ -125,7 +125,7 @@ func TestTerminalShowsEachStep(t *testing.T) {
 		all = append(all, fmt.Sprint(d.body["rich_message"]))
 	}
 	joined := strings.Join(all, "\n=====\n")
-	for _, want := range []string{"tg-thinking", "**MACRON** ⟫ live", "📁 Files ✅"} {
+	for _, want := range []string{"tg-thinking", "MACRON ⟫ live", "✓ Files"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the terminal misses %q:\n%s", want, joined)
 		}
@@ -165,7 +165,7 @@ func TestGroupTraceMessageIsRemovedAfterTheAnswer(t *testing.T) {
 	h.send(group(22, "مکرون فایل‌هام چیه؟"))
 	var traceID float64
 	for _, c := range h.tg.of("sendMessage") {
-		if s, _ := c.body["text"].(string); strings.Contains(s, "<b>MACRON</b> ⟫ live") {
+		if s, _ := c.body["text"].(string); strings.Contains(s, "MACRON ⟫ live") {
 			traceID = -1
 			if rp, ok := c.body["reply_parameters"].(map[string]any); !ok || rp["message_id"].(float64) != 77 {
 				t.Errorf("the trace replies to the user's message: %v", c.body)

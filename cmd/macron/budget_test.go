@@ -25,8 +25,8 @@ func TestAgentBudgetFromThePanelAndContinuation(t *testing.T) {
 	}
 	h.tg.reset()
 	h.click(ownerID, ownerID, 9, "a:ai")
-	h.wantText("قدرت ایجنت: ⏩ ادامه خودکار: خاموش — هر بار 6 قدم")
-	h.wantText("ترمز: 45 دقیقه، یا 15 دقیقه بی‌کاری")
+	h.wantText("ادامهٔ کار: ⏩ ادامه خودکار: خاموش")
+	h.wantText("قدم‌ها: 6 · زمان: 45 دقیقه · توقف بی‌کاری: 15 دقیقه")
 
 	// A job bigger than the budget: a report, and the work log in memory.
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
@@ -87,7 +87,7 @@ func TestAutoContinueButton(t *testing.T) {
 		}
 	}
 	h.click(ownerID, ownerID, 9, "a:st:auto")
-	h.wantText("قدرت ایجنت: ⏩ تا 3 تمدید")
+	h.wantText("ادامهٔ کار: ⏩ تا 3 تمدید")
 	if h.bot.agentExtensions() != 3 {
 		t.Fatal("3 extensions")
 	}

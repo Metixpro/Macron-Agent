@@ -61,17 +61,15 @@ func modeName(l lang, fast bool) string {
 	return l.t("🧠 عمیق")
 }
 
-// modeText is the /mode message: the answer mode, and how a private chat
-// sees the bot at work.
-func modeText(l lang, fast bool, live string) string {
-	return l.f("<b>حالت جواب‌دادن</b>: %s\n\n", modeName(l, fast)) +
-		l.t("⚡ <b>سریع</b>: جواب فوری و کوتاه؛ حداکثر یه جستجوی سریع، بدون ابزارهای سنگین (دانلود، اجرای کد، ساخت فایل و عکس، مرورگر).\n") +
-		l.t("🧠 <b>عمیق</b>: ایجنت کامل؛ با همه ابزارها و چند ده قدم، برای کارهای جدی و چندمرحله‌ای.") +
-		"\n\n" + l.f("<b>نمایش کار توی پیوی</b>: %s\n\n", liveName(l, live)) + liveHelp(l)
+// modeText shows the response depth.
+func modeText(l lang, fast bool) string {
+	return l.f("<b>حالت پاسخ</b>: %s\n\n", modeName(l, fast)) +
+		l.t("⚡ <b>سریع</b>: پاسخ کوتاه و ابزارهای سبک.\n") +
+		l.t("🧠 <b>عمیق</b>: ابزارهای کامل برای کارهای چندمرحله‌ای.")
 }
 
 // modeKeyboard picks a mode; the current one is marked.
-func (b *Bot) modeKeyboard(l lang, fast bool, live string) *telegram.InlineKeyboardMarkup {
+func (b *Bot) modeKeyboard(l lang, fast bool) *telegram.InlineKeyboardMarkup {
 	mark := func(on bool, label string) string {
 		if on {
 			return "✓ " + label
@@ -82,17 +80,15 @@ func (b *Bot) modeKeyboard(l lang, fast bool, live string) *telegram.InlineKeybo
 		b.button(mark(fast, l.t("⚡ سریع")), "mode:set:fast", map[bool]string{true: telegram.StylePrimary}[fast]),
 		b.button(mark(!fast, l.t("🧠 عمیق")), "mode:set:deep", map[bool]string{true: telegram.StylePrimary}[!fast]),
 	)}
-	for _, v := range liveModes {
-		rows = append(rows, row(b.button(mark(v == live, liveName(l, v)), "mode:live:"+v, map[bool]string{true: telegram.StylePrimary}[v == live])))
-	}
+
 	return keyboard(rows...)
 }
 
 // sendMode answers /mode.
 func (b *Bot) sendMode(ctx context.Context, m *telegram.Message) {
 	l := b.langOf(m.From)
-	fast, live := b.fastMode(ctx, m.From.ID), b.liveModeOf(ctx, m.From.ID)
-	b.sendPanel(ctx, m, modeText(l, fast, live), b.modeKeyboard(l, fast, live))
+	fast := b.fastMode(ctx, m.From.ID)
+	b.sendPanel(ctx, m, modeText(l, fast), b.modeKeyboard(l, fast))
 }
 
 // handleModeCallback switches the presser's own mode from the /mode message.
@@ -116,18 +112,10 @@ func (b *Bot) handleModeCallback(ctx context.Context, q *telegram.CallbackQuery,
 		return
 	}
 	if parts[1] == "live" {
-		if !validLive(parts[2]) {
-			answer("", false)
-			return
-		}
-		if err := b.st.SetUserPref(ctx, uid, store.PrefLive, parts[2]); err != nil {
-			answer(l.t(textError), true)
-			return
-		}
-		answer(liveName(l, parts[2]), false)
+		answer("", false)
 		if q.Message != nil {
 			fast := b.fastMode(ctx, uid)
-			_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, modeText(l, fast, parts[2]), b.modeKeyboard(l, fast, parts[2]))
+			_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, modeText(l, fast), b.modeKeyboard(l, fast))
 		}
 		return
 	}
@@ -149,6 +137,5 @@ func (b *Bot) handleModeCallback(ctx context.Context, q *telegram.CallbackQuery,
 		return
 	}
 	// The /mode message shows the new choice.
-	live := b.liveModeOf(ctx, uid)
-	_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, modeText(l, fast, live), b.modeKeyboard(l, fast, live))
+	_ = b.editHTML(ctx, q.Message.Chat.ID, q.Message.MessageID, modeText(l, fast), b.modeKeyboard(l, fast))
 }

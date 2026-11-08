@@ -100,6 +100,9 @@ func verifyUnit(u unit, path string) (out string, checked bool, err error) {
 			return out, false, nil
 		}
 	}
+	if err != nil && (strings.Contains(out, "Read-only file system") || strings.Contains(out, "Failed to connect to bus")) {
+		return out, false, nil
+	}
 	if err == nil {
 		return out, true, nil
 	}
@@ -111,7 +114,7 @@ func verifyUnit(u unit, path string) (out string, checked bool, err error) {
 			return out, true, err
 		}
 	}
-	return out, true, nil
+	return out, true, err
 }
 
 // renderLaunchd writes the launchd property list (macOS).

@@ -190,7 +190,7 @@ func TestTheGroupLiveMessageBecomesTheAnswer(t *testing.T) {
 	}
 	terminal := false
 	for _, e := range edits {
-		if strings.Contains(fmt.Sprint(e.body["rich_message"]), "**MACRON** ⟫ live") {
+		if strings.Contains(fmt.Sprint(e.body["rich_message"]), "MACRON ⟫ live") {
 			terminal = true
 		}
 	}

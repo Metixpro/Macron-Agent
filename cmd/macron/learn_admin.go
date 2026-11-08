@@ -22,7 +22,7 @@ const lessonsPage = 8
 func (b *Bot) viewLearn(ctx context.Context, l lang) panelView {
 	counts, _ := b.st.LessonCounts(ctx)
 	var sb strings.Builder
-	sb.WriteString(l.t("🧠 <b>یادگیری</b>\n\nبعد از کاری که یه قدمش خطا داد و با راه دیگه درست شد (یا یه کار طولانی که خوب پیش رفت)، یه قاعده کلی ازش می‌نویسم و همون لحظه توی مهارت‌هام می‌ذارم؛ بدون هیچ اطلاعات شخصی، کلید یا مسیر خونه. هر درس با ↩️ یا <code>/learn undo ID</code> دقیقاً به نسخه قبل برمی‌گرده و دیگه پیشنهاد نمی‌شه."))
+	sb.WriteString(l.t("🧠 <b>یادگیری</b>\n\nدرس‌های اجرا در مهارت‌ها ذخیره می‌شوند. برگشت: ↩️ یا <code>/learn undo ID</code>."))
 	fmt.Fprint(&sb, l.f("\n\n✅ در حال استفاده: <b>%s</b> · 📝 در انتظار: %s · ❌ ردشده یا پس‌گرفته: %s", l.num(counts[store.LessonApproved]),
 		l.num(counts[store.LessonPending]), l.num(counts[store.LessonRejected])))
 	fmt.Fprint(&sb, l.f("\n🔁 یادگیری: %s · ⚡ خودکار: %s", onOff(l, b.learningOn()), onOff(l, b.st.SettingBool(settingLearnAuto, true))))

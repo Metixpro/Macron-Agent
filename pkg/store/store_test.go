@@ -212,18 +212,18 @@ func TestSettingsAdminsChannelsEmoji(t *testing.T) {
 	}
 	s.SetSetting(bg, SettingFailover, "true")
 	s.SetSetting(bg, SettingHistoryTokens, "12000")
-	s.SetSetting(bg, SettingTraceStyle, "سلام <b>دوست</b> 👋")
+	s.SetSetting(bg, "unicode_test_setting", "سلام <b>دوست</b> 👋")
 	// A new Store must see the persisted values.
 	s2 := &Store{db: s.db, now: time.Now, settings: map[string]string{}, admins: map[int64]bool{}}
 	s2.reloadCaches(bg)
 	if !s2.SettingBool(SettingFailover, false) || s2.SettingInt(SettingHistoryTokens, 0) != 12000 {
 		t.Error("persisted settings")
 	}
-	if v, _ := s2.Setting(SettingTraceStyle); v != "سلام <b>دوست</b> 👋" {
+	if v, _ := s2.Setting("unicode_test_setting"); v != "سلام <b>دوست</b> 👋" {
 		t.Errorf("welcome %q", v)
 	}
-	s.DeleteSetting(bg, SettingTraceStyle)
-	if _, ok := s.Setting(SettingTraceStyle); ok {
+	s.DeleteSetting(bg, "unicode_test_setting")
+	if _, ok := s.Setting("unicode_test_setting"); ok {
 		t.Error("delete setting")
 	}
 

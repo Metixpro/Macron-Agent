@@ -183,9 +183,6 @@ const (
 	SettingActiveProvider = "active_provider"
 	SettingFailover       = "provider_failover"
 	SettingLiveTrace      = "live_trace"     // show the live terminal while working
-	SettingTraceStyle     = "trace_style"    // how the terminal looks: the console (default) or "code"
-	SettingWorkLog        = "work_log"       // a folded work log above answers that used tools (default on)
-	SettingLiveMode       = "live_mode"      // how private chats see the work by default (see PrefLive)
 	SettingAgentSteps     = "agent_steps"    // tool rounds per request (0 = the server's default)
 	SettingAgentMinutes   = "agent_minutes"  // minutes per request (0 = the server's default)
 	SettingAutoContinue   = "auto_continue"  // extra rounds a job gets by itself when its budget runs out
@@ -361,4 +358,26 @@ func (s *Store) SecretSetting(key string) (string, error) {
 		return "", nil
 	}
 	return s.open(v)
+}
+
+// EnsureSecretSetting atomically initializes a secret and returns the stored
+// winner, including when another process initialized the same key first.
+func (s *Store) EnsureSecretSetting(ctx context.Context, key, candidate string) (string, error) {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (k,v,updated_at) VALUES (?,?,?)
+ ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated_at=excluded.updated_at WHERE settings.v=''`, key, s.seal(candidate), s.Now())
+	if err != nil {
+		return "", err
+	}
+	var stored string
+	if err = s.db.QueryRowContext(ctx, `SELECT v FROM settings WHERE k=?`, key).Scan(&stored); err != nil {
+		return "", err
+	}
+	value, err := s.open(stored)
+	if err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	s.settings[key] = stored
+	s.mu.Unlock()
+	return value, nil
 }

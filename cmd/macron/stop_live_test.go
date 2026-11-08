@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
@@ -85,79 +84,6 @@ func TestAStoppedJobKeepsItsWorkAndGoesOn(t *testing.T) {
 	h.click(4444, uid, 700, fmt.Sprintf("run:go:%d", uid))
 	if h.llm.count() > 4 {
 		t.Fatal("another user's press continued the job")
-	}
-}
-
-func TestLiveMessageModeKeepsTheInputFree(t *testing.T) {
-	h := newHarness(t)
-	const uid = 33
-	if err := h.st.SetUserPref(bg, uid, store.PrefLive, liveMsg); err != nil {
-		t.Fatal(err)
-	}
-	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
-		if n == 0 {
-			return toolCall("list_files", `{}`), 0
-		}
-		return map[string]any{"role": "assistant", "content": "فایل‌هات مرتبه ✅"}, 0
-	}
-	h.send(private(uid, "فایل‌هامو چک کن"))
-	h.wantText("فایل‌هات مرتبه")
-	if n := len(h.tg.of("sendRichMessageDraft")); n != 0 {
-		t.Fatalf("the live message mode sent %d drafts (they lock the input on Android)", n)
-	}
-	rich := h.tg.of("sendRichMessage")
-	if len(rich) == 0 {
-		t.Fatal("no live message")
-	}
-	reply, _ := rich[0].body["reply_parameters"].(map[string]any)
-	if reply == nil || reply["message_id"] != float64(77) {
-		t.Fatalf("the live message must reply to the request: %v", rich[0].body)
-	}
-	answered := false
-	for _, e := range h.tg.of("editMessageText") {
-		if strings.Contains(fmt.Sprint(e.body["rich_message"]), "فایل‌هات مرتبه") && e.body["message_id"] != nil {
-			answered = true
-		}
-	}
-	if !answered || len(rich) != 1 {
-		t.Fatalf("the live message must become the answer (edited, %d rich messages sent)", len(rich))
-	}
-	actions := h.tg.of("sendChatAction")
-	if len(actions) == 0 || actions[0].body["action"] != "typing" {
-		t.Fatal("no typing… dots")
-	}
-}
-
-func TestModePanelChoosesTheLiveView(t *testing.T) {
-	h := newHarness(t)
-	const uid = 34
-	h.send(private(uid, "/mode"))
-	h.wantText("نمایش کار توی پیوی")
-	panel := lastOf(h, "sendMessage")
-	for _, v := range liveModes {
-		if !hasButton(buttons(panel), "mode:live:"+v) {
-			t.Fatalf("no %s button: %v", v, buttons(panel))
-		}
-	}
-	h.click(uid, uid, 900, "mode:live:"+liveDots)
-	if v, _ := h.st.UserPref(bg, uid, store.PrefLive); v != liveDots {
-		t.Fatalf("stored %q", v)
-	}
-	h.tg.reset()
-	h.llm.reply = say("سلام 👋")
-	h.send(private(uid, "یه سوال: پایتخت فرانسه کجاست؟"))
-	drafts := h.tg.of("sendRichMessageDraft")
-	if len(drafts) == 0 {
-		t.Fatal("the dots mode shows a draft")
-	}
-	for _, d := range drafts {
-		if d.body["can_stop"] == true {
-			t.Fatal("the dots mode has no stop button")
-		}
-	}
-	h.click(uid, uid, 900, "mode:live:bogus")
-	if v, _ := h.st.UserPref(bg, uid, store.PrefLive); v != liveDots {
-		t.Fatalf("an unknown mode was stored: %q", v)
 	}
 }
 

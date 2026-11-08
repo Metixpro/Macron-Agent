@@ -126,7 +126,7 @@ func TestSubAgentShowsAsABranchInTheLiveTerminal(t *testing.T) {
 		all = append(all, fmt.Sprint(d.body["rich_message"]))
 	}
 	joined := strings.Join(all, "\n=====\n")
-	for _, want := range []string{"Sub-agent: Notes", "└ ✍️ Write File ✅"} {
+	for _, want := range []string{"Sub-agent: Notes", "└─ ✓ Write File"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the terminal misses %q:\n%s", want, joined)
 		}

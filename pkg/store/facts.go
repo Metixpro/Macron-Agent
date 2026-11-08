@@ -109,10 +109,6 @@ const PrefFactsOff = "facts_off"
 // PrefMode is the user's answer mode: "fast", or unset for deep mode.
 const PrefMode = "mode"
 
-// PrefLive is how the bot shows its work in the user's private chat
-// ("msg", "stop" or "dots"; unset: SettingLiveMode).
-const PrefLive = "live"
-
 // UserPref returns a user's preference ("" when unset).
 func (s *Store) UserPref(ctx context.Context, userID int64, name string) (string, error) {
 	var v string

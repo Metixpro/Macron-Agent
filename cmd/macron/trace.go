@@ -16,7 +16,7 @@ import (
 // The live view: while the agent works, the user sees which tools it uses,
 // one line per tool, named after the tool's function, and nothing else (no
 // arguments, outputs, commands or the model's notes). By default it is drawn
-// as the console (console.go), whose icons can be premium emoji; this file
+// as classic code blocks; this file
 // draws the classic style, a code block:
 //
 //	💭 MACRON ⟫ live · step 3 · 0:07
@@ -163,8 +163,6 @@ type trace struct {
 	note      string           // a line under the title, outside the code block (e.g. «🎧 listening»)
 	title     string           // a background task's name: shown in the title line
 	plan      []agent.PlanItem // the job's checklist, above the terminal
-	console   bool             // drawn as the console (console.go), not a code block
-	icons     iconPicker       // the console's icons, premium where they can be
 }
 
 func (t *trace) add(s traceStep) *traceStep {
@@ -381,9 +379,6 @@ func (t *trace) card(now, started time.Time, animate bool) (title, body string) 
 }
 
 func (t *trace) markdown(now, started time.Time, animate bool) string {
-	if t.console {
-		return t.consoleView(now, started, animate, mdConsole)
-	}
 	title, body := t.card(now, started, animate)
 	if t.note != "" {
 		title += "\n" + t.note
@@ -395,9 +390,6 @@ func (t *trace) markdown(now, started time.Time, animate bool) string {
 }
 
 func (t *trace) html(now, started time.Time, animate bool) string {
-	if t.console {
-		return t.consoleView(now, started, animate, htmlConsole)
-	}
 	title, body := t.card(now, started, animate)
 	if t.note != "" {
 		title += "\n" + t.note
@@ -542,3 +534,5 @@ var markdownSpecial = strings.NewReplacer(`\`, `\\`, "*", `\*`, "_", `\_`, "`", 
 	"=", `\=`, "#", `\#`, "<", `\<`, ">", `\>`)
 
 func escapeMarkdown(s string) string { return markdownSpecial.Replace(s) }
+
+func (t *trace) planMD() string { return planMarkdown(t.plan) }

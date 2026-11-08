@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -36,15 +37,38 @@ func (r *Registry) checkpoint(ctx context.Context, sessionID string, paths []str
 	if err := os.MkdirAll(r.CheckpointDir, 0o700); err != nil {
 		return "checkpoint: " + err.Error()
 	}
-	file := filepath.Join(r.CheckpointDir, time.Now().Format("20060102-150405")+"-"+sanitizeBase(sessionID)+".tar.gz")
-	quoted := make([]string, 0, len(paths))
-	for _, p := range paths {
-		quoted = append(quoted, "'"+strings.ReplaceAll(p, "'", `'\''`)+"'")
+	f, err := os.CreateTemp(r.CheckpointDir, "checkpoint-"+sanitizeBase(sessionID)+"-*.tar.gz")
+	if err != nil {
+		return "checkpoint failed: " + err.Error()
 	}
-	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Shell: "tar czf '" + strings.ReplaceAll(file, "'", `'\''`) + "' --ignore-failed-read -- " +
-		strings.Join(quoted, " ") + " 2>/dev/null || true", Timeout: 2 * time.Minute, InSession: true})
-	if res != nil && res.ExitCode != 0 {
-		return fmt.Sprintf("checkpoint of %v failed (exit %d)", paths, res.ExitCode)
+	file := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(file)
+		return "checkpoint failed: " + err.Error()
+	}
+	ws, err := r.Machine.Workspace(sessionID)
+	if err != nil {
+		_ = os.Remove(file)
+		return "checkpoint failed: " + err.Error()
+	}
+	args := []string{"czf", file, "--"}
+	for _, path := range paths {
+		if path == machine.MountPoint {
+			path = ws
+		} else if strings.HasPrefix(path, machine.MountPoint+"/") {
+			path = filepath.Join(ws, strings.TrimPrefix(path, machine.MountPoint+"/"))
+		}
+		args = append(args, path)
+	}
+	checkpointCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(checkpointCtx, "tar", args...)
+	cmd.Dir = ws
+	// The archive helper needs no model credentials or caller TAR_OPTIONS.
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "LANG=C.UTF-8"}
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(file)
+		return fmt.Sprintf("checkpoint failed: %v", err)
 	}
 	return "checkpoint kept in " + file
 }

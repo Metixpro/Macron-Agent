@@ -36,7 +36,7 @@ func TestGroupPanelsAnswerOnlyTheirOwner(t *testing.T) {
 	chat := telegram.Chat{ID: -100500, Type: "supergroup", Title: "بچه‌های Go"}
 
 	h.send(group(owner, "/mode"))
-	h.wantText("حالت جواب‌دادن")
+	h.wantText("حالت پاسخ")
 	panel := &telegram.Message{MessageID: panelIn(h, chat.ID), Chat: chat}
 
 	edits := len(h.tg.of("editMessageText"))

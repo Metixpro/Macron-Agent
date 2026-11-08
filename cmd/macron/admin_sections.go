@@ -36,7 +36,7 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		in.draft.Name = text
 		in.kind = "pv_url"
 		b.expect(m.From.ID, in)
-		b.reply(m, l.t("🌐 آدرس API رو بفرست، مثلاً:\n<code>https://api.openai.com/v1</code> (هر سرویس سازگار با OpenAI: Gemini، DeepSeek، OpenRouter، Groq، Azure، Ollama…)\n<code>https://api.anthropic.com</code> (Claude با API خود Anthropic)\n<code>https://api.kie.ai/openai/v1/responses</code> (آدرسی که آخرش <code>/responses</code> باشه، یعنی Responses API؛ همون‌طور که هست بفرست)"))
+		b.reply(m, l.t("🌐 آدرس API را بفرست:\n<code>https://api.openai.com/v1</code>\n<code>https://api.anthropic.com</code>\nبرای Responses، آدرس کاملِ <code>/responses</code> را بفرست."))
 	case "pv_url":
 		u, api := llm.CleanBaseURL(text) // a whole endpoint pasted (".../v1/responses") names its wire format
 		u = strings.TrimRight(u, "/")
@@ -282,7 +282,6 @@ func (b *Bot) viewProviders(ctx context.Context, l lang) panelView {
 	}
 	failover := b.st.SettingBool(store.SettingFailover, true)
 	fmt.Fprint(&sb, l.f("\n🔁 سوییچ خودکار وقتی پروایدر فعال خطا بده: %s", onOff(l, failover)))
-	sb.WriteString(l.t("\n\nℹ️ <b>روشن/خاموش</b> یعنی این مدل اصلاً استفاده بشه یا نه؛ خاموش هیچ‌جا به کار نمی‌ره. <b>⭐ فعال</b> یعنی درخواست‌ها اول سراغ کدوم برن. توی 💎 سطح‌ها می‌شه برای Free و VIP پروایدر جدا گذاشت؛ اونجا «خودکار» همین ⭐ هست. بقیه روشن‌ها به ترتیب اولویت فقط جای خطا جواب می‌دن."))
 	rows = append(rows,
 		row(b.button(l.t("➕ افزودن پروایدر"), "a:pv:add", telegram.StyleSuccess), b.button(l.t("🧭 مسیریابی هوشمند"), "a:rt", telegram.StylePrimary)),
 		row(b.button(l.t("🔁 سوییچ خودکار"), "a:st:failover:pv", ""), b.back(l, "a:home")))
@@ -392,7 +391,6 @@ func (b *Bot) viewProvider(ctx context.Context, l lang, id int64) panelView {
 	if p.LastErrorAt != nil {
 		fmt.Fprint(&sb, l.f("\n❌ آخرین خطا (%s): <code>%s</code>", ago(l, p.LastErrorAt), esc(shortText(p.LastError, 200))))
 	}
-	sb.WriteString(l.t("\n\nℹ️ ⏸ خاموش: هیچ درخواستی بهش نمی‌ره (نه پیش‌فرض، نه سوییچ خودکار). ⭐ فعال کن: پیش‌فرض همه درخواست‌ها می‌شه."))
 	pid := func(action string) string { return fmt.Sprintf("a:pv:%d:%s", id, action) }
 	toggle := b.button(l.t("⏸ خاموش کن"), pid("toggle"), "")
 	if !p.Enabled {
@@ -579,8 +577,6 @@ func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 وقتی روشن باشه، هر ایموجی معمولی که توی متن‌ها و دکمه‌های ربات بیاد و نسخه پریمیومش ثبت شده باشه، خودکار پریمیوم نشون داده می‌شه.
 
 ⚠️ تلگرام فقط وقتی اجازه می‌ده که صاحب ربات <b>تلگرام پریمیوم</b> داشته باشه (یا ربات یوزرنیم Fragment خریده باشه).`, onOff(l, enabled), len(m)) + b.statusEmojiLines(l)
-	have, total := b.consoleCoverage()
-	html += l.f("\n\n🖥 <b>آیکون‌های ترمینال</b>: %s از %s پریمیوم دارن. با «📦 وارد کردن پک» یه پک کامل (مثلاً لینک <code>t.me/addemoji/…</code>) یک‌جا وصل می‌شه.", l.num(have), l.num(total))
 	toggleStyle := telegram.StyleSuccess
 	if enabled {
 		toggleStyle = ""
@@ -588,7 +584,7 @@ func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 	return panelView{html: html, kb: keyboard(
 		row(b.button(map[bool]string{true: l.t("🔴 خاموش کن"), false: l.t("🟢 روشن کن")}[enabled], "a:st:premium:em", toggleStyle),
 			b.button(l.t("➕ افزودن"), "a:em:add", telegram.StylePrimary)),
-		row(b.button(l.t("📦 وارد کردن پک"), "a:em:pack", telegram.StylePrimary), b.button(l.t("🖥 آیکون‌های ترمینال"), "a:em:icons", "")),
+		row(b.button(l.t("📦 وارد کردن پک"), "a:em:pack", telegram.StylePrimary)),
 		row(b.button(l.t("📋 لیست"), "a:em:list", ""), b.button(l.t("🧪 تست"), "a:em:test", "")),
 		row(b.button(l.t("🗑 حذف"), "a:em:del", ""), b.button(l.t("🧹 حذف همه"), "a:em:clear", telegram.StyleDanger)),
 		row(b.button(l.t("✨ ساخت ایموجی وضعیت‌ها"), "a:em:make", telegram.StylePrimary)),
@@ -621,7 +617,7 @@ func (b *Bot) handleEmojiPanel(ctx context.Context, q *telegram.CallbackQuery, p
 		return
 	case "icons":
 		answer("", false)
-		show(b.viewConsoleIcons(l))
+		show(b.viewEmoji(ctx, l))
 		return
 	case "del":
 		answer("", false)

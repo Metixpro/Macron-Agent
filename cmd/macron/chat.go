@@ -680,11 +680,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			resp.answer(sendCtx, answer)
 		}
 	default:
-		head := "" // the steps, folded above the answer
-		if strings.TrimSpace(answer) != "" {
-			head = live.workLog()
-		}
-		shown, rest = b.sendAnswerWithFiles(sendCtx, m, session, answer, head, sent, captions, box.extras.effectID(), live.inPlace())
+		shown, rest = b.sendAnswerWithFiles(sendCtx, m, session, answer, "", sent, captions, box.extras.effectID(), live.inPlace())
 	}
 	asked := ""
 	if q := box.question(); q != nil && res.EndedBy == toolAskUser {

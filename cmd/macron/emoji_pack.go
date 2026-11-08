@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -107,47 +106,10 @@ func (b *Bot) handleEmojiPackInput(ctx context.Context, m *telegram.Message, don
 	if r.twice > 0 {
 		msg += l.f("\n♻️ %s تا ایموجی توی خود پک تکراری بود؛ اولی ثبت شد.", l.num(r.twice))
 	}
-	have, total := b.consoleCoverage()
-	msg += l.f("\n🖥 آیکون‌های ترمینال: %s از %s پریمیوم دارن.", l.num(have), l.num(total))
 	if !b.st.SettingBool(store.SettingPremiumEmoji, false) {
 		msg += l.t("\n⚠️ ایموجی پریمیوم خاموشه؛ با «🟢 روشن کن» توی همین پنل فعالش کن.")
 	}
 	b.reply(m, msg)
 	done(b.viewEmoji(ctx, l))
 	return true
-}
-
-// consoleCoverage counts the console's icons that have a premium emoji
-// (mapped, whether premium emoji are on or not).
-func (b *Bot) consoleCoverage() (have, total int) {
-	ic := iconPicker{b.emojis.Load()}
-	for _, c := range consoleIconList() {
-		total++
-		if ic.premium(c.cands) {
-			have++
-		}
-	}
-	return have, total
-}
-
-// viewConsoleIcons lists the console's icons and which have a premium emoji.
-func (b *Bot) viewConsoleIcons(l lang) panelView {
-	ic := iconPicker{b.emojis.Load()}
-	have, total := b.consoleCoverage()
-	var sb strings.Builder
-	sb.WriteString(l.f("🖥 <b>آیکون‌های ترمینال</b>: %s از %s پریمیوم دارن\n\n", l.num(have), l.num(total)))
-	for _, c := range consoleIconList() {
-		state, alts := "✅", ""
-		if !ic.premium(c.cands) {
-			state = "▫️"
-			if len(c.cands) > 1 {
-				alts = l.f(" (یا %s)", strings.Join(c.cands[1:], " "))
-			}
-		}
-		fmt.Fprintf(&sb, "%s %s %s%s\n", state, ic.pick(c.cands), esc(c.name), alts)
-	}
-	sb.WriteString(l.t("\nهر کدوم که پریمیوم نداره رو با «➕ افزودن» به یه ایموجی پریمیوم وصل کن (هر کدوم از جایگزین‌هاش هم قبوله)، یا یه پک کامل رو با «📦 وارد کردن پک» بیار."))
-	return panelView{html: sb.String(), kb: keyboard(
-		row(b.button(l.t("📦 وارد کردن پک"), "a:em:pack", telegram.StylePrimary), b.button(l.t("➕ افزودن"), "a:em:add", "")),
-		row(b.back(l, "a:em")))}
 }

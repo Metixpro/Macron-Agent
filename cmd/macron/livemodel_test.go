@@ -166,7 +166,6 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = h.bot.prov.Reload(bg)
-	_ = h.st.SetSetting(bg, store.SettingLiveMode, liveStop)
 	h.bot.runTimeout = 4 * time.Minute
 	if os.Getenv("WAZE_TEST_LLM_PLUGINS") != "" { // many plugin tools: the job loads the ones it needs (tool_search)
 		h.bot.app.Registry.SetPlugins(labPlugins{})

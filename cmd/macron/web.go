@@ -59,10 +59,12 @@ func (b *Bot) secretSetting(ctx context.Context, key string) string {
 	raw := make([]byte, 24)
 	_, _ = rand.Read(raw)
 	v := hex.EncodeToString(raw)
-	if err := b.st.SetSecretSetting(ctx, key, v); err != nil {
+	stored, err := b.st.EnsureSecretSetting(ctx, key, v)
+	if err != nil {
 		log.Printf("web: saving %s: %v", key, err)
+		return ""
 	}
-	return v
+	return stored
 }
 
 // signHook is the signature a sender puts on an event.
@@ -97,7 +99,12 @@ func (b *Bot) webhookHandler() http.Handler {
 			http.Error(w, "stale or missing timestamp", http.StatusUnauthorized)
 			return
 		}
-		want := signHook(b.secretSetting(r.Context(), settingHookSecret), ts, body)
+		secret := b.secretSetting(r.Context(), settingHookSecret)
+		if secret == "" {
+			http.Error(w, "not configured", http.StatusServiceUnavailable)
+			return
+		}
+		want := signHook(secret, ts, body)
 		if subtle.ConstantTimeCompare([]byte(want), []byte(r.Header.Get("X-Macron-Signature"))) != 1 {
 			http.Error(w, "bad signature", http.StatusUnauthorized)
 			return
@@ -114,6 +121,7 @@ func (b *Bot) webhookHandler() http.Handler {
 		}
 		id, err := b.hookTask(r.Context(), name, body)
 		if err != nil {
+			b.hookSeen.Delete(want) // A request that created no task may be retried.
 			log.Printf("webhook %s: %v", name, err)
 			http.Error(w, "not accepted", http.StatusServiceUnavailable)
 			return

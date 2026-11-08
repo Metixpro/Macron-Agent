@@ -4,8 +4,7 @@ package main
 
 func init() {
 	for fa, en := range map[string]string{
-		"\n\nℹ️ مدل معمولی همون پروایدر فعاله (⭐ توی 🤖 پروایدرها).":                                                       "\n\nℹ️ The regular model is the active provider (⭐ in 🤖 Providers).",
-		"\n\nℹ️ ⏸ خاموش: هیچ درخواستی بهش نمی‌ره (نه پیش‌فرض، نه سوییچ خودکار). ⭐ فعال کن: پیش‌فرض همه درخواست‌ها می‌شه.": "\n\nℹ️ ⏸ Off: no request goes to it (not as the default, not by automatic switching). ⭐ Activate: it becomes the default for all requests.",
+		"\n\nℹ️ مدل معمولی همون پروایدر فعاله (⭐ توی 🤖 پروایدرها).": "\n\nℹ️ The regular model is the active provider (⭐ in 🤖 Providers).",
 		"\n▫️ معمولی: %s\n": "\n▫️ Regular: %s\n",
 		"<b>%s</b>\n\n🔋 توکن امروز: <b>%s</b>\n🧠 حافظه گفتگو: %s\n📌 چیزهایی که درباره‌ات یادمه: %s\n🗂 گفتگوهای بایگانی‌شده: %s پیام\n📁 فایل‌ها: %d (%s)": "<b>%s</b>\n\n🔋 Tokens today: <b>%s</b>\n🧠 Conversation memory: %s\n📌 What I remember about you: %s\n🗂 Archived conversations: %s messages\n📁 Files: %d (%s)",
 		"▫️ <b>مدل معمولی</b>\n\nهمه درخواست‌ها، جز کارهای سنگین، اول به این پروایدر می‌رن. «خودکار» یعنی ⭐ فعال پنل.":                                   "▫️ <b>Regular model</b>\n\nEvery request except the heavy jobs goes to this provider first. «Automatic» means the panel's ⭐ active one.",

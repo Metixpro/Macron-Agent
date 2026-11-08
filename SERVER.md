@@ -152,3 +152,11 @@ UPPER_CASE keys live in `config.env`; lower_case keys are the agent's own settin
 | `MACRON_DASHBOARD_ADDR` | — | e.g. `127.0.0.1:8788`: a read-only status page (loopback only; `/dashboard` gives the link) |
 
 Commands: `/settings` (the panel; `/admin` still works), `/update`, `/moa`, `/learn undo ID`, `/approve`, `/yolo [off]`, `/board`, `/search WORDS`, `/dashboard`. Group settings: `/groupsettings`.
+
+### 1.2.1 presentation cleanup
+
+Progress uses the classic code block. Appearance selection, the private-view
+selector and the attached final work report are removed. `/mode` selects only
+fast/deep responses. Private progress uses the standard draft with Stop;
+legacy display preferences are ignored. Internal continuation history is kept.
+See [the review and remaining limits](audits/REVIEW-1.2.1.fa.md).
