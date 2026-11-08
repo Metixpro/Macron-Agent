@@ -137,7 +137,10 @@ func (b *Bot) handlePollAnswer(a *telegram.PollAnswer) {
 		}
 		return
 	}
-	// In a group anyone may vote; only the person who was asked continues the task.
+	if b.personal && (p.ChatType != "private" || p.ChatID < 0) {
+		return
+	}
+	// Only the person who was asked continues the task.
 	if p.UserID != a.User.ID || time.Since(p.CreatedAt) > pollMaxAge {
 		return
 	}

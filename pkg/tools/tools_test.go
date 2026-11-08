@@ -55,7 +55,7 @@ func TestToolListIsStableAndComplete(t *testing.T) {
 	}
 	want := []string{"bash_execute", "crypto_currency_price", "deep_research", "download_file", "download_media_ytdlp", "generate_chart",
 		"document_reader", "generate_image", "generate_qr", "github_inspect", "list_files", "media_convert", "pdf_tool", "read_file", "search_image",
-		"search_music", ToolSplitVideo, "text_to_speech", ToolTranscribe, "web_fetch", "web_search", "whois_lookup", "write_file", ToolRunCode,
+		"search_music", ToolSplitVideo, "text_to_speech", "web_fetch", "web_search", "whois_lookup", "write_file", ToolRunCode,
 		ToolProjectTree, ToolSearchCode, ToolFindFiles, ToolCodeOutline, ToolEditFile, ToolExtract, ToolImportRepo, ToolPackFiles,
 		ToolQueryData, ToolCreateSpreadsheet, ToolMarketPrice, ToolShellJobs}
 	if r.syntax["git"] {

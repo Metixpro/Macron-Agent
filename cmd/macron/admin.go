@@ -132,6 +132,9 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 	// ----- the server
 	case "sys", "syschart", "sysal":
 		b.handleSysCallback(ctx, l, section, parts, chatID, admin, answer, show)
+	case "ssh": // Old server-panel buttons return to the current server view.
+		answer("", false)
+		show(b.viewServer(l, "1h"))
 	// ----- the downloader
 	case "dl":
 		switch arg(2) {
@@ -277,7 +280,7 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		show(b.updateView(ctx, l, "a:home"))
 
 	// ----- the agent and its tools
-	case "ai":
+	case "ai", "stt":
 		answer("", false)
 		show(b.viewAgent(l))
 
@@ -301,13 +304,9 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		b.handleImageGenPanel(ctx, q, parts, answer, show, ask)
 	case "mu":
 		b.handleMusicPanel(ctx, q, parts, answer, show, ask)
-	case "stt":
-		if b.sttCallback(ctx, l, arg(2), chatID, answer, ask) {
-			return
-		}
-		show(b.viewSTT(l))
 	default:
 		answer("", false)
+		show(b.viewHome(ctx, admin))
 	}
 }
 
@@ -335,10 +334,6 @@ func (b *Bot) handleAdminInput(ctx context.Context, m *telegram.Message) bool {
 	}
 
 	switch in.kind {
-	case "stt_set":
-		if b.sttInput(ctx, l, m) {
-			done(b.viewSTT(l))
-		}
 	case "sr_token":
 		_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID) // a token is a password: never leave it in the chat
 		token := strings.TrimSpace(m.Text)
@@ -733,13 +728,12 @@ func (b *Bot) viewAgent(l lang) panelView {
 	if b.app.Registry.Has(tools.ToolEditImage) {
 		html += l.f("\n🖼 ویرایش عکس با هوش مصنوعی: %s", onOff(l, b.app.Registry.ImageEditKey() != ""))
 	}
-	html += l.f("\n🎙 صدا به متن (ویس‌ها): %s", onOff(l, b.app.Registry.CanTranscribe()))
 	return panelView{html: html, kb: keyboard(
 		row(b.button(l.t("🤖 قدم‌های ایجنت"), "a:st:steps", ""), b.button(l.t("⏱ زمان هر درخواست"), "a:st:minutes", "")),
 		row(b.button(l.t("⏩ ادامه خودکار"), "a:st:auto", ""), b.button(l.t("🪟 پنجره context"), "a:st:window", "")),
 		row(b.button(l.t("🧠 اندازه حافظه"), "a:st:ctx", ""), b.button(l.t("🧬 روح ربات"), "a:soul", "")),
 		row(b.button(l.t("🔎 جستجوی وب"), "a:sr", ""), b.button(l.t("📥 دانلودر"), "a:dl", "")),
-		row(b.button(l.t("🎙 صدا به متن"), "a:stt", ""), b.button(l.t("🎨 ساخت عکس"), "a:ig", "")),
+		row(b.button(l.t("🎨 ساخت عکس"), "a:ig", "")),
 		row(b.button(l.t("🖼 ویرایش عکس"), "a:ie", ""), b.button(l.t("🎤 ساخت آهنگ"), "a:mu", "")),
 		row(b.button(l.t("🖥 نمایش کار"), "a:ws", ""), b.button(l.t("🛡 گیت دستورات"), "a:gate", "")),
 		row(b.button(l.t("⚖️ رأی‌گیری چندمدلی"), "a:moa", "")),
@@ -760,7 +754,14 @@ func (b *Bot) registerCommands(ctx context.Context) error {
 		if err := b.api.SetMyCommandsFor(ctx, b.userCommands(m.l), nil, m.code); err != nil && first == nil {
 			first = err
 		}
-		_ = b.api.SetMyCommandsFor(ctx, groupCommands(m.l), &telegram.BotCommandScope{Type: "all_group_chats"}, m.code)
+		if b.personal {
+			// Clear old group/default menus; the personal menu belongs in private chats.
+			_ = b.api.SetMyCommandsFor(ctx, nil, nil, m.code)
+			_ = b.api.SetMyCommandsFor(ctx, nil, &telegram.BotCommandScope{Type: "all_group_chats"}, m.code)
+			_ = b.api.SetMyCommandsFor(ctx, b.userCommands(m.l), &telegram.BotCommandScope{Type: "all_private_chats"}, m.code)
+		} else {
+			_ = b.api.SetMyCommandsFor(ctx, groupCommands(m.l), &telegram.BotCommandScope{Type: "all_group_chats"}, m.code)
+		}
 	}
 	b.registerAdminCommands(ctx)
 	return first

@@ -109,6 +109,9 @@ var answerSendBudget = 5 * time.Minute
 // at a fixed budget: the agent extends it while the work makes progress
 // (see agentExtensions).
 func (b *Bot) handlePrompt(u *store.User, m *telegram.Message, text string, opt promptOptions) error {
+	if b.personal && !m.Chat.Private() {
+		return errNotDone
+	}
 	out, err := b.runPrompt(u, m, text, opt)
 	// Whatever ended it, the job never stays "running" (a no-op once it ended).
 	defer func() { out.job.interrupt(store.JobFailed) }()
@@ -306,7 +309,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	live.start(runCtx)
 	defer live.discard() // after the answer: removes the live message unless it became the answer
 
-	in, err := b.buildInput(withListening(runCtx, live.listening), u, m, text, false)
+	in, err := b.buildInput(runCtx, u, m, text, false)
 	if errors.Is(err, errTooBig) || errors.Is(err, errWorkspaceFull) {
 		react.clear()
 		return say(b.fileRefusal(l, err))
@@ -445,10 +448,6 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		check = fileClaimCheck(func(answer string) []string {
 			return append(files.deliveries(box.list()), files.placed(answer)...)
 		}, func(chosen []string) []string { return files.made(chosen...) })
-	}
-	if !b.app.Registry.CanTranscribe() { // shown only when a speech-to-text service is set
-		keep := toolFilter
-		toolFilter = func(name string) bool { return name != tools.ToolTranscribe && (keep == nil || keep(name)) }
 	}
 
 	// The triage's choice of history and tools: where the provider does not
@@ -1208,10 +1207,6 @@ func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, v
 		// to again: it knows what it said, and the card shows no «listening».
 		replied := lead == leadReplied
 		own := replied && m.From != nil && (m.From.ID == b.me.ID || (m.ViaBot != nil && m.ViaBot.ID == b.me.ID))
-		heard, failed := "", ""
-		if (m.Voice != nil || m.VideoNote != nil) && !own {
-			heard, failed = b.hear(ctx, session, name)
-		}
 		switch {
 		case own:
 			if preview != "" {
@@ -1219,106 +1214,19 @@ func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, v
 			}
 			a.about = fmt.Sprintf("%s a %s you sent yourself earlier in this chat (yours, e.g. made with text_to_speech or downloaded), saved in "+
 				"the workspace as %s (%s). %s You can work with the file (convert, cut, send again…).%s", lead, kind, name, sizeText(size), desc, songNote(m, name))
-		case heard != "" && replied:
-			if preview != "" {
-				a.images = []string{preview}
-			}
-			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). %s What it says (speech to text; small mistakes are possible): "+
-				"«%s». That is the content of the replied message; the user's request is their own message.", lead, kind, name, sizeText(size), desc,
-				textutil.TruncateRunes(heard, 3000, "…"))
-		case heard != "":
-			if preview != "" {
-				a.images = []string{preview}
-			}
-			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). %s What it says (speech to text; small mistakes are possible) "+
-				"is the user's message: answer it as if they had typed it, in its language.", lead, kind, name, sizeText(size), desc)
-			a.placeholder = "🎙 " + heard
-			a.note = "[the user sent " + aOrAn(kind) + ": " + name + "] " + textutil.TruncateRunes(heard, 2000, "…")
-		case failed != "":
-			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). Writing down its speech failed (%s); "+
-				"do not try %s on it now: tell the user kindly, and ask them to type it or try again later.", lead, kind, name, sizeText(size), failed, tools.ToolTranscribe)
 		case preview != "":
 			a.images = []string{preview}
 			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). %s You cannot hear its sound.", lead, kind, name, sizeText(size), desc)
 		case moving != nil:
 			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). You cannot watch it, but you can work with the file "+
 				"(convert, cut, extract audio…). Tell the user kindly if they expect you to understand its content.", lead, kind, name, sizeText(size))
-		case b.app.Registry.CanTranscribe():
-			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). %s writes down its speech when that is what the user wants; "+
-				"you can also work with the file (convert, cut, trim…).", lead, kind, name, sizeText(size), tools.ToolTranscribe)
 		default:
-			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). You cannot listen to it (speech to text is not set up; "+
-				"the bot's admin can turn it on in the admin panel), but you can work with the file (convert, cut, trim…). "+
+			a.about = fmt.Sprintf("%s a %s, saved in the workspace as %s (%s). Speech recognition is not supported. You can work with the file (convert, cut, trim…). "+
 				"Tell the user kindly if they expect you to understand its content.", lead, kind, name, sizeText(size))
 		}
 		return a, nil
 	}
 	return nil, nil
-}
-
-// hear writes down a voice message (once: the transcript is kept next to
-// it, so replying to it later does not ask the service again). failed tells
-// why it could not; both are empty without a speech-to-text service.
-func (b *Bot) hear(ctx context.Context, session, name string) (text, failed string) {
-	cache := "." + name + ".transcript"
-	if data, _, err := b.app.Machine.ReadFile(session, cache, 1<<20); err == nil {
-		return strings.TrimSpace(string(data)), ""
-	}
-	if !b.app.Registry.CanTranscribe() {
-		return "", ""
-	}
-	show := listeningFrom(ctx)
-	show(listenStart)
-	// A local whisper writes down one recording at a time: the card says
-	// when this one waits for its turn.
-	ctx = tools.WithProgress(ctx, tools.Progress{Status: func(s string) {
-		switch s {
-		case tools.StatusQueued:
-			show(listenQueued)
-		case tools.StatusListening:
-			show(listenStart)
-		}
-	}})
-	text, _, err := b.app.Registry.Transcribe(ctx, session, name, "")
-	switch {
-	case errors.Is(err, tools.ErrNoTranscriber):
-		show(listenDone)
-		return "", ""
-	case err != nil:
-		show(listenFailed)
-		log.Printf("[%s] speech to text: %v", session, err)
-		return "", textutil.TruncateRunes(err.Error(), 200, "…")
-	case strings.TrimSpace(text) == "":
-		show(listenDone)
-		return "", "no speech in it"
-	}
-	show(listenDone)
-	_ = b.app.Machine.WriteFile(session, cache, []byte(text))
-	return text, ""
-}
-
-// listenState is where writing down a voice message is.
-type listenState int
-
-const (
-	listenStart listenState = iota
-	listenQueued
-	listenDone
-	listenFailed
-)
-
-type listenKey struct{}
-
-// withListening lets reading a message tell the live card that it listens.
-func withListening(ctx context.Context, f func(listenState)) context.Context {
-	return context.WithValue(ctx, listenKey{}, f)
-}
-
-func listeningFrom(ctx context.Context) func(listenState) {
-	if f, ok := ctx.Value(listenKey{}).(func(listenState)); ok && f != nil {
-		return f
-	}
-	return func(listenState) {}
 }
 
 // memCtx is the time to write a turn to the memory: its own, so a shutdown

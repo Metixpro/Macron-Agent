@@ -12,7 +12,7 @@ license: MIT
 ## Get the transcript (not the video)
 1. `download_media_ytdlp` with the link and `subtitles: "only"`; `sub_langs` = the video's language (e.g. `en`, `fa`), automatic subtitles included.
 2. Read the SRT with `read_file`. For long videos, read it in parts and keep notes in a work file.
-3. No subtitles at all? Download the audio only and say a transcript needs speech-to-text, which may not be available; summarize from the title, description and chapters instead, and say so.
+3. No subtitles at all? Summarize from the title, description and chapters instead, and say so.
 
 ## Turn it into what was asked
 - **Summary**: the main point in one line, then 5–8 key points with timestamps (mm:ss).

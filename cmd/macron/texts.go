@@ -101,9 +101,6 @@ func statusFor(l lang, tool string) string {
 // thinkingStatus is the status while the model thinks.
 func thinkingStatus(l lang) string { return "💭 " + l.t(thinkingText) }
 
-// listeningStatus is shown while a voice message is written down.
-func listeningStatus(l lang) string { return "🎙 " + l.t("دارم می‌شنوم…") }
-
 // statusIcon is the icon in front of a tool's status line.
 func statusIcon(tool string) string {
 	switch tool {
@@ -113,7 +110,7 @@ func statusIcon(tool string) string {
 		return "📖"
 	case "deep_research":
 		return "🧠"
-	case "search_music", tools.ToolTranscribe:
+	case "search_music":
 		return "🎧"
 	case "download_file", "download_media_ytdlp":
 		return "📥"
@@ -195,8 +192,6 @@ func statusIcon(tool string) string {
 
 func toolStatus(tool string) string {
 	switch tool {
-	case tools.ToolTranscribe:
-		return "دارم گوش می‌دم…"
 	case "web_search":
 		return "دارم توی اینترنت می‌گردم…"
 	case "web_fetch":
@@ -302,7 +297,7 @@ func actionFor(tool string) string {
 	switch tool {
 	case "generate_image", tools.ToolEditImage, "search_image", "generate_chart", "generate_qr", toolProfilePhoto:
 		return "upload_photo"
-	case "text_to_speech", tools.ToolTranscribe:
+	case "text_to_speech":
 		return "record_voice"
 	case "download_media_ytdlp", "media_convert", "split_video", "create_motion_graphic":
 		return "upload_video"

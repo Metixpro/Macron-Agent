@@ -45,10 +45,6 @@ const (
 	EnvMusicURL      = "WAZE_MUSIC_API_URL"  // the song service of generate_song ("off" disables songs)
 	EnvMusicKey      = "WAZE_MUSIC_API_KEY"  // its X-API-Key (the bot's admin panel can set it too)
 	EnvPiperModel    = "WAZE_PIPER_MODEL"    // the local Persian voice of text_to_speech (a Piper .onnx; "off" = Edge TTS only)
-	EnvSTTURL        = "WAZE_STT_URL"        // OpenAI-compatible speech to text (…/v1); default: the providers; "off" disables it
-	EnvSTTKey        = "WAZE_STT_KEY"        // its API key
-	EnvSTTModel      = "WAZE_STT_MODEL"      // its model (default whisper-1; Groq: whisper-large-v3-turbo)
-	EnvSTTTimeout    = "WAZE_STT_TIMEOUT"    // one recording's time limit, e.g. 8m (default 5m; a local whisper on a small server needs more)
 	EnvContextWindow = "WAZE_CONTEXT_WINDOW" // the model's context window in tokens (default: guessed from the model's name)
 	EnvSkillsDir     = "WAZE_SKILLS_DIR"     // procedural skills on disk (default /etc/waze/skills, else ./skills)
 	EnvSkillsWrite   = "WAZE_SKILLS_WRITE"   // the REST API may save skills
@@ -112,11 +108,6 @@ type Config struct {
 	MusicAPI      string // "" = no songs
 	MusicKey      string
 	PiperModel    string // the local Persian voice (Piper); "" = Edge TTS only
-	STTURL        string // speech to text; "" = the providers
-	STTKey        string
-	STTModel      string
-	STTOff        bool
-	STTTimeout    time.Duration
 	ContextWindow int    // tokens; 0 = guessed from the model's name
 	SkillsDir     string // procedural skills (SKILL.md folders), outside the workspaces
 	SkillsWrite   bool   // the REST API may save skills (the bot lets its admins, the CLI always)
@@ -244,22 +235,6 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 		c.PiperModel = defaultPiper()
 	case "off", "none", "disabled":
 		c.PiperModel = ""
-	}
-	c.STTURL = strings.TrimRight(strings.TrimSpace(os.Getenv(EnvSTTURL)), "/")
-	switch strings.ToLower(c.STTURL) {
-	case "off", "none", "disabled":
-		c.STTURL, c.STTOff = "", true
-	case "on", "default", "auto":
-		c.STTURL = ""
-	}
-	c.STTKey = strings.TrimSpace(os.Getenv(EnvSTTKey))
-	c.STTModel = strings.TrimSpace(os.Getenv(EnvSTTModel))
-	if v := strings.TrimSpace(os.Getenv(EnvSTTTimeout)); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			c.STTTimeout = d
-		} else if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			c.STTTimeout = time.Duration(n) * time.Second
-		}
 	}
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(EnvContextWindow))); err == nil && n >= 8000 {
 		c.ContextWindow = n

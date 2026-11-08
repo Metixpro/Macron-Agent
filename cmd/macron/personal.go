@@ -15,7 +15,7 @@ import (
 // The personal edition answers its owners and nobody else. Every update is
 // looked at here first: one from a stranger is dropped without a word (a bot
 // that answers "not for you" tells a stranger that it exists, and who runs
-// it), and a stranger who adds the bot to a group finds it gone.
+// it), and it leaves any group it is added to, including by its owner.
 
 // senderOf is the user an update comes from (false: it has none, e.g. a
 // press of the stop button of a draft, which only a job of the owner has).
@@ -58,21 +58,42 @@ func senderOf(u telegram.Update) (int64, bool) {
 
 // allowedUpdate says whether an update may be handled.
 func (b *Bot) allowedUpdate(u telegram.Update) bool {
+	if mc := u.MyChatMember; mc != nil && !mc.Chat.Private() {
+		switch mc.NewChatMember.Status {
+		case "member", "administrator":
+			b.wg.Add(1)
+			go func() {
+				defer b.wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+				if err := b.api.LeaveChat(ctx, mc.Chat.ID); err != nil {
+					log.Printf("could not leave non-private chat %d: %v", mc.Chat.ID, err)
+				}
+			}()
+		}
+		return false
+	}
+	var chat *telegram.Chat
+	switch {
+	case u.Message != nil:
+		chat = &u.Message.Chat
+	case u.EditedMessage != nil:
+		chat = &u.EditedMessage.Chat
+	case u.GuestMessage != nil:
+		chat = &u.GuestMessage.Chat
+	case u.CallbackQuery != nil && u.CallbackQuery.Message != nil:
+		chat = &u.CallbackQuery.Message.Chat
+	case u.MessageReaction != nil:
+		chat = &u.MessageReaction.Chat
+	case u.StoppedMessageGeneration != nil:
+		chat = &u.StoppedMessageGeneration.Chat
+	}
+	if chat != nil && !chat.Private() {
+		return false
+	}
 	id, known := senderOf(u)
 	if !known || b.owner[id] {
 		return true
-	}
-	if mc := u.MyChatMember; mc != nil && mc.Chat.Type != "private" {
-		switch mc.NewChatMember.Status {
-		case "member", "administrator":
-			go func(chat int64) {
-				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-				defer cancel()
-				if err := b.api.LeaveChat(ctx, chat); err != nil {
-					log.Printf("could not leave chat %d (a stranger added the bot): %v", chat, err)
-				}
-			}(mc.Chat.ID)
-		}
 	}
 	b.noteStranger(id)
 	return false
@@ -176,9 +197,6 @@ func (b *Bot) viewHome(ctx context.Context, admin int64) panelView {
 	kept, _ := b.st.ArchiveCount(ctx, admin)
 	html := l.t(`🛠 <b>پنل مدیریت مکرون</b> · نسخه `) + app.Version + l.f(personalHomeFmt,
 		active, reminders, tasks, humanInt(kept), esc(config.Home()), uptime(l, time.Since(b.started)))
-	if !b.readsAll.Load() {
-		html += l.t("\n\n⚠️ <b>حالت Privacy روشنه:</b> توی گروه‌هایی که ربات ادمین نیست، «مکرون …» به ربات نمی‌رسه (فقط منشن و ریپلای به خودش). توی @BotFather با /setprivacy خاموشش کن و ربات رو دوباره به گروه‌ها اضافه کن، یا توی هر گروه ادمینش کن.")
-	}
 	rows := [][]telegram.InlineKeyboardButton{
 		row(b.button(l.t("📊 آمار و سرور"), "a:stats", telegram.StylePrimary), b.button(l.t("🤖 پروایدرها"), "a:pv", "")),
 		row(b.button(l.t("🦾 ایجنت و ابزارها"), "a:ai", ""), b.button(b.learnLabel(ctx, l), "a:learn", "")),

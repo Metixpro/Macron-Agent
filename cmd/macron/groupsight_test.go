@@ -70,8 +70,8 @@ func TestGroupWhereTheBotSeesOnlyMentions(t *testing.T) {
 		t.Errorf("the hello tells them: %v", h.tg.texts())
 	}
 
-	// The admin panel says it too.
+	// The personal admin panel has no group/privacy instructions.
 	h.tg.reset()
 	h.send(private(ownerID, "/admin"))
-	h.wantText("حالت Privacy روشنه")
+	h.noText("حالت Privacy روشنه")
 }

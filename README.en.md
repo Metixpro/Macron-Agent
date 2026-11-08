@@ -93,7 +93,7 @@ macron service status
 macron logs -f
 ```
 
-Setup asks for a BotFather token, numeric owner ID, model endpoint/key/name and timezone. The bot answers configured owners. Linux uses systemd; macOS uses launchd. Real systemd reboot recovery and macOS service operation were not validated in the cloud test instance.
+Setup asks for a BotFather token, numeric owner ID, model endpoint/key/name and timezone. The bot answers configured owners in private chats only; it does not operate in groups or channels. Linux uses systemd; macOS uses launchd. Real systemd reboot recovery and macOS service operation were not validated in the cloud test instance.
 
 ## Capabilities
 

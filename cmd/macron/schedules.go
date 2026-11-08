@@ -352,6 +352,12 @@ func (b *Bot) runDueSchedules(ctx context.Context, now time.Time) {
 }
 
 func (b *Bot) fireSchedule(x store.Schedule, rule sched.Rule, now time.Time) error {
+	if b.personal && (x.ChatType != "private" || x.ChatID < 0) {
+		ctx, cancel := b.ctx(10 * time.Second)
+		defer cancel()
+		_, _ = b.st.CancelSchedule(ctx, x.ID, 0)
+		return errors.New("group schedules are disabled")
+	}
 	ctx, cancel := b.ctx(time.Minute)
 	defer cancel()
 	u, err := b.st.User(ctx, x.UserID)

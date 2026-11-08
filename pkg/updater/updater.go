@@ -30,7 +30,7 @@ import (
 )
 
 // Repository is where the releases are.
-const Repository = "Metixpro/macron-agent"
+const Repository = "Metixpro/Macron-Agent"
 
 // ReleaseAPI is the releases' API (replaced in tests).
 var ReleaseAPI = "https://api.github.com/repos/" + Repository + "/releases"

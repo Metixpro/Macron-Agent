@@ -44,7 +44,7 @@ var toolsets = map[string][]string{
 	"web": {"web_search", "web_fetch", "deep_research", "crypto_currency_price", tools.ToolMarketPrice, "whois_lookup", "github_inspect"},
 	"code": {tools.ToolRunCode, "bash_execute", tools.ToolShellJobs, tools.ToolProjectTree, tools.ToolSearchCode, tools.ToolFindFiles,
 		tools.ToolCodeOutline, tools.ToolEditFile, tools.ToolApplyPatch, tools.ToolImportRepo, tools.ToolExtract, tools.ToolPackFiles, tools.ToolQueryData},
-	"media":     {tools.ToolDownloadMedia, "search_music", "download_file", "media_convert", tools.ToolSplitVideo, "text_to_speech", tools.ToolTranscribe},
+	"media":     {tools.ToolDownloadMedia, "search_music", "download_file", "media_convert", tools.ToolSplitVideo, "text_to_speech"},
 	"images":    {"generate_image", tools.ToolEditImage, "search_image", "generate_chart", "generate_qr"},
 	"documents": {"pdf_tool", tools.ToolDocumentReader, tools.ToolQueryData, tools.ToolCreateSpreadsheet, tools.ToolExtract, tools.ToolPackFiles},
 	"browser":   {tools.ToolBrowser, tools.ToolBrowserAgent},

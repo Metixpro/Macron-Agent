@@ -136,8 +136,6 @@ func main() {
 	cookies.http = a.Registry.HTTP // the registry's client
 	a.Registry.SetCookiePool(cookies)
 	a.Registry.SetUserCookies(cookies.user)
-	a.Registry.SetTranscriber(sttSources(st, cfg))
-	a.Registry.SetSTTTimeout(cfg.STTTimeout)
 	go cookies.refreshLoop(rootCtx)
 	go cookies.checkLoop(rootCtx, a.Registry.TestCookie)
 	// The image editing key set in the admin panel wins over the environment's.

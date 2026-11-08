@@ -53,7 +53,7 @@ type ledger struct{ rs []receipt }
 var (
 	readOnlyTools = setOf("read_file", "list_files", "search_code", "find_files", "project_tree", "code_outline", "web_search", "web_fetch",
 		"deep_research", "view_image", "document_reader", "query_data", "github_inspect", "whois_lookup",
-		"currency_gold_price", "crypto_currency_price", "search_image", "search_music", "list_skills", "read_skill", "transcribe_audio",
+		"currency_gold_price", "crypto_currency_price", "search_image", "search_music", "list_skills", "read_skill",
 		"recall_history", "more_tools", "tool_search", "list_schedules", "chat_info", "telegram_lookup", "lookup", "list_plans", "update_plan")
 	// execTools run a command or code: what they did is in the command.
 	execTools = setOf("bash_execute", "run_code", "shell_jobs", "install_package")

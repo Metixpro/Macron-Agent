@@ -11,7 +11,7 @@ license: MIT
 
 ## Input
 - A document or PDF → `document_reader` (long) or `read_file`; a pasted chat → as is.
-- A voice note or recording: the bot hears voice messages as text when available; otherwise ask for a transcript.
+- A voice note or recording: ask the user for a written transcript.
 
 ## Output (in the user's language)
 1. **Summary**: 3–5 lines: what it was about and the outcome.

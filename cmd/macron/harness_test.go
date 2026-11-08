@@ -416,7 +416,6 @@ func newHarness(t *testing.T) *harness {
 	b.cookies = newCookiePool(st, "")                              // as in main
 	a.Registry.SetCookiePool(b.cookies)
 	a.Registry.SetUserCookies(b.cookies.user)
-	a.Registry.SetTranscriber(sttSources(st, cfg))
 	a.Registry.SetSkillWriter(b.sessionAdmin) // as in main
 	a.Registry.Gate = b.newCommandGate()      // as in main
 	// Tests never reach the real web: an empty search engine, no reader.

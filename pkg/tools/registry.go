@@ -76,15 +76,10 @@ type Registry struct {
 	// userCookies are each user's own cookies, tried first for their downloads.
 	userCookies func(sessionID string) []Cookie
 	rotations   rotationLimiter
-	// stt lists the speech-to-text services in the order they are tried.
-	stt        func() []STTService
-	sttState   sttState
-	sttClient  *http.Client    // nil = defaultSTTClient
-	sttTimeout time.Duration   // one recording's transcription (0 = 5 minutes)
-	browser    *browserRuntime // headless Chromium (nil when not installed)
-	imageAPI   string
-	imageKey   func() string
-	styles     styleCache // the studio's styles and shapes
+	browser     *browserRuntime // headless Chromium (nil when not installed)
+	imageAPI    string
+	imageKey    func() string
+	styles      styleCache // the studio's styles and shapes
 	// imageEditAPI is the Nano Banana task service; its key is read per call.
 	imageEditAPI string
 	imageEditKey func() string
@@ -130,7 +125,6 @@ func NewRegistry(sb *machine.Machine, se *search.Engine, client llm.ChatClient, 
 	r.registerBrowserTools()
 	r.registerMusicTool()
 	r.registerProjectTools()
-	r.registerTranscribe()
 	if r.skills != nil {
 		r.registerSkillTools()
 	}

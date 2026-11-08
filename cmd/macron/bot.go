@@ -193,6 +193,9 @@ func (b *Bot) reply(m *telegram.Message, html string) *telegram.Message {
 }
 
 func (b *Bot) sendHTML(ctx context.Context, chatID int64, html string, opts telegram.SendOptions) *telegram.Message {
+	if b.personal && chatID < 0 {
+		return nil
+	}
 	html = b.bidi(chatID, html)
 	if set := b.premium(); set != nil {
 		if sent, err := b.api.SendHTML(ctx, chatID, set.HTML(html), opts); err == nil {
@@ -346,7 +349,7 @@ func userInfo(u *telegram.User) store.UserInfo {
 }
 
 func (b *Bot) handleMessage(m *telegram.Message) {
-	if m.From == nil || m.From.IsBot || m.Chat.Type == "channel" {
+	if m.From == nil || m.From.IsBot || m.Chat.Type == "channel" || (b.personal && !m.Chat.Private()) {
 		return
 	}
 	// A group waits for an admin's approval before the bot works there; groups
@@ -645,6 +648,9 @@ func (b *Bot) handleStop(s *telegram.MessageGenerationStopped) {
 }
 
 func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
+	if b.personal && q.Message != nil && !q.Message.Chat.Private() {
+		return
+	}
 	ctx, cancel := b.ctx(60 * time.Second)
 	defer cancel()
 	answer := func(text string, alert bool) { _ = b.api.AnswerCallbackQuery(ctx, q.ID, text, alert) }

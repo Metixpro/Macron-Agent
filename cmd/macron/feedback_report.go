@@ -108,7 +108,7 @@ func toolHint(l lang, tool string) string {
 		return l.t("سرویس یا کلید ساخت و ویرایش عکس رو چک کن.")
 	case "run_code", "bash_execute", "install_package":
 		return l.t("بیشترشون خطای خود برنامه‌ان و ایجنت درستشون می‌کنه؛ اگه خیلی زیاده، پکیج‌ها و منابع سرور رو ببین.")
-	case "text_to_speech", "transcribe_audio":
+	case "text_to_speech":
 		return l.t("سرویس صدا رو چک کن (⚙️ ← 🎙 صدا به متن).")
 	case "download_file":
 		return l.t("لینک‌ها خراب یا بزرگ‌تر از سقف بودن؛ سقف دانلود و فضای کاربرها رو ببین.")

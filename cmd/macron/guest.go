@@ -21,6 +21,9 @@ import (
 
 // handleGuest answers a guest message.
 func (b *Bot) handleGuest(m *telegram.Message) {
+	if b.personal && !m.Chat.Private() {
+		return
+	}
 	l := b.langOf(m.From)
 	if m.From == nil || m.From.IsBot || m.GuestQueryID == "" {
 		return
@@ -112,7 +115,7 @@ func (b *Bot) guestThinking(ctx context.Context, queryID string, l lang) *guestR
 		rm := telegram.RichMessage{Markdown: status, IsRTL: l == fa}
 		if set := b.premium(); set != nil {
 			fancy := rm
-			fancy.Markdown = set.Markdown(b.statusIcons().Markdown(rm.Markdown))
+			fancy.Markdown = set.Markdown(rm.Markdown)
 			if fancy.Markdown != rm.Markdown {
 				tries = append(tries, telegram.GuestRich(fancy, nil))
 			}
@@ -121,7 +124,7 @@ func (b *Bot) guestThinking(ctx context.Context, queryID string, l lang) *guestR
 	}
 	html := telegram.EscapeHTML(status)
 	if set := b.premium(); set != nil {
-		if fancy := set.HTML(b.statusIcons().HTML(html)); fancy != html {
+		if fancy := set.HTML(html); fancy != html {
 			tries = append(tries, telegram.GuestHTML(fancy, nil))
 		}
 	}
@@ -248,9 +251,6 @@ func (g *guestReply) edit(ctx context.Context, md string, rtl, status bool) erro
 		html := telegram.MarkdownToHTML(md)
 		if set := g.b.premium(); set != nil {
 			fancy := html
-			if status {
-				fancy = g.b.statusIcons().HTML(fancy)
-			}
 			if fancy = set.HTML(fancy); fancy != html && g.b.api.EditInlineHTML(ctx, g.inlineID, fancy, nil) == nil {
 				return nil
 			}
@@ -259,9 +259,6 @@ func (g *guestReply) edit(ctx context.Context, md string, rtl, status bool) erro
 	}
 	if set := g.b.premium(); set != nil {
 		fancy := md
-		if status {
-			fancy = g.b.statusIcons().Markdown(fancy)
-		}
 		if fancy = set.Markdown(fancy); fancy != md && g.b.api.EditInlineRich(ctx, g.inlineID, telegram.RichMessage{Markdown: fancy, IsRTL: rtl}, nil) == nil {
 			return nil
 		}

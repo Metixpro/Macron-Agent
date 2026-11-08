@@ -41,7 +41,7 @@ func TestPersonalEditionAnswersItsOwnerOnly(t *testing.T) {
 	h.wantText("سلام صاحب‌خونه")
 }
 
-func TestPersonalEditionLeavesGroupsStrangersAddItTo(t *testing.T) {
+func TestPersonalEditionLeavesAllGroups(t *testing.T) {
 	h := personalHarness(t)
 	add := func(by int64) telegram.Update {
 		return telegram.Update{UpdateID: by, MyChatMember: &telegram.ChatMemberUpdated{
@@ -50,16 +50,16 @@ func TestPersonalEditionLeavesGroupsStrangersAddItTo(t *testing.T) {
 	}
 	h.dispatch(add(ownerID))
 	time.Sleep(200 * time.Millisecond)
-	if n := len(h.tg.of("leaveChat")); n != 0 {
-		t.Fatalf("the owner adds the bot to a group and it stays (%d leaves)", n)
+	if n := len(h.tg.of("leaveChat")); n != 1 {
+		t.Fatalf("the owner adds the bot to a group and it must leave (%d leaves)", n)
 	}
 	h.dispatch(add(555))
 	deadline := time.Now().Add(3 * time.Second)
 	for len(h.tg.of("leaveChat")) == 0 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if len(h.tg.of("leaveChat")) != 1 {
-		t.Fatal("a stranger adds the bot to a group and it leaves")
+	if len(h.tg.of("leaveChat")) != 2 {
+		t.Fatal("all group invitations are declined")
 	}
 }
 

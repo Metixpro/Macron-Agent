@@ -46,7 +46,7 @@ type focusGroup struct {
 // focusGroups are the tools a request's words (or what came with it) point to.
 var focusGroups = []focusGroup{
 	{regexp.MustCompile(`(?i)youtu|instagram|tiktok|aparat|soundcloud|spotify|twitter|x\.com/|t\.me/|ویدیو|ویدئو|فیلم|کلیپ|آهنگ|اهنگ|موزیک|موسیقی|دانلود|music|song|video|download|mp3|mp4|podcast|پادکست|a video|an audio`),
-		[]string{tools.ToolDownloadMedia, "search_music", "download_file", "media_convert", tools.ToolSplitVideo, tools.ToolTranscribe}},
+		[]string{tools.ToolDownloadMedia, "search_music", "download_file", "media_convert", tools.ToolSplitVideo}},
 	{regexp.MustCompile(`(?i)عکس|تصویر|نقاشی|لوگو|پوستر|بنر|استیکر|image|photo|picture|logo|draw|poster|wallpaper|sticker|\.(?:png|jpe?g|webp)\b`),
 		[]string{"generate_image", "search_image", tools.ToolEditImage, "view_image", "media_convert"}},
 	{regexp.MustCompile(`(?i)pdf|\bword\b|docx?|excel|xlsx|csv|pptx?|پاورپوینت|اکسل|ورد|سند|جدول|کتاب|\bbook\b|sheet|spreadsheet|فایل|\bfile|zip|rar|7z|آرشیو|فشرده|database|sqlite|دیتابیس`),
@@ -59,7 +59,7 @@ var focusGroups = []focusGroup{
 	{regexp.MustCompile(`(?i)یادآور|یادم بنداز|یادم بیار|هر روز|هر هفته|هر ساعت|ساعت ?\d|فردا|زمان ?بندی|remind|schedule|every (?:day|week|hour|morning)|tomorrow|alarm|cron`),
 		[]string{"schedule", "list_schedules", "cancel_schedule"}},
 	{regexp.MustCompile(`(?i)صدا|ویس|voice|audio|speech|بخون|بخوان|read (?:it )?aloud|تلفظ|recording|ضبط`),
-		[]string{"text_to_speech", tools.ToolTranscribe, "media_convert"}},
+		[]string{"text_to_speech", "media_convert"}},
 	{regexp.MustCompile(`(?i)نمودار|چارت|chart|graph|plot|\bqr\b|کیو ?آر|آمار|statistic`),
 		[]string{"generate_chart", "generate_qr", tools.ToolQueryData}},
 	{regexp.MustCompile(`(?i)تحقیق|پژوهش|مقاله|research|paper|گزارش کامل|بررسی جامع|in-depth|literature`),
@@ -87,13 +87,13 @@ var focusGroups = []focusGroup{
 // toolGroupInfo names focusGroups, in their order, for a triage that asks
 // about each group by its description (cmd/macron/triage.go).
 var toolGroupInfo = []struct{ key, about string }{
-	{"media", "download, convert, split or transcribe videos, music or audio"},
+	{"media", "download, convert, split videos, music or audio"},
 	{"images", "make, find, edit or look at pictures"},
 	{"documents", "read or make PDFs, Word, Excel, CSV or slides, or pack and unpack archives"},
 	{"code", "write, run, fix or test code or a software project"},
 	{"prices", "currency, gold or crypto prices"},
 	{"reminders", "a reminder or a scheduled job"},
-	{"voice", "speak text aloud or turn a voice message into text"},
+	{"voice", "speak text aloud or convert audio files"},
 	{"charts", "a chart, a graph or a QR code"},
 	{"research", "in-depth research with sources and a report"},
 	{"browser", "open a website in a real browser: log in, click, fill forms, take screenshots"},

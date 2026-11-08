@@ -1,6 +1,7 @@
 package main
 
 func init() {
+	english["[!] نسخه نصب شد؛ راه‌اندازی مجدد ناموفق بود: %s\n<code>macron service restart</code>"] = "[!] Version installed; restart failed: %s\n<code>macron service restart</code>"
 	english["🖥 <b>نمایش کار</b>\n\nنمایش مراحل: %s"] = "🖥 <b>Work display</b>\n\nProgress: %s"
 	english["🦾 <b>ایجنت و ابزارها</b>\n\n🤖 ادامهٔ کار: %s\nقدم‌ها: %d · زمان: %d دقیقه · توقف بی‌کاری: %d دقیقه"] = "🦾 <b>Agent and tools</b>\n\n🤖 Continuation: %s\nSteps: %d · Time: %d min · Idle timeout: %d min"
 	english["\n🪟 پنجره context مدل: <b>%s</b> توکن"] = "\n🪟 Model context: <b>%s</b> tokens"

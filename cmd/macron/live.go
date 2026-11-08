@@ -15,7 +15,6 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
-	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
 const (
@@ -253,9 +252,7 @@ func (l *liveView) toolStartWith(sub int, name, args string) {
 	if status := statusFor(l.lng, name); status != "" {
 		l.status = status
 	}
-	if name == tools.ToolTranscribe {
-		l.tr.note = "🎧 " + l.lng.t("دارم گوش می‌دم…") // above the terminal, not in it
-	}
+
 	if toolLabel(name) == "" {
 		return // e.g. a reaction: nothing to show, and the text goes on
 	}
@@ -285,28 +282,6 @@ func (l *liveView) termOn() bool {
 	return l.terminal
 }
 
-// listening shows a voice message being written down (before the agent
-// starts): «🎙 listening», then «💭 thinking», or the failure. It is the
-// card's status line, plain HTML outside any code block, so a premium emoji
-// shows.
-func (l *liveView) listening(state listenState) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	switch state {
-	case listenStart:
-		l.status, l.action = listeningStatus(l.lng), "record_voice"
-	case listenQueued:
-		l.status, l.action = "🎙 "+l.lng.t("توی صف شنیدنم؛ الان نوبتم می‌شه…"), "record_voice"
-	case listenFailed:
-		l.status, l.action = "⚠️ "+l.lng.t("نتونستم ویس رو بشنوم"), "typing"
-	default:
-		l.status, l.action = thinkingStatus(l.lng), "typing"
-	}
-	l.dirty, l.urgent = true, true
-}
-
-// subAgent adds a sub-agent to the terminal; its calls hang under it, and it
-// may work while the agent goes on. It returns its id.
 func (l *liveView) subAgent(title string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -366,17 +341,7 @@ func (l *liveView) note() {
 func (l *liveView) toolProgress(sub int, name, text string, output bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if name == tools.ToolTranscribe { // its state shows above the terminal
-		switch text {
-		case tools.StatusQueued:
-			l.tr.note = "🎧 " + l.lng.t("توی صف گوش دادنم…")
-			l.dirty = true
-		case tools.StatusListening:
-			l.tr.note = "🎧 " + l.lng.t("دارم گوش می‌دم…")
-			l.dirty = true
-		}
-		return
-	}
+
 	if toolLabel(name) == "" {
 		return
 	}
@@ -396,9 +361,7 @@ func (l *liveView) toolEnd(sub int, name, result string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.status, l.action = thinkingStatus(l.lng), "typing"
-	if name == tools.ToolTranscribe {
-		l.tr.note = ""
-	}
+
 	if toolLabel(name) == "" {
 		return
 	}
@@ -513,10 +476,7 @@ func (l *liveView) flush(ctx context.Context) {
 	defer cancel()
 	if set := l.b.premium(); set != nil {
 		fancy := rm
-		if text == "" { // the status line: its own premium emoji first
-			icons := l.b.statusIcons()
-			fancy.HTML, fancy.Markdown = icons.HTML(fancy.HTML), icons.Markdown(fancy.Markdown)
-		}
+
 		if fancy.HTML != "" {
 			fancy.HTML = set.HTML(fancy.HTML)
 		} else {
@@ -562,7 +522,7 @@ func (l *liveView) flushGroup(ctx context.Context) {
 
 	tries := []string{html}
 	if set := l.b.premium(); set != nil {
-		if fancy := set.HTML(l.b.statusIcons().HTML(html)); fancy != html {
+		if fancy := set.HTML(html); fancy != html {
 			tries = []string{fancy, html}
 		}
 	}
@@ -692,7 +652,6 @@ func (l *liveView) flushRich(ctx context.Context) {
 		return
 	}
 	body, rtl := l.groupBody()
-	status := l.text == "" // the status or the terminal, not the answer
 	withStop := l.wantsStop() && l.stopData != ""
 	l.dirty, l.urgent, l.lastFlush = false, false, time.Now()
 	if id != 0 && body == l.shown && withStop == l.shownKB {
@@ -714,9 +673,7 @@ func (l *liveView) flushRich(ctx context.Context) {
 	var tries []liveTry
 	if set := l.b.premium(); set != nil {
 		md := body
-		if status {
-			md = l.b.statusIcons().Markdown(md)
-		}
+
 		md = set.Markdown(md)
 		if row {
 			md += l.stopRow()

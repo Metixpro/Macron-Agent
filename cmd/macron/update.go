@@ -83,6 +83,7 @@ func (b *Bot) handleUpdateCallback(ctx context.Context, q *telegram.CallbackQuer
 		defer b.updating.Store(false)
 		uctx, cancel := b.ctx(10 * time.Minute)
 		defer cancel()
+		installed := false
 		var steps []string
 		show := func(s string) {
 			steps = append(steps, "[*] "+s)
@@ -90,20 +91,33 @@ func (b *Bot) handleUpdateCallback(ctx context.Context, q *telegram.CallbackQuer
 		}
 		fail := func(err error) {
 			log.Printf("update: %v", err)
-			b.sendHTML(uctx, chatID, l.f("[-] آپدیت نشد: %s\nبرنامه نصب‌شده دست نخورد.", esc(err.Error())), telegram.SendOptions{})
+			if installed {
+				b.sendHTML(uctx, chatID, l.f("[!] نسخه نصب شد؛ راه‌اندازی مجدد ناموفق بود: %s\n<code>macron service restart</code>", esc(err.Error())), telegram.SendOptions{})
+			} else {
+				b.sendHTML(uctx, chatID, l.f("[-] آپدیت نشد: %s\nبرنامه نصب‌شده دست نخورد.", esc(err.Error())), telegram.SendOptions{})
+			}
 		}
 		rel, err := updater.Latest(uctx, tag)
 		if err != nil {
 			fail(err)
 			return
 		}
-		if err := updater.Install(uctx, rel, show); err != nil {
+		if !updater.Newer(rel.Version(), app.Version) {
+			show(l.f("[+] تو آخرین نسخه‌ای (<code>v%s</code>).", app.Version))
+			return
+		}
+		p, _ := json.Marshal(updatePending{Chat: chatID, Version: rel.Version(), From: app.Version})
+		if err := b.st.SetSetting(uctx, settingUpdatePending, string(p)); err != nil {
 			fail(err)
 			return
 		}
+		if err := updater.Install(uctx, rel, show); err != nil {
+			_ = b.st.DeleteSetting(uctx, settingUpdatePending)
+			fail(err)
+			return
+		}
+		installed = true
 		self, _ := updater.SelfPath()
-		p, _ := json.Marshal(updatePending{Chat: chatID, Version: rel.Version(), From: app.Version})
-		_ = b.st.SetSetting(uctx, settingUpdatePending, string(p))
 		how, err := restartLater(self, os.Geteuid() == 0)
 		if err != nil {
 			fail(err)

@@ -100,7 +100,6 @@ var toolAliases = map[string][]string{
 	"imagesearch": {"search_image"}, "findimage": {"search_image"}, "searchimages": {"search_image"}, "searchphoto": {"search_image"},
 	"sendfiletouser": {"send_file"}, "uploadfile": {"send_file"}, "sendattachment": {"send_file"}, "attachfile": {"send_file"},
 	"tts": {"text_to_speech"}, "speak": {"text_to_speech"}, "texttovoice": {"text_to_speech"},
-	"stt": {"transcribe_audio"}, "transcribe": {"transcribe_audio"}, "speechtotext": {"transcribe_audio"},
 	"youtubedownload": {"download_media_ytdlp"}, "downloadvideo": {"download_media_ytdlp"}, "downloadmedia": {"download_media_ytdlp"},
 	"ytdlp": {"download_media_ytdlp"}, "youtubedl": {"download_media_ytdlp"}, "downloadaudio": {"download_media_ytdlp"},
 	"downloadmusic": {"search_music", "download_media_ytdlp"}, "findmusic": {"search_music"}, "searchsong": {"search_music"},

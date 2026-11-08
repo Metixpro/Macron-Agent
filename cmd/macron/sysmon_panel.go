@@ -287,7 +287,7 @@ func (b *Bot) viewServer(l lang, key string) panelView {
 	return panelView{html: sb.String(), kb: keyboard(
 		row(b.button(l.t("🔄 بروزرسانی"), "a:sys:"+key, telegram.StylePrimary), b.button(l.t("📈 نمودار"), "a:syschart:"+key, "")),
 		wins,
-		row(b.button(alerts+" "+l.t("هشدارها"), "a:sysal", ""), b.button(l.t("🔐 SSH کاربرها"), "a:ssh", "")),
+		row(b.button(alerts+" "+l.t("هشدارها"), "a:sysal", "")),
 		row(b.back(l, "a:stats")),
 	)}
 }

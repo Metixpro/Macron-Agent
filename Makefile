@@ -8,7 +8,6 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 darwin/amd64
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build $(GOFLAGS_REL) -o bin/macron ./cmd/macron
-	CGO_ENABLED=0 go build $(GOFLAGS_REL) -o bin/whisper-stt ./cmd/whisper-stt
 
 # The release files: dist/macron-<version>-<os>-<arch>.tar.gz for each platform
 # and dist/SHA256SUMS (what «macron update» and install.sh check).

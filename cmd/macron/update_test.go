@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -155,3 +156,31 @@ func TestUpdateNoticeOncePerVersion(t *testing.T) {
 }
 
 func itoaTest(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+func TestUpdateRejectsStaleDowngradeButton(t *testing.T) {
+	h := personalHarness(t)
+	self, restarted := withRelease(t, fakeGitHub(t, "1.0.0", false))
+	h.click(ownerID, ownerID, 9, "up:go:v1.0.0")
+	if b, _ := os.ReadFile(self); !strings.Contains(string(b), "echo old") || restarted.Load() != 0 {
+		t.Fatal("stale button installed a downgrade")
+	}
+	if _, ok := h.st.Setting(settingUpdatePending); ok {
+		t.Fatal("stale update left pending state")
+	}
+}
+
+func TestUpdateReportsInstalledVersionWhenRestartFails(t *testing.T) {
+	h := personalHarness(t)
+	self, _ := withRelease(t, fakeGitHub(t, "99.0.0", false))
+	restartLater = func(string, bool) (string, error) { return "", errors.New("restart unavailable") }
+	h.click(ownerID, ownerID, 9, "up:go:v99.0.0")
+	if b, _ := os.ReadFile(self); !strings.Contains(string(b), "macron 99.0.0") {
+		t.Fatal("new binary missing")
+	}
+	h.wantText("نسخه نصب شد")
+	h.wantText("macron service restart")
+	h.noText("برنامه نصب‌شده دست نخورد")
+	if _, ok := h.st.Setting(settingUpdatePending); !ok {
+		t.Fatal("manual restart lost its version report")
+	}
+}

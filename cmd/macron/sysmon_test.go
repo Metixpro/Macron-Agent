@@ -87,3 +87,25 @@ func TestServerPanel(t *testing.T) {
 		t.Error("only admins open the server panel")
 	}
 }
+
+func TestServerPanelHasNoSSHUserManagement(t *testing.T) {
+	h := newHarness(t)
+	for _, l := range []lang{fa, en} {
+		v := h.bot.viewServer(l, "1h")
+		for _, row := range v.kb.InlineKeyboard {
+			for _, button := range row {
+				if button.CallbackData == "a:ssh" || strings.Contains(button.Text, "SSH") {
+					t.Fatalf("obsolete SSH user button: %+v", button)
+				}
+			}
+		}
+	}
+	h.click(ownerID, ownerID, 9, "a:ssh")
+	v := lastOf(h, "editMessageText")
+	if !hasButton(buttons(v), "→ a:stats") || hasButton(buttons(v), "→ a:ssh") {
+		t.Fatal("old SSH callback must refresh the server screen")
+	}
+	if len(h.tg.of("answerCallbackQuery")) == 0 {
+		t.Fatal("old callback not acknowledged")
+	}
+}

@@ -197,8 +197,6 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		return b.handleImageGenInput(ctx, m, done)
 	case "mu_key":
 		return b.handleMusicInput(ctx, m, done)
-	case "em_slot":
-		return b.handleStatusEmojiInput(ctx, m, in, done)
 	case "em_pack":
 		return b.handleEmojiPackInput(ctx, m, done)
 	default:
@@ -576,7 +574,7 @@ func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 
 وقتی روشن باشه، هر ایموجی معمولی که توی متن‌ها و دکمه‌های ربات بیاد و نسخه پریمیومش ثبت شده باشه، خودکار پریمیوم نشون داده می‌شه.
 
-⚠️ تلگرام فقط وقتی اجازه می‌ده که صاحب ربات <b>تلگرام پریمیوم</b> داشته باشه (یا ربات یوزرنیم Fragment خریده باشه).`, onOff(l, enabled), len(m)) + b.statusEmojiLines(l)
+⚠️ تلگرام فقط وقتی اجازه می‌ده که صاحب ربات <b>تلگرام پریمیوم</b> داشته باشه (یا ربات یوزرنیم Fragment خریده باشه).`, onOff(l, enabled), len(m))
 	toggleStyle := telegram.StyleSuccess
 	if enabled {
 		toggleStyle = ""
@@ -587,8 +585,6 @@ func (b *Bot) viewEmoji(ctx context.Context, l lang) panelView {
 		row(b.button(l.t("📦 وارد کردن پک"), "a:em:pack", telegram.StylePrimary)),
 		row(b.button(l.t("📋 لیست"), "a:em:list", ""), b.button(l.t("🧪 تست"), "a:em:test", "")),
 		row(b.button(l.t("🗑 حذف"), "a:em:del", ""), b.button(l.t("🧹 حذف همه"), "a:em:clear", telegram.StyleDanger)),
-		row(b.button(l.t("✨ ساخت ایموجی وضعیت‌ها"), "a:em:make", telegram.StylePrimary)),
-		row(b.button(l.t("🎙 ایموجی شنیدن"), "a:em:slot:listen", ""), b.button(l.t("🎧 ایموجی گوش دادن"), "a:em:slot:transcribe", "")),
 		row(b.back(l, "a:ws")),
 	)}
 }
@@ -601,12 +597,6 @@ func (b *Bot) handleEmojiPanel(ctx context.Context, q *telegram.CallbackQuery, p
 	}
 	chatID := q.Message.Chat.ID
 	switch action {
-	case "make", "slot":
-		b.handleStatusEmojiPanel(ctx, q, parts, answer, ask)
-		if action == "make" {
-			show(b.viewEmoji(ctx, l))
-		}
-		return
 	case "add":
 		answer("", false)
 		ask(&adminInput{kind: "em_add"}, l.t("➕ هر خط: <b>ایموجی معمولی</b> + فاصله + <b>ایموجی پریمیوم</b> (یا آیدی عددی‌اش). چند خط هم با هم می‌شه:\n\n<code>😀 ⭐️</code>  ← دومی رو از پنل ایموجی‌های پریمیوم بفرست\n<code>🔥 5368324170671202286</code>"))

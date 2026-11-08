@@ -21,7 +21,6 @@ var capabilities = []capability{
 	{"🔎 search the web and read sites and news, with sources", []string{"web_search", "web_fetch"}},
 	{"🧠 deep, multi-step research with a full cited report", []string{"deep_research"}},
 	{"🎵 find and send songs; download video and audio from YouTube, Instagram, TikTok, SoundCloud and direct links", []string{tools.ToolDownloadMedia, "search_music", "download_file"}},
-	{"🎙 listen to voice messages and recordings and write them down", []string{tools.ToolTranscribe}},
 	{"🖼 make pictures with AI and find real photos", []string{"generate_image", "search_image"}},
 	{"🪄 edit photos with AI (background, style, lighting, adding or removing things, retouching, colorizing, combining)", []string{tools.ToolEditImage}},
 	{"📊 charts, QR codes, text to speech (also as a voice message), converting, cutting and compressing audio and video, GIFs, Telegram voice and round video messages", []string{"generate_chart", "generate_qr", "text_to_speech", "media_convert"}},

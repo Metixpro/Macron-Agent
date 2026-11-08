@@ -343,7 +343,7 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 	home, _ := callbacks(lastOf(h, "sendMessage"))
 	hubs := map[string][]string{
 		"a:stats": {"a:sys:1h"},
-		"a:ai":    {"a:sr", "a:dl", "a:stt", "a:ig", "a:ie", "a:mu", "a:soul", "a:ws", "a:st:steps", "a:st:window", "a:st:ctx"},
+		"a:ai":    {"a:sr", "a:dl", "a:ig", "a:ie", "a:mu", "a:soul", "a:ws", "a:st:steps", "a:st:window", "a:st:ctx"},
 		"a:st":    {"a:st:react", "a:st:remoji:0"},
 		"a:pv":    {"a:rt"},
 	}

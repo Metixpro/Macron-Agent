@@ -160,3 +160,24 @@ selector and the attached final work report are removed. `/mode` selects only
 fast/deep responses. Private progress uses the standard draft with Stop;
 legacy display preferences are ignored. Internal continuation history is kept.
 See [the review and remaining limits](audits/REVIEW-1.2.1.fa.md).
+
+### 1.2.2: private Telegram and GitHub updates
+
+The bot works only in its owners' private chats. Group/channel messages, guest
+messages from groups, edits, reactions and callbacks are ignored. It leaves new
+group invitations even from an owner; old group schedules are cancelled when due.
+Group command menus and the Privacy-mode instructions are removed.
+
+Speech recognition is removed, including its settings, automatic voice-message
+transcription, tool and `whisper-stt` program. Audio files can still be saved,
+converted and sent; their spoken content is not read. Music generation and text
+to speech remain available.
+
+The owner can use `/update` or Settings → Update in Telegram. Updates install the
+latest published GitHub **Release**, not unversioned commits on `main`. For a new
+version: change `pkg/app/app.go`, commit and push, then push the matching `vX.Y.Z`
+tag. The release workflow builds Linux/macOS amd64/arm64 archives and SHA256SUMS.
+The Telegram button downloads the correct archive, checks its hash, runs a
+preflight, keeps `macron.old` and restarts the service. Old update buttons cannot
+downgrade the running version. A failed restart reports the installed state and
+keeps the pending version report for a manual `macron service restart`.
