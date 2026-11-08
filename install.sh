@@ -1,26 +1,41 @@
 #!/usr/bin/env bash
-# Macron Agent installer (Linux and macOS).
+# Macron Agent installer (Linux and macOS). One line, everything:
 #
 #   curl -fsSL https://raw.githubusercontent.com/Metixpro/macron-agent/main/install.sh | bash
 #
-# It downloads the newest release for this machine (checking its SHA-256 sum),
-# puts the `macron` program on your PATH and starts `macron setup`, which asks for
-# the bot token from @BotFather, your Telegram id and a model. Running it again
-# updates the program and keeps your settings.
-#
-# Options:
-#   --version vX.Y.Z   install that release instead of the newest
-#   --prefix DIR       put the program in DIR (default: /usr/local/bin as root, else ~/.local/bin)
-#   --binary FILE      install this program instead of downloading one
-#   --from-source      build it here (needs git and Go) instead of downloading a release
-#   --source-dir DIR   build a local source checkout (no GitHub clone)
-#   --browser        also download Chromium into the private home
-#   --browser-agent  also install the autonomous browser runtime in a separate venv
-#   --tools            also install the tools the agent likes to have: python3, git, curl, ffmpeg, ssh, sshpass…
-#   --no-setup         only install the program
-#   --uninstall        remove the service and the program (your data in ~/.macron stays)
-#   --purge            with --uninstall: remove ~/.macron too, after asking
+# It installs the system tools the agent uses (python3, git, ffmpeg, poppler…),
+# the newest release for this machine (checking its SHA-256 sum), the pinned
+# Python tools in a private venv, and the background service; then it starts
+# `macron setup`, which asks for the bot token, your Telegram id, your time zone
+# and a model. Running it again updates the program, keeps ~/.macron and
+# restarts the service.
 set -Eeuo pipefail
+
+usage() {
+	cat <<'USAGE'
+Macron Agent installer
+
+  curl -fsSL https://raw.githubusercontent.com/Metixpro/macron-agent/main/install.sh | bash
+  curl -fsSL …/install.sh | bash -s -- [OPTIONS]
+
+Options:
+  --version vX.Y.Z   install that release instead of the newest
+  --prefix DIR       put the program in DIR (default: /usr/local/bin as root, else ~/.local/bin)
+  --binary FILE      install this program instead of downloading one
+  --from-source      build it here (needs git and Go) instead of downloading a release
+  --source-dir DIR   build a local source checkout (no GitHub clone)
+  --no-tools         skip the system packages and the Python tools (installed by default)
+  --tools            (default) install python3, git, curl, ffmpeg, jq, poppler, ssh, sshpass, rsync, gh
+  --browser          also download Chromium into the private home
+  --browser-agent    also install the autonomous browser runtime in a separate venv
+  --no-service       do not install or restart the background service
+  --no-setup         only install the program (no questions)
+  -y, --yes          ask nothing; print the exact next command at the end
+  --uninstall        remove the service and the program (your data in ~/.macron stays)
+  --purge            with --uninstall: remove ~/.macron too, after asking
+  -h, --help         this help
+USAGE
+}
 
 REPO="${MACRON_REPO:-Metixpro/macron-agent}"
 VERSION=""
@@ -32,7 +47,10 @@ SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; fi
 BROWSER_AGENT=0
 BROWSER=0
-TOOLS=0
+TOOLS=1
+TOOLS_ASKED=0
+SERVICE=1
+ASSUME_YES=0
 SETUP=1
 UNINSTALL=0
 PURGE=0
@@ -49,14 +67,17 @@ while [ $# -gt 0 ]; do
 	--prefix)      PREFIX="${2:?--prefix needs a folder}"; shift ;;
 	--binary)      BINARY="${2:?--binary needs a file}"; shift ;;
 	--from-source) FROM_SOURCE=1 ;;
- --source-dir) SOURCE_DIR="${2:?--source-dir needs a folder}"; FROM_SOURCE=1; shift ;;
-	--tools)       TOOLS=1 ;;
- --browser) BROWSER=1; TOOLS=1 ;;
- --browser-agent) BROWSER_AGENT=1; BROWSER=1; TOOLS=1 ;;
+	--source-dir)  SOURCE_DIR="${2:?--source-dir needs a folder}"; FROM_SOURCE=1; shift ;;
+	--tools)       TOOLS=1; TOOLS_ASKED=1 ;;
+	--no-tools)    TOOLS=0 ;;
+	--browser)     BROWSER=1; TOOLS=1; TOOLS_ASKED=1 ;;
+	--browser-agent) BROWSER_AGENT=1; BROWSER=1; TOOLS=1; TOOLS_ASKED=1 ;;
+	--no-service)  SERVICE=0 ;;
 	--no-setup)    SETUP=0 ;;
+	-y|--yes)      ASSUME_YES=1 ;;
 	--uninstall)   UNINSTALL=1 ;;
 	--purge)       PURGE=1 ;;
-	-h|--help)     sed -n '2,/^set -E/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h|--help)     usage; exit 0 ;;
 	*)             die "unknown option: $1 (see --help)" ;;
 	esac
 	shift
@@ -157,66 +178,132 @@ STAGE="$(mktemp -d "$PREFIX/.macron-install.XXXXXX")"
 trap 'rm -rf -- "$TMP" "${STAGE:-}"' EXIT
 install -m 0755 "$TMP/macron" "$STAGE/macron"
 "$STAGE/macron" version >/dev/null || die "the new program does not start; the installed program was kept"
+OLD_VERSION=""
+if [ -x "$TARGET" ]; then OLD_VERSION="$("$TARGET" version 2>/dev/null | awk '{print $NF}' || true)"; fi
 if [ -e "$TARGET" ]; then
  cp -p "$TARGET" "$STAGE/macron.old" || die "cannot back up the installed program"
  mv -f "$STAGE/macron.old" "$TARGET.old"
 fi
 mv -f "$STAGE/macron" "$TARGET"
-ok "installed $("$TARGET" version) in $TARGET"
+NEW_VERSION="$("$TARGET" version | awk '{print $NF}')"
+if [ -n "$OLD_VERSION" ] && [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+	ok "updated $OLD_VERSION → $NEW_VERSION in $TARGET"
+else
+	ok "installed macron $NEW_VERSION in $TARGET"
+fi
 case ":$PATH:" in *":$PREFIX:"*) ;; *) warn "$PREFIX is not on your PATH. Add it:  echo 'export PATH=\"$PREFIX:\$PATH\"' >> ~/.bashrc" ;; esac
 
-# ---- the tools the agent likes to have
-if [ "$TOOLS" = 1 ]; then
+# ---- the tools the agent likes to have (default; --no-tools skips them)
+SUDO=""
+if [ "$(id -u)" != 0 ]; then
+	if have sudo && { sudo -n true 2>/dev/null || [ -r /dev/tty ]; }; then SUDO="sudo"; else SUDO="none"; fi
+fi
+python_ok() { "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; }
+python_hint() {
+	say "   Python 3.12+ is needed for the pinned tools. Ways to get it:"
+	say "     Ubuntu 22.04:   sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.12 python3.12-venv"
+	say "     Debian 12:      curl -LsSf https://astral.sh/uv/install.sh | sh && uv python install 3.12"
+	say "     macOS:          brew install python@3.12"
+	say "   Then run this installer again."
+}
+tools_failed() { # explicit --tools: stop; default: warn and go on without the Python tools
+	if [ "$TOOLS_ASKED" = 1 ]; then die "$1"; fi
+	warn "$1 — continuing without the Python tools"
+}
+install_tools() {
 	pkgs="python3 python3-pip python3-venv git curl ffmpeg jq unzip poppler-utils openssh-client sshpass rsync"
-	if have apt-get; then
-		sudo_cmd=""; [ "$(id -u)" = 0 ] || sudo_cmd="sudo"
+	if [ "$SUDO" = none ]; then
+		warn "no root and no sudo: skipping system packages ($pkgs)"
+	elif have apt-get; then
 		say "Installing: $pkgs"
-		$sudo_cmd apt-get update -qq && $sudo_cmd apt-get install -y -qq $pkgs || warn "some packages did not install"
-		$sudo_cmd apt-get install -y -qq gh >/dev/null 2>&1 || true   # GitHub's CLI: not in every release
+		{ $SUDO apt-get update -qq && DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq $pkgs; } </dev/null || warn "some packages did not install"
+		DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq gh </dev/null >/dev/null 2>&1 || true   # GitHub's CLI: not in every release
+	elif have dnf; then
+		$SUDO dnf install -y -q python3 python3-pip git curl ffmpeg jq unzip poppler-utils openssh-clients sshpass rsync gh </dev/null || warn "some packages did not install"
 	elif have brew; then
 		brew install python git curl ffmpeg jq poppler rsync gh || warn "some packages did not install"
 		brew install hudochenkov/sshpass/sshpass >/dev/null 2>&1 || warn "sshpass did not install: servers that need a password will need a key"
 	else
-		warn "--tools knows apt and Homebrew; install python3, git, curl, ffmpeg, ssh and sshpass yourself"
+		warn "only apt, dnf and Homebrew are known; install python3, git, curl, ffmpeg, ssh and sshpass yourself"
 	fi
- # Keep Python packages out of the system interpreter (PEP 668).
- have python3 || die "--tools requires python3"
- python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' || die "the pinned Python tools require Python 3.12+"
- req="$SCRIPT_DIR/requirements-tools.lock"
- if [ -n "$SOURCE_DIR" ]; then req="$SOURCE_DIR/requirements-tools.lock"; fi
- if [ ! -f "$req" ]; then
-  req="$TMP/requirements-tools.lock"
-  fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-main}/requirements-tools.lock" "$req"
- fi
- mkdir -p "$HOME_DIR"
- chmod 0700 "$HOME_DIR"
- python3 -m venv "$HOME_DIR/venv" || die "cannot create the tools environment (install python3-venv)"
- "$HOME_DIR/venv/bin/python" -m pip install --disable-pip-version-check --require-hashes -r "$req" || die "Python tool dependencies did not install"
- if [ "$BROWSER_AGENT" = 1 ]; then
-  agent_req="$SCRIPT_DIR/requirements-browser-agent.lock"
-  if [ -n "$SOURCE_DIR" ]; then agent_req="$SOURCE_DIR/requirements-browser-agent.lock"; fi
-  if [ ! -f "$agent_req" ]; then agent_req="$TMP/requirements-browser-agent.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-main}/requirements-browser-agent.lock" "$agent_req"; fi
-  python3 -m venv "$HOME_DIR/browser-agent"
-  "$HOME_DIR/browser-agent/bin/python" -m pip install --disable-pip-version-check --require-hashes -r "$agent_req" || die "browser-agent dependencies did not install"
- fi
- ok "Python tools installed in $HOME_DIR/venv"
- if [ "$BROWSER" = 1 ]; then
-  PLAYWRIGHT_BROWSERS_PATH="$HOME_DIR/browsers" "$HOME_DIR/venv/bin/python" -m playwright install chromium || die "Chromium install failed"
- fi
-fi
+	# Keep Python packages out of the system interpreter (PEP 668), in a private venv.
+	PY=""
+	for c in python3 python3.13 python3.12; do
+		if have "$c" && python_ok "$c"; then PY="$c"; break; fi
+	done
+	if [ -z "$PY" ]; then
+		if have python3; then warn "python3 is $(python3 -c 'import platform; print(platform.python_version())') (older than 3.12)"; else warn "python3 is missing"; fi
+		python_hint
+		tools_failed "the pinned Python tools need Python 3.12+"
+		return 0
+	fi
+	req="$SCRIPT_DIR/requirements-tools.lock"
+	if [ -n "$SOURCE_DIR" ]; then req="$SOURCE_DIR/requirements-tools.lock"; fi
+	if [ ! -f "$req" ]; then
+		req="$TMP/requirements-tools.lock"
+		fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-main}/requirements-tools.lock" "$req" || { tools_failed "cannot download requirements-tools.lock"; return 0; }
+	fi
+	mkdir -p "$HOME_DIR"
+	chmod 0700 "$HOME_DIR"
+	"$PY" -m venv "$HOME_DIR/venv" || { tools_failed "cannot create the tools environment (install python3-venv)"; return 0; }
+	"$HOME_DIR/venv/bin/python" -m pip install -q --disable-pip-version-check --require-hashes -r "$req" || { tools_failed "Python tool dependencies did not install"; return 0; }
+	if [ "$BROWSER_AGENT" = 1 ]; then
+		agent_req="$SCRIPT_DIR/requirements-browser-agent.lock"
+		if [ -n "$SOURCE_DIR" ]; then agent_req="$SOURCE_DIR/requirements-browser-agent.lock"; fi
+		if [ ! -f "$agent_req" ]; then agent_req="$TMP/requirements-browser-agent.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-main}/requirements-browser-agent.lock" "$agent_req"; fi
+		"$PY" -m venv "$HOME_DIR/browser-agent"
+		"$HOME_DIR/browser-agent/bin/python" -m pip install -q --disable-pip-version-check --require-hashes -r "$agent_req" || die "browser-agent dependencies did not install"
+	fi
+	ok "Python tools installed in $HOME_DIR/venv ($("$HOME_DIR/venv/bin/python" -c 'import platform; print(platform.python_version())'))"
+	if [ "$BROWSER" = 1 ]; then
+		PLAYWRIGHT_BROWSERS_PATH="$HOME_DIR/browsers" "$HOME_DIR/venv/bin/python" -m playwright install chromium || die "Chromium install failed"
+	fi
+}
+if [ "$TOOLS" = 1 ]; then install_tools; fi
 
-# ---- setup
+# ---- setup and the service
+INTERACTIVE=0
+if [ "$ASSUME_YES" = 0 ] && [ -r /dev/tty ] && { : </dev/tty; } 2>/dev/null; then INTERACTIVE=1; fi
+
+ME="${USER:-$(id -un)}"
+can_service() { [ "$SERVICE" = 1 ] && { [ "$OS" = darwin ] || have systemctl; }; }
+
+start_service() {
+	can_service || return 0
+	if "$TARGET" service install; then
+		if [ "$OS" = linux ] && [ "$(id -u)" != 0 ]; then
+			# A user service stops with the last SSH session unless it lingers.
+			loginctl show-user "$ME" -p Linger 2>/dev/null | grep -q yes \
+				|| loginctl enable-linger "$ME" 2>/dev/null \
+				|| { [ "$SUDO" = sudo ] && sudo loginctl enable-linger "$ME"; } \
+				|| warn "could not enable lingering; run: sudo loginctl enable-linger $ME"
+		fi
+		"$TARGET" service status >/dev/null 2>&1 && ok "the service is active (macron $NEW_VERSION)"
+	else
+		warn "the service did not start; see: macron service status · macron logs"
+	fi
+}
+
+NEXT=""
 if [ "$SETUP" = 1 ]; then
 	if [ -f "$HOME_DIR/config.env" ]; then
 		ok "your settings in $HOME_DIR are kept"
-		if "$TARGET" service status >/dev/null 2>&1; then "$TARGET" service restart >/dev/null 2>&1 && ok "the service was restarted on the new program"; fi
-	elif [ -r /dev/tty ]; then
+		start_service
+	elif [ "$INTERACTIVE" = 1 ]; then
 		say ""
-		"$TARGET" setup </dev/tty
+		if "$TARGET" setup --no-service </dev/tty; then start_service; else NEXT="macron setup"; fi
 	else
-		say ""
-		say "Next:  macron setup"
+		NEXT="macron setup"
 	fi
 fi
+if [ -z "$NEXT" ] && [ "$SETUP" = 0 ] && [ ! -f "$HOME_DIR/config.env" ]; then NEXT="macron setup"; fi
+if [ -n "$NEXT" ] && can_service; then NEXT="$NEXT && macron service install"; fi
+case ":$PATH:" in *":$PREFIX:"*) ;; *) if [ -n "$NEXT" ]; then NEXT="export PATH=\"$PREFIX:\$PATH\"; $NEXT"; fi ;; esac
 say ""
-say "Macron Agent is installed.   macron doctor · macron service install · macron update"
+if [ -n "$NEXT" ]; then
+	say "Macron Agent $NEW_VERSION is installed. Next, run:"
+	say ""
+	say "    $NEXT"
+else
+	say "Macron Agent $NEW_VERSION is ready.   macron doctor · macron service status · macron update"
+fi

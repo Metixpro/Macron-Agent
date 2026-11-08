@@ -382,3 +382,36 @@ func TestUnknownCommandsAndFlagsPassThrough(t *testing.T) {
 		t.Errorf("version: %q", out)
 	}
 }
+
+// The wizard asks in this order: bot, owner, time zone, model; a UTC server is
+// offered Asia/Tehran.
+func TestSetupAsksInOrder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MACRON_HOME", home)
+	t.Setenv("MACRON_ENV_FILE", "")
+	t.Setenv("TZ", "UTC")
+	tg, llm := fakeServices(t)
+	old := telegramAPI
+	telegramAPI = tg.URL
+	defer func() { telegramAPI = old }()
+
+	// Time zone: Enter (the default); model choice 1, its address, then the model name.
+	io, out := testIO("\n1\n" + llm.URL + "/v1\nmy-model\n")
+	io.Interactive = true
+	io.Secret = func(string) (string, error) { return "sk-test", nil }
+	if _, code := Run([]string{"setup", "--no-service", "--token", "123:good", "--owner", "42", "--api-key", "sk-test"}, io); code != 0 {
+		t.Fatalf("setup: %d\n%s", code, out)
+	}
+	s := out.String()
+	bot, zone, model := strings.Index(s, "bot @macron_test_bot verified"), strings.Index(s, "3/4  Your time zone"), strings.Index(s, "4/4  The model")
+	if bot < 0 || zone < bot || model < zone {
+		t.Fatalf("order bot=%d zone=%d model=%d:\n%s", bot, zone, model, s)
+	}
+	if !strings.Contains(s, "Time zone [Asia/Tehran]") {
+		t.Errorf("a UTC server is offered Asia/Tehran:\n%s", s)
+	}
+	env, _ := loadEnvFile(filepath.Join(home, "config.env"))
+	if got, _ := env.Get(keyTimezone); got != "Asia/Tehran" {
+		t.Errorf("time zone %q", got)
+	}
+}

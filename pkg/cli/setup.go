@@ -97,7 +97,7 @@ func setup(io *IO, args []string) int {
 	if me == nil {
 		return 1
 	}
-	io.printf("     ✓ the bot is @%s\n\n", me.Username)
+	io.printf("     ✓ bot @%s verified\n\n", me.Username)
 	env.Set(keyToken, tok)
 
 	// ---- the owner
@@ -122,17 +122,12 @@ func setup(io *IO, args []string) int {
 	io.printf("     ✓ owner: %s\n\n", owners)
 	env.Set(keyOwners, owners)
 
-	// ---- the model
-	if code := setupModel(ctx, io, env, interactive, *apiURL, *apiKey, *model, *skipTest); code != 0 {
-		return code
-	}
-
 	// ---- the clock
 	zone := firstNonEmpty(*tz, getEnv(env, keyTimezone))
 	if zone == "" {
-		zone = systemZone()
+		zone = defaultZone()
 		if interactive {
-			io.println("4/4  Your time zone (reminders and schedules follow it).")
+			io.println("3/4  Your time zone (reminders and schedules follow it).")
 			zone = io.ask("     Time zone", zone)
 		}
 	}
@@ -141,6 +136,12 @@ func setup(io *IO, args []string) int {
 		return 1
 	}
 	env.Set(keyTimezone, zone)
+	io.printf("     ✓ time zone: %s\n\n", zone)
+
+	// ---- the model
+	if code := setupModel(ctx, io, env, interactive, *apiURL, *apiKey, *model, *skipTest); code != 0 {
+		return code
+	}
 
 	if err := env.Save(); err != nil {
 		io.printf("❌ cannot save %s: %v\n", envPath, err)
@@ -151,6 +152,8 @@ func setup(io *IO, args []string) int {
 	// ---- run it
 	switch {
 	case *noService:
+		io.printf("Then send /start to @%s.\n", me.Username)
+		return 0
 	case interactive && serviceSupported() && io.yes("\nKeep the agent running in the background and start it at boot?", true):
 		if code := service(io, []string{"install"}); code != 0 {
 			io.println("   (you can run it by hand with: macron)")
@@ -169,15 +172,15 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 	key := firstNonEmpty(flagKey, getEnv(env, keyAPIKey))
 	model := firstNonEmpty(flagModel, getEnv(env, keyModel))
 	if url == "" && interactive {
-		io.println("3/4  The model. Which service will the agent think with?")
+		io.println("4/4  The model. Which service will the agent think with?")
 		for i, p := range presets {
 			io.printf("       %d) %s\n", i+1, p.name)
 		}
-		io.printf("       %d) Later: I will add it in Telegram (/admin → providers)\n", len(presets)+1)
+		io.printf("       %d) Later: I will add it in Telegram (/settings → providers)\n", len(presets)+1)
 		n, _ := strconv.Atoi(io.ask("     Choose", "1"))
 		switch {
 		case n == len(presets)+1:
-			io.println("     ↷ skipped: nothing will answer until you add a provider in /admin.")
+			io.println("     ↷ skipped: nothing will answer until you add a provider in /settings.")
 			return 0
 		case n >= 1 && n <= len(presets):
 			p := presets[n-1]
@@ -198,7 +201,7 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 		}
 	}
 	if url == "" {
-		io.println("3/4  The model: none given, so it is left for /admin → providers in Telegram.")
+		io.println("4/4  The model: none given, so it is left for /settings → providers in Telegram.")
 		return 0
 	}
 	base, api := llm.CleanBaseURL(url)
@@ -318,6 +321,15 @@ func shorten(err error) string {
 		return string(r[:160]) + "…"
 	}
 	return s
+}
+
+// defaultZone is what the wizard offers: the machine's zone, except that a
+// server set to UTC (most are) gets Asia/Tehran, the agent's home zone.
+func defaultZone() string {
+	if z := systemZone(); z != "UTC" && z != "Etc/UTC" {
+		return z
+	}
+	return "Asia/Tehran"
 }
 
 // systemZone is the machine's time zone name (UTC when it cannot tell).

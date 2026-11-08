@@ -3,9 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
 )
+
+// needsQRCode skips a test whose tool call needs the Python qrcode package
+// (installed by install.sh in the tools venv; absent on a bare machine).
+func needsQRCode(t *testing.T) {
+	t.Helper()
+	config.ActivateToolEnv() // the tools venv, as the agent runs it
+	if err := exec.Command("python3", "-c", "import qrcode").Run(); err != nil {
+		t.Skipf("generate_qr needs the Python qrcode package: %v", err)
+	}
+}
 
 // filesSent lists the Telegram calls that carried a file.
 func filesSent(h *harness) []string {
@@ -28,6 +41,7 @@ func filesSent(h *harness) []string {
 // TestTheModelChoosesWhatIsSent: what a tool made is not sent by itself;
 // the model is reminded once, and sends it by showing it in its answer.
 func TestTheModelChoosesWhatIsSent(t *testing.T) {
+	needsQRCode(t)
 	h := newHarness(t)
 	// These tests count foreground requests; learning has its own suite.
 	if err := h.st.SetSetting(context.Background(), settingLearn, "false"); err != nil {
@@ -58,6 +72,7 @@ func TestTheModelChoosesWhatIsSent(t *testing.T) {
 // TestAFileTheModelDoesNotChooseStays: a download fetched for the work is
 // not sent when the model, reminded, still chooses nothing.
 func TestAFileTheModelDoesNotChooseStays(t *testing.T) {
+	needsQRCode(t)
 	h := newHarness(t)
 	// These tests count foreground requests; learning has its own suite.
 	if err := h.st.SetSetting(context.Background(), settingLearn, "false"); err != nil {

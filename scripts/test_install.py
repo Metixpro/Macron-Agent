@@ -20,16 +20,50 @@ class InstallerTests(unittest.TestCase):
         self.target.write_text("#!/bin/sh\necho 'macron old'\n")
         self.target.chmod(0o755)
 
-    def install(self, body):
+    def install(self, body, *extra, env=None, tools=False):
         candidate = self.root / "candidate"
         candidate.write_text("#!/bin/sh\n" + body + "\n")
         candidate.chmod(0o755)
+        args = ["bash", str(INSTALLER), "--binary", str(candidate),
+                "--prefix", str(self.prefix), "--no-setup", *extra]
+        if not tools:
+            args.append("--no-tools")
         return subprocess.run(
-            ["bash", str(INSTALLER), "--binary", str(candidate),
-             "--prefix", str(self.prefix), "--no-setup"],
-            env={**os.environ, "MACRON_HOME": str(self.root / "state")},
-            capture_output=True, text=True, timeout=20,
+            args,
+            env={**os.environ, "MACRON_HOME": str(self.root / "state"), **(env or {})},
+            capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
         )
+
+    def test_help_works_when_piped(self):
+        # curl … | bash: $0 is "bash", so the help cannot be read from the file.
+        result = subprocess.run(["bash", "-s", "--", "--help"], input=INSTALLER.read_text(),
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for flag in ("--no-tools", "--no-service", "--yes", "--from-source", "--uninstall"):
+            self.assertIn(flag, result.stdout)
+
+    def test_reports_version_change_and_next_step(self):
+        result = self.install("echo 'macron 9.9.9'", "--yes")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("updated old → 9.9.9", result.stdout)
+        self.assertIn("macron setup", result.stdout)  # no settings yet: the exact next command
+
+    def test_default_tools_survive_old_python(self):
+        stubs = self.root / "stubs"
+        stubs.mkdir()
+        for name in ("apt-get", "dnf", "brew", "sudo"):
+            (stubs / name).write_text("#!/bin/sh\nexit 0\n")
+        for name in ("python3", "python3.12", "python3.13"):
+            (stubs / name).write_text("#!/bin/sh\ncase \"$*\" in *platform*) echo 3.11.2;; esac\nexit 1\n")
+        for f in stubs.iterdir():
+            f.chmod(0o755)
+        result = self.install("echo 'macron 9.9.9'", env={"PATH": f"{stubs}:{os.environ['PATH']}"}, tools=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("older than 3.12", result.stderr)
+        self.assertIn("uv python install", result.stdout)
+        # An explicit --tools insists.
+        result = self.install("echo 'macron 9.9.9'", "--tools", env={"PATH": f"{stubs}:{os.environ['PATH']}"}, tools=True)
+        self.assertNotEqual(result.returncode, 0)
 
     def test_broken_candidate_keeps_running_version(self):
         result = self.install("exit 42")
