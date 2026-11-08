@@ -77,6 +77,7 @@ type Bot struct {
 	triage        triageState // what a request needs, decided before the model works (triage.go)
 	// toldGroupSettings: the groups already told that /settings is not their settings
 	toldGroupSettings sync.Map
+	gateAsks          sync.Map    // id → *gateAsk: the command gate's questions waiting for the owner (cmdgate.go)
 	suspended         sync.Map    // poll ID → suspension: jobs waiting for a poll's answer (polls.go)
 	readsAll          atomic.Bool // privacy mode is off: every group message reaches the bot (groupsight.go)
 	sights            sync.Map    // chatID → sight (whether the bot sees all of a group)
@@ -285,8 +286,8 @@ func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 var botCommands = map[string]bool{}
 
 func init() {
-	for _, c := range strings.Fields("/admin /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /help /lang /language /learn /me /memory " +
-		"/mode /new /nolog /panel /recap /reminders /reset /schedules /settings /start /stop /tasks /teach /zaban") {
+	for _, c := range strings.Fields("/admin /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /approve /help /lang /language /learn /me /memory " +
+		"/mode /new /nolog /panel /recap /reminders /reset /schedules /settings /start /stop /tasks /teach /yolo /zaban") {
 		botCommands[c] = true
 	}
 }
@@ -511,6 +512,19 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 		b.reply(m, l.t(textUnknownCommand))
 		return
+	case "/approve":
+		if admin && b.approveLatest(uid) {
+			return
+		}
+		b.reply(m, l.t("[!] دستوری منتظر تأیید نیست."))
+		return
+	case "/yolo":
+		if b.isOwner(uid) && m.Chat.Private() {
+			b.yoloCommand(m, l, args)
+			return
+		}
+		b.reply(m, l.t(textUnknownCommand))
+		return
 	case "/learn":
 		if admin && m.Chat.Private() {
 			b.learnCommand(ctx, m, l, args)
@@ -618,6 +632,8 @@ func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
 		b.handleScheduleCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "ga:"):
 		b.handleApprovalCallback(ctx, q, answer)
+	case strings.HasPrefix(q.Data, "cg:"):
+		b.handleGateCallback(q, answer)
 	case strings.HasPrefix(q.Data, "me:"):
 		b.handleMeCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "gl:"):

@@ -170,6 +170,7 @@ const (
 	stopCanceled                   // the user stopped it
 	stopRepeat                     // the model kept making the same call: no progress
 	stopIdle                       // nothing happened for the idle timeout
+	stopBlocked                    // the command gate refused too many commands in a row
 )
 
 // ExtendForever is Request.Extensions with no limit: the budget grows for as
@@ -207,6 +208,8 @@ func (r stopReason) String() string {
 		return "repeat"
 	case stopIdle:
 		return "idle"
+	case stopBlocked:
+		return "blocked"
 	}
 	return "failed"
 }
@@ -223,7 +226,8 @@ func stoppedText(lang string, steps int, why stopReason, auto bool) string {
 		reason := map[stopReason]string{stopFailed: "I lost the connection to my brain in the middle of the job",
 			stopTime: "The time for this request ran out", stopSteps: "This job needed more steps than one request allows",
 			stopTokens: "Your tokens ran out in the middle of the job", stopRepeat: "I stopped because I kept making the same call without getting anywhere",
-			stopIdle: "I stopped because nothing happened for a long time (no answer from the model, no tool finishing)"}[why]
+			stopIdle:    "I stopped because nothing happened for a long time (no answer from the model, no tool finishing)",
+			stopBlocked: "I stopped because several commands in a row were refused by the safety gate; they need you to run them by hand"}[why]
 		s := fmt.Sprintf("⏸ %s. %d steps of the work are done and what I made is kept in the workspace.", reason, steps)
 		if !auto {
 			s += " Say «continue» and I'll pick it up from here."
@@ -232,7 +236,8 @@ func stoppedText(lang string, steps int, why stopReason, auto bool) string {
 	}
 	reason := map[stopReason]string{stopFailed: "ارتباطم با مغزم وسط کار قطع شد", stopTime: "وقت این درخواست تموم شد",
 		stopSteps: "این کار از تعداد قدم‌های مجاز یه درخواست بیشتر بود", stopTokens: "توکن‌هات وسط کار تموم شد",
-		stopRepeat: "متوقف شدم چون داشتم همون کار رو بی‌نتیجه تکرار می‌کردم", stopIdle: "متوقف شدم چون مدت زیادی هیچ اتفاقی نیفتاد (نه جوابی از مدل، نه ابزاری که تموم بشه)"}[why]
+		stopRepeat: "متوقف شدم چون داشتم همون کار رو بی‌نتیجه تکرار می‌کردم", stopIdle: "متوقف شدم چون مدت زیادی هیچ اتفاقی نیفتاد (نه جوابی از مدل، نه ابزاری که تموم بشه)",
+		stopBlocked: "متوقف شدم چون گیت امنیتی چند دستور پشت‌سرهم رو رد کرد؛ اون دستورها رو باید خودت دستی اجرا کنی"}[why]
 	s := fmt.Sprintf("⏸ %s. %s مرحله از کار انجام شد و هرچی ساختم توی فضای کاری مونده.", reason, persianDigits(steps))
 	if !auto {
 		s += " بگو «ادامه بده» تا از همین‌جا ادامه بدم."

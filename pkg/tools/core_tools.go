@@ -395,6 +395,9 @@ func (r *Registry) bashExecute(ctx context.Context, sessionID string, args map[s
 	if strings.TrimSpace(cmd) == "" {
 		return "error: command is required", nil
 	}
+	if refused := r.gateCommand(ctx, sessionID, cmd); refused != "" {
+		return refused, nil
+	}
 	if boolArg(args, "background") {
 		return r.startBackground(ctx, sessionID, cmd), nil
 	}

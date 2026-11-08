@@ -178,8 +178,9 @@ func main() {
 		brain:      br,
 		workFiles:  cfg.WorkspaceTTL,
 	}
-	a.Agent.Teachings = bot.teachings // what the admins taught by hand, in every prompt
-	api.OnSent = bot.noteSent         // a reaction is counted only on the bot's own messages
+	a.Registry.Gate, a.Registry.CheckpointDir = bot.newCommandGate(), config.HomePath("checkpoints") // every shell command passes it
+	a.Agent.Teachings = bot.teachings                                                                // what the admins taught by hand, in every prompt
+	api.OnSent = bot.noteSent                                                                        // a reaction is counted only on the bot's own messages
 	bot.reloadEmoji(rootCtx)
 	mem.UserBudget = bot.historyFor // the conversation fits the model's window
 	a.Agent.Redact = bot.redact

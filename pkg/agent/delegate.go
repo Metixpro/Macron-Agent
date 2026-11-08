@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/cmdgate"
 	"maps"
 	"path"
 	"sort"
@@ -259,6 +260,9 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 			sctx, cancel = context.WithTimeout(ctx, left-reserve(left))
 			defer cancel()
 		}
+		// Nobody watches a sub-agent: a dangerous command it wants is refused,
+		// never waiting for an answer (pkg/cmdgate).
+		sctx = cmdgate.WithOrigin(sctx, cmdgate.OriginSubAgent)
 		res, err := a.do(sctx, sub)
 		contract := ""
 		if err == nil && schema != nil {

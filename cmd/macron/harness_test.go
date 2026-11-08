@@ -419,6 +419,7 @@ func newHarness(t *testing.T) *harness {
 	a.Registry.SetUserCookies(b.cookies.user)
 	a.Registry.SetTranscriber(sttSources(st, cfg))
 	a.Registry.SetSkillWriter(b.sessionAdmin) // as in main
+	a.Registry.Gate = b.newCommandGate()      // as in main
 	// Tests never reach the real web: an empty search engine, no reader.
 	noWeb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("<html></html>")) }))
 	t.Cleanup(noWeb.Close)

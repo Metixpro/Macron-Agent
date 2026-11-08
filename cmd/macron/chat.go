@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/cmdgate"
 	"log"
 	"net/http"
 	"path"
@@ -247,6 +248,18 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	defer cancelRun()
 	allow := &tools.Allowance{} // no cap on the pictures and downloads of a request
 	runCtx = tools.WithAllowance(runCtx, allow)
+	// Who the commands of this job run for (pkg/cmdgate): a job nobody
+	// watches is refused a dangerous command; the owner is asked in the chat.
+	switch {
+	case scheduled:
+		runCtx = cmdgate.WithOrigin(runCtx, cmdgate.OriginCron)
+	case bg:
+		runCtx = cmdgate.WithOrigin(runCtx, cmdgate.OriginBackground)
+	case !guest:
+		if ask := b.gateAsker(uid, m.Chat.ID); ask != nil {
+			runCtx = cmdgate.WithAsker(runCtx, ask)
+		}
+	}
 	run := newRun(uid, m, cancelRun, opt.pending, st.tier)
 	switch {
 	case bg:

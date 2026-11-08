@@ -192,6 +192,17 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 	if err != nil {
 		return "error: " + err.Error(), nil
 	}
+	if lang.Name == "bash" { // a shell script is commands like any other
+		script := code
+		if strings.TrimSpace(script) == "" {
+			if b, _, err := r.Machine.ReadFile(sessionID, file, maxCodeBytes); err == nil {
+				script = string(b)
+			}
+		}
+		if refused := r.gateCommand(ctx, sessionID, script); refused != "" {
+			return refused, nil
+		}
+	}
 
 	switch {
 	case strings.TrimSpace(code) != "" && file != "":

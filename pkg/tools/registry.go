@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/cmdgate"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -50,6 +51,12 @@ type Options struct {
 }
 
 type Registry struct {
+	// Gate decides whether a shell command may run on this machine (nil:
+	// every command runs; see pkg/cmdgate). CheckpointDir is where the
+	// snapshots it asks for go before a destructive command.
+	Gate          *cmdgate.Gate
+	CheckpointDir string
+
 	Machine     *machine.Machine
 	Search      *search.Engine
 	LLM         llm.ChatClient

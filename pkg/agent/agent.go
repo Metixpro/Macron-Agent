@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/cmdgate"
 	"log"
 	"runtime/debug"
 	"slices"
@@ -1451,7 +1452,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			images    []llm.Part
 			responses []string
 		)
-		progressed, repeated := false, 0
+		progressed, repeated, blocked := false, 0, false
 		for i, tc := range toolCalls {
 			name, out := tc.Function.Name, outs[i]
 			if name != ToolPlan { // the plan is kept on its own (planState)
@@ -1489,8 +1490,15 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			if out.end && res.EndedBy == "" {
 				res.EndedBy = name
 			}
+			blocked = blocked || out.stop
 		}
 		touch()
+		if blocked {
+			// The command gate refused too many commands in a row: the job stops
+			// and reports what was blocked, so the owner can run it by hand.
+			log.Printf("agent: the command gate stopped session %s", req.SessionID)
+			return a.finishEarly(ctx, res, work, messages, known, leak, req, stopBlocked), nil
+		}
 		if repeated > 0 && repeated == len(toolCalls) {
 			stalled++
 		} else {
@@ -1573,6 +1581,7 @@ type toolOut struct {
 	images  []string
 	end     bool
 	refused bool // the call could not run as written (the model is told what to fix)
+	stop    bool // the command gate stopped the job (cmdgate.HardStop)
 }
 
 // runTools runs the calls of one turn. Sub-agents run alongside everything
@@ -1584,6 +1593,7 @@ func (a *Agent) runTools(ctx context.Context, sessionID string, calls []llm.Tool
 	outs := make([]toolOut, len(calls))
 	run := func(i int) {
 		outs[i].msg, outs[i].images, outs[i].end, outs[i].refused = a.runTool(ctx, sessionID, calls[i], local, defs, l)
+		outs[i].stop = strings.Contains(outs[i].msg.Content, strings.TrimSpace(cmdgate.HardStop))
 	}
 	var wg sync.WaitGroup
 	agents := make(chan struct{}, parallelAgents)

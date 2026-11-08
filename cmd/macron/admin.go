@@ -285,6 +285,8 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 	case "ws":
 		answer("", false)
 		show(b.viewShowWork(l))
+	case "gate":
+		b.handleGatePanel(ctx, l, parts, answer, show)
 
 	// ----- the agent and its tools
 	case "ai":
@@ -767,7 +769,7 @@ func (b *Bot) viewAgent(l lang) panelView {
 		row(b.button(l.t("🔎 جستجوی وب"), "a:sr", ""), b.button(l.t("📥 دانلودر"), "a:dl", "")),
 		row(b.button(l.t("🎙 صدا به متن"), "a:stt", ""), b.button(l.t("🎨 ساخت عکس"), "a:ig", "")),
 		row(b.button(l.t("🖼 ویرایش عکس"), "a:ie", ""), b.button(l.t("🎤 ساخت آهنگ"), "a:mu", "")),
-		row(b.button(l.t("🖥 نمایش کار"), "a:ws", "")),
+		row(b.button(l.t("🖥 نمایش کار"), "a:ws", ""), b.button(l.t("🛡 گیت دستورات"), "a:gate", "")),
 		row(b.back(l, "a:home")),
 	)}
 }

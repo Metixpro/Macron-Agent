@@ -370,4 +370,24 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_lesson_log_lesson ON lesson_log (lesson_id, id)`,
 	},
+
+	// 4: the command gate (pkg/cmdgate): what the owner allowed for good, and
+	// every decision about a command flagged as dangerous
+	{
+		`CREATE TABLE IF NOT EXISTS cmd_allow (
+			pattern TEXT NOT NULL PRIMARY KEY,
+			created_at DATETIME NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS cmd_audit (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			at DATETIME NOT NULL,
+			session TEXT NOT NULL DEFAULT '',
+			origin TEXT NOT NULL DEFAULT '',
+			command TEXT NOT NULL,
+			decision TEXT NOT NULL,
+			decider TEXT NOT NULL DEFAULT '',
+			rule TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_cmd_audit_at ON cmd_audit (at)`,
+	},
 }

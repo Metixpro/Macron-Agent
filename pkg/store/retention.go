@@ -15,6 +15,7 @@ const (
 	keepEndedJobs    = 90 * 24 * time.Hour  // scheduled tasks that ended
 	keepOpenJobs     = 3 * 24 * time.Hour   // an unfinished job nobody went on with (its files are gone by then)
 	keepBgTasks      = 7 * 24 * time.Hour   // a finished background task, listed in /tasks
+	keepCmdAudit     = 180 * 24 * time.Hour // the command gate's decisions
 	retentionBatch   = 5000
 	retentionMaxRuns = 40 // batches per table and pass (the next pass goes on)
 )
@@ -36,6 +37,7 @@ func (s *Store) Retention(ctx context.Context) (map[string]int64, error) {
 			[]any{ScheduleDone, ScheduleCancelled, now.Add(-keepEndedJobs)}},
 		{"open_jobs", `DELETE FROM open_jobs WHERE rowid IN (SELECT rowid FROM open_jobs WHERE updated_at < ? LIMIT ?)`, []any{now.Add(-keepOpenJobs)}},
 		{"bg_tasks", `DELETE FROM bg_tasks WHERE rowid IN (SELECT rowid FROM bg_tasks WHERE created_at < ? AND status NOT IN ('queued', 'running') LIMIT ?)`, []any{now.Add(-keepBgTasks)}},
+		{"cmd_audit", `DELETE FROM cmd_audit WHERE rowid IN (SELECT rowid FROM cmd_audit WHERE at < ? LIMIT ?)`, []any{now.Add(-keepCmdAudit)}},
 		{"context_messages", `DELETE FROM context_messages WHERE rowid IN (SELECT rowid FROM context_messages WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
 		{"context_memory", `DELETE FROM context_memory WHERE rowid IN (SELECT rowid FROM context_memory WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
 		{"user_facts", `DELETE FROM user_facts WHERE rowid IN (SELECT rowid FROM user_facts WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
