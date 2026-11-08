@@ -23,3 +23,41 @@ jobs:
       - run: make check
       - name: the installer parses
         run: bash -n install.sh
+
+  # The final gate: the one-line installer on a clean Ubuntu LTS, then the
+  # program's own checks. With the CI bot's secrets set it also runs as a
+  # system service and must answer Telegram's getMe (macron --check).
+  clean-install:
+    runs-on: ubuntu-24.04
+    env:
+      BOT_TOKEN: ${{ secrets.MACRON_CI_BOT_TOKEN }}
+      OWNER: ${{ secrets.MACRON_CI_OWNER }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make build
+      - name: one-line install (this build, tools and venv included)
+        run: bash install.sh --binary ./bin/macron --source-dir . --yes --no-service
+      - name: the installed program works
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          macron version
+          macron doctor --tools-only
+      - name: a second run keeps the settings
+        run: |
+          mkdir -p ~/.macron && printf 'TELEGRAM_BOT_TOKEN=x\nMACRON_OWNERS=1\n' > ~/.macron/config.env
+          bash install.sh --binary ./bin/macron --no-tools --yes --no-service | tee out.txt
+          grep -q "settings in" out.txt && grep -q 'TELEGRAM_BOT_TOKEN=x' ~/.macron/config.env
+      - name: as a service, answering Telegram
+        if: ${{ env.BOT_TOKEN != '' }}
+        run: |
+          sudo install -m 0755 ./bin/macron /usr/local/bin/macron
+          sudo mkdir -p /root/.macron
+          printf 'TELEGRAM_BOT_TOKEN=%s\nMACRON_OWNERS=%s\n' "$BOT_TOKEN" "$OWNER" | sudo tee /root/.macron/config.env >/dev/null
+          sudo chmod 600 /root/.macron/config.env
+          sudo -H macron --check | grep -q "^ok "
+          sudo -H macron service install
+          sleep 5
+          sudo systemctl is-active macron.service

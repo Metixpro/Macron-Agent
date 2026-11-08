@@ -1,6 +1,6 @@
 <div align="center">
 
-# Macron Agent
+# Macron Agent — مکرون بهتر از هرمس (Macron, better than Hermes)
 ### A personal agent that lives on your server and does real work
 
 [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -17,6 +17,14 @@
 Macron is a personal Go agent for coding, files, documents, web research and server tasks. Its Telegram workflow adds persistent conversations, memory, skills, scheduled tasks and background jobs. Personality and lasting knowledge are editable files; SQLite holds application state.
 
 **Development build.** Source installation on Linux is the recommended test path. Downloadable binaries require a published GitHub Release. The agent runs locally; inference stays local only when you choose a local model endpoint.
+
+## One-line install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Metixpro/macron-agent/main/install.sh | bash
+```
+
+That one line installs the system packages (python3, git, ffmpeg, poppler, ssh, rsync…), the newest release checked against its SHA-256 sum, the hash-locked Python tools in a private venv, and the systemd service with lingering (it stays up after you close SSH); then `macron setup` asks, in order, for the bot token from @BotFather, your numeric Telegram id, your time zone (Asia/Tehran by default) and the provider and model, testing each for real. Running the same line again updates the program, keeps `~/.macron` and restarts the service. Flags: `bash -s -- --help` (e.g. `--yes` to ask nothing, `--no-tools`, `--no-service`). Later updates from Telegram: `/update`.
 
 ## Install from source
 

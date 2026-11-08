@@ -19,6 +19,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/moa"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
+	"github.com/Metixpro/macron-agent/pkg/updater"
 )
 
 type level int
@@ -148,7 +149,7 @@ func doctor(io *IO, args []string) int {
 	url, key, model := getEnv(env, keyAPIURL), getEnv(env, keyAPIKey), getEnv(env, keyModel)
 	switch {
 	case url == "":
-		r.line(warn, "no model in the settings", "fine if you added a provider in Telegram (/admin → providers); otherwise run: macron setup")
+		r.line(warn, "no model in the settings", "fine if you added a provider in Telegram (/settings → providers); otherwise run: macron setup")
 	case !*offline:
 		base, api := llm.CleanBaseURL(url)
 		c := llm.NewClient(base, key, model)
@@ -190,6 +191,28 @@ func doctor(io *IO, args []string) int {
 			} else {
 				r.line(ok, "the agent runs as a service", "")
 			}
+			if !u.System {
+				out, _ := exec.Command("loginctl", "show-user", currentUser(), "-p", "Linger", "--value").Output()
+				if strings.TrimSpace(string(out)) == "yes" {
+					r.line(ok, "lingering is on: the service keeps running after you log out", "")
+				} else {
+					r.line(warn, "lingering is off: the service stops when your last SSH session ends", "sudo loginctl enable-linger "+currentUser())
+				}
+			}
+		}
+	}
+	// ---- a newer release
+	if !*offline {
+		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		rel, err := updater.Latest(cctx, "")
+		cancel()
+		switch {
+		case err != nil:
+			r.line(warn, "could not look for a newer release: "+shorten(err), "")
+		case updater.Newer(rel.Version(), app.Version):
+			r.line(warn, "a newer release is out: "+rel.Version()+" (you have "+app.Version+")", "run: macron update (or /update in Telegram)")
+		default:
+			r.line(ok, "the newest release ("+app.Version+")", "")
 		}
 	}
 	io.println()
@@ -300,6 +323,7 @@ func currentUser() string {
 
 // checkToolDependencies reports package imports, not merely an installed Python.
 func checkToolDependencies(r *report) {
+	checkPython(r)
 	for _, t := range doctorTools {
 		if _, err := exec.LookPath(t.name); err == nil {
 			r.line(ok, t.name+" ("+t.why+")", "")
@@ -325,4 +349,47 @@ func checkToolDependencies(r *report) {
 			r.line(ok, "Python package "+dep.packageName, "")
 		}
 	}
+}
+
+// checkPython reports the Python the tools run with: 3.12 or newer, from the
+// private venv install.sh makes.
+func checkPython(r *report) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "python3", "-I", "-c", "import sys; print('%d.%d' % sys.version_info[:2]); print(sys.prefix)").Output()
+	if err != nil {
+		r.line(fail, "python3 does not run", installHint("python3 python3-venv"))
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	ver, prefix := lines[0], ""
+	if len(lines) > 1 {
+		prefix = lines[1]
+	}
+	if parts := versionNumbers(ver); len(parts) < 2 || parts[0] < 3 || parts[0] == 3 && parts[1] < 12 {
+		r.line(fail, "Python "+ver+" is older than 3.12 (the pinned tools need 3.12+)", "install Python 3.12 (deadsnakes, uv python install 3.12, or brew), then run install.sh again")
+	} else {
+		r.line(ok, "Python "+ver, "")
+	}
+	venv := filepath.Join(config.Home(), "venv")
+	switch {
+	case strings.HasPrefix(prefix, venv):
+		r.line(ok, "the tools' private venv "+venv, "")
+	case fileExists(filepath.Join(venv, "bin", "python")):
+		r.line(warn, "the private venv exists but python3 is not it", "it is used when the agent starts; nothing to fix if this is a manual check")
+	default:
+		r.line(warn, "no private venv for the tools ("+venv+")", "run install.sh again (it creates it from requirements-tools.lock)")
+	}
+}
+
+func versionNumbers(v string) []int {
+	var out []int
+	for _, p := range strings.Split(v, ".") {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			break
+		}
+		out = append(out, n)
+	}
+	return out
 }

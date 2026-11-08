@@ -19,7 +19,7 @@ import (
 )
 
 // Version is the release of Macron Agent.
-const Version = "1.1.0-dev"
+const Version = "1.2.0"
 
 // App bundles the initialised components.
 type App struct {
