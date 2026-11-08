@@ -20,6 +20,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/store"
+	"github.com/Metixpro/macron-agent/pkg/updater"
 )
 
 // testIO is a terminal nobody sits at.
@@ -200,15 +201,15 @@ func TestVersionsAndChecksums(t *testing.T) {
 		a, b string
 		want bool
 	}{{"1.0.1", "1.0.0", true}, {"v1.10.0", "1.9.9", true}, {"1.0.0", "1.0.0", false}, {"1.0", "1.0.0", false}, {"2.0.0", "10.0.0", false}} {
-		if got := newer(c.a, c.b); got != c.want {
+		if got := updater.Newer(c.a, c.b); got != c.want {
 			t.Errorf("newer(%q, %q) = %v", c.a, c.b, got)
 		}
 	}
 	sum := strings.Repeat("ab", 32)
-	if got, ok := checksumOf("garbage\n"+sum+"  macron-1.0.0-linux-amd64.tar.gz\n", "macron-1.0.0-linux-amd64.tar.gz"); !ok || got != sum {
+	if got, ok := updater.ChecksumOf("garbage\n"+sum+"  macron-1.0.0-linux-amd64.tar.gz\n", "macron-1.0.0-linux-amd64.tar.gz"); !ok || got != sum {
 		t.Errorf("checksum %q %v", got, ok)
 	}
-	if _, ok := checksumOf(sum+"  other.tar.gz\n", "macron.tar.gz"); ok {
+	if _, ok := updater.ChecksumOf(sum+"  other.tar.gz\n", "macron.tar.gz"); ok {
 		t.Error("only the named file")
 	}
 }
@@ -225,7 +226,7 @@ func fakeRelease(t *testing.T, version string, tamper bool) *httptest.Server {
 	tw.Close()
 	gz.Close()
 	archive := buf.Bytes()
-	name := assetName(version)
+	name := updater.AssetName(version)
 	sum := sha256.Sum256(archive)
 	sums := hex.EncodeToString(sum[:]) + "  " + name + "\n"
 	if tamper {
@@ -258,12 +259,13 @@ func TestUpdateReplacesTheProgramAfterVerifyingIt(t *testing.T) {
 	dir := t.TempDir()
 	self := filepath.Join(dir, "macron")
 	os.WriteFile(self, []byte("#!/bin/sh\necho old\n"), 0o755)
-	oldSelf, oldAPI := selfPath, releaseAPI
-	selfPath = func() (string, error) { return self, nil }
-	defer func() { selfPath, releaseAPI = oldSelf, oldAPI }()
+	t.Setenv("MACRON_HOME", t.TempDir())
+	oldSelf, oldAPI := updater.SelfPath, updater.ReleaseAPI
+	updater.SelfPath = func() (string, error) { return self, nil }
+	defer func() { updater.SelfPath, updater.ReleaseAPI = oldSelf, oldAPI }()
 
 	srv := fakeRelease(t, "99.0.0", false)
-	releaseAPI = srv.URL + "/releases"
+	updater.ReleaseAPI = srv.URL + "/releases"
 	io, out := testIO("")
 	if _, code := Run([]string{"update", "--check"}, io); code != 0 || !strings.Contains(out.String(), "99.0.0") {
 		t.Fatalf("check: %d\n%s", code, out)
@@ -287,7 +289,7 @@ func TestUpdateReplacesTheProgramAfterVerifyingIt(t *testing.T) {
 
 	// Already on the newest release.
 	srv2 := fakeRelease(t, app.Version, false)
-	releaseAPI = srv2.URL + "/releases"
+	updater.ReleaseAPI = srv2.URL + "/releases"
 	io, out = testIO("")
 	if _, code := Run([]string{"update"}, io); code != 0 || !strings.Contains(out.String(), "newest") {
 		t.Errorf("up to date: %d\n%s", code, out)
@@ -298,11 +300,12 @@ func TestUpdateRefusesATamperedDownload(t *testing.T) {
 	dir := t.TempDir()
 	self := filepath.Join(dir, "macron")
 	os.WriteFile(self, []byte("#!/bin/sh\necho old\n"), 0o755)
-	oldSelf, oldAPI := selfPath, releaseAPI
-	selfPath = func() (string, error) { return self, nil }
-	defer func() { selfPath, releaseAPI = oldSelf, oldAPI }()
+	t.Setenv("MACRON_HOME", t.TempDir())
+	oldSelf, oldAPI := updater.SelfPath, updater.ReleaseAPI
+	updater.SelfPath = func() (string, error) { return self, nil }
+	defer func() { updater.SelfPath, updater.ReleaseAPI = oldSelf, oldAPI }()
 	srv := fakeRelease(t, "99.0.0", true)
-	releaseAPI = srv.URL + "/releases"
+	updater.ReleaseAPI = srv.URL + "/releases"
 	io, out := testIO("")
 	if _, code := Run([]string{"update", "--no-restart"}, io); code == 0 || !strings.Contains(out.String(), "SHA-256") {
 		t.Fatalf("a download that does not match its sum must fail: %d\n%s", code, out)

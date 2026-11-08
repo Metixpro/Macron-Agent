@@ -219,6 +219,8 @@ func main() {
 	go bot.runScheduler(rootCtx)
 	go bot.runWeeklyReports(rootCtx)
 	go bot.runEvalSchedule(rootCtx)
+	go bot.runUpdateNotices(rootCtx)
+	go bot.reportUpdate(rootCtx)
 
 	log.Printf("🤖 @%s is online (Macron Agent %s · home %s · time zone %s)", me.Username, app.Version, config.Home(), loc)
 	poll(rootCtx, bot)

@@ -77,6 +77,7 @@ type Bot struct {
 	triage        triageState // what a request needs, decided before the model works (triage.go)
 	// toldGroupSettings: the groups already told that /settings is not their settings
 	toldGroupSettings sync.Map
+	updating          atomic.Bool // an /update is in flight (update.go)
 	moaStrictBy       sync.Map    // user → *moa.Strict: destinations that need alternating roles (moa.go)
 	gateAsks          sync.Map    // id → *gateAsk: the command gate's questions waiting for the owner (cmdgate.go)
 	suspended         sync.Map    // poll ID → suspension: jobs waiting for a poll's answer (polls.go)
@@ -288,7 +289,7 @@ var botCommands = map[string]bool{}
 
 func init() {
 	for _, c := range strings.Fields("/admin /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /approve /help /lang /language /learn /me /memory /moa " +
-		"/mode /new /nolog /panel /recap /reminders /reset /schedules /settings /start /stop /tasks /teach /yolo /zaban") {
+		"/mode /new /nolog /panel /recap /reminders /reset /schedules /settings /start /stop /tasks /teach /update /yolo /zaban") {
 		botCommands[c] = true
 	}
 }
@@ -526,6 +527,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 		b.reply(m, l.t(textUnknownCommand))
 		return
+	case "/update":
+		if !b.isOwner(uid) || !m.Chat.Private() {
+			b.reply(m, l.t(textUnknownCommand))
+			return
+		}
+		b.showNew(ctx, m.Chat.ID, b.updateView(ctx, l, "a:home"))
+		return
 	case "/moa":
 		if !admin || !m.Chat.Private() {
 			b.reply(m, l.t(textUnknownCommand))
@@ -644,6 +652,8 @@ func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
 		b.handleApprovalCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "cg:"):
 		b.handleGateCallback(q, answer)
+	case strings.HasPrefix(q.Data, "up:go:"):
+		b.handleUpdateCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "me:"):
 		b.handleMeCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "gl:"):

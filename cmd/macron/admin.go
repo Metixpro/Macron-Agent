@@ -289,6 +289,9 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		b.handleGatePanel(ctx, l, parts, answer, show)
 	case "moa":
 		b.handleMoaPanel(ctx, l, parts, answer, show, ask)
+	case "upd":
+		answer("", false)
+		show(b.updateView(ctx, l, "a:home"))
 
 	// ----- the agent and its tools
 	case "ai":
