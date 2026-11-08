@@ -181,3 +181,16 @@ The Telegram button downloads the correct archive, checks its hash, runs a
 preflight, keeps `macron.old` and restarts the service. Old update buttons cannot
 downgrade the running version. A failed restart reports the installed state and
 keeps the pending version report for a manual `macron service restart`.
+
+### 1.2.3: asset downloads and CLI context
+
+If a GitHub browser/CDN download URL is unavailable, the updater and installer
+try the corresponding public GitHub asset API with `application/octet-stream`.
+The SHA-256 and executable preflight checks still apply. Both archive and checksum
+downloads were tested against the real v1.2.2 Release in isolated local directories;
+no running bot or system service was replaced in this check.
+
+The CLI keeps owner personality/rules and execution/safety instructions, while
+loading skill descriptions and hidden tool guidance when needed. Skill discovery
+and reading still work, and discovery keeps the system prefix stable. Repeated
+model measurements are recorded separately from the 1.2.2 baseline.

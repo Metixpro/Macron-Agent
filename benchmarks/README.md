@@ -61,3 +61,28 @@ Hermes terminal/file surface. A follow-up uses Macron's new `--tools` option
 with six corresponding shell/file capabilities. It is stored separately; do not
 silently combine the default and restricted variants. The new option does not
 provide OS isolation.
+
+## Repeated 1.2.2 / 1.2.3 review
+
+`--repetitions 3` repeats all three tasks, alternating agent order by both task
+and repetition. Each trial has its own metrics label and clean workspace. The
+interval validator adds 40 deterministic generated cases; accounting includes
+large exact-decimal values and signed whitespace input. These stronger checks
+are not used to rewrite the old pilot scores.
+
+The 1.2.2 baseline uses the default Macron CLI tool discovery and the latest
+Hermes source at `e0754412`. Both get the same task prompts, endpoint and limits.
+The 1.2.3 CLI context change is measured in a separate follow-up, preserving the
+baseline attempts. Comparisons across phases must disclose that scheduling,
+network/server load, sampling and cache were not controlled. Failed or timed-out
+trials remain in the raw files; incomplete usage is never treated as a full cost.
+
+```sh
+python3 benchmarks/compare.py --endpoint http://HOST:PORT/v1 --normalize \
+  --macron /path/to/macron --hermes-python benchmarks/hermes_launch.sh \
+  --hermes-repo /path/to/hermes-agent --repetitions 3 --output results.json
+python3 benchmarks/report_head_to_head.py results.json --output results.md
+```
+
+An interrupted preparatory attempt is retained separately and excluded; it was
+stopped to apply the requested feature removals before the repeated suite.

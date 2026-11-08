@@ -1,12 +1,21 @@
 package agent
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // cliPrompt keeps stable execution rules separate from task/history data. Tool
 // schemas already describe arguments; repeating every recipe here costs each call.
 func (a *Agent) cliPrompt(offers func(string) bool) string {
 	var b strings.Builder
-	b.WriteString(a.core("\nLocal server agent. Use only tools offered in this request.\n"))
+	fmt.Fprintf(&b, "You are %s, a local server agent.\n\n%s\n", a.Persona.fullName(), a.soulText())
+	if a.Teachings != nil {
+		if taught := strings.TrimSpace(a.Teachings()); taught != "" {
+			b.WriteString("\nOwner rules:\n" + taught + "\n")
+		}
+	}
+	b.WriteString("\nGround rules: use only the offered tools, protect the owner's private data, and follow the execution and safety rules below.\n")
 	b.WriteString(`
 Execution:
 - Complete the user's task with real tool calls. Read existing files before changing them. Preserve unrelated work and credentials.

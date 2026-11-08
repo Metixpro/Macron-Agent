@@ -74,3 +74,28 @@ func TestRestrictedPromptDoesNotAdvertiseAbsentCapabilities(t *testing.T) {
 		t.Fatal("instructions require filtered-out tools")
 	}
 }
+
+func TestEfficientCLILoadsRealSkillOnDemandWithoutEagerIndex(t *testing.T) {
+	a, script := skillAgent(t, nil, true,
+		llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall("load", ToolMoreTools, `{"need":"read skill"}`)}},
+		llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{toolCall("skill", "read_skill", `{"name":"linux-server-ops"}`)}},
+		llm.Message{Role: "assistant", Content: "Ready."})
+	a.Channel = ChannelCLI
+	_, err := a.Do(context.Background(), Request{SessionID: "skill-discovery", Input: llm.Message{Role: "user", Content: "Use my server procedure"}, FocusTools: true, EfficientTools: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := msgs(script.requests[0])[0]["content"].(string)
+	if strings.Contains(first, "<available_skills>") {
+		t.Fatal("hidden skill index inflated initial request")
+	}
+	raw, _ := json.Marshal(script.requests[len(script.requests)-1])
+	if !strings.Contains(string(raw), "uptime first") {
+		t.Fatal("real skill body was not loaded after discovery")
+	}
+	for _, req := range script.requests {
+		if msgs(req)[0]["content"] != first {
+			t.Fatal("discovery mutated the stable system prefix")
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,7 +23,7 @@ import (
 )
 
 // fakeGitHub serves one release whose program says its version.
-func fakeGitHub(t *testing.T, version string, tamper bool) *httptest.Server {
+func fakeGitHub(t *testing.T, version string, tamper bool, brokenBrowser ...bool) *httptest.Server {
 	t.Helper()
 	script := "#!/bin/sh\n[ \"$1\" = version ] && echo 'macron " + version + "'\n"
 	var buf bytes.Buffer
@@ -42,9 +43,17 @@ func fakeGitHub(t *testing.T, version string, tamper bool) *httptest.Server {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.Contains(r.URL.Path, "/releases/assets/"):
+			if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
+				_, _ = w.Write([]byte(sums))
+			} else {
+				_, _ = w.Write(archive)
+			}
+		case len(brokenBrowser) > 0 && brokenBrowser[0] && strings.HasPrefix(r.URL.Path, "/dl/"):
+			http.NotFound(w, r)
 		case strings.Contains(r.URL.Path, "/releases/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"tag_name": "v" + version, "body": "- faster agent\n- new gate",
-				"assets": []map[string]any{{"name": name, "browser_download_url": srv.URL + "/dl/" + name}, {"name": "SHA256SUMS", "browser_download_url": srv.URL + "/dl/SHA256SUMS"}}})
+				"assets": []map[string]any{{"name": name, "browser_download_url": srv.URL + "/dl/" + name, "url": srv.URL + "/releases/assets/" + name}, {"name": "SHA256SUMS", "browser_download_url": srv.URL + "/dl/SHA256SUMS", "url": srv.URL + "/releases/assets/SHA256SUMS"}}})
 		case strings.HasSuffix(r.URL.Path, "/dl/"+name):
 			_, _ = w.Write(archive)
 		case strings.HasSuffix(r.URL.Path, "/dl/SHA256SUMS"):
@@ -182,5 +191,23 @@ func TestUpdateReportsInstalledVersionWhenRestartFails(t *testing.T) {
 	h.noText("برنامه نصب‌شده دست نخورد")
 	if _, ok := h.st.Setting(settingUpdatePending); !ok {
 		t.Fatal("manual restart lost its version report")
+	}
+}
+
+func TestUpdateFallsBackToGitHubAssetAPI(t *testing.T) {
+	for _, tampered := range []bool{false, true} {
+		t.Run(fmt.Sprint(tampered), func(t *testing.T) {
+			h := personalHarness(t)
+			self, restarted := withRelease(t, fakeGitHub(t, "99.0.0", tampered, true))
+			h.click(ownerID, ownerID, 9, "up:go:v99.0.0")
+			data, _ := os.ReadFile(self)
+			if tampered {
+				if !strings.Contains(string(data), "echo old") || restarted.Load() != 0 {
+					t.Fatal("fallback bypassed checksum")
+				}
+			} else if !strings.Contains(string(data), "macron 99.0.0") || restarted.Load() != 1 {
+				t.Fatal("asset API update failed")
+			}
+		})
 	}
 }

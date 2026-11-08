@@ -138,6 +138,32 @@ build_from_source() {
  (cd "$src" && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-s -w" -o "$TMP/macron" ./cmd/macron) || die "the build failed"
 }
 
+fetch_release_asset() { # browser-url asset-name output api-base tag
+    fetch "$1" "$3" 2>/dev/null && return 0
+    have python3 || return 1
+    [ -f "$TMP/release.json" ] || fetch "$4/tags/$5" "$TMP/release.json" 2>/dev/null || return 1
+    local asset_api
+    asset_api="$(python3 - "$TMP/release.json" "$2" "$REPO" <<'PYCODE'
+import json, sys
+release = json.load(open(sys.argv[1]))
+for asset in release.get("assets", []):
+    url = asset.get("url", "")
+    prefix = "https://api.github.com/repos/" + sys.argv[3] + "/releases/assets/"
+    if asset.get("name") == sys.argv[2] and url.lower().startswith(prefix.lower()):
+        print(url)
+        break
+PYCODE
+)" || return 1
+    [ -n "$asset_api" ] || return 1
+    if have curl; then
+        curl -fsSL --retry 3 -H 'Accept: application/octet-stream' -o "$3" "$asset_api"
+    elif have wget; then
+        wget -q --header='Accept: application/octet-stream' -O "$3" "$asset_api"
+    else
+        return 1
+    fi
+}
+
 download_release() {
 	local tag="$VERSION" api="https://api.github.com/repos/$REPO/releases"
 	if [ -z "$tag" ]; then
@@ -149,8 +175,8 @@ download_release() {
 	name="macron-$ver-$OS-$ARCH.tar.gz"
 	base="https://github.com/$REPO/releases/download/$tag"
 	say "Downloading Macron Agent $ver for $OS/$ARCH…"
-	fetch "$base/$name" "$TMP/$name" 2>/dev/null || return 1
-	fetch "$base/SHA256SUMS" "$TMP/SHA256SUMS" 2>/dev/null || return 1
+	fetch_release_asset "$base/$name" "$name" "$TMP/$name" "$api" "$tag" || return 1
+	fetch_release_asset "$base/SHA256SUMS" "SHA256SUMS" "$TMP/SHA256SUMS" "$api" "$tag" || return 1
 	local want got
 	want="$(grep " $name\$" "$TMP/SHA256SUMS" | head -n1 | cut -d' ' -f1)"
 	got="$(sha256_of "$TMP/$name")"

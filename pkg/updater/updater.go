@@ -57,9 +57,10 @@ type Release struct {
 	Body       string `json:"body"` // the changelog
 	Prerelease bool   `json:"prerelease"`
 	Assets     []struct {
-		Name string `json:"name"`
-		URL  string `json:"browser_download_url"`
-		Size int64  `json:"size"`
+		Name   string `json:"name"`
+		URL    string `json:"browser_download_url"`
+		APIURL string `json:"url"`
+		Size   int64  `json:"size"`
 	} `json:"assets"`
 }
 
@@ -108,6 +109,9 @@ func get(ctx context.Context, url string, api bool) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "macron-agent/"+app.Version)
+	if !api {
+		req.Header.Set("Accept", "application/octet-stream")
+	}
 	if api {
 		req.Header.Set("Accept", "application/vnd.github+json")
 		if t := Token(); t != "" {
@@ -169,6 +173,20 @@ func download(ctx context.Context, url string, limit int64) ([]byte, error) {
 	return data, nil
 }
 
+// downloadAsset falls back to GitHub's public asset API when a browser/CDN
+// URL is unavailable. Checksums and preflight still run on the returned bytes.
+func downloadAsset(ctx context.Context, browserURL, apiURL string, limit int64) ([]byte, error) {
+	data, err := download(ctx, browserURL, limit)
+	if err == nil || !strings.HasPrefix(apiURL, ReleaseAPI+"/assets/") {
+		return data, err
+	}
+	data, fallbackErr := download(ctx, apiURL, limit)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("download failed (%v); asset API: %w", err, fallbackErr)
+	}
+	return data, nil
+}
+
 // ChecksumOf finds the sum of file in a SHA256SUMS listing ("<sum>  <file>" lines).
 func ChecksumOf(sums, file string) (string, bool) {
 	for _, line := range strings.Split(sums, "\n") {
@@ -208,24 +226,24 @@ func Install(ctx context.Context, rel *Release, step func(string)) error {
 		step = func(string) {}
 	}
 	want := AssetName(rel.Version())
-	var archiveURL, sumsURL string
+	var archiveURL, sumsURL, archiveAPI, sumsAPI string
 	for _, a := range rel.Assets {
 		switch a.Name {
 		case want:
-			archiveURL = a.URL
+			archiveURL, archiveAPI = a.URL, a.APIURL
 		case "SHA256SUMS":
-			sumsURL = a.URL
+			sumsURL, sumsAPI = a.URL, a.APIURL
 		}
 	}
 	if archiveURL == "" || sumsURL == "" {
 		return fmt.Errorf("the release has no %s (or no SHA256SUMS): nothing for %s/%s", want, runtime.GOOS, runtime.GOARCH)
 	}
 	step("download " + want)
-	archive, err := download(ctx, archiveURL, 300<<20)
+	archive, err := downloadAsset(ctx, archiveURL, archiveAPI, 300<<20)
 	if err != nil {
 		return err
 	}
-	sums, err := download(ctx, sumsURL, 1<<20)
+	sums, err := downloadAsset(ctx, sumsURL, sumsAPI, 1<<20)
 	if err != nil {
 		return err
 	}

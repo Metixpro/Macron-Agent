@@ -939,7 +939,16 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	// conversation so far (they only grow at the end between compressions),
 	// then what is new each time: who the user is, the clock, the budget and
 	// the message itself.
-	full := a.systemPrompt(local, known)
+	promptTools := known
+	if a.Channel == ChannelCLI && req.EfficientTools && focused != nil {
+		// Hidden tools remain discoverable, but their skill index and guidance
+		// need not inflate every call before the model asks to load them.
+		promptTools = make(map[string]bool, len(focused))
+		for _, d := range focused {
+			promptTools[d.Function.Name] = true
+		}
+	}
+	full := a.systemPrompt(local, promptTools)
 	if req.depth > 0 {
 		full = a.subPrompt(func(name string) bool { return known[name] })
 	}
