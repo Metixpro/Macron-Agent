@@ -226,11 +226,11 @@ Telegram API references: [InputRichMessage](https://core.telegram.org/bots/api#i
 Persistent cards do not use the draft-only `thinking` block.
 
 
-### 1.2.9: remove obsolete modules and synchronize command menus
+### 1.2.10: remove obsolete modules and synchronize command menus
 
 The group administration, membership approval, group history and privacy-warning
-modules have been removed along with their unused settings, translated copy and
-obsolete tests. Existing database migrations remain so upgrading an old Snap
+modules and unused Telegram moderation wrappers have been removed along with
+their unused settings, translated copy and obsolete tests. Existing database migrations remain so upgrading an old Snap
 installation still removes its tables and secrets safely. The old group-message
 expiry cleanup is retained solely for databases from previous versions.
 

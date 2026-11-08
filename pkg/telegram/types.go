@@ -399,27 +399,6 @@ type ChatMember struct {
 	CanAddWebPagePreviews bool  `json:"can_add_web_page_previews,omitempty"`
 }
 
-func (m *ChatMember) Rights() AdminRights {
-	if m.Status == "creator" {
-		return AllAdminRights()
-	}
-	if m.Status != "administrator" {
-		return AdminRights{}
-	}
-	return AdminRights{CanManageChat: true, IsAnonymous: m.IsAnonymous, CanDeleteMessages: m.CanDeleteMessages,
-		CanManageVideoChats: m.CanManageVideoChats, CanRestrictMembers: m.CanRestrictMembers, CanPromoteMembers: m.CanPromoteMembers,
-		CanChangeInfo: m.CanChangeInfo, CanInviteUsers: m.CanInviteUsers, CanPinMessages: m.CanPinMessages, CanManageTopics: m.CanManageTopics,
-		CanPostStories: m.CanPostStories, CanEditStories: m.CanEditStories, CanDeleteStories: m.CanDeleteStories}
-}
-
-func (m *ChatMember) Permissions() ChatPermissions {
-	return ChatPermissions{CanSendMessages: m.CanSendMessage, CanSendAudios: m.CanSendAudios, CanSendDocuments: m.CanSendDocuments,
-		CanSendPhotos: m.CanSendPhotos, CanSendVideos: m.CanSendVideos, CanSendVideoNotes: m.CanSendVideoNotes,
-		CanSendVoiceNotes: m.CanSendVoiceNotes, CanSendPolls: m.CanSendPolls, CanSendOtherMessages: m.CanSendOtherMessages,
-		CanAddWebPagePreviews: m.CanAddWebPagePreviews, CanChangeInfo: m.CanChangeInfo, CanInviteUsers: m.CanInviteUsers,
-		CanPinMessages: m.CanPinMessages, CanManageTopics: m.CanManageTopics}
-}
-
 func (m *ChatMember) Joined() bool {
 	switch m.Status {
 	case "creator", "administrator", "member":
@@ -690,4 +669,21 @@ const TelegramServiceID = 777000
 
 func (m *Message) FromChannel() bool {
 	return m.IsAutomaticForward || (m.From != nil && m.From.ID == TelegramServiceID) || (m.SenderChat != nil && m.SenderChat.Type == "channel")
+}
+
+type ChatPermissions struct {
+	CanSendMessages       bool `json:"can_send_messages"`
+	CanSendAudios         bool `json:"can_send_audios"`
+	CanSendDocuments      bool `json:"can_send_documents"`
+	CanSendPhotos         bool `json:"can_send_photos"`
+	CanSendVideos         bool `json:"can_send_videos"`
+	CanSendVideoNotes     bool `json:"can_send_video_notes"`
+	CanSendVoiceNotes     bool `json:"can_send_voice_notes"`
+	CanSendPolls          bool `json:"can_send_polls"`
+	CanSendOtherMessages  bool `json:"can_send_other_messages"`
+	CanAddWebPagePreviews bool `json:"can_add_web_page_previews"`
+	CanChangeInfo         bool `json:"can_change_info"`
+	CanInviteUsers        bool `json:"can_invite_users"`
+	CanPinMessages        bool `json:"can_pin_messages"`
+	CanManageTopics       bool `json:"can_manage_topics"`
 }
