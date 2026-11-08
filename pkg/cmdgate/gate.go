@@ -94,7 +94,9 @@ type Asker func(ctx context.Context, q Question) Choice
 type askerKey struct{}
 
 // WithAsker gives a context someone to ask: the owner's chat.
-func WithAsker(ctx context.Context, a Asker) context.Context { return context.WithValue(ctx, askerKey{}, a) }
+func WithAsker(ctx context.Context, a Asker) context.Context {
+	return context.WithValue(ctx, askerKey{}, a)
+}
 
 func askerOf(ctx context.Context) Asker {
 	a, _ := ctx.Value(askerKey{}).(Asker)

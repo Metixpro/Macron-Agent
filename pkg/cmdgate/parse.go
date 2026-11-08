@@ -6,7 +6,7 @@
 // Commands are parsed, not matched as raw text: a rule looks at the command
 // in command position (rm, dd, mkfs…) with its real arguments, so the same
 // words inside a quoted message (git commit -m "never rm -rf /") are
-// harmless, while quoting, escapes and empty quotes (r''m, \rm) cannot hide
+// harmless, while quoting, escapes and empty quotes (r”m, \rm) cannot hide
 // a command, and what sh -c, bash -c, eval, $(…) and `…` run is read too.
 package cmdgate
 
@@ -70,15 +70,15 @@ func Parse(s string) Script {
 }
 
 type parser struct {
-	src  []rune
-	i    int
-	out  Script
-	pipe Pipeline
-	cmd  Cmd
-	word strings.Builder
-	has  bool     // the word has started (an empty "" is a word)
-	redir string  // the operator waiting for its target
-	docs []string // heredoc delimiters waiting for the next line
+	src   []rune
+	i     int
+	out   Script
+	pipe  Pipeline
+	cmd   Cmd
+	word  strings.Builder
+	has   bool     // the word has started (an empty "" is a word)
+	redir string   // the operator waiting for its target
+	docs  []string // heredoc delimiters waiting for the next line
 }
 
 func (p *parser) peek(k int) rune {

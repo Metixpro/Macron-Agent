@@ -289,7 +289,7 @@ var botCommands = map[string]bool{}
 
 func init() {
 	for _, c := range strings.Fields("/admin /cancel /clear /cookie /cookies /deep /fast /files /groupsettings /approve /help /lang /language /learn /me /memory /moa " +
-		"/mode /new /nolog /panel /recap /reminders /reset /schedules /settings /start /stop /tasks /teach /update /yolo /zaban") {
+		"/mode /new /nolog /panel /recap /reminders /reset /schedules /search /settings /start /stop /tasks /teach /update /yolo /zaban") {
 		botCommands[c] = true
 	}
 }
@@ -526,6 +526,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 			return
 		}
 		b.reply(m, l.t(textUnknownCommand))
+		return
+	case "/search":
+		if !b.isOwner(uid) || !m.Chat.Private() {
+			b.reply(m, l.t(textUnknownCommand))
+			return
+		}
+		b.searchCommand(ctx, m, l, args)
 		return
 	case "/update":
 		if !b.isOwner(uid) || !m.Chat.Private() {

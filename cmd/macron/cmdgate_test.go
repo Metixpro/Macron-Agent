@@ -222,3 +222,18 @@ func TestYoloAndApprove(t *testing.T) {
 	h.send(private(ownerID, "/approve"))
 	h.wantText("منتظر تأیید نیست")
 }
+
+// /search finds earlier talk in the archive, even after /new.
+func TestSearchCommand(t *testing.T) {
+	h := newHarness(t)
+	h.llm.reply = say("زرافه‌ها گردن بلندی دارن چون برگ درخت‌های بلند رو می‌خورن")
+	h.send(private(ownerID, "چرا زرافه گردن بلند داره؟"))
+	h.send(private(ownerID, "/new"))
+	h.tg.reset()
+	h.send(private(ownerID, "/search زرافه"))
+	h.wantText("نتیجه برای «زرافه»")
+	h.wantText("<b>زرافه")
+	h.tg.reset()
+	h.send(private(ownerID, "/search کهکشان"))
+	h.wantText("چیزی پیدا نشد")
+}

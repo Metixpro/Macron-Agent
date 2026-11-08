@@ -46,7 +46,7 @@ var gateAskTimeout = 10 * time.Minute
 func (b *Bot) newCommandGate() *cmdgate.Gate {
 	env := cmdgate.Env{
 		SudoPassword: os.Getenv("SUDO_PASSWORD") != "",
-		SelfNames:    []string{"macron"},
+		SelfNames:    []string{"macron", config.ServiceName()},
 		SelfDB:       []string{config.HomePath(config.FileDB)},
 		SelfPID:      os.Getpid(),
 	}

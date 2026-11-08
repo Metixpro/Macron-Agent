@@ -15,9 +15,10 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
-const (
-	unitName    = "macron.service"
-	launchLabel = "app.macron.agent"
+// unitName and launchLabel are the profile's service (config.Profile).
+var (
+	unitName    = config.ServiceName() + ".service"
+	launchLabel = "app.macron.agent" + strings.TrimPrefix(config.ServiceName(), "macron")
 )
 
 // unit describes how the agent runs as a service.

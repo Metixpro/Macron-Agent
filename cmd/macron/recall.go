@@ -9,6 +9,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/store"
+	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
@@ -73,4 +74,34 @@ func (b *Bot) recallTool(u *store.User) agent.LocalTool {
 			return agent.ToolOutput{Text: sb.String()}, nil
 		},
 	}
+}
+
+// searchCommand is the owner's «/search WORDS»: the same archive the agent
+// searches (search_past_chats), shown directly.
+func (b *Bot) searchCommand(ctx context.Context, m *telegram.Message, l lang, query string) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		b.reply(m, l.t("<code>/search کلمه‌ها</code> توی همه گفتگوهای قبلی‌مون می‌گرده (حتی بعد از /new)."))
+		return
+	}
+	hits, err := b.st.SearchArchive(ctx, m.From.ID, query, time.Time{}, 8)
+	if err != nil {
+		b.reply(m, l.t(textError))
+		return
+	}
+	if len(hits) == 0 {
+		b.reply(m, l.f("🔎 برای «%s» چیزی پیدا نشد.", esc(shortText(query, 80))))
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString(l.f("🔎 <b>%s</b> نتیجه برای «%s»\n", l.num(len(hits)), esc(shortText(query, 80))))
+	for _, h := range hits {
+		who := l.t("تو")
+		if h.Role == "assistant" {
+			who = l.t("من")
+		}
+		snippet := strings.NewReplacer("«", "<b>", "»", "</b>").Replace(esc(textutil.TruncateRunes(strings.Join(strings.Fields(h.Snippet), " "), 300, "…")))
+		fmt.Fprintf(&sb, "\n<code>%s</code> · %s: %s\n", h.CreatedAt.In(b.loc).Format("2006-01-02 15:04"), who, snippet)
+	}
+	b.reply(m, sb.String())
 }

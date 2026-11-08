@@ -44,7 +44,9 @@ func newGate(mode string) (*Gate, *memStore) {
 	st := &memStore{}
 	g := New(testEnv, false)
 	g.Store = st
-	g.Policy = func() Policy { return Policy{Mode: mode, Breaker: 3, Deny: []string{"git push --force*", "*curl*|*sh*"}} }
+	g.Policy = func() Policy {
+		return Policy{Mode: mode, Breaker: 3, Deny: []string{"git push --force*", "*curl*|*sh*"}}
+	}
 	return g, st
 }
 
@@ -165,7 +167,9 @@ func TestGuardian(t *testing.T) {
 	g, st := newGate(ModeSmart)
 	var risk Risk
 	var seenPolicy, seenCmd string
-	g.Policy = func() Policy { return Policy{Mode: ModeSmart, Breaker: 3, SmartPolicy: "approve docker compose restarts"} }
+	g.Policy = func() Policy {
+		return Policy{Mode: ModeSmart, Breaker: 3, SmartPolicy: "approve docker compose restarts"}
+	}
 	g.Guardian = func(_ context.Context, policy, cmd string, _ []Finding) (Risk, string, error) {
 		seenPolicy, seenCmd = policy, cmd
 		return risk, "because", nil
@@ -186,7 +190,9 @@ func TestGuardian(t *testing.T) {
 	if v := g.Check(asking(Once, &asked), "s", "systemctl restart docker"); !v.Allow || asked != 1 {
 		t.Fatalf("unsure goes to the owner: %+v", v)
 	}
-	g.Guardian = func(context.Context, string, string, []Finding) (Risk, string, error) { return "", "", errors.New("down") }
+	g.Guardian = func(context.Context, string, string, []Finding) (Risk, string, error) {
+		return "", "", errors.New("down")
+	}
 	if v := g.Check(asking(Once, &asked), "s", "systemctl restart docker"); !v.Allow || asked != 2 {
 		t.Fatal("a guardian that fails sends it to the owner")
 	}
@@ -195,7 +201,9 @@ func TestGuardian(t *testing.T) {
 // Three refusals in a row stop the job; an approval resets the count.
 func TestDenialBreaker(t *testing.T) {
 	g, _ := newGate(ModeSmart)
-	g.Guardian = func(context.Context, string, string, []Finding) (Risk, string, error) { return RiskHigh, "too risky", nil }
+	g.Guardian = func(context.Context, string, string, []Finding) (Risk, string, error) {
+		return RiskHigh, "too risky", nil
+	}
 	ctx := context.Background()
 	if v := g.Check(ctx, "s", "rm -rf a"); v.Stop || v.Allow {
 		t.Fatal("1")

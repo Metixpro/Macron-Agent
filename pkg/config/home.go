@@ -22,20 +22,52 @@ import (
 //	workspaces/      the files the agent makes and receives
 //
 // Backing up the folder is backing up the agent.
+//
+// A profile (MACRON_PROFILE=work) is another agent on the same machine, with
+// a home of its own (~/.macron/profiles/work) and a service of its own
+// (macron-work.service): its own bot, settings, memory and skills.
 const (
 	EnvHome    = "MACRON_HOME"
 	EnvEnvFile = "MACRON_ENV_FILE"
+	EnvProfile = "MACRON_PROFILE"
 )
+
+// Profile is the profile this agent runs as ("" the default one). A name
+// that is not lower-case letters, digits, - or _ (at most 32) is ignored.
+func Profile() string {
+	p := strings.TrimSpace(os.Getenv(EnvProfile))
+	if p == "" || len(p) > 32 || p == "default" {
+		return ""
+	}
+	for _, r := range p {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return ""
+		}
+	}
+	return p
+}
+
+// ServiceName is the profile's service ("macron", or "macron-<profile>").
+func ServiceName() string {
+	if p := Profile(); p != "" {
+		return "macron-" + p
+	}
+	return "macron"
+}
 
 // Home is the agent's folder.
 func Home() string {
 	if h := strings.TrimSpace(os.Getenv(EnvHome)); h != "" {
 		return filepath.Clean(h)
 	}
+	base := ".macron"
 	if h, err := os.UserHomeDir(); err == nil && h != "" {
-		return filepath.Join(h, ".macron")
+		base = filepath.Join(h, ".macron")
 	}
-	return ".macron"
+	if p := Profile(); p != "" {
+		return filepath.Join(base, "profiles", p)
+	}
+	return base
 }
 
 // HomePath is a path inside the home folder.

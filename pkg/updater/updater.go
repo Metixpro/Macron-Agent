@@ -316,7 +316,7 @@ func RestartLater(self string, system bool) (string, error) {
 	if p, err := exec.LookPath("systemd-run"); err == nil {
 		args := append(append([]string{}, scope...), "--on-active=3", "--timer-property=AccuracySec=1s", "systemctl")
 		args = append(args, scope...)
-		args = append(args, "restart", "macron.service")
+		args = append(args, "restart", config.ServiceName()+".service")
 		if out, err := exec.Command(p, args...).CombinedOutput(); err == nil {
 			return "systemd-run", nil
 		} else {

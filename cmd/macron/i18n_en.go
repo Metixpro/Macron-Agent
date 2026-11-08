@@ -1181,4 +1181,9 @@ var english = map[string]string{
 	"[+] آپدیت کن":       "[+] Update",
 	"یه آپدیت در جریانه": "An update is already running",
 	"[-] آپدیت نشد: %s\nبرنامه نصب‌شده دست نخورد.": "[-] The update failed: %s\nThe installed program is untouched.",
+	"من": "me",
+	"<code>/search کلمه‌ها</code> توی همه گفتگوهای قبلی‌مون می‌گرده (حتی بعد از /new).": "<code>/search words</code> searches all our earlier conversations (even after /new).",
+	"🔎 برای «%s» چیزی پیدا نشد.":    "🔎 Nothing found for “%s”.",
+	"🔎 <b>%s</b> نتیجه برای «%s»\n": "🔎 <b>%s</b> results for “%s”\n",
+	"تو": "you",
 }
