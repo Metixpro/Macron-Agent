@@ -108,6 +108,8 @@ func Local(in TriageInput) Triage {
 	switch {
 	case len(in.History) == 0:
 		t.Context, t.ContextConf = ContextStandalone, 0.9
+	case (in.Images > 0 || len(in.Files) > 0) && !in.Reply && strings.TrimSpace(in.Hint) == "" && !earlierRe.MatchString(text):
+		t.Context, t.ContextConf = ContextStandalone, 0.85
 	case earlierRe.MatchString(text):
 		t.Context, t.ContextConf = ContextEarlier, 0.7
 	case recentRe.MatchString(text) || strings.TrimSpace(in.Hint) != "":

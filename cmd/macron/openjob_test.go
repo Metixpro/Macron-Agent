@@ -17,7 +17,7 @@ func TestAFailedJobIsWhatContinueMeans(t *testing.T) {
 	h.llm.reply = func(map[string]any, int) (map[string]any, int) { return nil, 503 }
 	h.send(private(uid, "یه سایت فروشگاهی با سبد خرید برام بساز"))
 	h.wantText("به مغزم دسترسی ندارم")
-	notice := lastTextDelivery(h)
+	notice := lastTextDelivery(h, uid)
 	if !hasButton(buttons(notice), fmt.Sprintf("run:go:%d:77", uid)) || !hasButton(buttons(notice), "دوباره امتحان کن") {
 		t.Fatalf("no 🔁 button for the failed job: %v", buttons(notice))
 	}
@@ -48,7 +48,7 @@ func TestARestartTellsTheUserAndGoesOn(t *testing.T) {
 	h.bot.tellRestarted(bg, jobs)
 	h.wantText("ری‌استارت شد")
 	h.wantText("ویدیوی تبلیغاتی")
-	notice := lastTextDelivery(h)
+	notice := lastTextDelivery(h, uid)
 	if !hasButton(buttons(notice), fmt.Sprintf("run:go:%d:500", uid)) {
 		t.Fatalf("no ▶️ button: %v", buttons(notice))
 	}
@@ -76,7 +76,7 @@ func TestARestartTellsTheUserAndGoesOn(t *testing.T) {
 	}
 }
 
-func TestASideQuestionOnlyMentionsTheJob(t *testing.T) {
+func TestASideQuestionDoesNotInjectAnUnrelatedUnfinishedJob(t *testing.T) {
 	h := newHarness(t)
 	const uid = 63
 	_ = h.st.BeginJob(bg, uid, uid, 77, "گزارش فروش ماهانه رو PDF کن", "Steps taken:\n1. read_file(sales.csv) → 120 rows")
@@ -85,8 +85,8 @@ func TestASideQuestionOnlyMentionsTheJob(t *testing.T) {
 	h.llm.reply = say("پاریس 🇫🇷")
 	h.send(private(uid, "پایتخت فرانسه کجاست؟"))
 	last := llmText(h.llm.last())
-	if !strings.Contains(last, "An earlier job is unfinished") || strings.Contains(last, "[Unfinished job]") {
-		t.Fatalf("a side question must only mention the job: %s", last)
+	if strings.Contains(last, "An earlier job is unfinished") || strings.Contains(last, "[Unfinished job]") {
+		t.Fatalf("a side question must not be pulled back to an unfinished job: %s", last)
 	}
 	if j, _ := h.st.UnfinishedJob(bg, uid); j == nil || j.Later != 1 {
 		t.Fatalf("the side question must leave the job, counted: %+v", j)
@@ -95,8 +95,8 @@ func TestASideQuestionOnlyMentionsTheJob(t *testing.T) {
 	h.llm.reply = say("باشه")
 	h.send(private(uid, "ادامه بده"))
 	last = llmText(h.llm.last())
-	if !strings.Contains(last, "[Unfinished job]") || !strings.Contains(last, "you answered 1 other request") {
-		t.Fatalf("«continue» after another request must leave the choice to the conversation: %s", last)
+	if strings.Contains(last, "[Unfinished job]") || strings.Contains(last, "you answered 1 other request") {
+		t.Fatalf("«continue» after another request must use conversation history without injecting an older job: %s", last)
 	}
 }
 

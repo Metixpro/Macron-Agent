@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/store"
@@ -17,7 +16,6 @@ import (
 
 const (
 	jobFlushEvery  = 4 * time.Second
-	jobHintFor     = 12 * time.Hour
 	jobNoticeFor   = 6 * time.Hour
 	jobStepsKept   = 40
 	jobRequestRune = 1500
@@ -190,13 +188,8 @@ func jobOf(j *store.OpenJob, chatID int64, text string, explicit bool) (note str
 		return "", false
 	}
 	asks := isContinueRequest(text)
-	switch {
-	case asks && (explicit || j.Later == 0):
+	if asks && (explicit || j.Later == 0) {
 		return continueNote(j), true
-	case asks:
-		return movedOnNote(j), false
-	case time.Since(j.UpdatedAt) < jobHintFor:
-		return unfinishedHint(j), false
 	}
 	return "", false
 }
@@ -242,17 +235,6 @@ func continueNote(j *store.OpenJob) string {
 		"about something else, handle that instead.)"
 }
 
-func movedOnNote(j *store.OpenJob) string {
-	return strings.Replace(continueNote(j), "The user's message asks to go on with it: pick it up where it stopped.",
-		fmt.Sprintf("Since it stopped you answered %d other request(s), so the user's «continue» may be about the latest topic of the "+
-			"conversation instead: decide from the conversation. If it is about this job, pick it up where it stopped.", j.Later), 1)
-}
-
-func unfinishedHint(j *store.OpenJob) string {
-	return fmt.Sprintf("(An earlier job is unfinished: «%s», stopped %s ago because %s. Go on with it only if the user's message asks for it.)",
-		textutil.TruncateRunes(textutil.OneLine(j.Request), 200, "…"), ageWord(time.Since(j.UpdatedAt)), jobReason(j.Reason))
-}
-
 func (b *Bot) noteResume(uid int64) { b.resumes.Store(uid, time.Now()) }
 
 func (b *Bot) takeResume(uid int64) bool {
@@ -265,16 +247,26 @@ var continueRoots = []string{"ادامه", "ادامش", "بقیه", "بقیش",
 	"continue", "resume", "goon", "carryon", "keepgoing", "proceed", "finishit", "whathappened", "retry", "tryagain"}
 
 func isContinueRequest(text string) bool {
-	text = strings.ToLower(textutil.Fold(text))
-	text = strings.NewReplacer("‌", "", "ي", "ی", "ك", "ک", "'", "", "’", "").Replace(text)
-	words := strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) })
-	if len(words) == 0 || len(words) > 10 {
-		return false
+	words := intentWords(text)
+	polite := map[string]bool{"لطفا": true, "لطفاً": true, "please": true, "خب": true, "حالا": true, "داداش": true, "bro": true, "دیگه": true}
+	for len(words) > 0 && polite[words[0]] {
+		words = words[1:]
+	}
+	for len(words) > 0 && polite[words[len(words)-1]] {
+		words = words[:len(words)-1]
 	}
 	joined := strings.Join(words, "")
+	for _, prefix := range []string{"ازهمونجا", "ازهمینجا"} {
+		if strings.HasPrefix(joined, prefix) && len(joined) > len(prefix) {
+			joined = strings.TrimPrefix(joined, prefix)
+			break
+		}
+	}
 	for _, root := range continueRoots {
-		if strings.Contains(joined, root) {
-			return true
+		for _, tail := range []string{"", "بده", "کن", "ش", "شو", "شبده", "بدهدیگه"} {
+			if joined == root+tail {
+				return true
+			}
 		}
 	}
 	return false

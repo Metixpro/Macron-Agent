@@ -103,7 +103,7 @@ func (r *Registry) registerProjectTools() {
 		}, []string{"filename"}, r.editFile)
 
 	r.add(ToolExtract,
-		"Unpack an archive (.zip, .rar, .7z, .tar.*, .gz, .xz, .iso…) into a folder; password if protected; list=true only lists it.",
+		"Unpack an archive (.zip, .apk, .aab, .apks, .xapk, .rar, .7z, .tar.*, .gz, .xz, .iso…) into a folder; password if protected; list=true only lists it.",
 		map[string]any{
 			"filename": prop("string", ""),
 			"dest":     prop("string", ""),
@@ -1028,7 +1028,7 @@ func occurrenceLines(text, old string, max int) []string {
 func archiveKind(name string) string {
 	lower := strings.ToLower(name)
 	switch {
-	case strings.HasSuffix(lower, ".zip"):
+	case strings.HasSuffix(lower, ".zip"), IsAndroidPackage(lower):
 		return "zip"
 	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
 		return "tgz"
@@ -1047,7 +1047,7 @@ func archiveKind(name string) string {
 
 func archiveBase(name string) string {
 	lower := strings.ToLower(name)
-	for _, ext := range append([]string{".tar.gz", ".tar.bz2", ".tgz", ".tbz2", ".tar", ".zip"}, externalExts...) {
+	for _, ext := range append([]string{".tar.gz", ".tar.bz2", ".tgz", ".tbz2", ".tar", ".zip", ".apk", ".aab", ".apks", ".xapk"}, externalExts...) {
 		if strings.HasSuffix(lower, ext) {
 			return name[:len(name)-len(ext)]
 		}
@@ -1404,3 +1404,11 @@ func (r *Registry) importRepo(ctx context.Context, sessionID string, args map[st
 }
 
 func IsArchive(name string) bool { return archiveKind(name) != "" }
+
+func IsAndroidPackage(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".apk", ".aab", ".apks", ".xapk":
+		return true
+	}
+	return false
+}

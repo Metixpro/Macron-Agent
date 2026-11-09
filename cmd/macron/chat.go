@@ -342,7 +342,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if track == nil && !opt.noMemory && !guest && !detached && !smallTalk {
 		request, base := in.memoryText, ""
 		unfinished := b.unfinishedJob(uid)
-		note, cont := jobOf(unfinished, m.Chat.ID, text, b.takeResume(uid))
+		note, cont := messageJob(unfinished, m, text, b.takeResume(uid))
 		if note != "" {
 			in.about = strings.TrimSpace(in.about + "\n" + note)
 		}
@@ -839,13 +839,22 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 		images = append(images, reply.images...)
 	}
 
+	if m.HasMedia() || len(m.Album) > 0 {
+		about = append(about, "Current request: files uploaded with this message are the primary objects of this turn. They are already available now, not promised for a future task. Earlier completed jobs are background; continue one only when the user asks for it. Resolve ‘this file’ against these uploads before older workspace files.")
+	} else if separateTask(text) {
+		about = append(about, "Current request: the user is starting a separate task. Keep earlier conversation as background, but do not continue or re-run earlier jobs unless requested.")
+	}
 	if files := b.workspaceAbout(session); files != "" {
 		about = append(about, files)
 	}
 
-	msg := llm.Message{Role: "user", Content: text}
+	inputText := text
+	if att != nil && att.note != "" {
+		inputText += "\n\n[Attachments in this message]\n" + att.note
+	}
+	msg := llm.Message{Role: "user", Content: inputText}
 	if len(images) > 0 {
-		msg.Parts = []llm.Part{llm.TextPart(text)}
+		msg.Parts = []llm.Part{llm.TextPart(inputText)}
 		for _, img := range images {
 			msg.Parts = append(msg.Parts, llm.ImagePart(img))
 		}
@@ -1003,18 +1012,16 @@ func (b *Bot) attach(ctx context.Context, session string, m *telegram.Message, v
 		return a, nil
 	case m.Document != nil && m.Animation == nil:
 		d := m.Document
-		name := safeName(d.FileName, "file_"+msgTag(m))
-		size, ok := have(name)
-		if !ok {
-			n, err := b.saveIncoming(ctx, session, d.FileID, name, d.FileSize)
-			if err != nil {
-				return nil, err
-			}
-			size = n
+		name, size, err := b.incomingDocument(ctx, session, m)
+		if err != nil {
+			return nil, err
 		}
+
 		a := &attachment{about: fmt.Sprintf("%s a file: %s (%s, %s), saved in the workspace as %s.", lead, d.FileName, d.MimeType, sizeText(size), name),
 			note: "[the user sent a file: " + name + "]", placeholder: l.f("(یه فایل فرستاد: %s)", name)}
-		if tools.IsArchive(name) {
+		if tools.IsAndroidPackage(name) {
+			a.about += " This is an Android application package (APK/AAB/APKS/XAPK), a ZIP-based file to inspect as data, not a package to install on this server. Use extract_archive with list=true to inspect its manifest, DEX bytecode and assets; extract it for deeper analysis. AndroidManifest.xml in an APK is usually binary XML; do not treat it as plain text or execute the app."
+		} else if tools.IsArchive(name) {
 			a.about += " It is an archive (often a whole project): " + tools.ToolExtract + " unpacks it, then " + tools.ToolProjectTree + " maps it."
 		}
 		if strings.HasPrefix(d.MimeType, "image/") {

@@ -38,6 +38,7 @@ const (
 )
 
 type Input struct {
+	Reply  bool
 	Text   string
 	Hint   string
 	Images int
@@ -145,6 +146,8 @@ func Classify(in Input) Verdict {
 	for _, f := range in.Files {
 		ext := strings.ToLower(path.Ext(f))
 		switch {
+		case ext == ".apk" || ext == ".aab" || ext == ".apks" || ext == ".xapk":
+			add(Code, 4, Signal{Why: "android_package", Arg: ext})
 		case codeExts[ext]:
 			add(Code, 3, Signal{Why: "code_file", Arg: ext})
 		case docExts[ext]:

@@ -226,6 +226,10 @@ func (b *Bot) interjectMode(u *store.User, m *telegram.Message, text string, que
 	}
 	ctx, cancel := b.ctx(2 * time.Minute)
 	defer cancel()
+	if !queue && run.describePendingAttachment(m, text) {
+		return true
+	}
+	queue = queue || separateTask(text)
 	var x *interjection
 	var err error
 	if !queue && run.queueNext && !m.HasMedia() && strings.TrimSpace(text) != "" {

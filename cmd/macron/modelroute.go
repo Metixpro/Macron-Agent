@@ -77,7 +77,7 @@ func (b *Bot) providerOn(id int64) bool {
 }
 
 func routeInput(m *telegram.Message, text string) router.Input {
-	in := router.Input{Text: text}
+	in := router.Input{Text: text, Reply: m.Replied() != nil || m.Quote != nil || m.ReplyToStory != nil}
 	look := func(m *telegram.Message) {
 		if len(m.Photo) > 0 {
 			in.Images++
@@ -86,11 +86,18 @@ func routeInput(m *telegram.Message, text string) router.Input {
 			if strings.HasPrefix(d.MimeType, "image/") {
 				in.Images++
 			} else {
-				in.Files = append(in.Files, d.FileName)
+				name := d.FileName
+				if name == "" && d.MimeType == "application/vnd.android.package-archive" {
+					name = "attachment.apk"
+				}
+				in.Files = append(in.Files, name)
 			}
 		}
 	}
 	look(m)
+	for _, item := range m.Album {
+		look(item)
+	}
 	if r := m.Replied(); r != nil {
 		in.Hint = r.Body()
 		look(r)

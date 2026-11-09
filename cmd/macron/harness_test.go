@@ -533,12 +533,22 @@ func lastRichAnswer(h *harness) tgCall {
 	return calls[len(calls)-1]
 }
 
-func lastTextDelivery(h *harness) tgCall {
+func lastTextDelivery(h *harness, chats ...int64) tgCall {
 	h.t.Helper()
 	h.tg.mu.Lock()
 	defer h.tg.mu.Unlock()
 	for i := len(h.tg.calls) - 1; i >= 0; i-- {
 		c := h.tg.calls[i]
+		if len(chats) > 0 {
+			id, _ := c.body["chat_id"].(float64)
+			matches := false
+			for _, chat := range chats {
+				matches = matches || int64(id) == chat
+			}
+			if !matches {
+				continue
+			}
+		}
 		if c.method != "sendMessage" && c.method != "sendRichMessage" && c.method != "editMessageText" {
 			continue
 		}

@@ -47,6 +47,7 @@ var english = map[string]string{
 	"هیچ‌کدوم ⚠️":           "None ⚠️",
 	"🛠 <b>پنل مدیریت مکرون</b> · نسخه ": "🛠 <b>Macron Ai admin panel</b> · version ",
 	"🤖 پروایدرها":                       "🤖 Providers",
+	"⬆️ آپدیت":                          "⬆️ Update",
 	"🔄 بروزرسانی":                       "🔄 Refresh",
 	"✖️ بستن":                           "✖️ Close",
 	"خطا: ":                             "Error: ",

@@ -277,7 +277,7 @@ func TestGIFArrivesWithAFrameToLookAt(t *testing.T) {
 	m.Document = &telegram.Document{FileID: "gif", FileName: "funny.gif.mp4", MimeType: "video/mp4"}
 	h.send(m)
 	req := llmText(h.llm.last())
-	for _, want := range []string{"GIF animation, saved in the workspace as animation_77.mp4", "A still frame of it is attached below", "data:image/jpeg;base64,", `"(یه گیف فرستاد)"`} {
+	for _, want := range []string{"GIF animation, saved in the workspace as animation_77.mp4", "A still frame of it is attached below", "data:image/jpeg;base64,", "(یه گیف فرستاد)"} {
 		if !strings.Contains(req, want) {
 			t.Errorf("model request misses %q", want)
 		}

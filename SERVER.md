@@ -320,3 +320,30 @@ image search could find and download valid images but fail to recognize them;
 test-only imports masked the missing runtime registration. Edge text-to-speech
 now combines system/custom trusted CAs with its package trust roots and honors
 HTTP(S) proxy environment variables and NO_PROXY, keeping TLS verification on.
+
+### 1.3.2: current requests, queued attachments and Android packages
+
+The current user turn carries its own attachment names while conversation history
+remains available. Completed jobs are background, and a fresh upload or a reply to
+a different message does not implicitly resume an unrelated unfinished job. Bare
+“continue” still resumes the latest unfinished job when no intervening task has moved the conversation on; a resume button or reply can explicitly target an older job. Unrelated turns do not receive old-job hints. Mentioning `continue` in a
+new programming question does not.
+
+While a task is running, an explicit new-task message queues a separate turn.
+A reference to the most recently queued attachment, or
+an explicit reply to a queued attachment, adds instructions to that file's queued
+turn without changing FIFO order. Ordinary corrections still steer the active
+request; `/queue` always starts a separate turn. Unclear text retains the existing
+steering behavior; this is not a semantic guarantee for every possible phrasing.
+
+Uploaded documents keep a per-message/file identity in a private `.incoming` index.
+Same-named files no longer overwrite one another; replies and repeated processing
+resolve to the original saved copy. A queued file keeps its original payload when
+its explanatory text arrives later.
+
+APK, AAB, APKS and XAPK files route to code analysis and can be listed or extracted
+with the existing archive tool. Their manifest, DEX and assets can be inspected as
+data; uploading a package does not install or run it on the server. Binary Android
+XML and bytecode may require separate inspection tools for deeper analysis.
+
+The software-update entry in Settings is labelled **Update** in English.

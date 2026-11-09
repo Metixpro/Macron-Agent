@@ -48,6 +48,7 @@ type Bot struct {
 	mediaStrikes  atomic.Int32
 	mediaFailedAt atomic.Int64
 
+	uploadLocks sync.Map
 	inputs      sync.Map
 	runs        sync.Map
 	bgRuns      sync.Map
