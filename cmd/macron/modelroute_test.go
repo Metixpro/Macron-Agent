@@ -27,7 +27,7 @@ func TestSmartModelRouting(t *testing.T) {
 		t.Fatalf("no strong model yet: %q", h.lastModel())
 	}
 
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	h.click(ownerID, ownerID, 9, "a:pv")
 	if !hasButton(buttons(lastOf(h, "editMessageText")), "→ a:rt") {
 		t.Fatal("no door to the routing in the providers")

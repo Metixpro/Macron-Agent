@@ -56,13 +56,13 @@ func handledPrivateCommands(t *testing.T) map[string]bool {
 			return true
 		})
 	}
-	if len(out) < 30 {
+	if len(out) < 20 {
 		t.Fatalf("only %d handlers found", len(out))
 	}
 	return out
 }
 
-func TestOwnerCommandMenuCoversEveryPrivateHandlerAndAlias(t *testing.T) {
+func TestOwnerCommandMenuCoversEveryPrivateHandler(t *testing.T) {
 	handlers := handledPrivateCommands(t)
 	valid := regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
 	for _, l := range []lang{fa, en} {
@@ -128,7 +128,7 @@ func TestCommandMenuRespectsAccessAndReportsOwnerRegistrationErrors(t *testing.T
 	for _, role := range []commandRole{commandUser, commandAdmin} {
 		for _, c := range commandMenu(en, role) {
 			for _, spec := range commandSpecs {
-				for _, name := range strings.Fields(spec.names) {
+				for _, name := range strings.Fields(spec.name) {
 					if name == c.Command && spec.role > role {
 						t.Errorf("/%s leaked into role %d menu", name, role)
 					}

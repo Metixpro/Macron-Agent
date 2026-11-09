@@ -2,15 +2,12 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
@@ -49,7 +46,6 @@ func (r *Registry) registerMotionTool() {
 			"size":       enumProp("1280x720 (default), 1920x1080, 1080x1080, 1080x1920 (reels), 1080x1350, 854x480", "landscape", "hd", "square", "vertical", "portrait", "small"),
 			"background": prop("string", "For body-only html (default #000)"),
 			"audio":      prop("string", "A workspace audio file"),
-			"music":      map[string]any{"type": "object", "description": "ai: style tags ('epic orchestral') for real music from the song service; else " + ToolMusic + "'s options (style, bpm, sfx…)"},
 			"filename":   prop("string", "Default 'motion'"),
 		}, nil, r.motionGraphic)
 }
@@ -107,48 +103,11 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 
 	cfg := map[string]any{"page": page, "width": size[0], "height": size[1], "fps": fps, "duration": dur, "out": out,
 		"preview": "work/" + stem + "_preview.jpg"}
-	var notes []string
-	var (
-		ai     <-chan motionMusic
-		silent bool
-		aiTags string
-		aiOpts map[string]any
-	)
-	mctx, mcancel := context.WithCancel(ctx)
-	defer mcancel()
 	if a := strArg(args, "audio"); a != "" {
 		if info, err := r.Machine.Stat(sessionID, a); err != nil || !info.Mode().IsRegular() {
 			return fmt.Sprintf("error: audio %q is not a file in the workspace", a), nil
 		}
 		cfg["audio"] = a
-	} else if m, ok := args["music"].(map[string]any); ok {
-		music := "work/" + stem + "_music.mp3"
-		if tags := cleanStyleText(strArg(m, "ai")); tags != "" {
-
-			if ai = r.startMotionMusic(mctx, sessionID, tags, stem); ai == nil {
-				notes = append(notes, "the song service is not available here (or this request's downloads are used up), so the music is a synthesizer's")
-			} else {
-				cfg["out"], silent = stem+"_silent.mp4", true
-				aiTags, aiOpts = tags, m
-			}
-		}
-		if ai == nil {
-			opts := m
-			if strArg(m, "ai") != "" && strArg(m, "style") == "" {
-				opts = map[string]any{"style": synthStyleFor(strArg(m, "ai"))}
-				for k, v := range m {
-					if k != "ai" {
-						opts[k] = v
-					}
-				}
-			}
-			if summary, err := r.synthesize(ctx, sessionID, opts, dur, music); err != nil {
-				notes = append(notes, "the music could not be made ("+err.Error()+"), so the video is silent")
-			} else {
-				cfg["audio"] = music
-				notes = append(notes, "music: "+summary)
-			}
-		}
 	}
 
 	var res struct {
@@ -162,9 +121,6 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 		return "error: " + err.Error(), nil
 	}
 	rendered := out
-	if silent {
-		rendered = stem + "_silent.mp4"
-	}
 	info, err := r.Machine.Stat(sessionID, rendered)
 	if res.Error != "" || err != nil || info.Size() == 0 {
 		msg := res.Error
@@ -176,19 +132,10 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 		}
 		return "error: " + msg, nil
 	}
-	if silent {
-		notes = append(notes, r.addMotionMusic(ctx, sessionID, ai, aiTags, aiOpts, rendered, out, stem, dur))
-		if info, err = r.Machine.Stat(sessionID, out); err != nil {
-			return "error: the video was lost while the music was added", nil
-		}
-	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Rendered %q — %dx%d, %s at %d fps (%d frames), %s, in %.0f s. "+SendNote+".\n",
 		out, size[0], size[1], strconv.FormatFloat(dur, 'f', -1, 64)+" s", fps, res.Frames, humanSize(info.Size()), res.Seconds)
 	fmt.Fprintf(&sb, "Preview of 4 frames: %s (view_image it to check the design).\n", cfg["preview"])
-	for _, n := range notes {
-		sb.WriteString("Note: " + n + "\n")
-	}
 	if res.Still {
 		sb.WriteString("WARNING: every frame looks the same — nothing moved. Animate with requestAnimationFrame, CSS animations or GSAP and render again.\n")
 	}
@@ -196,119 +143,6 @@ func (r *Registry) motionGraphic(ctx context.Context, sessionID string, args map
 		sb.WriteString("Script errors on the page (fix them and render again): " + strings.Join(res.Errors, " | ") + "\n")
 	}
 	return strings.TrimSpace(sb.String()), nil
-}
-
-type motionMusic struct {
-	file    string
-	seconds float64
-	err     error
-}
-
-func (r *Registry) startMotionMusic(ctx context.Context, sessionID, tags, stem string) <-chan motionMusic {
-	if !r.SongReady() {
-		return nil
-	}
-	if n, _ := take(ctx, kindDownloads, 1); n == 0 {
-		return nil
-	}
-	ch := make(chan motionMusic, 1)
-	go func() {
-		files, seconds, err := r.makeSong(ctx, sessionID, instrumentalLyrics, styleTitle(tags), instrumentalStyle(tags), "", "work/"+stem+"_ai_music", 1, false)
-		if err != nil || len(files) == 0 {
-			giveBack(ctx, kindDownloads, 1)
-			if err == nil {
-				err = errors.New("no music came")
-			}
-			ch <- motionMusic{err: err}
-			return
-		}
-		ch <- motionMusic{file: files[0].name, seconds: seconds}
-	}()
-	return ch
-}
-
-func (r *Registry) addMotionMusic(ctx context.Context, sessionID string, ai <-chan motionMusic, tags string, opts map[string]any, silent, out, stem string, dur float64) string {
-	ReportStatus(ctx, "motion · music")
-	audio, said := "", ""
-	select {
-	case m := <-ai:
-		if m.err == nil {
-			audio, said = m.file, "music: a real instrumental from the song service ("+tags+"), cut to the video and faded"
-			break
-		}
-		log.Printf("create_motion_graphic: the song service gave no music: %v", m.err)
-		said = "the song service gave no music (" + textutil.TruncateRunes(m.err.Error(), 120, "…") + "), so it is a synthesizer's: "
-	case <-ctx.Done():
-		said = "the music was stopped, so "
-	}
-	if audio == "" && ctx.Err() == nil {
-		synth := map[string]any{"style": synthStyleFor(tags)}
-		for k, v := range opts {
-			if k != "ai" {
-				synth[k] = v
-			}
-		}
-		music := "work/" + stem + "_music.mp3"
-		if summary, err := r.synthesize(ctx, sessionID, synth, dur, music); err == nil {
-			audio, said = music, said+summary
-		} else {
-			said += "the synthesizer failed too (" + err.Error() + ")"
-		}
-	}
-	if audio != "" {
-		if err := r.muxAudio(ctx, sessionID, silent, audio, out, dur); err == nil {
-			_ = r.Machine.RemoveAll(sessionID, silent)
-			return said
-		} else {
-			said = "the music could not be put under the video (" + err.Error() + ")"
-		}
-	}
-	if err := r.Machine.Rename(sessionID, silent, out); err != nil {
-		return said + "; and the video could not be saved: " + friendlyFSError(err)
-	}
-	return said + "; the video is silent"
-}
-
-func (r *Registry) muxAudio(ctx context.Context, sessionID, video, audio, out string, dur float64) error {
-	fade := min(1.5, dur/4)
-	in := min(0.5, dur/8)
-	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{
-		Args: []string{"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", "./" + video, "-i", "./" + audio,
-			"-map", "0:v", "-map", "1:a", "-c:v", "copy",
-			"-af", fmt.Sprintf("afade=t=in:st=0:d=%.3f,apad,afade=t=out:st=%.3f:d=%.3f", in, dur-fade, fade),
-			"-c:a", "aac", "-b:a", "192k", "-t", fmt.Sprintf("%.3f", dur), "-movflags", "+faststart", "./" + out},
-		Timeout: 3 * time.Minute,
-	})
-	if res.ExitCode != 0 {
-		return errors.New(textutil.TruncateRunes(strings.TrimSpace(res.Stderr), 200, "…"))
-	}
-	if fi, err := r.Machine.Stat(sessionID, out); err != nil || fi.Size() == 0 {
-		return errors.New("no file was made")
-	}
-	return nil
-}
-
-func synthStyleFor(tags string) string {
-	low := strings.ToLower(tags)
-	for _, c := range []struct{ style, words string }{
-		{"persian", "persian santur tar daf kamancheh dastgah iranian"},
-		{"synthwave", "synthwave retrowave outrun 80s"},
-		{"chiptune", "chiptune 8-bit 8bit chip retro-game"},
-		{"cinematic", "cinematic orchestral epic trailer film score"},
-		{"lofi", "lo-fi lofi chill study"},
-		{"trap", "trap drill hip-hop hiphop"},
-		{"edm", "edm house techno dance electro club"},
-		{"ambient", "ambient atmospheric drone meditation relax"},
-		{"piano", "piano"},
-		{"pop", "pop"},
-	} {
-		for _, w := range strings.Fields(c.words) {
-			if strings.Contains(low, w) {
-				return c.style
-			}
-		}
-	}
-	return "lofi"
 }
 
 func libNames(files []string) string {

@@ -33,14 +33,13 @@ var toolsets = map[string][]string{
 	"code": {tools.ToolRunCode, "bash_execute", tools.ToolShellJobs, tools.ToolProjectTree, tools.ToolSearchCode, tools.ToolFindFiles,
 		tools.ToolCodeOutline, tools.ToolEditFile, tools.ToolApplyPatch, tools.ToolImportRepo, tools.ToolExtract, tools.ToolPackFiles, tools.ToolQueryData},
 	"media":     {tools.ToolDownloadMedia, "search_music", "download_file", "media_convert", tools.ToolSplitVideo, "text_to_speech"},
-	"images":    {"generate_image", tools.ToolEditImage, "search_image", "generate_chart", "generate_qr"},
+	"images":    {"search_image", "generate_chart", "generate_qr"},
 	"documents": {"pdf_tool", tools.ToolDocumentReader, tools.ToolQueryData, tools.ToolCreateSpreadsheet, tools.ToolExtract, tools.ToolPackFiles},
 	"browser":   {tools.ToolBrowser, tools.ToolBrowserAgent},
-	"motion":    {tools.ToolMotion, tools.ToolMusic, "media_convert"},
-	"music":     {tools.ToolMusic, tools.ToolSong, "search_music", "download_file", tools.ToolDownloadMedia},
+	"motion":    {tools.ToolMotion, "media_convert"},
 }
 
-var toolsetNames = []string{"web", "code", "media", "images", "documents", "browser", "motion", "music"}
+var toolsetNames = []string{"web", "code", "media", "images", "documents", "browser", "motion"}
 
 var subBasics = []string{"list_files", "read_file", "write_file", tools.ToolListSkills, tools.ToolReadSkill, "view_image", "send_file"}
 
@@ -53,7 +52,6 @@ var toolsetHints = map[string][]string{
 		"سند", "کتاب", "جزوه", "اکسل", "پاورپوینت", "دیتابیس", "پایگاه داده", "جدول", "زیپ", "فشرده", "آرشیو"},
 	"browser": {"browser", "log in", "login", "click", "form", "screenshot", "مرورگر", "لاگین", "فرم", "اسکرین"},
 	"motion":  {"motion", "animation", "animated", "intro", "انیمیشن", "موشن", "اینترو"},
-	"music":   {"beat", "jingle", "melody", "compose", "sound effect", "بیت", "ملودی", "جینگل", "آهنگ بساز"},
 }
 
 func subTools(asked []any, goal string) map[string]bool {

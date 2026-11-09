@@ -167,7 +167,11 @@ func currentUnit() (unit, error) {
 	if cu, err := user.Current(); err == nil {
 		u.User = cu.Username
 	}
-	if u.System {
+	record, recordErr := config.ReadInstallation(bin)
+	if recordErr == nil && record.UID == os.Geteuid() {
+		u.System = record.Scope == "system"
+	}
+	if u.System && recordErr != nil {
 
 		if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
 			if tu, err := user.Lookup(su); err == nil {

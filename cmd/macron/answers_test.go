@@ -131,12 +131,12 @@ func TestTwoRunsInOneWorkspaceKeepTheirFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	live, task := newFileTracker(sb, "tg-1"), newFileTracker(sb, "tg-1")
-	live.start("generate_image")
-	task.start("generate_image")
+	live.start("search_image")
+	task.start("search_image")
 	_ = sb.WriteFile("tg-1", "task-chart.png", []byte("png"))
-	task.end("generate_image", "Image saved: task-chart.png")
+	task.end("search_image", "Image saved: task-chart.png")
 	_ = sb.WriteFile("tg-1", "cat.png", []byte("png"))
-	live.end("generate_image", "Image saved: cat.png")
+	live.end("search_image", "Image saved: cat.png")
 	if strings.Join(live.auto, ",") != "cat.png" {
 		t.Errorf("the live job sends only its own picture: %v", live.auto)
 	}
@@ -144,9 +144,9 @@ func TestTwoRunsInOneWorkspaceKeepTheirFiles(t *testing.T) {
 		t.Errorf("the task sends only its own: %v", task.auto)
 	}
 
-	live.start("generate_image")
+	live.start("search_image")
 	_ = sb.WriteFile("tg-1", "unnamed.png", []byte("png"))
-	live.end("generate_image", "done")
+	live.end("search_image", "done")
 	if !strings.Contains(strings.Join(live.auto, ","), "unnamed.png") {
 		t.Errorf("a call alone in the workspace owns its changes: %v", live.auto)
 	}

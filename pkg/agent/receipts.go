@@ -40,8 +40,8 @@ var (
 
 	execTools = setOf("bash_execute", "run_code", "shell_jobs", "install_package")
 
-	writeTools = setOf("write_file", "edit_file", "create_spreadsheet", "generate_image", "edit_image", "generate_chart",
-		"generate_qr", "text_to_speech", "pdf_tool", "media_convert", "split_video", "create_motion_graphic", "generate_music_synth", "generate_song", "send_file",
+	writeTools = setOf("write_file", "edit_file", "create_spreadsheet", "generate_chart",
+		"generate_qr", "text_to_speech", "pdf_tool", "media_convert", "split_video", "create_motion_graphic", "send_file",
 		"download_file", "download_media_ytdlp", "import_repo", "extract_archive", "pack_files", "remember", "save_skill", "create_schedule",
 		"schedule", "create_poll", "react", "send_effect")
 

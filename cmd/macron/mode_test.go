@@ -58,12 +58,13 @@ func TestFastMode(t *testing.T) {
 	if kb := rich[len(rich)-1].body["reply_markup"]; kb != nil && len(buttons(rich[len(rich)-1])) > 0 {
 		t.Fatalf("no mode button under answers: %v", kb)
 	}
-	h.send(private(90, "/deep"))
+	h.send(private(90, "/mode"))
+	h.click(90, 90, 600, "mode:set:deep")
 	if h.bot.fastMode(bg, 90) {
-		t.Error("/deep switches back")
+		t.Error("/mode switches back")
 	}
 	if !strings.Contains(h.tg.allText(), "✓ 🧠 عمیق") && !strings.Contains(fmt.Sprint(h.tg.of("sendMessage")), "✓ 🧠") {
-		t.Error("/deep shows the mode message with the new choice")
+		t.Error("/mode shows the mode message with the new choice")
 	}
 
 	h.llm.reply = say("باشه.")

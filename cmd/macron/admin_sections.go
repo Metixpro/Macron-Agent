@@ -189,12 +189,6 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		b.reply(m, l.f("🗑 %d تا حذف شد.", removed))
 		done(b.viewEmoji(ctx, l))
 
-	case "ie_key":
-		return b.handleImageEditInput(ctx, m, done)
-	case "ig_key":
-		return b.handleImageGenInput(ctx, m, done)
-	case "mu_key":
-		return b.handleMusicInput(ctx, m, done)
 	case "em_pack":
 		return b.handleEmojiPackInput(ctx, m, done)
 	default:

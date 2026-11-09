@@ -26,7 +26,7 @@ func lastMarkup(h *harness) string {
 
 func TestPanelAccess(t *testing.T) {
 	h := newHarness(t)
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	h.wantText("پنل مدیریت مکرون")
 	kb := lastMarkup(h)
 	for _, want := range []string{"a:stats", "a:pv", "a:ai", "a:learn", "a:st"} {
@@ -328,11 +328,11 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 		}
 		return doors, back
 	}
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	home, _ := callbacks(lastOf(h, "sendMessage"))
 	hubs := map[string][]string{
 		"a:stats": {"a:sys:1h"},
-		"a:ai":    {"a:sr", "a:dl", "a:ig", "a:ie", "a:mu", "a:soul", "a:ws", "a:st:steps", "a:st:window", "a:st:ctx"},
+		"a:ai":    {"a:sr", "a:dl", "a:soul", "a:ws", "a:st:steps", "a:st:window", "a:st:ctx"},
 		"a:st":    {"a:em"},
 		"a:pv":    {"a:rt"},
 	}
@@ -379,7 +379,7 @@ func TestAdminPanelOneDoorPerSection(t *testing.T) {
 
 func TestSettingsExposesPremiumAndRetiresReactions(t *testing.T) {
 	h := newHarness(t)
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	if !strings.Contains(lastMarkup(h), "⚙️ تنظیمات") || strings.Contains(lastMarkup(h), "تنظیمات عمومی") {
 		t.Fatalf("home: %s", lastMarkup(h))
 	}
@@ -441,15 +441,15 @@ func TestSettingsCommand(t *testing.T) {
 	h.send(private(ownerID, "/settings"))
 	h.wantText("پنل مدیریت مکرون")
 	h.tg.reset()
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	h.wantText("پنل مدیریت مکرون")
 
 	h.tg.reset()
 	h.bot.registerAdminCommands(bg)
 	for _, c := range h.tg.of("setMyCommands") {
 		menu := fmt.Sprint(c.body["commands"])
-		if !strings.Contains(menu, "command:settings") || !strings.Contains(menu, "command:admin") {
-			t.Errorf("the admin menu must include /settings and /admin: %s", menu)
+		if !strings.Contains(menu, "command:settings") || strings.Contains(menu, "command:admin") {
+			t.Errorf("the admin menu must use the canonical /settings command: %s", menu)
 		}
 	}
 

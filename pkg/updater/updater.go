@@ -257,7 +257,9 @@ var Preflight = func(path, version string) error {
 	}
 	cctx, ccancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer ccancel()
-	out, err = exec.CommandContext(cctx, path, "--check").CombinedOutput()
+	check := exec.CommandContext(cctx, path, "--check")
+	check.Env = append(os.Environ(), "MACRON_HOME="+config.Home(), "MACRON_ENV_FILE="+config.EnvFilePath())
+	out, err = check.CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "ok "+version) {
 		return fmt.Errorf("the new program does not pass «macron --check» (%v): it is NOT installed\n%s", err, lastLines(string(out), 5))
 	}

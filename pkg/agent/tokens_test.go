@@ -135,7 +135,7 @@ func TestEarlierOutputsStayWholeUntilTheJobGrows(t *testing.T) {
 
 func TestASubAgentGetsWhatItsPartNeeds(t *testing.T) {
 	got := subTools([]any{"images"}, "یه پوستر برای کنسرت بساز")
-	for _, want := range []string{"generate_image", "read_file", "write_file", tools.ToolReadSkill, "send_file"} {
+	for _, want := range []string{"generate_chart", "read_file", "write_file", tools.ToolReadSkill, "send_file"} {
 		if !got[want] {
 			t.Errorf("missing %s", want)
 		}
@@ -145,7 +145,7 @@ func TestASubAgentGetsWhatItsPartNeeds(t *testing.T) {
 			t.Errorf("%s is not for this part", not)
 		}
 	}
-	if web := subTools(nil, "a few words"); !web["web_search"] || web["generate_image"] {
+	if web := subTools(nil, "a few words"); !web["web_search"] || web["generate_chart"] {
 		t.Error("with nothing to go on, a part gets the web")
 	}
 	if code := subTools(nil, "fix the bug in the python script"); !code[tools.ToolRunCode] {
@@ -165,7 +165,7 @@ func TestASubAgentWorksWithAFewToolsAndAShortPrompt(t *testing.T) {
 	}
 	sub := script.requests[1]
 	names := strings.Join(toolNames(sub), ",")
-	if strings.Contains(names, ToolDelegate) || !strings.Contains(names, "web_search") || strings.Contains(names, "generate_image") {
+	if strings.Contains(names, ToolDelegate) || !strings.Contains(names, "web_search") || strings.Contains(names, "generate_chart") {
 		t.Fatalf("the sub-agent's tools: %s", names)
 	}
 	sys := msgs(sub)[0]["content"].(string)

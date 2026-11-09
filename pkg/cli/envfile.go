@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
 type envFile struct {
@@ -13,6 +15,10 @@ type envFile struct {
 }
 
 func loadEnvFile(path string) (*envFile, error) {
+	if err := config.PruneRetiredEnv(path); err != nil {
+		return nil, err
+	}
+
 	f := &envFile{path: path}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

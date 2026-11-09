@@ -51,9 +51,9 @@ func hiddenFile(name string) bool {
 }
 
 var deliverableTools = map[string]bool{
-	"generate_image": true, tools.ToolEditImage: true, "search_image": true, "text_to_speech": true, "generate_chart": true, "generate_qr": true,
+	"search_image": true, "text_to_speech": true, "generate_chart": true, "generate_qr": true,
 	"download_file": true, "download_media_ytdlp": true, "media_convert": true, "pdf_tool": true, "deep_research": true, "split_video": true,
-	"create_motion_graphic": true, "generate_music_synth": true, tools.ToolSong: true,
+	"create_motion_graphic": true,
 }
 
 type fileTracker struct {
@@ -121,7 +121,7 @@ func (t *fileTracker) end(tool, result string) {
 	}
 	sort.Strings(changed)
 	for _, name := range changed {
-		if deliverableTools[tool] && (alone || names(result, name)) && !(tool == tools.ToolSong && strings.HasSuffix(name, ".txt")) {
+		if deliverableTools[tool] && (alone || names(result, name)) {
 			t.auto = appendNew(t.auto, name)
 		} else {
 			t.scratch = appendNew(t.scratch, name)

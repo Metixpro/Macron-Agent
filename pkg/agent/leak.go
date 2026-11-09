@@ -318,11 +318,11 @@ func (a *Agent) privateText(lang string) string {
 	p := a.Persona
 	if lang == "en" {
 		return fmt.Sprintf("I'm %s, built by %s. My technical details stay private 😉 In plain words: I can search the web and read sites, "+
-			"make and edit pictures, download music and videos, read and make PDFs and documents, run and fix code, and set reminders. "+
+			"find pictures and create charts, download music and videos, read and make PDFs and documents, run and fix code, and set reminders. "+
 			"What shall we start with?", p.Name, p.Creator)
 	}
 	return fmt.Sprintf("من %s، ساخته %s. جزئیات فنی پیش خودمون می‌مونه 😉 ولی به زبون ساده: می‌تونم توی اینترنت بگردم و سایت‌ها رو بخونم، "+
-		"عکس بسازم و ویرایش کنم، آهنگ و ویدیو دانلود کنم، PDF و سند بخونم و بسازم، کد اجرا کنم و درستش کنم و یادآور بذارم. از کدوم شروع کنیم؟",
+		"عکس پیدا کنم و نمودار بسازم، آهنگ و ویدیو دانلود کنم، PDF و سند بخونم و بسازم، کد اجرا کنم و درستش کنم و یادآور بذارم. از کدوم شروع کنیم؟",
 		iAm(p.localName()), p.Creator)
 }
 

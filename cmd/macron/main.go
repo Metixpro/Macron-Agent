@@ -131,12 +131,6 @@ func main() {
 	go cookies.refreshLoop(rootCtx)
 	go cookies.checkLoop(rootCtx, a.Registry.TestCookie)
 
-	a.Registry.SetImageEditKey(imageEditKey(st, cfg.ImageEditKey))
-
-	a.Registry.SetImageKey(imageGenKey(st, cfg.ImageKey))
-
-	a.Registry.SetMusicKey(musicKey(st, cfg.MusicKey))
-
 	mem := memory.New(st, prov, func() int { return historyBudget(st, window()) })
 
 	api := telegram.NewBotWithBase(*tokenFlag, apiBase)

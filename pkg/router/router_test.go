@@ -17,7 +17,7 @@ func TestClassify(t *testing.T) {
 		{Input{Text: "قیمت دلار امروز چنده؟"}, Quick, false},
 		{Input{Text: "یادم بنداز ساعت ۸ دارو بخورم"}, Quick, false},
 		{Input{Text: "این آهنگ رو دانلود کن https://youtu.be/xyz"}, Media, false},
-		{Input{Text: "یه عکس از یه گربه فضانورد بساز"}, Media, false},
+		{Input{Text: "یه عکس از یه گربه پیدا کن"}, Media, false},
 		{Input{Text: "یه کپشن قشنگ برای پست اینستاگرامم بنویس"}, Writing, false},
 		{Input{Text: "این متن رو به انگلیسی ترجمه کن: سلام دنیا"}, Writing, false},
 		{Input{Text: "یه کتاب خوب برای تعطیلات معرفی کن"}, Chat, false},

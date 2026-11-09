@@ -54,7 +54,7 @@ func TestToolListIsStableAndComplete(t *testing.T) {
 		}
 	}
 	want := []string{"bash_execute", "crypto_currency_price", "deep_research", "download_file", "download_media_ytdlp", "generate_chart",
-		"document_reader", "generate_image", "generate_qr", "github_inspect", "list_files", "media_convert", "pdf_tool", "read_file", "search_image",
+		"document_reader", "generate_qr", "github_inspect", "list_files", "media_convert", "pdf_tool", "read_file", "search_image",
 		"search_music", ToolSplitVideo, "text_to_speech", "web_fetch", "web_search", "whois_lookup", "write_file", ToolRunCode,
 		ToolProjectTree, ToolSearchCode, ToolFindFiles, ToolCodeOutline, ToolEditFile, ToolExtract, ToolImportRepo, ToolPackFiles,
 		ToolQueryData, ToolCreateSpreadsheet, ToolMarketPrice, ToolShellJobs}
@@ -66,9 +66,6 @@ func TestToolListIsStableAndComplete(t *testing.T) {
 		if r.browser.agentPython != "" {
 			want = append(want, ToolBrowserAgent)
 		}
-	}
-	if r.check("python3", "-I", "-c", "import numpy") {
-		want = append(want, ToolMusic)
 	}
 	if len(a) != len(want) {
 		t.Fatalf("got %d tools, want %d", len(a), len(want))
@@ -355,7 +352,6 @@ func TestMediaToolInputValidation(t *testing.T) {
 			map[string]any{"name": "x", "values": []any{1.0}}, map[string]any{"name": "y", "values": []any{2.0}}}}, "shows one series"},
 		{"generate_qr", map[string]any{"data": strings.Repeat("x", 2000)}, "too long"},
 		{"text_to_speech", map[string]any{"text": strings.Repeat("x", 5000)}, "too long"},
-		{"generate_image", map[string]any{"prompt": ""}, "required"},
 		{"media_convert", map[string]any{"input_file": "nope.mp4", "output_file": "o.gif", "action": "video_to_gif"}, "not found"},
 		{"media_convert", map[string]any{"input_file": "a", "output_file": "b", "action": "format_disk"}, "not found"},
 		{"pdf_tool", map[string]any{"action": "read", "filename": "missing.pdf"}, "not found"},

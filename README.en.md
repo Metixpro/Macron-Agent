@@ -27,7 +27,9 @@ On Linux or macOS:
 curl -fsSL https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.sh | bash
 ```
 
-The installer prepares the program and tools, checks the download and guides you through bot and model setup. Enter your bot token, owner ID and model credentials in the setup wizard.
+Choose **current user** or **system/root** first. The installer shows the paths, verifies the download and guides you through bot and model setup. Enter your bot token, owner ID and model credentials in the wizard.
+
+User installations need no `sudo`. Python packages go into a private environment; a compatible Python is provisioned when needed. Missing optional system executables are reported.
 
 Talk to the bot in a **private chat**. It answers configured owners only and does not operate in groups or channels. Progress appears in a native rich card with a checklist, expandable execution details, code blocks and a **Stop** button underneath. The final answer replaces the card. New text guides the active task; use `/queue next task` for a separate turn. Manage premium emoji packs and mappings under **Settings → Premium emoji**.
 
@@ -63,33 +65,31 @@ Configure the model through setup or `MACRON_API_URL`, `MACRON_MODEL` and `MACRO
 | `/start` | Start and introduction |
 | `/help` | Help |
 | `/queue` | Queue a separate task |
-| `/new` · `/reset` · `/clear` | New conversation |
+| `/new` | New conversation |
 | `/memory` | Memory and files |
 | `/mode` | Choose response mode |
-| `/fast` | Fast response mode |
-| `/deep` | Deep response mode |
 | `/files` | Manage files |
-| `/cookies` · `/cookie` | Manage download cookies |
-| `/reminders` · `/schedules` | Reminders and schedules |
+| `/cookies` | Manage download cookies |
+| `/reminders` | Reminders and schedules |
 | `/tasks` | Background tasks |
 | `/search` | Search past conversations |
 | `/board` | Task board |
 | `/dashboard` | Web dashboard |
-| `/settings` · `/panel` · `/admin` | Administration panel |
+| `/settings` | Administration panel |
 | `/update` | Update from GitHub |
 | `/learn` | Manage learning |
 | `/teach` | Teach a lesson |
 | `/moa` | Multi-model voting |
 | `/approve` | Approve a pending command |
 | `/yolo` | Configure command approval |
-| `/language` · `/lang` · `/zaban` | Bot language |
+| `/language` | Bot language |
 | `/id` | User and chat IDs |
 | `/me` | Account and usage |
-| `/cancel` · `/stop` | Stop the current task |
+| `/cancel` | Stop the current task |
 
 ## Your memory, your files
 
-The default home is `~/.macron`:
+User installations default to `~/.macron`; system installations use `/var/lib/macron`. Choose another directory with `--home`:
 
 | Path | Contents |
 |---|---|
@@ -125,6 +125,15 @@ macron update
 ```
 
 You can also use `/update` or the admin panel's Update button. Downloads come from GitHub Releases, with checksum verification, executable preflight and a retained previous binary. To publish a version, keep the source version and `vX.Y.Z` tag aligned.
+
+## Uninstall
+
+```bash
+macron uninstall --dry-run
+macron uninstall
+```
+
+After confirmation, uninstall stops this installation’s services and processes, then removes the program, configuration, keys, memory, workspaces and private Python environments. Use `--keep-data` to preserve data or `--yes` to skip the question. Shared system packages remain installed.
 
 ## Development
 

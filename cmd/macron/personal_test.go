@@ -76,7 +76,7 @@ func TestPersonalEditionSpeaksForItself(t *testing.T) {
 	h.noText("/invite")
 
 	h.tg.reset()
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	panel := lastOf(h, "sendMessage")
 	text := panel.body["text"].(string)
 	if !strings.Contains(text, "پروایدر فعال") || strings.Contains(text, "کاربران") {

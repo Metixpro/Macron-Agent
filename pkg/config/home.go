@@ -42,6 +42,11 @@ func Home() string {
 	base := ".macron"
 	if h, err := os.UserHomeDir(); err == nil && h != "" {
 		base = filepath.Join(h, ".macron")
+		if binary, err := os.Executable(); err == nil {
+			if installed, err := ReadInstallation(binary); err == nil && installed.UID == os.Geteuid() {
+				base = installed.Home
+			}
+		}
 	}
 	if p := Profile(); p != "" {
 		return filepath.Join(base, "profiles", p)

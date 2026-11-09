@@ -17,6 +17,10 @@ import (
 )
 
 func configCmd(io *IO, args []string) int {
+	if len(args) == 3 && args[0] == "set" && config.RetiredKey(args[1]) {
+		io.println("This setting was removed:", args[1])
+		return 1
+	}
 	if len(args) == 0 {
 		io.println("usage: macron config list | get KEY | set KEY VALUE | unset KEY | path")
 		io.println("  UPPER_CASE keys are config.env; lower_case keys are the agent's own settings (the panel's), e.g. premium_emoji")

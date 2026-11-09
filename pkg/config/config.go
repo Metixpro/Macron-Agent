@@ -32,12 +32,6 @@ const (
 	EnvTregToken     = "WAZE_TREG_TOKEN"
 	EnvReaderURL     = "WAZE_READER_URL"
 	EnvReaderKey     = "WAZE_READER_KEY"
-	EnvImageAPI      = "WAZE_IMAGE_API_URL"
-	EnvImageKey      = "WAZE_IMAGE_API_KEY"
-	EnvImageEditURL  = "WAZE_IMAGE_EDIT_URL"
-	EnvImageEditKey  = "WAZE_IMAGE_EDIT_KEY"
-	EnvMusicURL      = "WAZE_MUSIC_API_URL"
-	EnvMusicKey      = "WAZE_MUSIC_API_KEY"
 	EnvPiperModel    = "WAZE_PIPER_MODEL"
 	EnvContextWindow = "WAZE_CONTEXT_WINDOW"
 	EnvSkillsDir     = "WAZE_SKILLS_DIR"
@@ -49,12 +43,6 @@ const (
 )
 
 const DefaultModel = "claude-sonnet-5"
-
-const DefaultImageAPI = "https://nanobanana.irjh.top/api/txt2img/v1/index.php"
-
-const DefaultImageEditAPI = "https://nanobanana.irjh.top/v2/index.php"
-
-const DefaultMusicAPI = "https://nanobanana.irjh.top/music/index.php"
 
 const DefaultPiperModel = "/opt/piper-voices/fa_IR-mana-medium.onnx"
 
@@ -82,12 +70,6 @@ type Config struct {
 	TregToken     string
 	ReaderURL     string
 	ReaderKey     string
-	ImageAPI      string
-	ImageKey      string
-	ImageEditAPI  string
-	ImageEditKey  string
-	MusicAPI      string
-	MusicKey      string
 	PiperModel    string
 	ContextWindow int
 	SkillsDir     string
@@ -103,6 +85,9 @@ type Config struct {
 }
 
 func LoadDotEnv(path string) error {
+	if err := PruneRetiredEnv(path); err != nil {
+		return err
+	}
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -179,33 +164,6 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 		c.ReaderURL = strings.TrimRight(v, "/") + "/"
 	}
 	c.ReaderKey = os.Getenv(EnvReaderKey)
-	c.ImageAPI = strings.TrimSpace(os.Getenv(EnvImageAPI))
-	switch strings.ToLower(c.ImageAPI) {
-	case "", "on", "default":
-		c.ImageAPI = DefaultImageAPI
-	case "off", "none", "disabled":
-		c.ImageAPI = ""
-	}
-	if strings.Contains(strings.ToLower(c.ImageAPI), "nestapi.ir") {
-		c.ImageAPI = DefaultImageAPI
-	}
-	c.ImageKey = strings.TrimSpace(os.Getenv(EnvImageKey))
-	c.ImageEditAPI = strings.TrimSpace(os.Getenv(EnvImageEditURL))
-	switch strings.ToLower(c.ImageEditAPI) {
-	case "", "on", "default":
-		c.ImageEditAPI = DefaultImageEditAPI
-	case "off", "none", "disabled":
-		c.ImageEditAPI = ""
-	}
-	c.ImageEditKey = strings.TrimSpace(os.Getenv(EnvImageEditKey))
-	c.MusicAPI = strings.TrimSpace(os.Getenv(EnvMusicURL))
-	switch strings.ToLower(c.MusicAPI) {
-	case "", "on", "default":
-		c.MusicAPI = DefaultMusicAPI
-	case "off", "none", "disabled":
-		c.MusicAPI = ""
-	}
-	c.MusicKey = strings.TrimSpace(os.Getenv(EnvMusicKey))
 	c.PiperModel = strings.TrimSpace(os.Getenv(EnvPiperModel))
 	switch strings.ToLower(c.PiperModel) {
 	case "", "on", "default":

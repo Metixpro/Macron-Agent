@@ -78,8 +78,6 @@ var toolAliases = map[string][]string{
 	"openfile": {"read_file"}, "catfile": {"read_file"}, "viewfile": {"read_file"},
 	"createfile": {"write_file"}, "savefile": {"write_file"}, "writetofile": {"write_file"},
 	"ls": {"list_files"}, "listdir": {"list_files"}, "listdirectory": {"list_files"}, "files": {"list_files"},
-	"imagegeneration": {"generate_image"}, "createimage": {"generate_image"}, "texttoimage": {"generate_image"}, "imagegen": {"generate_image"},
-	"dalle": {"generate_image"}, "makeimage": {"generate_image"}, "drawimage": {"generate_image"}, "draw": {"generate_image"},
 	"imagesearch": {"search_image"}, "findimage": {"search_image"}, "searchimages": {"search_image"}, "searchphoto": {"search_image"},
 	"sendfiletouser": {"send_file"}, "uploadfile": {"send_file"}, "sendattachment": {"send_file"}, "attachfile": {"send_file"},
 	"tts": {"text_to_speech"}, "speak": {"text_to_speech"}, "texttovoice": {"text_to_speech"},

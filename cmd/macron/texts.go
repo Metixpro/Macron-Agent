@@ -83,8 +83,6 @@ func statusIcon(tool string) string {
 		return "🎧"
 	case "download_file", "download_media_ytdlp":
 		return "📥"
-	case "generate_image":
-		return "🎨"
 	case "search_image", toolProfilePhoto:
 		return "🖼"
 	case "text_to_speech":
@@ -107,10 +105,6 @@ func statusIcon(tool string) string {
 		return "✂️"
 	case "create_motion_graphic":
 		return "🎬"
-	case "generate_music_synth":
-		return "🎹"
-	case tools.ToolSong:
-		return "🎤"
 	case "document_reader":
 		return "📚"
 	case tools.ToolQueryData, tools.ToolCreateSpreadsheet:
@@ -167,10 +161,6 @@ func toolStatus(tool string) string {
 		return "دارم آهنگ رو پیدا می‌کنم…"
 	case "download_file", "download_media_ytdlp":
 		return "دارم فایل رو دانلود می‌کنم…"
-	case "generate_image":
-		return "دارم عکس رو می‌سازم…"
-	case tools.ToolEditImage:
-		return "دارم عکس رو ویرایش می‌کنم؛ یکی دو دقیقه طول می‌کشه…"
 	case "search_image":
 		return "دارم یه عکس خوب پیدا می‌کنم…"
 	case "text_to_speech":
@@ -195,10 +185,6 @@ func toolStatus(tool string) string {
 		return "ایجنت مرورگر داره قدم‌به‌قدم توی سایت کار می‌کنه…"
 	case "create_motion_graphic":
 		return "دارم موشن‌گرافیک رو فریم‌به‌فریم رندر می‌کنم…"
-	case "generate_music_synth":
-		return "دارم آهنگ رو می‌سازم…"
-	case tools.ToolSong:
-		return "دارم آهنگ رو با هوش مصنوعی می‌سازم؛ حدود دو دقیقه طول می‌کشه…"
 	case "document_reader":
 		return "دارم لای صفحه‌های سند رو می‌گردم…"
 	case tools.ToolQueryData:
@@ -255,14 +241,12 @@ func toolStatus(tool string) string {
 
 func actionFor(tool string) string {
 	switch tool {
-	case "generate_image", tools.ToolEditImage, "search_image", "generate_chart", "generate_qr", toolProfilePhoto:
+	case "search_image", "generate_chart", "generate_qr", toolProfilePhoto:
 		return "upload_photo"
 	case "text_to_speech":
 		return "record_voice"
 	case "download_media_ytdlp", "media_convert", "split_video", "create_motion_graphic":
 		return "upload_video"
-	case "generate_music_synth", tools.ToolSong:
-		return "upload_voice"
 	case "download_file", "pdf_tool", "write_file", toolSendFile:
 		return "upload_document"
 	}

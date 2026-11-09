@@ -241,7 +241,7 @@ func kindExample(l lang, k router.Kind) string {
 	case router.Quick:
 		return l.t("قیمت دلار، معنی یه کلمه، یادآور")
 	case router.Media:
-		return l.t("دانلود ویدیو، آهنگ، ساخت عکس، تبدیل فایل")
+		return l.t("دانلود ویدیو و آهنگ، جستجوی عکس، تبدیل فایل")
 	case router.Writing:
 		return l.t("کپشن، ایمیل، مقاله، خلاصه، ترجمه")
 	case router.Vision:

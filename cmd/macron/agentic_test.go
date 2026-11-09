@@ -49,7 +49,7 @@ func TestFileTrackerSendsOnlyFinalResults(t *testing.T) {
 		t.Errorf("placed: %v", got)
 	}
 
-	step("generate_image", "sunset.png")
+	step("search_image", "sunset.png")
 	if got := ft.deliveries(nil); len(got) != 0 {
 		t.Errorf("nothing is sent unless chosen: %v", got)
 	}
@@ -60,10 +60,10 @@ func TestFileTrackerSendsOnlyFinalResults(t *testing.T) {
 		t.Errorf("made leaves out what was chosen: %v", got)
 	}
 
-	ft.start("edit_image")
+	ft.start("run_code")
 	time.Sleep(10 * time.Millisecond)
 	_ = sb.WriteFile("s", "sunset.png", []byte("better"))
-	ft.end("edit_image", "")
+	ft.end("run_code", "")
 	if got := ft.made(); len(got) != 1 {
 		t.Errorf("a changed file is tracked once: %v", got)
 	}

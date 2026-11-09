@@ -82,6 +82,7 @@ Usage:
   macron logs [-f]       the agent's log
   macron update          update to the newest release (--check: only look)
   macron config ACTION   list | get KEY | set KEY VALUE | unset KEY | path
+  macron uninstall [--yes]  remove this installation, service and all its data
   macron backup [FILE]   save the home folder (database and notes) as one archive
   macron version
 
@@ -100,18 +101,20 @@ func Run(args []string, io *IO) (handled bool, code int) {
 	switch cmd {
 	case "exec":
 		return true, execTask(io, rest)
-	case "setup", "init":
+	case "setup":
 		return true, setup(io, rest)
-	case "doctor", "check":
+	case "doctor":
 		return true, doctor(io, rest)
 	case "service":
 		return true, service(io, rest)
 	case "logs":
 		return true, logs(io, rest)
-	case "update", "upgrade":
+	case "update":
 		return true, update(io, rest)
 	case "config":
 		return true, configCmd(io, rest)
+	case "uninstall":
+		return true, uninstall(io, rest)
 	case "backup":
 		return true, backup(io, rest)
 	case "version", "--version", "-v":
@@ -120,8 +123,6 @@ func Run(args []string, io *IO) (handled bool, code int) {
 	case "help", "--help", "-h":
 		io.printf(usage, app.Version, config.Home())
 		return true, 0
-	case "start", "run":
-		return false, 0
 	}
 	if strings.HasPrefix(cmd, "-") {
 		return false, 0

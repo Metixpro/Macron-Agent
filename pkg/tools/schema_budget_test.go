@@ -20,13 +20,13 @@ func TestToolDefinitionsStayShort(t *testing.T) {
 	}
 	st, _ := skills.New(t.TempDir())
 	r := NewRegistry(sb, search.NewEngine(guardOff()), nil, Options{HTTP: guardOff(), Skills: st,
-		SkillWrite: func(string) bool { return true }, ImageEditAPI: "https://edit.example/v2"})
+		SkillWrite: func(string) bool { return true }})
 	total, per := 0, []string{}
 	for _, tool := range r.GetTools() {
 		raw, _ := json.Marshal(tool)
 		total += len(raw)
 		per = append(per, fmt.Sprintf("%5d %s", len(raw), tool.Function.Name))
-		if limit := map[string]int{ToolMusic: 2400}[tool.Function.Name]; len(raw) > max(limit, 1500) {
+		if len(raw) > 1500 {
 			t.Errorf("%s: %d bytes", tool.Function.Name, len(raw))
 		}
 	}

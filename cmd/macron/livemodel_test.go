@@ -25,7 +25,7 @@ import (
 
 var leakRe = regexp.MustCompile(`(?i)<\s*/?\s*(?:[a-z0-9_-]+:)?(?:tool_call|tool_calls|function_calls?|invoke|parameter|tool_use|arg_key|arg_value)\b|` +
 	`<function=|<\|[a-z_]+\|>|\[TOOL_CALLS\]|\bto=functions\.|(?m:^\s*Action:\s)|` +
-	`(?m:^[\s>*•-]*(?:bash_execute|run_code|write_file|read_file|web_search|web_fetch|send_file|list_files|update_plan|generate_chart|generate_image)\s*\()|` +
+	`(?m:^[\s>*•-]*(?:bash_execute|run_code|write_file|read_file|web_search|web_fetch|send_file|list_files|update_plan|generate_chart|generate_chart)\s*\()|` +
 	`"name"\s*:\s*"(?:bash_execute|run_code|write_file|read_file|web_search|send_file|update_plan|generate_chart)"`)
 
 type labProxy struct {

@@ -13,11 +13,11 @@ func TestTraceShowsSubAgentsAsBranches(t *testing.T) {
 	now := time.Now()
 	var tr trace
 	music := tr.subStart("Music search & download", now)
-	tr.start(0, "generate_image", now)
+	tr.start(0, "search_image", now)
 	tr.start(music, "search_music", now)
 	tr.end(music, "search_music", false)
 	tr.start(music, tools.ToolDownloadMedia, now)
-	tr.end(0, "generate_image", false)
+	tr.end(0, "search_image", false)
 	tr.end(music, tools.ToolDownloadMedia, false)
 	tr.start(music, toolSendFile, now)
 	tr.end(music, toolSendFile, false)
@@ -29,7 +29,7 @@ func TestTraceShowsSubAgentsAsBranches(t *testing.T) {
   ├─ ✓ Music Search
   ├─ ✓ Download
   └─ ✓ Attach File
-✓ Generate Image
+✓ Image Search
 ✓ Attach File`
 	if out := tr.render(now.Add(80*time.Second), now, false); out != want {
 		t.Fatalf("render:\n%s\nwant:\n%s", out, want)
@@ -85,11 +85,11 @@ func TestFilesOfOverlappingCallsGoToTheirOwner(t *testing.T) {
 	}
 	ft := newFileTracker(sb, "s")
 	ft.start("delegate_task")
-	ft.start("generate_image")
+	ft.start("search_image")
 	_ = sb.WriteFile("s", "song.mp3", []byte("la"))
 	_ = sb.WriteFile("s", "sunset.png", []byte("img"))
 	_ = sb.WriteFile("s", "data.png", []byte("scratch"))
-	ft.end("generate_image", "Image created and queued for delivery.\n- File: sunset.png (1 KB)")
+	ft.end("search_image", "Image created and queued for delivery.\n- File: sunset.png (1 KB)")
 	ft.end("delegate_task", "Sub-agent report (3 steps): done")
 	if got := strings.Join(ft.made(), ","); got != "sunset.png" {
 		t.Fatalf("a shared window gives the picture tool only the file its result names: %s", got)

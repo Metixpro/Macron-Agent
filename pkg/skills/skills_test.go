@@ -1,6 +1,8 @@
 package skills
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -322,5 +324,28 @@ func TestHandWrittenSkillsAreFound(t *testing.T) {
 	}
 	if !strings.Contains(st.Index(), "by-hand") {
 		t.Error("and be in the index")
+	}
+}
+
+func TestRetiringBuiltinSkillPreservesUserEdits(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "retired", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("original bundled skill")
+	sum := sha256.Sum256(original)
+	expected := hex.EncodeToString(sum[:])
+	if err := os.WriteFile(path, []byte("my custom instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if removed, err := retireSeed(path, expected); removed || err != nil {
+		t.Fatal("user-edited skill was removed")
+	}
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if removed, err := retireSeed(path, expected); !removed || err != nil {
+		t.Fatal("unchanged retired seed remained", err)
 	}
 }

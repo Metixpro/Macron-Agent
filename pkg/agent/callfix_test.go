@@ -26,7 +26,7 @@ func fixDefs() map[string]llm.ToolDef {
 			"language": map[string]any{"type": "string", "enum": []any{"python", "javascript", "go"}}, "timeout": map[string]any{"type": "number"}}, "code")},
 		"schedule": {Name: "schedule", Parameters: obj(map[string]any{"when": map[string]any{"type": "object", "properties": map[string]any{
 			"hour": map[string]any{"type": "integer"}, "daily": map[string]any{"type": "boolean"}}}, "task": map[string]any{"type": "string"}}, "task")},
-		"generate_image": {Name: "generate_image", Parameters: obj(map[string]any{"prompt": map[string]any{"type": "string"}}, "prompt")},
+		"generate_chart": {Name: "generate_chart", Parameters: obj(map[string]any{"prompt": map[string]any{"type": "string"}}, "prompt")},
 		"web_fetch":      {Name: "web_fetch", Parameters: obj(map[string]any{"url": map[string]any{"type": "string"}}, "url")},
 	}
 }
@@ -36,7 +36,7 @@ func TestResolveTool(t *testing.T) {
 	for in, want := range map[string]string{
 		"web_search": "web_search", "functions.web_search": "web_search", "default_api:web_search": "web_search", "WebSearch": "web_search",
 		"web-search": "web_search", "`web_search()`": "web_search", "google_search": "web_search", "search": "web_search",
-		"web_serach": "web_search", "generat_image": "generate_image", "python": "run_code", "fetch_url": "web_fetch", "createImage": "generate_image",
+		"web_serach": "web_search", "generat_chart": "generate_chart", "python": "run_code", "fetch_url": "web_fetch",
 		"tools.send_file": "send_file", "upload_file": "send_file",
 	} {
 		if got, ok := resolveTool(in, defs); !ok || got != want {
@@ -81,7 +81,7 @@ func TestFixCallArguments(t *testing.T) {
 		{"run_code", `{"code": "print(1)", "language": "Python", "timeout": "30"}`, map[string]any{"code": "print(1)", "language": "python", "timeout": 30.0}, false},
 		{"run_code", `{"script": "print(1)", "language": "js"}`, map[string]any{"code": "print(1)", "language": "js"}, true},
 		{"schedule", `{"task": "x", "when": "{\"hour\": \"9\", \"daily\": \"true\"}"}`, map[string]any{"task": "x", "when": map[string]any{"hour": 9.0, "daily": true}}, false},
-		{"generate_image", `{"description": "a cat"}`, map[string]any{"prompt": "a cat"}, true},
+		{"generate_chart", `{"description": "a cat"}`, map[string]any{"prompt": "a cat"}, true},
 	} {
 		_, got, fx := fixed(t, c.name, c.args)
 		if !reflect.DeepEqual(got, c.want) {

@@ -30,17 +30,11 @@ const MaxToolOutput = 15000
 type ToolHandler func(ctx context.Context, sessionID string, args map[string]any) (string, error)
 
 type Options struct {
-	HTTP         *http.Client
-	GitHubToken  string
-	ImageAPI     string
-	ImageKey     func() string
-	ImageEditAPI string
-	ImageEditKey func() string
-	MusicAPI     string
-	MusicKey     func() string
-	PiperModel   string
-	Skills       *skills.Store
-	SkillWrite   func(sessionID string) bool
+	HTTP        *http.Client
+	GitHubToken string
+	PiperModel  string
+	Skills      *skills.Store
+	SkillWrite  func(sessionID string) bool
 }
 
 type Registry struct {
@@ -67,18 +61,9 @@ type Registry struct {
 	userCookies func(sessionID string) []Cookie
 	rotations   rotationLimiter
 	browser     *browserRuntime
-	imageAPI    string
-	imageKey    func() string
-	styles      styleCache
-
-	imageEditAPI string
-	imageEditKey func() string
-
-	musicAPI   string
-	musicKey   func() string
-	piper      piperVoice
-	skills     *skills.Store
-	skillWrite func(string) bool
+	piper       piperVoice
+	skills      *skills.Store
+	skillWrite  func(string) bool
 
 	plugins atomic.Pointer[pluginSource]
 }
@@ -88,23 +73,17 @@ func NewRegistry(sb *machine.Machine, se *search.Engine, client llm.ChatClient, 
 		opts.HTTP = netclient.NewClient(netclient.Options{})
 	}
 	r := &Registry{
-		Machine:      sb,
-		Search:       se,
-		LLM:          client,
-		HTTP:         opts.HTTP,
-		GitHubToken:  opts.GitHubToken,
-		tools:        make(map[string]llm.Tool),
-		handler:      make(map[string]ToolHandler),
-		docs:         newDocCache(),
-		imageAPI:     opts.ImageAPI,
-		imageKey:     opts.ImageKey,
-		imageEditAPI: opts.ImageEditAPI,
-		imageEditKey: opts.ImageEditKey,
-		musicAPI:     opts.MusicAPI,
-		musicKey:     opts.MusicKey,
-		piper:        piperVoice{model: opts.PiperModel},
-		skills:       opts.Skills,
-		skillWrite:   opts.SkillWrite,
+		Machine:     sb,
+		Search:      se,
+		LLM:         client,
+		HTTP:        opts.HTTP,
+		GitHubToken: opts.GitHubToken,
+		tools:       make(map[string]llm.Tool),
+		handler:     make(map[string]ToolHandler),
+		docs:        newDocCache(),
+		piper:       piperVoice{model: opts.PiperModel},
+		skills:      opts.Skills,
+		skillWrite:  opts.SkillWrite,
 	}
 	r.registerCoreTools()
 	r.registerMediaTools()
@@ -113,16 +92,9 @@ func NewRegistry(sb *machine.Machine, se *search.Engine, client llm.ChatClient, 
 	r.registerDataTools()
 	r.registerDownloadTools()
 	r.registerBrowserTools()
-	r.registerMusicTool()
 	r.registerProjectTools()
 	if r.skills != nil {
 		r.registerSkillTools()
-	}
-	if r.imageEditAPI != "" {
-		r.registerImageEditTool()
-	}
-	if r.musicAPI != "" {
-		r.registerSongTool()
 	}
 	r.registerDevTools()
 	return r
@@ -231,4 +203,16 @@ func tail(s string, n int) string {
 		return s
 	}
 	return "…" + string(r[len(r)-n:])
+}
+
+func (r *Registry) Usable(name, sessionID string) bool {
+	switch name {
+	case ToolSaveSkill:
+		return r.SkillWritable(sessionID)
+	}
+	if r.Builtin(name) {
+		return true
+	}
+	p := r.pluginTools()
+	return p != nil && p.Has(name) && p.Allowed(name, sessionID)
 }

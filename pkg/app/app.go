@@ -17,7 +17,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-const Version = "1.2.10"
+const Version = "1.3.0"
 
 type App struct {
 	Config   *config.Config
@@ -57,9 +57,6 @@ func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, cli
 	}
 	reg := tools.NewRegistry(sb, engine, client, tools.Options{
 		HTTP: toolsHTTP, GitHubToken: cfg.GitHubToken,
-		ImageAPI: cfg.ImageAPI, ImageKey: func() string { return cfg.ImageKey },
-		ImageEditAPI: cfg.ImageEditAPI, ImageEditKey: func() string { return cfg.ImageEditKey },
-		MusicAPI: cfg.MusicAPI, MusicKey: func() string { return cfg.MusicKey },
 		PiperModel: cfg.PiperModel,
 		Skills:     sk, SkillWrite: skillWrite,
 	})

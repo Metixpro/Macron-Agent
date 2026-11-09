@@ -322,7 +322,7 @@ func TestLocalTriageRoutesTheThreeKinds(t *testing.T) {
 func TestTriagePanel(t *testing.T) {
 	h := newHarness(t)
 	f := withTriage(t, h, triageOff)
-	h.send(private(ownerID, "/admin"))
+	h.send(private(ownerID, "/settings"))
 	h.click(ownerID, ownerID, 9, "a:rt")
 	if !hasButton(buttons(lastOf(h, "editMessageText")), "→ a:tri") {
 		t.Fatal("no door to the triage from smart routing")

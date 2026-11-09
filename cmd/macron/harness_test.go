@@ -401,9 +401,6 @@ func newHarness(t *testing.T) *harness {
 	b.api.OnSent = b.noteSent
 	b.reloadEmoji(ctx)
 	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))
-	a.Registry.SetImageEditKey(imageEditKey(st, cfg.ImageEditKey))
-	a.Registry.SetImageKey(imageGenKey(st, cfg.ImageKey))
-	a.Registry.SetMusicKey(musicKey(st, cfg.MusicKey))
 	b.cookies = newCookiePool(st, "")
 	a.Registry.SetCookiePool(b.cookies)
 	a.Registry.SetUserCookies(b.cookies.user)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
@@ -20,39 +19,37 @@ const (
 )
 
 type commandSpec struct {
-	names string
-	fa    string
-	en    string
-	role  commandRole
+	name string
+	fa   string
+	en   string
+	role commandRole
 }
 
 var commandSpecs = []commandSpec{
 	{"start", "شروع و معرفی", "Start and introduction", commandUser},
 	{"help", "راهنما", "Help", commandUser},
 	{"queue", "کار مستقل بعدی", "Queue a separate task", commandUser},
-	{"new reset clear", "گفتگوی تازه", "New conversation", commandUser},
+	{"new", "گفتگوی تازه", "New conversation", commandUser},
 	{"memory", "حافظه و فایل‌ها", "Memory and files", commandUser},
 	{"mode", "انتخاب حالت پاسخ", "Choose response mode", commandUser},
-	{"fast", "پاسخ سریع", "Fast response mode", commandUser},
-	{"deep", "پاسخ عمیق", "Deep response mode", commandUser},
 	{"files", "مدیریت فایل‌ها", "Manage files", commandUser},
-	{"cookies cookie", "مدیریت کوکی دانلود", "Manage download cookies", commandUser},
-	{"reminders schedules", "یادآورها و زمان‌بندی", "Reminders and schedules", commandUser},
+	{"cookies", "مدیریت کوکی دانلود", "Manage download cookies", commandUser},
+	{"reminders", "یادآورها و زمان‌بندی", "Reminders and schedules", commandUser},
 	{"tasks", "کارهای پس‌زمینه", "Background tasks", commandUser},
 	{"search", "جستجوی گفتگوهای قبلی", "Search past conversations", commandOwner},
 	{"board", "برد کارها", "Task board", commandOwner},
 	{"dashboard", "داشبورد وب", "Web dashboard", commandOwner},
-	{"settings panel admin", "پنل مدیریت", "Administration panel", commandAdmin},
+	{"settings", "پنل مدیریت", "Administration panel", commandAdmin},
 	{"update", "بروزرسانی از گیت‌هاب", "Update from GitHub", commandOwner},
 	{"learn", "مدیریت یادگیری", "Manage learning", commandAdmin},
 	{"teach", "یاد دادن یک درس", "Teach a lesson", commandAdmin},
 	{"moa", "رأی‌گیری چندمدلی", "Multi-model voting", commandAdmin},
 	{"approve", "تأیید دستور منتظر", "Approve a pending command", commandAdmin},
 	{"yolo", "تنظیم تأیید دستورات", "Configure command approval", commandOwner},
-	{"language lang zaban", "زبان ربات", "Bot language", commandUser},
+	{"language", "زبان ربات", "Bot language", commandUser},
 	{"id", "شناسه کاربر و گفتگو", "User and chat IDs", commandUser},
 	{"me", "وضعیت حساب و مصرف", "Account and usage", commandUser},
-	{"cancel stop", "توقف کار فعلی", "Stop the current task", commandUser},
+	{"cancel", "توقف کار فعلی", "Stop the current task", commandUser},
 }
 
 func commandMenu(l lang, role commandRole) []telegram.BotCommand {
@@ -65,9 +62,7 @@ func commandMenu(l lang, role commandRole) []telegram.BotCommand {
 		if l == en {
 			description = spec.en
 		}
-		for _, name := range strings.Fields(spec.names) {
-			out = append(out, telegram.BotCommand{Command: name, Description: description})
-		}
+		out = append(out, telegram.BotCommand{Command: spec.name, Description: description})
 	}
 	return out
 }

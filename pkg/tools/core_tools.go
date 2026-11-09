@@ -487,7 +487,7 @@ func binaryHint(name string, data []byte) string {
 	case ext == ".db" || ext == ".sqlite" || ext == ".sqlite3":
 		use = ToolQueryData
 	case strings.HasPrefix(kind, "image/"):
-		use = "view_image to see it, or edit_image / media_convert to change it"
+		use = "view_image to inspect it; media_convert or code for file processing"
 	case strings.HasPrefix(kind, "audio/") || strings.HasPrefix(kind, "video/") || slices.Contains([]string{".mp3", ".m4a", ".ogg", ".oga", ".opus", ".wav", ".mp4", ".mkv", ".mov", ".webm"}, ext):
 		use = "media_convert to convert, cut or trim it; speech recognition is not supported"
 	case slices.Contains([]string{".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".xz", ".bz2", ".iso"}, ext) || kind == "application/zip" || kind == "application/x-gzip":

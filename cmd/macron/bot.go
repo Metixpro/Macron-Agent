@@ -368,13 +368,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	case "/help":
 		b.reply(m, l.t(personalHelp))
 		return
-	case "/language", "/lang", "/zaban":
+	case "/language":
 		b.sendLanguage(m, l)
 		return
 	case "/me":
 		b.sendMe(ctx, m, user)
 		return
-	case "/new", "/reset", "/clear":
+	case "/new":
 		if err := b.mem.Reset(ctx, uid); err != nil {
 			b.reply(m, l.t(textError))
 			return
@@ -387,33 +387,26 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	case "/tasks":
 		b.sendTasks(ctx, m, uid)
 		return
-	case "/mode", "/fast", "/deep":
-		switch cmd {
-		case "/fast", "/deep":
-			if err := b.setMode(ctx, uid, cmd == "/fast"); err != nil {
-				b.reply(m, l.t(textError))
-				return
-			}
-		}
+	case "/mode":
 		b.sendMode(ctx, m)
 		return
 	case "/files":
 		b.openFilePanel(ctx, m)
 		return
-	case "/cookies", "/cookie":
+	case "/cookies":
 		b.openCookiesPanel(ctx, m)
 		return
-	case "/reminders", "/schedules":
+	case "/reminders":
 		b.sendSchedules(ctx, m, uid)
 		return
-	case "/cancel", "/stop":
+	case "/cancel":
 		if r, ok := b.runs.Load(uid); ok {
 			r.(*activeRun).stop()
 			return
 		}
 		b.reply(m, l.t(textNothingToCancel))
 		return
-	case "/settings", "/panel", "/admin":
+	case "/settings":
 		if admin {
 			b.openPanel(ctx, m)
 			return

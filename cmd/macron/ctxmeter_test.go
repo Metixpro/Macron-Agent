@@ -36,7 +36,7 @@ func TestTheContextMeterGoesOnAcrossRequests(t *testing.T) {
 		t.Errorf("the meter went back from %d to %d", first, second)
 	}
 
-	h.send(private(66, "/reset"))
+	h.send(private(66, "/new"))
 	if mc, _ := h.bot.mem.Load(bg, 66); mc.Messages == 0 {
 		if n, _ := h.bot.contextCarry(bg, 66, mc); n != 0 {
 			t.Errorf("a reset conversation carries %d", n)

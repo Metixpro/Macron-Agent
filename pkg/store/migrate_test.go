@@ -59,3 +59,34 @@ func TestUpgradeFromVersion1(t *testing.T) {
 		t.Fatalf("version %d", v)
 	}
 }
+
+func TestUpgradeRemovesRetiredMediaSecrets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "upgrade.db")
+	s, err := Open(bg, path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"image_key", "image_edit_key", "music_key"} {
+		if err := s.SetSecretSetting(bg, key, "retired-secret"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = s.SetSetting(bg, "active_provider", "42")
+	if _, err = s.DB().Exec("DELETE FROM schema_migrations WHERE version = ?", len(migrations)); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	s, err = Open(bg, path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, key := range []string{"image_key", "image_edit_key", "music_key"} {
+		if _, exists := s.Setting(key); exists {
+			t.Errorf("retired key survived: %s", key)
+		}
+	}
+	if value, _ := s.Setting("active_provider"); value != "42" {
+		t.Fatal("unrelated settings changed")
+	}
+}

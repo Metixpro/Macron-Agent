@@ -93,8 +93,8 @@ var denials = []struct {
 		"قادر به ارسال فایل نیستم", "i can't send files", "i cannot send files"}},
 	{"downloads", []string{"download_file", "download_media_ytdlp"}, []string{"نمیتونم دانلود کنم", "امکان دانلود ندارم", "قادر به دانلود نیستم",
 		"i can't download", "i cannot download"}},
-	{"pictures", []string{"generate_image", "search_image", "edit_image"}, []string{"نمیتونم عکس بسازم", "نمیتونم تصویر بسازم",
-		"i can't generate images", "i cannot generate images"}},
+	{"pictures", []string{"search_image"}, []string{"نمیتونم عکس پیدا کنم", "نمیتونم تصویر پیدا کنم",
+		"i can't find images", "i cannot find images"}},
 	{"running code", []string{"run_code", "bash_execute"}, []string{"نمیتونم کد اجرا کنم", "امکان اجرای کد ندارم", "i can't run code", "i cannot run code"}},
 }
 

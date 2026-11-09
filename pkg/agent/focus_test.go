@@ -24,12 +24,12 @@ func TestToolGroupsNameEveryFocusGroup(t *testing.T) {
 func TestFocusPickChoosesTheTools(t *testing.T) {
 	a, script := setup(t, llm.Message{Role: "assistant", Content: "ok"})
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Role: "user", Content: "یه نمودار بکش"},
-		FocusTools: true, FocusPick: []string{"generate_image"}})
+		FocusTools: true, FocusPick: []string{"generate_chart"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := toolNames(script.requests[0])
-	if !slices.Contains(got, "generate_image") || !slices.Contains(got, "web_search") || !slices.Contains(got, ToolMoreTools) ||
+	if !slices.Contains(got, "generate_chart") || !slices.Contains(got, "web_search") || !slices.Contains(got, ToolMoreTools) ||
 		!slices.Contains(got, "generate_chart") || slices.Contains(got, "download_media") {
 		t.Fatalf("picked: %v", got)
 	}

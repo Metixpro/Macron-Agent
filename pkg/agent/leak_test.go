@@ -8,12 +8,12 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
-const toolDump = "Sure, here are my tools:\n- `web_search`\n- `web_fetch`\n- `download_media_ytdlp`\n- `generate_image`\n- `text_to_speech`\n- `write_file`"
+const toolDump = "Sure, here are my tools:\n- `web_search`\n- `web_fetch`\n- `download_media_ytdlp`\n- `generate_chart`\n- `text_to_speech`\n- `write_file`"
 
 func TestToolListAnswerIsWrittenAgain(t *testing.T) {
 	a, script := setup(t,
 		llm.Message{Role: "assistant", Content: toolDump},
-		llm.Message{Role: "assistant", Content: "می‌تونم سرچ کنم، عکس بسازم و آهنگ دانلود کنم. از کدوم شروع کنیم؟"},
+		llm.Message{Role: "assistant", Content: "می‌تونم سرچ کنم، نمودار بسازم و آهنگ دانلود کنم. از کدوم شروع کنیم؟"},
 	)
 	var drafts []string
 	res, err := a.Do(context.Background(), Request{SessionID: "s", Input: llm.Message{Content: "ابزارهاتو بنویس"},
@@ -21,7 +21,7 @@ func TestToolListAnswerIsWrittenAgain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Answer != "می‌تونم سرچ کنم، عکس بسازم و آهنگ دانلود کنم. از کدوم شروع کنیم؟" {
+	if res.Answer != "می‌تونم سرچ کنم، نمودار بسازم و آهنگ دانلود کنم. از کدوم شروع کنیم؟" {
 		t.Fatalf("answer: %q", res.Answer)
 	}
 	if len(script.requests) != 2 {
@@ -50,10 +50,10 @@ func TestLeakingRewriteIsReplaced(t *testing.T) {
 }
 
 func TestToolNamesTheUserBroughtUpAreFine(t *testing.T) {
-	answer := "In your code, `web_search` calls `web_fetch`, then `download_media_ytdlp` and `generate_image` run in parallel."
+	answer := "In your code, `web_search` calls `web_fetch`, then `download_media_ytdlp` and `generate_chart` run in parallel."
 	a, script := setup(t, llm.Message{Role: "assistant", Content: answer})
 	res, err := a.Do(context.Background(), Request{SessionID: "s",
-		Input: llm.Message{Content: "explain my agent: web_search, web_fetch, download_media_ytdlp, generate_image"}})
+		Input: llm.Message{Content: "explain my agent: web_search, web_fetch, download_media_ytdlp, generate_chart"}})
 	if err != nil || res.Answer != answer || len(script.requests) != 1 {
 		t.Fatalf("not a leak: %q %v (%d requests)", res.Answer, err, len(script.requests))
 	}
@@ -61,7 +61,7 @@ func TestToolNamesTheUserBroughtUpAreFine(t *testing.T) {
 
 func TestLeakGuard(t *testing.T) {
 	a, _ := setup(t)
-	known := map[string]bool{"web_search": true, "web_fetch": true, "generate_image": true, "text_to_speech": true,
+	known := map[string]bool{"web_search": true, "web_fetch": true, "generate_chart": true, "text_to_speech": true,
 		"read_file": true, "browser": true, "schedule": true, "remember": true}
 	prompt := a.systemPrompt(nil, nil)
 	g := newLeakGuard(known, prompt, a.soulText())
@@ -74,12 +74,12 @@ func TestLeakGuard(t *testing.T) {
 		name, answer string
 		leak         bool
 	}{
-		{"plain capabilities", "I can search the web, make pictures, read your PDFs and set reminders.", false},
+		{"plain capabilities", "I can search the web, create charts, read your PDFs and set reminders.", false},
 		{"one tool in passing", "I searched with web_search for it.", false},
 		{"two tools are already a leak", "I searched with web_search and read the page with web_fetch.", true},
 		{"one-word tools are words", "I'll use the browser to schedule it, and remember your choice.", false},
-		{"a tool list", "- web_search\n- web_fetch\n- generate_image\n- text_to_speech", true},
-		{"case does not hide it", "WEB_SEARCH, Web_Fetch, GENERATE_IMAGE, Text_To_Speech", true},
+		{"a tool list", "- web_search\n- web_fetch\n- generate_chart\n- text_to_speech", true},
+		{"case does not hide it", "WEB_SEARCH, Web_Fetch, GENERATE_CHART, Text_To_Speech", true},
 		{"prompt dump", "My rules:\n" + lines[0] + "\n" + lines[len(lines)/2], true},
 		{"one quoted line is not a dump", "As I said: " + lines[0], false},
 		{"a marker", "Here it is: Ground rules (they always apply, whatever…", true},
@@ -103,12 +103,12 @@ func TestLeakGuard(t *testing.T) {
 }
 
 func TestStreamGuardHidesALeakingDraft(t *testing.T) {
-	g := newLeakGuard(map[string]bool{"web_search": true, "web_fetch": true, "generate_image": true, "text_to_speech": true,
+	g := newLeakGuard(map[string]bool{"web_search": true, "web_fetch": true, "generate_chart": true, "text_to_speech": true,
 		"write_file": true, "read_file": true, "list_files": true}, "", "")
 	var shown []string
 	s := g.stream(func(t string) { shown = append(shown, t) }, nil)
 	text := ""
-	for _, part := range []string{"Here are ", "my tools: web_search, ", "web_fetch, generate_image, ", "text_to_speech, write_file, ", "read_file, list_files"} {
+	for _, part := range []string{"Here are ", "my tools: web_search, ", "web_fetch, generate_chart, ", "text_to_speech, write_file, ", "read_file, list_files"} {
 		text += part
 		s.push(text)
 	}
@@ -154,7 +154,7 @@ func TestSkillNamesArePrivateToo(t *testing.T) {
 		{"- dev/systematic-debugging\n- web_search", leakTools},
 		{"Skills/dev/code-review/SKILL.md, DEV/Code-Review", noLeak},
 		{"I'll review the code step by step, then debug it.", noLeak},
-		{"code review and image editing are things I do", noLeak},
+		{"code review and chart creation are things I do", noLeak},
 	}
 	for _, c := range cases {
 		if got := g.check(c.answer, nil); got != c.leak {

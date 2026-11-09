@@ -1587,7 +1587,7 @@ func guessReaction(tools []string, text string) string {
 		return "❤"
 	case strings.Contains(used, "search_music") || strings.Contains(used, "ytdlp"):
 		return "🔥"
-	case strings.Contains(used, "generate_image") || strings.Contains(used, "search_image"):
+	case strings.Contains(used, "search_image"):
 		return "😍"
 	case strings.Contains(used, "deep_research"):
 		return "🤓"

@@ -360,4 +360,5 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_kanban_user ON kanban (user_id, status)`,
 	},
+	{`DELETE FROM settings WHERE k IN ('image_key', 'image_edit_key', 'music_key')`},
 }

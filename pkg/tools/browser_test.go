@@ -121,14 +121,17 @@ func TestMotionGraphicRendersSmoothVideo(t *testing.T) {
 		t.Skip("ffmpeg is needed")
 	}
 	ws, _ := r.Machine.Workspace("m")
+	if err := exec.Command("ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", filepath.Join(ws, "background.mp3")).Run(); err != nil {
+		t.Fatal(err)
+	}
 	html := `<style>#box{position:absolute;width:120px;height:120px;background:#ff3d71;animation:spin 1s linear infinite}
 		@keyframes spin{to{transform:rotate(360deg)}}</style><div id="box"></div><canvas id="c" width="640" height="360"></canvas>
 		<script>const c=document.getElementById('c').getContext('2d');
 		(function draw(t){c.clearRect(0,0,640,360);c.fillStyle='#4dd0e1';c.fillRect(t/5,200,60,60);requestAnimationFrame(draw)})(0);
 		setTimeout(()=>document.body.style.background='#123',1000)</script>`
 	out := call(t, r, "m", ToolMotion, map[string]any{"html": html, "duration": 2, "fps": 24, "size": "small", "filename": "intro",
-		"music": map[string]any{"style": "chiptune", "sfx": []any{map[string]any{"type": "pop", "at": 0.5}}}})
-	for _, want := range []string{`Rendered "intro.mp4" — 854x480, 2 s at 24 fps (48 frames)`, "work/intro_preview.jpg", "music: chiptune"} {
+		"audio": "background.mp3"})
+	for _, want := range []string{`Rendered "intro.mp4" — 854x480, 2 s at 24 fps (48 frames)`, "work/intro_preview.jpg"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
@@ -153,44 +156,6 @@ func TestMotionGraphicRendersSmoothVideo(t *testing.T) {
 		if out, _ := r.Execute(t.Context(), "m", ToolMotion, args); !strings.Contains(out, want) {
 			t.Errorf("%s: %s", args, out)
 		}
-	}
-}
-
-func TestMusicSynth(t *testing.T) {
-	r := newRegistry(t, true, nil)
-	if !r.Has(ToolMusic) {
-		t.Skip("numpy is needed")
-	}
-	ws, _ := r.Machine.Workspace("s")
-	out := call(t, r, "s", ToolMusic, map[string]any{"style": "persian", "duration": 4, "melody": "E4:1 Fk4:0.5 G4:0.5 R:1", "filename": "dastgah"})
-	if !strings.Contains(out, `Made "dastgah.mp3"`) || !strings.Contains(out, "persian, 96 BPM, E shur, 6/8") {
-		t.Fatalf("persian: %s", out)
-	}
-	if a := probeDuration(t, filepath.Join(ws, "dastgah.mp3"), "a:0"); !strings.Contains(a, "codec_name=mp3") || !strings.Contains(a, "duration=4.0") {
-		t.Errorf("mp3: %s", a)
-	}
-
-	if tags, _ := exec.Command("ffprobe", "-v", "error", "-show_entries", "format_tags=title,artist", "-of", "default=nw=1", filepath.Join(ws, "dastgah.mp3")).Output(); !strings.Contains(string(tags), "TAG:artist=Macron AI") ||
-		!strings.Contains(string(tags), "TAG:title=Persian 96 BPM") || strings.Contains(strings.ToLower(string(tags)), "waze") {
-		t.Errorf("tags: %s", tags)
-	}
-
-	out = call(t, r, "s", ToolMusic, map[string]any{"style": "lofi", "duration": 2, "title": "Rainy Night"})
-	if !strings.Contains(out, `Made "Macron_AI_-_Rainy_Night.mp3"`) {
-		t.Errorf("a named track: %s", out)
-	}
-	out = call(t, r, "s", ToolMusic, map[string]any{"duration": 2})
-	if !strings.Contains(out, `Made "Macron_AI_-_Lofi.mp3"`) {
-		t.Errorf("an unnamed track: %s", out)
-	}
-	out = call(t, r, "s", ToolMusic, map[string]any{"style": "pop", "duration": 3, "chords": "Am:2 F:2 C G", "bpm": 120, "format": "wav"})
-	if !strings.Contains(out, `"Macron_AI_-_Pop.wav"`) || !strings.Contains(out, "chords Am F C G") || !strings.Contains(out, "120 BPM") {
-		t.Errorf("pop: %s", out)
-	}
-	out = call(t, r, "s", ToolMusic, map[string]any{"style": "none", "duration": 2, "sfx": []any{map[string]any{"type": "whoosh", "at": 0.2},
-		map[string]any{"type": "impact", "at": 1}, map[string]any{"type": "unknown", "at": 1}}})
-	if !strings.Contains(out, "2 sound effects") {
-		t.Errorf("sfx: %s", out)
 	}
 }
 

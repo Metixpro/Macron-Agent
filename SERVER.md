@@ -2,33 +2,71 @@
 
 Installation, service management, dependencies, backups and recovery.
 
-## Build and install on Linux
+## Installation scope
 
-Go 1.26+ is required. Run as the account that should own the agent, in the
-extracted source directory:
+On Linux or macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.sh | bash
+```
+
+The installer asks for the scope before changing files and shows its plan.
+Run it as the account that should own the agent. Selecting user scope as root
+installs for the root account; it does not switch to another user automatically.
+
+| Scope | Program | Private data | System packages |
+|---|---|---|---|
+| User | `~/.local/bin/macron` | `~/.macron` | No sudo or package-manager calls |
+| System/root | `/usr/local/bin/macron` | `/var/lib/macron` | Supported helpers via apt/dnf |
+
+Python tools are installed by default into the private `venv`. If Python 3.12+
+or venv support is missing, the installer provisions a private uv runtime and
+Python. Neither needs root. Missing optional native executables are reported in
+user scope; FFmpeg and browser system libraries may still need host provisioning.
+The program adds its private `venv/bin` to PATH at startup, including in services.
+`--browser` downloads a private Chromium; `--browser-agent` also creates a separate
+autonomous-browser environment. `--no-tools` skips Python and system packages.
+
+For unattended user installation:
+
+```sh
+bash install.sh --scope user --yes --no-setup
+macron setup
+```
+
+`--prefix` selects the binary directory, `--home` selects private data,
+`--no-service` leaves service installation disabled. An installation receipt
+remembers the scope and home, so later CLI calls and updates use the same paths.
+
+## Build and install from source
+
+Git, Make and Go 1.26+ are required for building, not for release installation:
 
 ```sh
 make build
-./install.sh --binary ./bin/macron --no-setup
-# Or build and install the local source directly (no GitHub repository needed):
-./install.sh --source-dir "$PWD" --no-setup
+./install.sh --scope user --binary ./bin/macron --no-setup
+# Or build and install directly from the checkout:
+./install.sh --scope user --source-dir "$PWD" --no-setup
 ```
 
-Optional media/document helpers use Python 3.12+ and FFmpeg. To prepare Python
-helpers without modifying the system Python:
+## Complete removal
 
 ```sh
-mkdir -p "$HOME/.macron"
-chmod 700 "$HOME/.macron"
-python3 -m venv "$HOME/.macron/venv"
-"$HOME/.macron/venv/bin/python" -m pip install --require-hashes -r requirements-tools.lock
+macron uninstall --dry-run
+macron uninstall
 ```
 
-`install.sh --tools --binary ./bin/macron --no-setup` also installs supported
-system helper packages and the pinned Python environment. The program adds its
-private `venv/bin` to PATH at startup, including under systemd. A custom
-`MACRON_HOME` uses that home's `venv` instead. Optional browser automation still
-needs Playwright and its browser/system libraries separately.
+Uninstall shows the paths and asks for confirmation. It stops matching services
+and running copies before deleting their unit files, program and backup binaries,
+installation receipts, installer-owned PATH entries, and the entire private home.
+That includes secrets, conversations, workspaces, profiles and private runtimes.
+Run as the installation owner; system installations require root. A failed service
+or process stop aborts removal before data is erased.
+
+Use `macron uninstall --keep-data` to retain private data, or `--yes` for unattended
+removal. `install.sh --uninstall` delegates to the same command. Shared system
+packages and files outside the installation home are not removed. Back up wanted
+files first; the default removal cannot be undone.
 
 ## Run tasks from SSH or cron, without Telegram
 
@@ -119,8 +157,10 @@ PATH="$HOME/.macron/venv/bin:$PATH" make check
 go test -race ./pkg/cli ./pkg/config ./pkg/agent ./pkg/machine
 ```
 
-`make test` also runs the real installer against temporary fake binaries: broken
-candidate rollback, previous-version backup, and stale `.new` symlink protection.
+`make test` also checks interactive scope selection, isolated user/system install
+paths, Python bootstrap, failure recovery and PATH quoting. Separate lifecycle
+tests install a real binary into temporary directories and verify dry-run,
+confirmation, full removal and data-preserving removal.
 The local execution test uses a mock HTTP model, performs a real file write, and
 verifies the result returns to the model. It does not measure model intelligence.
 
@@ -149,7 +189,7 @@ UPPER_CASE keys live in `config.env`; lower_case keys are the agent's own settin
 | `MACRON_WEBHOOK_ADDR` | — | e.g. `:8787`: signed events on `POST /hook/NAME` become background tasks (`/dashboard` shows the secret) |
 | `MACRON_DASHBOARD_ADDR` | — | e.g. `127.0.0.1:8788`: a read-only status page (loopback only; `/dashboard` gives the link) |
 
-Commands: `/settings` (the panel; `/admin` still works), `/update`, `/moa`, `/learn undo ID`, `/approve`, `/yolo [off]`, `/board`, `/search WORDS`, `/dashboard`.
+Commands: `/settings` (the panel), `/update`, `/moa`, `/learn undo ID`, `/approve`, `/yolo [off]`, `/board`, `/search WORDS`, `/dashboard`.
 
 ### 1.2.1 presentation cleanup
 
@@ -167,8 +207,8 @@ Group command menus and the Privacy-mode instructions are removed.
 
 Speech recognition is removed, including its settings, automatic voice-message
 transcription, tool and `whisper-stt` program. Audio files can still be saved,
-converted and sent; their spoken content is not read. Music generation and text
-to speech remain available.
+converted and sent; their spoken content is not read. Text to speech remains
+available. Music generation was subsequently removed in 1.3.0.
 
 The owner can use `/update` or Settings → Update in Telegram. Updates install the
 latest published GitHub **Release**, not unversioned commits on `main`. For a new
@@ -242,3 +282,20 @@ An AST-based test checks every private command handler against the owner menu.
 
 The source distribution contains no Snap classifier or speech-recognition program.
 See [Telegram commands](docs/telegram-commands.md).
+
+### 1.3.0: private installation and complete removal
+
+The installer presents user/system scope before changes, installs Python packages
+privately without sudo in user scope, and provisions missing Python/venv support.
+`macron uninstall` removes the owned installation and its data after confirmation.
+Custom installation homes are retained across CLI calls, services and updates.
+
+AI image generation, AI image editing and music generation are removed, including
+their tools, admin panels, bundled skills and credentials. Upgrades remove retired
+credential keys from the database and config.env, and retire unmodified old bundled
+skills; user-edited skill files are preserved. Web image search, charts, document
+processing, existing-audio video composition and text to speech remain available.
+
+Telegram now has 24 canonical commands with no alternate spellings. Use `/language`,
+`/settings`, `/new`, `/cookies`, `/reminders` and `/cancel`; choose fast/deep with
+`/mode`. See [the current command list](docs/telegram-commands.md).

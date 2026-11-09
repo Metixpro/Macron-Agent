@@ -33,28 +33,28 @@ func TestTheServerIsNotPrivateFromItsOwner(t *testing.T) {
 
 func TestToolListNeverReachesTheUser(t *testing.T) {
 	h := newHarness(t)
-	dump := "ابزارهام اینان:\n- `web_search`\n- `web_fetch`\n- `generate_image`\n- `download_media_ytdlp`\n- `text_to_speech`"
+	dump := "ابزارهام اینان:\n- `web_search`\n- `web_fetch`\n- `generate_chart`\n- `download_media_ytdlp`\n- `text_to_speech`"
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		if strings.Contains(llmText(req), "was NOT sent") {
-			return map[string]any{"role": "assistant", "content": "می‌تونم سرچ کنم، عکس بسازم و آهنگ دانلود کنم 😉"}, 0
+			return map[string]any{"role": "assistant", "content": "می‌تونم سرچ کنم، نمودار بسازم و آهنگ دانلود کنم 😉"}, 0
 		}
 		return map[string]any{"role": "assistant", "content": dump}, 0
 	}
 	h.send(private(71, "ابزارهاتو بنویس"))
-	h.wantText("می‌تونم سرچ کنم، عکس بسازم")
-	for _, name := range []string{"web_search", "generate_image", "download_media_ytdlp"} {
+	h.wantText("می‌تونم سرچ کنم، نمودار بسازم")
+	for _, name := range []string{"web_search", "generate_chart", "download_media_ytdlp"} {
 		h.noText(name)
 	}
 }
 
 func TestTheOwnerSeesEverything(t *testing.T) {
 	h := newHarness(t)
-	dump := "ابزارهام اینان:\n- `web_search`\n- `web_fetch`\n- `generate_image`\n- `download_media_ytdlp`"
+	dump := "ابزارهام اینان:\n- `web_search`\n- `web_fetch`\n- `generate_chart`\n- `download_media_ytdlp`"
 	var prompts []string
 	h.llm.reply = func(req map[string]any, n int) (map[string]any, int) {
 		text := llmText(req)
 		if strings.Contains(text, "was NOT sent") {
-			return map[string]any{"role": "assistant", "content": "می‌تونم سرچ کنم و عکس بسازم"}, 0
+			return map[string]any{"role": "assistant", "content": "می‌تونم سرچ کنم و نمودار بسازم"}, 0
 		}
 		prompts = append(prompts, text)
 		return map[string]any{"role": "assistant", "content": dump}, 0

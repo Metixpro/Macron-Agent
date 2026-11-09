@@ -275,12 +275,6 @@ func (b *Bot) handlePanel(ctx context.Context, q *telegram.CallbackQuery, answer
 		b.handleTriagePanel(ctx, l, parts, answer, show, ask)
 	case "em":
 		b.handleEmojiPanel(ctx, q, parts, answer, show, ask)
-	case "ie":
-		b.handleImageEditPanel(ctx, q, parts, answer, show, ask)
-	case "ig":
-		b.handleImageGenPanel(ctx, q, parts, answer, show, ask)
-	case "mu":
-		b.handleMusicPanel(ctx, q, parts, answer, show, ask)
 	default:
 		answer("", false)
 		show(b.viewHome(ctx, admin))
@@ -655,18 +649,11 @@ func (b *Bot) viewAgent(l lang) panelView {
 	if se := b.app.Search; se != nil {
 		html += l.f("\n🔎 جستجوی وب: treg.to %s", onOff(l, se.Treg.Token() != ""))
 	}
-	html += l.f("\n🎨 ساخت عکس با استایل: %s", onOff(l, b.app.Registry.StudioReady()))
-	html += l.f("\n🎤 ساخت آهنگ با خواننده: %s", onOff(l, b.app.Registry.SongReady()))
-	if b.app.Registry.Has(tools.ToolEditImage) {
-		html += l.f("\n🖼 ویرایش عکس با هوش مصنوعی: %s", onOff(l, b.app.Registry.ImageEditKey() != ""))
-	}
 	return panelView{html: html, kb: keyboard(
 		row(b.button(l.t("🤖 قدم‌های ایجنت"), "a:st:steps", ""), b.button(l.t("⏱ زمان هر درخواست"), "a:st:minutes", "")),
 		row(b.button(l.t("⏩ ادامه خودکار"), "a:st:auto", ""), b.button(l.t("🪟 پنجره context"), "a:st:window", "")),
 		row(b.button(l.t("🧠 اندازه حافظه"), "a:st:ctx", ""), b.button(l.t("🧬 روح ربات"), "a:soul", "")),
 		row(b.button(l.t("🔎 جستجوی وب"), "a:sr", ""), b.button(l.t("📥 دانلودر"), "a:dl", "")),
-		row(b.button(l.t("🎨 ساخت عکس"), "a:ig", "")),
-		row(b.button(l.t("🖼 ویرایش عکس"), "a:ie", ""), b.button(l.t("🎤 ساخت آهنگ"), "a:mu", "")),
 		row(b.button(l.t("🖥 نمایش کار"), "a:ws", ""), b.button(l.t("🛡 گیت دستورات"), "a:gate", "")),
 		row(b.button(l.t("⚖️ رأی‌گیری چندمدلی"), "a:moa", "")),
 		row(b.back(l, "a:home")),

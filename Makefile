@@ -24,6 +24,7 @@ release:
 test:
 	go test -count=1 ./...
 	python3 scripts/test_install.py
+	python3 scripts/test_install_e2e.py
 
 vet:
 	go vet ./...

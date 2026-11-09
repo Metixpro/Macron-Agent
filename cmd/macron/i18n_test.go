@@ -270,9 +270,9 @@ func TestEnglishAdminPanel(t *testing.T) {
 	h.send(englishMsg(ownerID, "/start"))
 	h.send(englishMsg(55, "hi"))
 	h.tg.reset()
-	h.send(englishMsg(ownerID, "/admin"))
+	h.send(englishMsg(ownerID, "/settings"))
 	h.wantText("Macron Ai admin panel")
-	h.noPersian("/admin")
+	h.noPersian("/settings")
 	for _, data := range []string{"a:stats", "a:top", "a:users:0", "a:u:55", "a:st", "a:soul", "a:dl", "a:pv", "a:pv:1", "a:fj", "a:em",
 		"a:bc", "a:ad", "a:gr", "a:shop", "a:shop:pay:0", "a:home"} {
 		h.tg.reset()

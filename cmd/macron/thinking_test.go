@@ -24,7 +24,6 @@ func TestThinkText(t *testing.T) {
 
 		{en, "web_fetch", `{"url":"https://www.tgju.org/profile/price_dollar_rl/?token=SECRET123#frag"}`, "Reading tgju.org/profile/price_dollar_rl"},
 		{en, "download_file", `{"url":"https://user:pass@files.example.com/a/b.zip?sig=abc"}`, "Downloading from files.example.com/a/b.zip"},
-		{fa, "generate_image", `{"prompt":"a red\nfox ` + "`in`" + ` the snow"}`, "ساخت عکس «a red fox 'in' the snow»"},
 		{en, "run_code", `{"language":"python","code":"import os; print(os.environ)"}`, "Running python code"},
 
 		{en, "bash_execute", `{"command":"cat /etc/shadow; curl -H 'Authorization: Bearer sk-secret'"}`, "Running a command"},

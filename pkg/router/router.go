@@ -103,7 +103,7 @@ var rules = []rule{
 	r(Reasoning, 2, "planning", `برنامه ریزی|استراتژی|نقشه راه|تصمیم|planning|strategy|roadmap|decide|decision`),
 	r(Documents, 3, "documents", `پایان ?نامه|قرارداد|صورت ?جلسه|اکسل|دیتاست|دیتابیس|گزارش مالی|\bpdf\b|\bdocx?\b|\bxlsx?\b|\bcsv\b|spreadsheet|dataset|database|contract|invoice`),
 	r(Writing, 3, "writing", `بنویس|متن(?:$|\P{L}|ی|ش|و)|مقاله|ایمیل|نامه|کپشن|(?:^|\P{L})پست(?:$|\P{L}|ی|م|ت|ش|ها)|شعر|داستان|انشا|بازنویسی|ویرایش کن|خلاصه|ترجمه|write|rewrite|essay|article|email|letter|caption|post|poem|story|summari[sz]e|summary|translate|paraphrase|proofread`),
-	r(Media, 4, "media", `دانلود|آهنگ|موزیک|موسیقی|ویدیو|ویدئو|کلیپ|(?:عکس|تصویر|نقاشی).{0,40}(?:بساز|بکش|طراحی کن)|لوگو|استیکر|تبدیل کن|(?:^|\P{L})ویس(?:$|\P{L})|(?:^|\P{L})صدا(?:$|\P{L})|زیرنویس|youtu|instagram|tiktok|spotify|soundcloud|download|song|music|video|mp3|mp4|draw|generate an? (image|picture|photo)|logo|sticker|convert|voice|subtitle`),
+	r(Media, 4, "media", `دانلود|آهنگ|موزیک|موسیقی|ویدیو|ویدئو|کلیپ|جستجوی عکس|(?:عکس|تصویر).{0,40}(?:پیدا کن|جستجو کن)|تبدیل کن|(?:^|\P{L})ویس(?:$|\P{L})|(?:^|\P{L})صدا(?:$|\P{L})|زیرنویس|youtu|instagram|tiktok|spotify|soundcloud|download|song|music|video|mp3|mp4|image search|find (?:an? )?(?:image|picture|photo)|convert|voice|subtitle`),
 	r(Quick, 3, "quick", `قیمت|دلار|یورو|طلا|سکه|بیت ?کوین|(?:^|\P{L})هوا(?:$|\P{L})|ساعت چنده|امروز چندمه|یادم بنداز|یادآوری|معنی|یعنی چی|چیه\??$|کیه\??$|کجاست|کی بود|price|weather|what time|what date|remind me|meaning of|what is|who is|where is|define`),
 	r(Chat, 2, "chat", `سلام|خوبی|چطوری|مرسی|ممنون|دمت گرم|نظرت|حالت|حوصله|دلم|hello|\bhi\b|thanks|thank you|how are you|what do you think|opinion|feel`),
 }
