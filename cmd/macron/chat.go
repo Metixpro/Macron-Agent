@@ -830,67 +830,13 @@ func (b *Bot) buildInput(ctx context.Context, u *store.User, m *telegram.Message
 		notes = append(notes, "[forwarded from "+o.Describe()+"]")
 	}
 
-	if r := m.Replied(); r != nil {
-		who := "another user"
-		switch {
-		case r.From != nil && r.From.ID != 0 && (r.From.ID == b.me.ID || (r.ViaBot != nil && r.ViaBot.ID == b.me.ID)):
-			who = "you (your own earlier message)"
-		case r.From != nil && r.From.ID != 0 && r.From.ID == u.ID:
-			who = "the user themself"
-		case r.SenderChat != nil:
-			who = (&telegram.MessageOrigin{Type: "chat", SenderChat: r.SenderChat}).Describe()
-		case r.From != nil:
-			who = (&telegram.MessageOrigin{Type: "user", SenderUser: r.From}).Describe()
+	if reply := b.replyContext(ctx, u.ID, m, vision); reply != nil {
+		plain = false
+		about = append(about, reply.about)
+		if reply.note != "" {
+			notes = append(notes, reply.note)
 		}
-		if o := r.Origin(); o != nil {
-			who += ", who forwarded it from " + o.Describe()
-		}
-		if m.RepliedInChat() == nil && r.Chat.ID != 0 && r.Chat.ID != m.Chat.ID && r.Chat.Title != "" {
-			who += " in «" + r.Chat.Title + "»"
-		}
-		body := strings.TrimSpace(telegram.UnmarkRTL(r.Body()))
-		quote := ""
-		if m.Quote != nil {
-			quote = strings.TrimSpace(m.Quote.Text)
-		}
-		line := "The user is replying to a message from " + who
-		switch {
-		case body != "":
-			line += ":\n<replied_message>\n" + textutil.TruncateRunes(body, 3000, "…") + "\n</replied_message>"
-			if quote != "" && quote != body {
-				line += "\nThey quoted this part of it: «" + textutil.TruncateRunes(quote, 600, "…") + "»"
-			}
-		case !r.HasMedia() && r.Poll == nil:
-			line += " (its text is not visible to you; if the request depends on it, ask them to quote or forward it)"
-		}
-		if r.Poll != nil {
-			line += "\nIt is a poll: «" + r.Poll.Question + "»"
-		}
-		if r.From != nil && r.From.ID == b.me.ID {
-			if s := b.replyToAnswer(m, u.ID); s != "" {
-				line += "\n" + s
-			}
-		}
-		line += "\nWords like «this», «این», «اینو» or «اون پیام» in their request mean that message."
-		quoted := body
-		if quote != "" {
-			quoted = quote
-		}
-
-		if ratt, err := b.attach(ctx, session, r, vision, leadReplied, false); err == nil && ratt != nil {
-			plain = false
-			line += "\n" + ratt.about
-			images = append(images, ratt.images...)
-		} else if errors.Is(err, errTooBig) {
-			line += "\n(It contains a file too big to open.)"
-		} else if errors.Is(err, errWorkspaceFull) {
-			line += "\n(It contains a file that does not fit in the user's full workspace; they can free space with /files.)"
-		}
-		about = append(about, line)
-		notes = append(notes, "[replying to: «"+textutil.TruncateRunes(textutil.OneLine(quoted), 80, "…")+"»]")
-	} else if s := m.ReplyToStory; s != nil {
-		about = append(about, "The user is replying to a story of "+(&telegram.MessageOrigin{Type: "chat", SenderChat: &s.Chat}).Describe()+
-			" (you cannot see stories; ask what it shows if the request depends on it).")
+		images = append(images, reply.images...)
 	}
 
 	if files := b.workspaceAbout(session); files != "" {

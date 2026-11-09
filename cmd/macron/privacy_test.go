@@ -62,8 +62,7 @@ func TestTheOwnerSeesEverything(t *testing.T) {
 	h.send(private(ownerID, "ابزارهاتو با اسم دقیق بنویس"))
 	h.wantText("download_media_ytdlp")
 	last := prompts[len(prompts)-1]
-	if !strings.Contains(last, "this private conversation is with the bot's owner") || !strings.Contains(last, "The active provider is") ||
-		!strings.Contains(last, "refusals for seriously harmful content still apply") {
+	if !strings.Contains(last, "this private conversation is with the bot's owner") || !strings.Contains(last, "The active provider is") {
 		t.Fatalf("the owner's prompt:\n%s", last)
 	}
 

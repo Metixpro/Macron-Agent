@@ -155,14 +155,12 @@ func (r *Registry) piperSpeech(ctx context.Context, sessionID, text, name string
 
 func (r *Registry) edgeSpeech(ctx context.Context, sessionID, text, name, voice string, asVoice bool, speed float64) string {
 	v := edgeVoices[voice]
-	rate := fmt.Sprintf("--rate=%+d%%", int((speed-1)*100+0.5*sign(speed-1)))
-	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{
+	rate := fmt.Sprintf("%+d%%", int((speed-1)*100+0.5*sign(speed-1)))
+	res, err := r.runScript(ctx, sessionID, "edge_speech.py", map[string]any{"text": text, "voice": v.id, "rate": rate, "filename": "./" + name}, 120*time.Second)
+	if err != nil {
+		return "error: text-to-speech: " + err.Error()
+	}
 
-		Args: []string{"bash", "-c", `p=(); [ -n "$HTTPS_PROXY" ] && p=(--proxy "$HTTPS_PROXY"); exec python3 -I -m edge_tts "${p[@]}" "$@"`, "tts",
-			"--voice", v.id, rate, "--file", "-", "--write-media", "./" + name},
-		Stdin:   []byte(text),
-		Timeout: 120 * time.Second,
-	})
 	if res.ExitCode != 0 {
 		return failure("text-to-speech", res)
 	}

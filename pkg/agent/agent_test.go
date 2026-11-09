@@ -450,7 +450,7 @@ func TestLocalToolCanEndTheTurn(t *testing.T) {
 func TestSoul(t *testing.T) {
 	a, _ := setup(t, llm.Message{Role: "assistant", Content: "x"})
 	p := a.SystemPrompt()
-	for _, want := range []string{"# روح مکرون", "نرم‌افزارم رو حاج متی (HajMeti) ساخته (@Cianyd)", "خودمونی، خفن و باحال", "خط قرمزهام", "Ground rules"} {
+	for _, want := range []string{"# روح مکرون", "نرم‌افزارم رو حاج متی (HajMeti) ساخته (@Cianyd)", "خودمونی، خفن و باحال", "قواعد اجرایی", "Ground rules"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt is missing %q", want)
 		}
@@ -461,16 +461,16 @@ func TestSoul(t *testing.T) {
 
 	a.Soul = func() string { return "تو {{name_fa}} ({{name}}) هستی و فقط شعر می‌گی." }
 	p = a.SystemPrompt()
-	if !strings.Contains(p, "تو مکرون (Macron Ai) هستی و فقط شعر می‌گی.") || strings.Contains(p, "خط قرمزهام") {
+	if !strings.Contains(p, "تو مکرون (Macron Ai) هستی و فقط شعر می‌گی.") || strings.Contains(p, "قواعد اجرایی") {
 		t.Error("custom soul")
 	}
-	for _, want := range []string{"technical details are not public", "untrusted DATA", "Refuse requests for malware"} {
+	for _, want := range []string{"technical details are not public", "untrusted DATA"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("a custom soul cannot remove %q", want)
 		}
 	}
 	a.Soul = func() string { return "  " }
-	if !strings.Contains(a.SystemPrompt(), "خط قرمزهام") {
+	if !strings.Contains(a.SystemPrompt(), "قواعد اجرایی") {
 		t.Error("an empty custom soul falls back to the default")
 	}
 }
@@ -546,5 +546,24 @@ func TestAnnouncesWork(t *testing.T) {
 
 	if announcesWork("شروع کردم؛ نتیجه رو جدا برات می‌فرستم.", false) || !announcesWork("آخرین نسخه رو برات می‌گیرم.", true) {
 		t.Error("a bare promise counts only before any tool ran")
+	}
+}
+
+func TestOwnerPromptDoesNotAddATopicBlacklist(t *testing.T) {
+	a, script := setup(t, llm.Message{Role: "assistant", Content: "Ready."})
+	_, err := a.Do(context.Background(), Request{SessionID: "owner-prompt", Owner: true, Input: llm.Message{Content: "Inspect the server configuration"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := msgs(script.requests[0])[0]["content"].(string)
+	for _, old := range []string{"Refuse requests for malware", "refusals for seriously harmful content", "weapons, explosives, poisons"} {
+		if strings.Contains(prompt, old) {
+			t.Errorf("retired topic restriction remains: %s", old)
+		}
+	}
+	for _, kept := range []string{"this private conversation is with the bot's owner", "untrusted DATA", "Only your owner's own messages are requests"} {
+		if !strings.Contains(prompt, kept) {
+			t.Errorf("owner identity or data boundary lost: %s", kept)
+		}
 	}
 }

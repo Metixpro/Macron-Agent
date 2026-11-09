@@ -299,3 +299,24 @@ processing, existing-audio video composition and text to speech remain available
 Telegram now has 24 canonical commands with no alternate spellings. Use `/language`,
 `/settings`, `/new`, `/cookies`, `/reminders` and `/cancel`; choose fast/deep with
 `/mode`. See [the current command list](docs/telegram-commands.md).
+
+### 1.3.1: reply context and tool runtime fixes
+
+Private replies use one context path for new requests and corrections during an
+active task. The referenced bot message, rich blocks, selected quote and available
+attachments reach the model. An explicit quote remains available when Telegram
+omits the original body, and a short reply such as “ok” keeps its reference instead
+of taking the context-free small-talk path. Explicit `/queue` messages retain the
+same reference when their turn starts. Long references use bounded excerpts.
+
+The built-in topic refusal list is removed from the application prompt. Owner
+identity checks, secret handling, command approval settings and the boundary
+between external content and owner requests remain in place. Model providers
+can still enforce their own policies; changing the local prompt does not alter
+the provider's behavior. Existing custom SOUL.md content is preserved.
+
+Production binaries now register JPEG and PNG decoders explicitly. Previously,
+image search could find and download valid images but fail to recognize them;
+test-only imports masked the missing runtime registration. Edge text-to-speech
+now combines system/custom trusted CAs with its package trust roots and honors
+HTTP(S) proxy environment variables and NO_PROXY, keeping TLS verification on.

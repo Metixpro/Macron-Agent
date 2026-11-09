@@ -27,7 +27,7 @@ func TestSoulInThePanel(t *testing.T) {
 	}
 	h.click(ownerID, ownerID, 900, "a:soul:reset")
 	h.send(private(77, "سلام"))
-	if !strings.Contains(llmText(h.llm.last()), "خط قرمزهام") {
+	if !strings.Contains(llmText(h.llm.last()), "قواعد اجرایی") {
 		t.Error("back to the default soul")
 	}
 }

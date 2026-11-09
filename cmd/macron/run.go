@@ -229,7 +229,11 @@ func (b *Bot) interjectMode(u *store.User, m *telegram.Message, text string, que
 	var x *interjection
 	var err error
 	if !queue && run.queueNext && !m.HasMedia() && strings.TrimSpace(text) != "" {
-		x = &interjection{m: m, text: strings.TrimSpace(text), msg: llm.Message{Role: "user", Content: strings.TrimSpace(text)}, memo: strings.TrimSpace(text)}
+		x, err = b.interjection(ctx, u, m, text, run)
+		if err != nil {
+			b.reply(m, l.t(textError))
+			return true
+		}
 		if run.steer(x) {
 			react.set("✍", false)
 			return true
@@ -300,11 +304,14 @@ func (b *Bot) interjection(ctx context.Context, u *store.User, m *telegram.Messa
 	if text == "" {
 		text = l.t("(پیام خالی)")
 	}
-	if r := m.RepliedInChat(); r != nil && r.MessageID != run.msgID && (r.From == nil || r.From.ID != b.me.ID) {
-		if q := strings.TrimSpace(r.Body()); q != "" {
-			about = append(about, "It replies to this message: «"+textutil.TruncateRunes(q, 1000, "…")+"»")
+	if reply := b.replyContext(ctx, u.ID, m, b.prov.VisionFor(b.route(ctx, run.tier))); reply != nil {
+		about = append(about, reply.about)
+		if reply.note != "" {
+			notes = append(notes, reply.note)
 		}
+		images = append(images, reply.images...)
 	}
+
 	content := agent.InterjectionNote + text
 	if len(about) > 0 {
 		content += "\n(" + strings.Join(about, " ") + ")"
