@@ -128,13 +128,6 @@ func envOr(key, def string) string {
 	return def
 }
 
-func envInt(key string, def int) int {
-	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil && n > 0 {
-		return n
-	}
-	return def
-}
-
 func envBool(key string) bool {
 	b, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv(key)))
 	return b
@@ -146,7 +139,7 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.Model, "model", envOr(EnvModel, DefaultModel), "model id (env "+EnvModel+")")
 	fs.StringVar(&c.WorkspaceDir, "workspace-dir", envOr(EnvWorkspaceDir, HomePath("workspaces")), "base directory of the per-user workspaces (env "+EnvWorkspaceDir+")")
 	fs.DurationVar(&c.WorkspaceTTL, "workspace-ttl", 0, "delete work-folder files (uploads and results) older than this (0 = never, the default)")
-	fs.BoolVar(&c.UseEnvProxy, "use-env-proxy", envBool(EnvEnvProxy), "send outbound tool traffic through HTTP(S)_PROXY (weakens the SSRF guard)")
+	fs.BoolVar(&c.UseEnvProxy, "use-env-proxy", envBool(EnvEnvProxy), "send outbound tool traffic through HTTP(S)_PROXY (the proxy, not the agent, then decides which addresses can be reached)")
 	fs.IntVar(&c.MaxSteps, "max-steps", 200, "maximum tool-calling rounds per request (the bot's admin panel can change it)")
 	fs.DurationVar(&c.RunTimeout, "run-timeout", 3*time.Hour, "time limit for one request (the bot's admin panel can change it)")
 	fs.IntVar(&c.Slots, "slots", 0, "commands (code, downloads, conversions) running at the same time; 0 = 8, or twice the CPUs")

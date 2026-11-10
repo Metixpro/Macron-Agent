@@ -206,9 +206,22 @@ func (g *Gate) audit(sessionID string, o Origin, cmd, decision, decider, rule st
 }
 
 func (g *Gate) Check(ctx context.Context, sessionID, command string) Verdict {
+	return g.decide(ctx, sessionID, command, Analyze(command, g.env))
+}
+
+// CheckCode is Check for a program in another language (run_code): only what
+// AnalyzeCode can see is judged, and the owner is shown a short piece of the code.
+func (g *Gate) CheckCode(ctx context.Context, sessionID, language, code string) Verdict {
+	findings := AnalyzeCode(code, g.env)
+	if len(findings) == 0 {
+		return Verdict{Allow: true}
+	}
+	return g.decide(ctx, sessionID, "["+language+" code] "+shorten(code, 600), findings)
+}
+
+func (g *Gate) decide(ctx context.Context, sessionID, command string, findings []Finding) Verdict {
 	norm := Normal(command)
 	origin := OriginOf(ctx)
-	findings := Analyze(command, g.env)
 	worst := Worst(findings)
 	p := g.policy()
 	rule := ""

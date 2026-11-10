@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	stdio "io"
 	"os"
 	"path/filepath"
@@ -62,6 +64,10 @@ func configCmd(io *IO, args []string) int {
 		if len(args) != 3 {
 			io.println("usage: macron config set KEY VALUE   (a secret is better set with: macron setup)")
 			return 2
+		}
+		if err := checkEnvPair(args[1], args[2]); err != nil {
+			io.printf("❌ %v\n", err)
+			return 1
 		}
 		if args[1] == keyOwners {
 			if _, err := config.ParseIDs(args[2]); err != nil {
@@ -219,6 +225,18 @@ func backup(io *IO, args []string) int {
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// checkEnvPair keeps one `config set` to one line of config.env: a line break in the
+// value would add a second setting (e.g. another owner) under an innocent key.
+func checkEnvPair(key, value string) error {
+	if key == "" || strings.ContainsAny(key, "=# \t\r\n\x00") {
+		return fmt.Errorf("%q is not a usable setting name", key)
+	}
+	if strings.ContainsAny(value, "\r\n\x00") {
+		return errors.New("a value is one line: it cannot hold a line break")
+	}
+	return nil
 }
 
 func dbSettingKey(k string) bool {

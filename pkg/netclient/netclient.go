@@ -7,9 +7,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -25,6 +28,7 @@ func NewClient(opts Options) *http.Client {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
+		Control:   refuseMetadata,
 	}
 	tr := &http.Transport{
 		DialContext:           dialer.DialContext,
@@ -52,6 +56,27 @@ func NewClient(opts Options) *http.Client {
 			return nil
 		},
 	}
+}
+
+var ErrMetadataAddress = errors.New("this address only hands out the machine's own cloud credentials; the web tools do not open it")
+
+var metadataHosts = []netip.Addr{netip.MustParseAddr("100.100.100.200"), netip.MustParseAddr("fd00:ec2::254")}
+
+// refuseMetadata runs once the name is resolved, so a page cannot point a public
+// name at the cloud metadata service (169.254.169.254 and the other link-local
+// addresses), which answers anyone on the machine with its credentials. The rest
+// of the network, this machine and the private ranges included, stays open: the
+// agent works on its owner's own servers. With a proxy the proxy dials instead.
+func refuseMetadata(_, address string, _ syscall.RawConn) error {
+	ap, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return nil
+	}
+	ip := ap.Addr().Unmap()
+	if ip.IsLinkLocalUnicast() || slices.Contains(metadataHosts, ip) {
+		return fmt.Errorf("%w (%s)", ErrMetadataAddress, ip)
+	}
+	return nil
 }
 
 var bodyIdle = 60 * time.Second

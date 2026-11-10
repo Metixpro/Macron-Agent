@@ -35,6 +35,7 @@ type Machine struct {
 	touched map[string]time.Time
 	active  map[string]int
 	shells  map[string]*shell
+	guarded map[string]bool
 
 	shellStart sync.Mutex
 	reaper     sync.Once

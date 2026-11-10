@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,12 +39,27 @@ func (b *Bot) newCommandGate() *cmdgate.Gate {
 		SelfNames:    []string{"macron", config.ServiceName()},
 		SelfDB:       []string{config.HomePath(config.FileDB)},
 		SelfPID:      os.Getpid(),
+		SelfHome:     config.Home(),
+		SelfSecrets:  ownSecrets(),
+		WorkDir:      b.app.Machine.BaseDir,
 	}
+	env.UserHome, _ = os.UserHomeDir()
 	g := cmdgate.New(env, os.Getenv("MACRON_YOLO") == "1")
 	g.Policy = b.gatePolicy
 	g.Store = &gateStore{b: b}
 	g.Guardian = b.guardian
 	return g
+}
+
+// ownSecrets are the files that hold the agent's keys, owners and settings.
+func ownSecrets() []string {
+	out := []string{config.HomePath(config.FileConfig), config.HomePath(config.FileSecret)}
+	if p := config.EnvFilePath(); p != out[0] {
+		if abs, err := filepath.Abs(p); err == nil {
+			out = append(out, filepath.Clean(abs))
+		}
+	}
+	return out
 }
 
 func (b *Bot) gatePolicy() cmdgate.Policy {

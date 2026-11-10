@@ -414,6 +414,9 @@ func (r *Registry) writeFile(ctx context.Context, sessionID string, args map[str
 	if len(content) > maxWriteBytes {
 		return fmt.Sprintf("error: content is %s, larger than the 2 MB limit", humanSize(int64(len(content)))), nil
 	}
+	if refused := r.gatePath(ctx, sessionID, "write_file", name); refused != "" {
+		return refused, nil
+	}
 	data := []byte(content)
 	if boolArg(args, "append") {
 		old, truncated, err := r.Machine.ReadFile(sessionID, name, maxAppendBytes)

@@ -29,6 +29,30 @@ func (r *Registry) gateCommand(ctx context.Context, sessionID, cmd string) strin
 	return ""
 }
 
+// gateCode judges run_code in a language other than bash.
+func (r *Registry) gateCode(ctx context.Context, sessionID, language, code string) string {
+	if r.Gate == nil {
+		return ""
+	}
+	if v := r.Gate.CheckCode(ctx, sessionID, language, code); !v.Allow {
+		return v.Message
+	}
+	return ""
+}
+
+// gatePath judges a file tool that writes outside the work folder the way the
+// gate would judge a shell command writing the same file.
+func (r *Registry) gatePath(ctx context.Context, sessionID, tool, name string) string {
+	if r.Gate == nil {
+		return ""
+	}
+	abs, inside, err := r.Machine.HostPath(sessionID, name)
+	if err != nil || inside {
+		return ""
+	}
+	return r.gateCommand(ctx, sessionID, "tee -- "+shellQuote(abs)+" # "+tool)
+}
+
 func (r *Registry) checkpoint(ctx context.Context, sessionID string, paths []string) string {
 	if err := os.MkdirAll(r.CheckpointDir, 0o700); err != nil {
 		return "checkpoint: " + err.Error()
