@@ -65,7 +65,7 @@ func (r *activeRun) describePendingAttachment(m *telegram.Message, text string) 
 	return false
 }
 
-func messageJob(j *store.OpenJob, m *telegram.Message, text string, explicit bool) (string, bool) {
+func messageJob(j *store.OpenJob, m *telegram.Message, text string, explicit, recorded bool) (string, bool) {
 	if j == nil {
 		return "", false
 	}
@@ -75,5 +75,5 @@ func messageJob(j *store.OpenJob, m *telegram.Message, text string, explicit boo
 			return "", false
 		}
 	}
-	return jobOf(j, m.Chat.ID, text, explicit || (reply != nil && reply.MessageID == j.MsgID))
+	return jobOf(j, m.Chat.ID, text, explicit || (reply != nil && reply.MessageID == j.MsgID), recorded)
 }

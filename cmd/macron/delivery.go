@@ -215,6 +215,20 @@ func (t *fileTracker) made(unsent ...string) []string {
 	return out
 }
 
+func (t *fileTracker) changed() []string {
+	t.mu.Lock()
+	list := append(append([]string(nil), t.auto...), t.scratch...)
+	t.mu.Unlock()
+	var out []string
+	for _, n := range list {
+		if fi, err := t.sb.Stat(t.session, n); err == nil && fi.Mode().IsRegular() {
+			out = appendNew(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (t *fileTracker) exists(name string) bool {
 	fi, err := t.sb.Stat(t.session, name)
 	return err == nil && fi.Mode().IsRegular() && fi.Size() > 0

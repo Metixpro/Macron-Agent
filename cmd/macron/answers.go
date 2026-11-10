@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
@@ -15,8 +16,27 @@ func fileNote(delivered []string) string {
 	return "<files_sent>" + strings.Join(delivered, ", ") + "</files_sent>"
 }
 
-func workNote(notes string) string {
-	if notes = strings.TrimSpace(notes); notes == "" {
+const notedFiles = 40
+
+func lastLogged(history []llm.Message) bool {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == "assistant" {
+			return strings.Contains(history[i].Content, agent.WorkLogMark)
+		}
+	}
+	return false
+}
+
+func workNote(notes string, files []string) string {
+	notes = strings.TrimSpace(notes)
+	if len(files) > 0 {
+		list := files
+		if len(list) > notedFiles {
+			list = append(list[:notedFiles:notedFiles], fmt.Sprintf("+%d more", len(files)-notedFiles))
+		}
+		notes = strings.TrimSpace("Files changed: " + strings.Join(list, ", ") + "\n" + notes)
+	}
+	if notes == "" {
 		return ""
 	}
 	return "<work_notes>\n" + notes + "\n</work_notes>"

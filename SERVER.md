@@ -395,3 +395,27 @@ Also in this release:
 
 The main branch no longer includes test files or explanatory source comments.
 Build directives and module dependency annotations remain where required.
+
+### Next release: exact work records and cached history
+
+Each reply now keeps an exact record of its work for the next request: the files
+it changed, and every step with its outcome (a command's exit code and last output
+line, what an edit replaced, what a download saved, a syntax warning). Look-ups are
+grouped and a long job is shortened, never its file list. "Continue" and follow-up
+requests build on this record instead of listing folders and reading files again to
+find out what was done. An unfinished job points at its record instead of repeating
+it; an in-job context summary carries the exact step record too.
+
+Only the latest few replies keep their full steps; older ones keep their file list,
+thinned three at a time so the cached part of the request stays the same between
+turns. The long-term memory summary keeps a "Work so far" section with paths,
+servers and what is left.
+
+`bash_execute` returns a terminal transcript (`$ command`, output, `[stderr]`,
+`[exit N · time]`) like `run_code`, instead of indented JSON: fewer tokens, and
+failed commands are now marked as failed in the live card and the tool statistics.
+
+With Anthropic, the end of the conversation history is a cache breakpoint, so a new
+request reads the earlier conversation from the cache. Through OpenRouter, Claude
+models get the same cache markers.
+

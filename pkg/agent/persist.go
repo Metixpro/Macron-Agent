@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
 const noticePersist = "[system notice] Don't give up yet: a step failed, but there is budget left. Before answering, try another real " +
@@ -14,6 +16,9 @@ const noticePersist = "[system notice] Don't give up yet: a step failed, but the
 var toolErrorRe = regexp.MustCompile(`^[a-z][a-z _-]{0,30} error: `)
 
 func failedOutput(result string) bool {
+	if strings.HasPrefix(result, tools.TranscriptPrefix) {
+		return strings.Contains(result, "\n[could not run: ")
+	}
 	l := strings.ToLower(firstLine(result))
 	if strings.HasPrefix(l, "error") || toolErrorRe.MatchString(l) {
 		return true

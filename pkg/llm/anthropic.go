@@ -40,6 +40,13 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 		msgs = append(msgs, anthropicMsg{Role: role, Content: blocks})
 	}
 	leading := true
+	markLast := func() {
+		if n := len(msgs); n > 0 {
+			if blocks := msgs[n-1].Content; len(blocks) > 0 {
+				blocks[len(blocks)-1]["cache_control"] = ephemeral
+			}
+		}
+	}
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
@@ -68,6 +75,9 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 				blocks = append(blocks, map[string]any{"type": "tool_use", "id": toolID(tc.ID), "name": tc.Function.Name, "input": toolInput(tc.Function.Arguments)})
 			}
 			add("assistant", blocks...)
+			if m.Cache {
+				markLast()
+			}
 		case "tool":
 			leading = false
 			content := m.Content
@@ -78,6 +88,9 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 		default:
 			leading = false
 			add("user", userBlocks(m)...)
+			if m.Cache {
+				markLast()
+			}
 		}
 	}
 	if len(msgs) == 0 || msgs[0].Role != "user" {

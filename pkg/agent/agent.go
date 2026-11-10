@@ -254,7 +254,7 @@ const (
 Context you receive:
 - Right before the user's message: the current date and time, the budget of this request, and maybe a [context] note on the user (name, username, bio, language), the files in their workspace (newest first; use their exact names), the message they replied to, and photos or files they sent. Use it naturally; don't recite it or mention that you received it.
 - A [memory] note may summarize your earlier conversation with this user. Treat it as what you remember.
-- <work_notes> at the end of your earlier replies are the system's record of the tools you used for them and what came back (files made, links found, errors). Use them to understand follow-ups and to go on with earlier work; the user never sees them, and you never write one yourself. A reply of yours with no <work_notes> ran no tools: nothing it says it did was done. When the user asks why something was not done, read that reply's <work_notes> and say only what they show (no record: you did not run it, so say so and do it now); never invent a cause.
+- <work_notes> at the end of your earlier replies are the system's exact record of that reply's work: the files it changed and each step with its outcome (a command's exit code and last output line, what an edit replaced, what a download saved). They are complete as of that reply, so build on them directly: don't re-list folders, re-read files or re-run checks just to learn what you did or whether it worked; open a file only when the next change needs its exact current content, and look again only at what may have changed since (the user says they changed it, or a step failed). Older replies keep only their file list. The user never sees these notes, and you never write one yourself. A reply of yours with no <work_notes> ran no tools: nothing it says it did was done. When the user asks why something was not done, read that reply's <work_notes> and say only what they show (no record: you did not run it, so say so and do it now); never invent a cause.
 `
 
 	safetyNote = `
@@ -665,10 +665,7 @@ type Result struct {
 	Notes string
 }
 
-const (
-	noteLines = 12
-	noteChars = 1600
-)
+const noteRunes = 3600
 
 func (a *Agent) Run(ctx context.Context, sessionID, userPrompt string, history []llm.Message, listener *EventListener) (string, error) {
 	res, err := a.Do(ctx, Request{
@@ -688,6 +685,16 @@ const (
 	historyMaxMessages = 40
 	historyMaxChars    = 12000
 )
+
+func (r *Result) Actions() int {
+	n := 0
+	for name, c := range r.Calls {
+		if name != ToolPlan {
+			n += c
+		}
+	}
+	return n
+}
 
 func (a *Agent) Do(ctx context.Context, req Request) (*Result, error) {
 	res, err := a.do(ctx, req)
@@ -797,7 +804,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		if out != nil {
 			out.Plan = plan.get()
 			if out.Notes == "" && work.len() > 0 {
-				out.Notes = work.brief(noteLines, noteChars)
+				out.Notes = strings.TrimSpace(work.record(noteRunes) + "\n" + planBrief(plan.get()))
 			}
 			if p := plan.String(); p != "" && out.WorkLog != "" && !strings.HasPrefix(out.WorkLog, "Plan:") {
 				out.WorkLog = p + "\n\nSteps taken:\n" + out.WorkLog
@@ -869,7 +876,11 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			messages = append(messages, llm.Message{Role: "system", Content: "[memory] What you remember from earlier in this conversation:\n" + m})
 		}
 		lay := layout{histFrom: len(messages)}
-		messages = append(messages, fitHistory(SanitizeHistory(req.History, 0, 0), keep)...)
+		hist := fitHistory(thinNotes(SanitizeHistory(req.History, 0, 0), notesKept), keep)
+		if n := len(hist); n > 0 {
+			hist[n-1].Cache = true
+		}
+		messages = append(messages, hist...)
 		lay.histTo = len(messages)
 		messages = append(messages, llm.Message{Role: "system", Content: now})
 		lay.input = len(messages)
@@ -1396,7 +1407,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			}
 			res.Extended++
 			log.Printf("agent: session %s is making progress; its budget grows by %d rounds to %d (extension %d)", req.SessionID, by, maxSteps, res.Extended)
-			messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeExtended, by, res.Extended, work.brief(12, 1500))})
+			messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeExtended, by, res.Extended, work.record(1500))})
 		}
 		if failures >= 2 {
 			escalate("steps failed")

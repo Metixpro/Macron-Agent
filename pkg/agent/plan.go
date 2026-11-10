@@ -64,6 +64,21 @@ func (p *planState) String() string {
 	return sb.String()
 }
 
+func planBrief(items []PlanItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, len(items))
+	for i, it := range items {
+		mark := map[string]string{PlanDone: "[x]", PlanInProgress: "[>]"}[it.Status]
+		if mark == "" {
+			mark = "[ ]"
+		}
+		parts[i] = mark + " " + textutil.TruncateRunes(textutil.OneLine(it.Text), 70, "…")
+	}
+	return "Plan: " + strings.Join(parts, " · ")
+}
+
 func (p *planState) progress() (done, total int, current string) {
 	for _, it := range p.get() {
 		switch it.Status {

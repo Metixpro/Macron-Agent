@@ -259,8 +259,9 @@ Update the memory with the new part of the conversation below.
 
 Rules:
 - Keep: facts about the user (name, preferences, projects, decisions, recurring requests), open tasks and promises, important results (file names, links, numbers) and the conversation's language and tone.
+- Keep the work record under a "Work so far" heading: for each project or job, its folder and the files the assistant made or changed (exact paths), what they are for, servers or background jobs it started (command, port), and where it stands (what works, what failed, what is left). The <work_notes> blocks are the exact record of the assistant's tool work: condense them into this, and never drop a path, port or command that a later request may build on.
 - Drop small talk, repeated content and anything already finished that won't matter later.
-- Write compact bullet points in the user's language (Persian if the conversation is Persian). At most about %d words.
+- Write compact bullet points in the user's language (Persian if the conversation is Persian); paths, commands and code names stay as written. At most about %d words.
 - Output only the updated memory, no introduction.
 
 Current memory:

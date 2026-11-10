@@ -342,7 +342,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if track == nil && !opt.noMemory && !guest && !detached && !smallTalk {
 		request, base := in.memoryText, ""
 		unfinished := b.unfinishedJob(uid)
-		note, cont := messageJob(unfinished, m, text, b.takeResume(uid))
+		note, cont := messageJob(unfinished, m, text, b.takeResume(uid), lastLogged(mc.History))
 		if note != "" {
 			in.about = strings.TrimSpace(in.about + "\n" + note)
 		}
@@ -559,7 +559,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			html = l.t(textCancelled)
 			goOn(store.JobStopped)
 			if worked {
-				html = l.f(textStoppedWork, l.num(strings.Count(res.WorkLog, "\n")+1))
+				html = l.f(textStoppedWork, l.num(max(res.Actions(), 1)))
 			} else {
 				kb = nil
 			}
@@ -612,7 +612,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 			}
 		}
 		if unfinished != "" && !opt.noMemory {
-			b.rememberUnfinished(uid, in.memoryText, run.memo(), unfinished, res, delivered)
+			b.rememberUnfinished(uid, in.memoryText, run.memo(), unfinished, res, delivered, files.changed())
 		}
 		refund = refund && !run.stopped.Load() && len(delivered) == 0
 		return promptOutcome{}, err
@@ -686,9 +686,11 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		stored += "\n\n" + note
 	}
 	if res.Partial && res.WorkLog != "" {
-
-		stored += "\n\n[work log before stopping — the job is not finished]\n" + res.WorkLog
-	} else if note := workNote(res.Notes); note != "" {
+		stored += "\n\n" + agent.WorkLogMark + "\n" + res.WorkLog
+		if changed := files.changed(); len(changed) > 0 {
+			stored += "\nFiles changed: " + strings.Join(changed, ", ")
+		}
+	} else if note := workNote(res.Notes, files.changed()); note != "" {
 		stored += "\n\n" + note
 	}
 	if asked != "" {
@@ -722,7 +724,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	return out, nil
 }
 
-func (b *Bot) rememberUnfinished(uid int64, asked, added, reason string, res *agent.Result, delivered []string) {
+func (b *Bot) rememberUnfinished(uid int64, asked, added, reason string, res *agent.Result, delivered, changed []string) {
 	userTurn := asked
 	if added != "" {
 		userTurn += "\n\n[messages the user sent while I was working on it]\n" + added
@@ -732,7 +734,10 @@ func (b *Bot) rememberUnfinished(uid int64, asked, added, reason string, res *ag
 		stored += "\n\n" + note
 	}
 	if res != nil && res.WorkLog != "" {
-		stored += "\n\n[work log before stopping — the job is not finished]\n" + b.redact(res.WorkLog)
+		stored += "\n\n" + agent.WorkLogMark + "\n" + b.redact(res.WorkLog)
+		if len(changed) > 0 {
+			stored += "\nFiles changed: " + strings.Join(changed, ", ")
+		}
 	}
 	ctx, cancel := b.memCtx()
 	defer cancel()

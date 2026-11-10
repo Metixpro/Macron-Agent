@@ -285,15 +285,13 @@ const TranscriptPrefix = "$ "
 func terminalTranscript(cmd string, res *machine.ExecutionResult, hints bool) string {
 	var sb strings.Builder
 	sb.WriteString(TranscriptPrefix + cmd + "\n")
-	out := res.Stdout
-	if res.Stderr != "" {
-		out = strings.TrimRight(out, "\n")
+	out := strings.TrimRight(res.Stdout, "\n")
+	if errOut := strings.TrimRight(res.Stderr, "\n"); errOut != "" {
 		if out != "" {
 			out += "\n"
 		}
-		out += res.Stderr
+		out += "[stderr]\n" + errOut
 	}
-	out = strings.TrimRight(out, "\n")
 	if out != "" {
 		sb.WriteString(out + "\n")
 	}

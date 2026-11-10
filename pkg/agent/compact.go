@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -35,6 +36,8 @@ const (
 )
 
 const summaryPrefix = "[context summary]"
+
+const compactRecordRunes = 2500
 
 var contextWindows = map[string]int{
 	"claude-fable": 1000000, "claude-opus-5": 1000000, "claude-sonnet-5": 1000000, "claude-opus-4-6": 1000000, "claude-sonnet-4-6": 1000000,
@@ -254,6 +257,91 @@ func historyCap(window, kept int) int {
 	return min(kept*3/2, FillHistoryTokens(window))
 }
 
+const (
+	WorkLogMark = "[work log before stopping — the job is not finished]"
+	notesKept   = 3
+	notesBatch  = 3
+)
+
+var notesRe = regexp.MustCompile(`(?s)<work_notes>\n?(.*?)\n?</work_notes>`)
+
+func noted(m llm.Message) (notes, logged bool) {
+	if m.Role != "assistant" {
+		return false, false
+	}
+	return strings.Contains(m.Content, "<work_notes>"), strings.Contains(m.Content, WorkLogMark)
+}
+
+func thinNotes(history []llm.Message, keep int) []llm.Message {
+	total := 0
+	for _, m := range history {
+		if n, l := noted(m); n || l {
+			total++
+		}
+	}
+	thin := max(total-keep, 0) / notesBatch * notesBatch
+	for i := range history {
+		if thin == 0 {
+			break
+		}
+		m := &history[i]
+		notes, logged := noted(*m)
+		if !notes && !logged {
+			continue
+		}
+		thin--
+		if notes {
+			m.Content = notesRe.ReplaceAllStringFunc(m.Content, func(block string) string {
+				return "<work_notes>\n" + olderNotes(notesRe.FindStringSubmatch(block)[1]) + "\n</work_notes>"
+			})
+		}
+		if at := strings.Index(m.Content, WorkLogMark); logged && at >= 0 {
+			m.Content = m.Content[:at] + WorkLogMark + "\n" + olderNotes(m.Content[at+len(WorkLogMark):])
+		}
+	}
+	return history
+}
+
+func olderNotes(body string) string {
+	var keep []string
+	steps := 0
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case line == "" || strings.HasPrefix(line, "(") || line == "Plan:" || line == "Steps taken:" || strings.HasPrefix(line, "[x] "):
+		case strings.HasPrefix(line, "[ ] ") || strings.HasPrefix(line, "[>] "):
+			keep = append(keep, line)
+		case strings.HasPrefix(line, "Files changed: "):
+			keep = append([]string{line}, keep...)
+		case strings.HasPrefix(line, "Plan: "):
+			if strings.Contains(line, "[ ]") || strings.Contains(line, "[>]") {
+				keep = append(keep, line)
+			}
+		case strings.HasPrefix(line, "… ") || strings.HasPrefix(line, "..."):
+			if n := leadingNumber(strings.TrimLeft(line, "… .")); n > 0 {
+				steps += n
+			}
+		default:
+			steps++
+		}
+	}
+	if steps > 0 {
+		keep = append(keep, fmt.Sprintf("(%d steps; their details are kept only for the latest replies)", steps))
+	}
+	return strings.Join(keep, "\n")
+}
+
+func leadingNumber(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
+}
+
 func fitHistory(history []llm.Message, budget int) []llm.Message {
 	total := estimateTokens(history)
 	dropped := 0
@@ -305,7 +393,7 @@ The user's request in one or two lines, and what "done" looks like.
 Constraints, corrections and choices the user gave (quote short corrections).
 
 ## Completed Actions
-A numbered list: action, target, outcome [tool]. Example: 3. DOWNLOAD song.mp3 from YouTube — 4.1 MB, ok [download_media_ytdlp]
+Only the milestones, one line each (the exact step-by-step record is attached to your summary separately).
 
 ## Active State
 Files created or changed in the workspace (one line each), the current approach, anything still running.
@@ -359,15 +447,17 @@ func (a *Agent) compact(ctx context.Context, messages []llm.Message, lay layout,
 	if err == nil {
 		summary = strings.TrimSpace(resp.Message.Content)
 	}
-	if summary == "" {
-		if ctx.Err() != nil {
-			return messages, lay, false
-		}
+	switch {
+	case summary != "" && work.len() > 0:
+		summary += "\n\n## Exact Step Record\n" + work.record(compactRecordRunes)
+	case summary == "" && ctx.Err() != nil:
+		return messages, lay, false
+	case summary == "":
 		log.Printf("agent: the compaction summary failed (%v); keeping the work log instead", err)
 		summary = "## Completed Actions\n" + work.String() + "\n\n(The detailed summary could not be written; check the workspace files for details.)"
 	}
 	note := llm.Message{Role: "user", Content: summaryPrefix + " The earlier conversation and steps of this job were folded into this summary to free up room. " +
-		"Go on from it and from the recent steps after it; check workspace files instead of guessing details that are not here.\n\n" + summary}
+		"Go on from it and from the recent steps after it, without redoing what it records; read a file only when the next step needs details that are not here.\n\n" + summary}
 	out := make([]llm.Message, 0, lay.histFrom+input-lay.histTo+2+len(messages)-start)
 	out = append(out, messages[:lay.histFrom]...)
 	out = append(out, messages[lay.histTo:input+1]...)

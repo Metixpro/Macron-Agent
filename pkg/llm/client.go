@@ -175,7 +175,10 @@ type Message struct {
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
 	Name             string     `json:"name,omitempty"`
 
-	Stable int `json:"-"`
+	Stable int  `json:"-"`
+	Cache  bool `json:"-"`
+
+	cacheWire bool
 }
 
 func (m Message) MarshalJSON() ([]byte, error) {
@@ -188,6 +191,21 @@ func (m Message) MarshalJSON() ([]byte, error) {
 	}
 	w := wire{Role: m.Role, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID, Name: m.Name}
 	switch {
+	case m.cacheWire:
+		parts := m.Parts
+		if len(parts) == 0 {
+			parts = []Part{TextPart(m.Content)}
+		}
+		wire := make([]map[string]any, 0, len(parts))
+		for _, p := range parts {
+			if p.Type == "image_url" {
+				wire = append(wire, map[string]any{"type": "image_url", "image_url": map[string]string{"url": p.ImageURL}})
+			} else {
+				wire = append(wire, map[string]any{"type": "text", "text": p.Text})
+			}
+		}
+		wire[len(wire)-1]["cache_control"] = ephemeral
+		w.Content = wire
 	case len(m.Parts) > 0:
 		parts := make([]map[string]any, 0, len(m.Parts))
 		for _, p := range m.Parts {
@@ -629,7 +647,45 @@ func (c *Client) encode(body ChatRequest, req Request) ([]byte, error) {
 		body.MaxCompletionTokens, body.MaxTokens = body.MaxTokens, 0
 	}
 	body.ReasoningEffort = c.wireEffort(req)
+	if c.cacheMarks() {
+		body.Messages = markCache(body.Messages)
+	}
 	return json.Marshal(body)
+}
+
+func (c *Client) cacheMarks() bool {
+	u, err := url.Parse(c.BaseURL)
+	if err != nil || !strings.HasSuffix(strings.ToLower(u.Hostname()), "openrouter.ai") {
+		return false
+	}
+	m := strings.ToLower(c.Model)
+	return strings.Contains(m, "claude") || strings.HasPrefix(m, "anthropic/")
+}
+
+func markCache(msgs []Message) []Message {
+	out := append([]Message(nil), msgs...)
+	marks := 0
+	textual := func(m Message) bool { return len(m.Parts) > 0 || strings.TrimSpace(m.Content) != "" }
+	mark := func(i int) {
+		if i >= 0 && i < len(out) && !out[i].cacheWire && textual(out[i]) && marks < 4 {
+			out[i].cacheWire = true
+			marks++
+		}
+	}
+	if len(out) > 0 && out[0].Role == "system" {
+		mark(0)
+	}
+	for i := range out {
+		if out[i].Cache {
+			mark(i)
+		}
+	}
+	last := len(out) - 1
+	for last > 0 && !textual(out[last]) {
+		last--
+	}
+	mark(last)
+	return out
 }
 
 func reasoningModel(model string) bool {

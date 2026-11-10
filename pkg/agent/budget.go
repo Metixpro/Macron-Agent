@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/llm"
-	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
@@ -86,54 +85,35 @@ const (
 
 type workLog struct {
 	mu    sync.Mutex
-	lines []string
+	steps []step
 }
 
 func (w *workLog) add(name, args, result string) {
-	line := fmt.Sprintf("%s(%s) → %s", name, textutil.ArgPreview(args, 80),
-		textutil.TruncateRunes(textutil.OneLine(firstLine(result)), 100, "…"))
+	s := describeStep(name, args, result)
 	w.mu.Lock()
-	w.lines = append(w.lines, line)
+	w.steps = append(w.steps, s)
 	w.mu.Unlock()
 }
 
-func (w *workLog) String() string {
+func (w *workLog) snapshot() []step {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	lines := w.lines
-	if len(lines) > 40 {
-		lines = append([]string{fmt.Sprintf("… %d earlier steps", len(lines)-40)}, lines[len(lines)-40:]...)
-	}
-	var sb strings.Builder
-	for i, l := range lines {
-		fmt.Fprintf(&sb, "%d. %s\n", i+1, l)
-	}
-	return strings.TrimSpace(sb.String())
+	return append([]step(nil), w.steps...)
 }
 
-func (w *workLog) brief(lines, chars int) string {
-	w.mu.Lock()
-	all := w.lines
-	w.mu.Unlock()
-	skipped := 0
-	if len(all) > lines {
-		skipped, all = len(all)-lines, all[len(all)-lines:]
-	}
-	var sb strings.Builder
-	if skipped > 0 {
-		fmt.Fprintf(&sb, "… %d earlier steps\n", skipped)
-	}
-	for _, l := range all {
-		sb.WriteString(l + "\n")
-	}
-	return textutil.TruncateRunes(strings.TrimSpace(sb.String()), chars, "…")
+func (w *workLog) String() string { return w.record(workLogRunes) }
+
+func (w *workLog) record(budget int) string {
+	return fitEntries(groupSteps(w.snapshot()), budget)
 }
 
 func (w *workLog) len() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return len(w.lines)
+	return len(w.steps)
 }
+
+const workLogRunes = 6000
 
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)

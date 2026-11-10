@@ -399,10 +399,20 @@ func (r *Registry) bashExecute(ctx context.Context, sessionID string, args map[s
 	timeout := time.Duration(intArg(args, "timeout_seconds", 60, 1, maxBashSeconds)) * time.Second
 	before := r.rootSnapshot(sessionID)
 	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Shell: cmd, Timeout: timeout, Tee: outputTee(ctx), InSession: true})
-	return jsonText(struct {
-		*machine.ExecutionResult
-		NewFiles []string `json:"new_or_changed_files,omitempty"`
-	}{res, r.changedFiles(sessionID, before)}), nil
+	out := terminalTranscript(commandLabel(cmd), res, true)
+	if files := r.changedFiles(sessionID, before); len(files) > 0 {
+		out += "\n[new or changed files in the workspace: " + strings.Join(files, ", ") + "]"
+	}
+	return out, nil
+}
+
+func commandLabel(cmd string) string {
+	lines := strings.Split(strings.TrimSpace(cmd), "\n")
+	label := strings.Join(strings.Fields(lines[0]), " ")
+	if len(lines) > 1 {
+		label += fmt.Sprintf(" … (%d lines)", len(lines))
+	}
+	return textutil.TruncateRunes(label, 120, "…")
 }
 
 func (r *Registry) writeFile(ctx context.Context, sessionID string, args map[string]any) (string, error) {
