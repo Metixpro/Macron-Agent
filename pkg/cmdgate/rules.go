@@ -338,6 +338,7 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					}
 				}
 			}
+			leaks(low, c, add)
 			switch {
 			case low == "rm" || strings.HasPrefix(name, "$"):
 				recursive := hasShort(flags, "rR", "--recursive")
@@ -468,6 +469,8 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 				}
 			case env.self(low):
 				env.selfCommand(flags, ops, add)
+			case low == "git":
+				gitCheck(args, add)
 			case low == "curl" || low == "wget":
 				env.uploadCheck(low, args, c, pl[:ci], add)
 			case interpreter(low):

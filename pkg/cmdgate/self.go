@@ -376,6 +376,12 @@ func AnalyzeCode(code string, env Env) []Finding {
 	if env.dbText(text) {
 		out = append(out, Finding{Level: Dangerous, Rule: "self-data", Reason: "code that opens the agent's own database"})
 	}
+	if private(text) {
+		out = append(out, Finding{Level: Dangerous, Rule: "secret-file", Reason: "code that touches a private key or credentials file"})
+	}
+	if metadataRe.MatchString(text) {
+		out = append(out, Finding{Level: Dangerous, Rule: "cloud-metadata", Reason: "code that reaches the cloud metadata service"})
+	}
 	for _, n := range env.SelfNames {
 		if n != "" && selfCall(n).MatchString(text) {
 			out = append(out, Finding{Level: Dangerous, Rule: "self-manage", Reason: "code that runs the agent's own program to manage it"})
