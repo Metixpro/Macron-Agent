@@ -1,4 +1,4 @@
-.PHONY: build release vet lint vuln fmt fmt-check check audit clean
+.PHONY: build release vet test lint vuln fmt fmt-check check audit clean
 
 VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' pkg/app/app.go)
 GOFLAGS_REL := -buildvcs=false -trimpath -ldflags "-s -w"
@@ -24,6 +24,9 @@ release:
 vet:
 	go vet ./...
 
+test:
+	go test ./...
+
 lint:
 	go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
@@ -36,7 +39,7 @@ fmt:
 fmt-check:
 	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
 
-check: fmt-check vet build
+check: fmt-check vet test build
 
 audit: lint vuln
 
