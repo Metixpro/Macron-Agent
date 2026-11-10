@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/guard"
 )
 
 const (
@@ -155,7 +157,12 @@ func (r *Registry) marketSnapshot(ctx context.Context, keys []string) (*marketSn
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	bonbast := make(chan *marketSnapshot, 1)
-	go func() { bonbast <- r.bonbastRates(ctx) }()
+	go func() {
+		var rates *marketSnapshot
+		defer func() { bonbast <- rates }()
+		defer guard.Recover("the bonbast rates")
+		rates = r.bonbastRates(ctx)
+	}()
 	board := r.tgjuRates(ctx)
 	if board == nil || !board.has(keys) {
 		if b := <-bonbast; b != nil {

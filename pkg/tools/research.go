@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
@@ -36,6 +37,7 @@ func (r *Registry) RunDeepResearch(ctx context.Context, sessionID, topic string,
 		wg.Add(1)
 		go func(query string) {
 			defer wg.Done()
+			defer guard.Recover("a research search")
 			results, err := r.Search.Search(ctx, query, 4)
 			if err != nil {
 				return
@@ -55,6 +57,7 @@ func (r *Registry) RunDeepResearch(ctx context.Context, sessionID, topic string,
 				inner.Add(1)
 				go func(sr struct{ Title, URL string }) {
 					defer inner.Done()
+					defer guard.Recover("reading a research source")
 					sem <- struct{}{}
 					defer func() { <-sem }()
 					text, err := r.Search.FetchPage(ctx, sr.URL, 4000)

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/netclient"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
@@ -422,6 +423,7 @@ func (e *Engine) SearchPersianMusic(ctx context.Context, query string) ([]MusicR
 		wg.Add(1)
 		go func(i int, res SearchResult) {
 			defer wg.Done()
+			defer guard.Recover("reading a music page")
 			page, err := e.Fetch(ctx, res.URL)
 			if err != nil {
 				return

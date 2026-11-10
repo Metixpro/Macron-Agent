@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/idna"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
@@ -161,6 +162,7 @@ func (r *Registry) tomanRate(ctx context.Context) (float64, string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer guard.Recover("an exchange-rate source")
 			rates[i] = s.get()
 		}()
 	}
@@ -204,6 +206,7 @@ func (r *Registry) cryptoPrice(ctx context.Context, _ string, args map[string]an
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer guard.Recover("the toman rate")
 		tctx, tcancel := context.WithTimeout(ctx, 8*time.Second)
 		defer tcancel()
 		toman, tomanSource = r.tomanRate(tctx)
@@ -212,6 +215,7 @@ func (r *Registry) cryptoPrice(ctx context.Context, _ string, args map[string]an
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer guard.Recover("a coin price")
 			prices[i] = r.coinPriceOf(ctx, sym)
 		}()
 	}

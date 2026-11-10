@@ -19,6 +19,7 @@ import (
 
 	xhtml "golang.org/x/net/html"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
@@ -252,7 +253,12 @@ func (e *Engine) SearchWith(ctx context.Context, query string, opt SearchOptions
 	defer cancelAll()
 	answer := make(chan *QuickAnswer, 1)
 	if opt.Answer && !opt.News {
-		go func() { answer <- e.quickAnswer(ectx, query) }()
+		go func() {
+			var quick *QuickAnswer
+			defer func() { answer <- quick }()
+			defer guard.Recover("the quick answer")
+			quick = e.quickAnswer(ectx, query)
+		}()
 	} else {
 		answer <- nil
 	}
@@ -261,14 +267,17 @@ func (e *Engine) SearchWith(ctx context.Context, query string, opt SearchOptions
 		go func() {
 			c, cancel := context.WithTimeout(ectx, engineLimit)
 			defer cancel()
-			res, err := en.run(c, query, opt, opt.Limit+5)
+			var res []SearchResult
+			var err error
+			defer func() { got <- engineResult{en, res, err} }()
+			defer guard.Failed("the search engine "+en.name, &err)
+			res, err = en.run(c, query, opt, opt.Limit+5)
 			if err != nil && ectx.Err() != nil && ctx.Err() == nil {
 				err = context.Canceled
 			}
 			if err != nil && !errors.Is(err, context.Canceled) {
 				e.health.note(en.name, err, time.Now())
 			}
-			got <- engineResult{en, res, err}
 		}()
 	}
 	var lists []engineResult

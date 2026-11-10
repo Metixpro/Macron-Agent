@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
@@ -608,6 +609,7 @@ func (s *mcpSession) close() {
 }
 
 func (m *Manager) connect(p *plugin) {
+	defer guard.Recover("connecting an MCP server")
 	ctx, cancel := context.WithTimeout(m.life, mcpStartTimeout)
 	defer cancel()
 	_ = m.reconnect(ctx, p)

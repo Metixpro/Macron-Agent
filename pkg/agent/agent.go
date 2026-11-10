@@ -937,12 +937,14 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		last.Store(time.Now().UnixNano())
 		touch = func() { last.Store(time.Now().UnixNano()) }
 		l = l.touching(touch)
+		// The watchdog keeps its own copy: escalate() below reassigns ctx while this goroutine runs.
+		idleCtx := ctx
 		go func() {
 			tick := time.NewTicker(min(max(req.IdleTimeout/8, 10*time.Millisecond), 30*time.Second))
 			defer tick.Stop()
 			for {
 				select {
-				case <-ctx.Done():
+				case <-idleCtx.Done():
 					return
 				case <-tick.C:
 					if time.Since(time.Unix(0, last.Load())) > req.IdleTimeout {
@@ -1447,6 +1449,13 @@ func (a *Agent) runTools(ctx context.Context, sessionID string, calls []llm.Tool
 	l *EventListener) []toolOut {
 	outs := make([]toolOut, len(calls))
 	run := func(i int) {
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("agent: the call of %q panicked: %v\n%s", calls[i].Function.Name, p, debug.Stack())
+				outs[i] = toolOut{msg: llm.Message{Role: "tool", ToolCallID: calls[i].ID, Name: calls[i].Function.Name,
+					Content: "Error: the tool crashed unexpectedly. Use another approach."}}
+			}
+		}()
 		outs[i].msg, outs[i].images, outs[i].end, outs[i].refused = a.runTool(ctx, sessionID, calls[i], local, defs, l)
 		outs[i].stop = strings.Contains(outs[i].msg.Content, strings.TrimSpace(cmdgate.HardStop))
 	}

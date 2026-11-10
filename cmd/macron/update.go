@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/app"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/Metixpro/macron-agent/pkg/updater"
@@ -66,6 +67,7 @@ func (b *Bot) handleUpdateCallback(ctx context.Context, q *telegram.CallbackQuer
 	_ = b.api.EditMarkup(ctx, chatID, msgID, nil)
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("update")
 		defer b.wg.Done()
 		defer b.updating.Store(false)
 		uctx, cancel := b.ctx(10 * time.Minute)

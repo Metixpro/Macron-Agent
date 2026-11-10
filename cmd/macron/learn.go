@@ -66,6 +66,7 @@ func (b *Bot) learnFrom(uid int64, res *agent.Result) {
 	trail, used := res.Trail, append([]string(nil), res.ToolsUsed...)
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("learn")
 		defer b.wg.Done()
 		ctx, cancel := b.ctx(2 * time.Minute)
 		defer cancel()

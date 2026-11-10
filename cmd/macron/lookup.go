@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
@@ -178,6 +179,7 @@ func (b *Bot) lookupChat(ctx context.Context, sb *strings.Builder, id int64, kno
 		go func() { defer wg.Done(); info, infoErr = b.api.GetChat(ctx, id) }()
 	}
 	go func() {
+		defer guard.Recover("lookup")
 		defer wg.Done()
 		if n, err := b.api.GetChatMemberCount(ctx, id); err == nil {
 			members = n

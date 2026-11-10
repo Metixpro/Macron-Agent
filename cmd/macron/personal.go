@@ -9,6 +9,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
@@ -55,6 +56,7 @@ func (b *Bot) allowedUpdate(u telegram.Update) bool {
 		case "member", "administrator":
 			b.wg.Add(1)
 			go func() {
+				defer guard.Recover("personal")
 				defer b.wg.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()

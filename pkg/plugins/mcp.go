@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
@@ -645,6 +646,7 @@ func startSSE(ctx context.Context, client *http.Client, raw string, headers map[
 	endpoint := make(chan string, 1)
 	go func() {
 		defer close(c.done)
+		defer guard.Recover("an MCP server's event stream")
 		err := readSSE(resp.Body, func(event, data string) bool {
 			switch event {
 			case "endpoint":

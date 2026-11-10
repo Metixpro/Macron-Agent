@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/netclient"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
@@ -34,6 +35,7 @@ func (e *Engine) AddPassages(ctx context.Context, query string, results []Search
 		wg.Add(1)
 		go func(r *SearchResult) {
 			defer wg.Done()
+			defer guard.Recover("reading a search result")
 			u, err := netclient.ValidateURL(r.URL)
 			if err != nil {
 				return

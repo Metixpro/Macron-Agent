@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
@@ -252,6 +253,7 @@ func (c *Client) advise(ctx context.Context, msgs []llm.Message) []Advice {
 		wg.Add(1)
 		go func(i int, s Slot) {
 			defer wg.Done()
+			defer guard.Failed("a model's turn in the vote", &out[i].Err)
 			out[i].Slot = s
 			resp, err := c.Call(ctx, s, llm.Request{Messages: view, MaxTokens: 2000})
 			switch {

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/Metixpro/macron-agent/pkg/tools"
@@ -164,6 +165,7 @@ func (b *Bot) testCookies(ctx context.Context, l lang) string {
 	for i, c := range tested {
 		wg.Add(1)
 		go func() {
+			defer guard.Recover("downloader_admin")
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()

@@ -17,6 +17,7 @@ func (b *Bot) alertModelDown(uid int64, err error) {
 		return
 	}
 	go func() {
+		defer guard.Recover("modeldown")
 		ctx, cancel := b.ctx(15 * time.Second)
 		defer cancel()
 		l := b.lang(b.firstOwner())
