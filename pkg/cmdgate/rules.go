@@ -47,7 +47,7 @@ func Analyze(command string, env Env) []Finding {
 		out = append(out, Finding{Level: Hardline, Rule: "fork-bomb", Reason: "a fork bomb"})
 	}
 	if env.secretText(Clean(command)) {
-		out = append(out, Finding{Level: Hardline, Rule: "self-protect", Reason: "touching the agent's own keys and settings file"})
+		out = append(out, Finding{Level: Dangerous, Rule: "self-keys", Reason: "touching the agent's own keys and settings file"})
 	}
 	if blockDevRedirRe.MatchString(masked) {
 		out = append(out, Finding{Level: Hardline, Rule: "write-block-device", Reason: "writing straight onto a disk device"})
@@ -307,13 +307,13 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 			low := strings.ToLower(name)
 
 			for _, w := range c.Words {
-				if l := env.secretRef(w); l > Safe {
-					add(l, "self-protect", "touching the agent's own keys and settings file", w)
+				if env.secretRef(w) {
+					add(Dangerous, "self-keys", "touching the agent's own keys and settings file", w)
 				}
 			}
 			for _, r := range c.Redirs {
-				if l := env.secretRef(r.Target); l > Safe {
-					add(l, "self-protect", "touching the agent's own keys and settings file", r.Target)
+				if env.secretRef(r.Target) {
+					add(Dangerous, "self-keys", "touching the agent's own keys and settings file", r.Target)
 				}
 				if !strings.Contains(r.Op, ">") {
 					continue
@@ -364,7 +364,7 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 						add(Hardline, "self-protect", "deleting the agent's own database", t)
 					}
 					if recursive && env.homeRef(t) {
-						add(Hardline, "self-protect", "deleting the agent's own home folder", t)
+						add(Dangerous, "self-manage", "deleting the agent's own home folder", t)
 					}
 					if topLevel(t) && target(t) == "" {
 						add(Dangerous, "rm-root-path", "deleting a folder right under /", t)
@@ -394,7 +394,7 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					}
 				}
 				if env.findsSelf(sc.Nested) {
-					add(Hardline, "self-protect", "killing the agent itself")
+					add(Dangerous, "self-manage", "killing the agent itself")
 				}
 				minusOne := false
 				for _, a := range args {
@@ -482,9 +482,9 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					for _, t := range starts {
 						switch {
 						case env.homeRef(t):
-							add(Hardline, "self-protect", "deleting the agent's own home folder", t)
+							add(Dangerous, "self-manage", "deleting the agent's own home folder", t)
 						case target(t) != "":
-							add(Hardline, "find-delete", "deleting everything under a system or home folder", t)
+							add(Dangerous, "find-delete", "deleting everything under a system or home folder", t)
 						case topLevel(t):
 							add(Dangerous, "find-delete", "deleting files under a folder right under /", t)
 						}
@@ -499,9 +499,9 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					for _, src := range ops[:len(ops)-1] {
 						switch {
 						case env.homeRef(src):
-							add(Hardline, "self-protect", "moving the agent's own home folder away", src)
+							add(Dangerous, "self-manage", "moving the agent's own home folder away", src)
 						case target(src) != "":
-							add(Hardline, "mv-system", "moving a system or home folder away", src)
+							add(Dangerous, "mv-system", "moving a system or home folder away", src)
 						}
 					}
 				}

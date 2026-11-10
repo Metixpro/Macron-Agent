@@ -276,8 +276,14 @@ func (g *Gate) decide(ctx context.Context, sessionID, command string, findings [
 			"Report it in your answer so the owner can run it or approve it later.", findings[0].Reason, origin))
 	}
 
+	// What concerns the agent itself (its keys, owners, program) is the owner's call
+	// alone: only they know whether they asked for it, so the guardian is not consulted.
+	ownersCall := false
+	for _, f := range findings {
+		ownersCall = ownersCall || strings.HasPrefix(f.Rule, "self-")
+	}
 	guardianSaid := ""
-	if p.Mode == ModeSmart && g.Guardian != nil {
+	if p.Mode == ModeSmart && g.Guardian != nil && !ownersCall {
 		risk, why, err := g.Guardian(ctx, p.SmartPolicy, command, findings)
 		switch {
 		case err != nil:

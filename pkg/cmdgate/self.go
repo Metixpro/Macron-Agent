@@ -6,10 +6,12 @@ import (
 	"strings"
 )
 
-// This file holds the rules that keep a job away from the agent itself: the files
-// with its keys and owners, its own program, and the ways a fetched instruction
-// could carry data off the machine. They are a deny-list, so they narrow what an
-// injected instruction can do without claiming to be complete.
+// This file holds the rules about the agent itself: the files with its keys and
+// owners, its own program, and the ways a fetched instruction could carry data off
+// the machine. None of them refuses: the agent does whatever its owner asks on
+// their own server, so these only make it ask the owner first (and, like every
+// question, they are skipped with approvals off or /yolo). What they stop is a
+// page or a file talking the agent into taking itself over unnoticed.
 
 func (env Env) expand(w string) string {
 	w = strings.TrimSpace(w)
@@ -55,32 +57,28 @@ func (env Env) secretText(text string) bool {
 	return false
 }
 
-func (env Env) secretRef(w string) Level {
+func (env Env) secretRef(w string) bool {
 	if len(env.SelfSecrets) == 0 || w == "" {
-		return Safe
+		return false
 	}
 	if env.secretText(w) {
-		return Hardline
+		return true
 	}
 	x := env.expand(w)
-	level := Safe
 	for _, s := range env.SelfSecrets {
 		if s == "" {
 			continue
 		}
 		if x == s {
-			return Hardline
+			return true
 		}
 		if strings.ContainsAny(x, "*?[") {
 			if ok, _ := path.Match(x, s); ok {
-				return Hardline
+				return true
 			}
 		}
-		if !strings.HasPrefix(x, "/") && base(x) == path.Base(s) {
-			level = Dangerous
-		}
 	}
-	return level
+	return false
 }
 
 func (env Env) homeRef(w string) bool {
@@ -185,13 +183,13 @@ func (env Env) selfCommand(flags, ops []string, add func(Level, string, string, 
 	case "version", "help", "doctor", "logs":
 	case "uninstall":
 		if !hasFlag(flags, "dry-run") {
-			add(Hardline, "self-protect", "removing the agent and all of its data")
+			add(Dangerous, "self-manage", "removing the agent and all of its data")
 		}
 	case "service":
 		switch at(1) {
 		case "status":
 		case "stop", "uninstall":
-			add(Hardline, "self-protect", "stopping the agent's own service")
+			add(Dangerous, "self-manage", "stopping the agent's own service")
 		default:
 			add(Dangerous, "self-manage", "restarting or reinstalling the agent's own service")
 		}
@@ -207,7 +205,7 @@ func (env Env) selfCommand(flags, ops []string, add func(Level, string, string, 
 			case gateKey(at(2)):
 				add(Hardline, "self-protect", "changing the command gate from inside a job")
 			case sensitiveKey(at(2)):
-				add(Hardline, "self-protect", "changing the agent's owners, keys or addresses from inside a job")
+				add(Dangerous, "self-manage", "changing the agent's owners, keys or addresses")
 			default:
 				add(Dangerous, "self-manage", "changing the agent's own settings")
 			}
@@ -387,7 +385,7 @@ func AnalyzeCode(code string, env Env) []Finding {
 	text := Clean(code)
 	var out []Finding
 	if env.secretText(text) {
-		out = append(out, Finding{Level: Hardline, Rule: "self-protect", Reason: "code that touches the agent's own keys and settings file"})
+		out = append(out, Finding{Level: Dangerous, Rule: "self-keys", Reason: "code that touches the agent's own keys and settings file"})
 	}
 	if env.dbText(text) {
 		out = append(out, Finding{Level: Dangerous, Rule: "self-data", Reason: "code that opens the agent's own database"})

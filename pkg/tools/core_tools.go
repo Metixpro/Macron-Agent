@@ -452,6 +452,9 @@ func (r *Registry) readFile(ctx context.Context, sessionID string, args map[stri
 	if name == "" {
 		return "error: filename is required", nil
 	}
+	if refused := r.gateRead(ctx, sessionID, "read_file", name); refused != "" {
+		return refused, nil
+	}
 	if from, to := intArg(args, "start_line", 0, 0, 1<<30), intArg(args, "end_line", 0, 0, 1<<30); from > 0 || to > 0 {
 		return r.readLines(sessionID, name, max(from, 1), to), nil
 	}

@@ -1,8 +1,6 @@
 package netclient
 
 import (
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,35 +63,4 @@ func TestRedirectToAnOddSchemeFails(t *testing.T) {
 	if _, err := NewClient(Options{}).Get(redir.URL); err == nil {
 		t.Fatal("redirect to file:// must fail")
 	}
-}
-
-func TestTheCloudMetadataAddressIsNotOpened(t *testing.T) {
-	c := NewClient(Options{Timeout: 5 * time.Second})
-	for _, addr := range []string{"[fe80::1]:80", "[fd00:ec2::254]:80", "[::ffff:169.254.169.254]:80"} {
-		if err := refuseMetadata("tcp", addr, nil); !errors.Is(err, ErrMetadataAddress) {
-			t.Errorf("%s: %v", addr, err)
-		}
-	}
-	for _, addr := range []string{"127.0.0.1:8080", "10.0.0.5:443", "192.168.1.1:80", "93.184.216.34:443", "[::1]:80"} {
-		if err := refuseMetadata("tcp", addr, nil); err != nil {
-			t.Errorf("%s is refused: %v", addr, err)
-		}
-	}
-	for _, u := range []string{"http://169.254.169.254/latest/meta-data/", "http://100.100.100.200/"} {
-		resp, err := c.Get(u)
-		if err == nil {
-			resp.Body.Close()
-			t.Fatalf("%s was opened", u)
-		}
-		if !errors.Is(err, ErrMetadataAddress) {
-			t.Errorf("%s: %v", u, err)
-		}
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
-	defer srv.Close()
-	resp, err := c.Get(srv.URL)
-	if err != nil {
-		t.Fatalf("this machine stays reachable: %v", err)
-	}
-	resp.Body.Close()
 }

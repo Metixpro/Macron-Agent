@@ -51,52 +51,7 @@ func (s *Machine) absPath(sessionID, name string) (string, error) {
 	case !filepath.IsAbs(p):
 		p = filepath.Join(ws, p)
 	}
-	p = filepath.Clean(p)
-	if s.protected(p) {
-		return "", fmt.Errorf("%w: %q holds the agent's own keys", ErrOutsideWorkspace, name)
-	}
-	return p, nil
-}
-
-// Protect closes files to every file tool (read, write, send, remove): the ones
-// that hold the agent's keys, owners and database. Shell commands are judged by
-// the command gate instead.
-func (s *Machine) Protect(paths ...string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.guarded == nil {
-		s.guarded = map[string]bool{}
-	}
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		if abs, err := filepath.Abs(p); err == nil {
-			p = abs
-		}
-		s.guarded[filepath.Clean(p)] = true
-		if real, err := filepath.EvalSymlinks(p); err == nil {
-			s.guarded[real] = true
-		}
-	}
-}
-
-func (s *Machine) protected(abs string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.guarded) == 0 {
-		return false
-	}
-	if s.guarded[abs] {
-		return true
-	}
-	if real, err := filepath.EvalSymlinks(abs); err == nil && s.guarded[real] {
-		return true
-	}
-	if dir, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil && s.guarded[filepath.Join(dir, filepath.Base(abs))] {
-		return true
-	}
-	return false
+	return filepath.Clean(p), nil
 }
 
 // HostPath is where a tool's file name lands on this machine, and whether that is

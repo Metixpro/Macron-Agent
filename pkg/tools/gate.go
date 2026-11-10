@@ -43,14 +43,31 @@ func (r *Registry) gateCode(ctx context.Context, sessionID, language, code strin
 // gatePath judges a file tool that writes outside the work folder the way the
 // gate would judge a shell command writing the same file.
 func (r *Registry) gatePath(ctx context.Context, sessionID, tool, name string) string {
+	return r.gateFile(ctx, sessionID, "tee", tool, name)
+}
+
+// gateRead is gatePath for reading: it only ever asks about the agent's own keys.
+func (r *Registry) gateRead(ctx context.Context, sessionID, tool, name string) string {
+	return r.gateFile(ctx, sessionID, "cat", tool, name)
+}
+
+func (r *Registry) gateFile(ctx context.Context, sessionID, verb, tool, name string) string {
 	if r.Gate == nil {
 		return ""
 	}
 	abs, inside, err := r.Machine.HostPath(sessionID, name)
-	if err != nil || inside {
+	if err != nil {
 		return ""
 	}
-	return r.gateCommand(ctx, sessionID, "tee -- "+shellQuote(abs)+" # "+tool)
+	if inside {
+		// A link in the work folder can point outside it.
+		real, err := filepath.EvalSymlinks(abs)
+		if err != nil || real == abs {
+			return ""
+		}
+		abs = real
+	}
+	return r.gateCommand(ctx, sessionID, verb+" -- "+shellQuote(abs)+" # "+tool)
 }
 
 func (r *Registry) checkpoint(ctx context.Context, sessionID string, paths []string) string {

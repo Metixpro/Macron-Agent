@@ -770,6 +770,9 @@ func (r *Registry) editFile(ctx context.Context, sessionID string, args map[stri
 	if len(edits) == 0 {
 		return "error: give old_text and new_text, or edits [{old_text, new_text}]", nil
 	}
+	if refused := r.gatePath(ctx, sessionID, ToolEditFile, name); refused != "" {
+		return refused, nil
+	}
 	data, truncated, err := r.Machine.ReadFile(sessionID, name, maxEditBytes)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -815,9 +818,6 @@ func (r *Registry) editFile(ctx context.Context, sessionID string, args map[stri
 			text = strings.Replace(text, old, repl, 1)
 		}
 		report = append(report, editSummary(line, n, e))
-	}
-	if refused := r.gatePath(ctx, sessionID, ToolEditFile, name); refused != "" {
-		return refused, nil
 	}
 	if err := r.Machine.WriteFile(sessionID, name, []byte(text)); err != nil {
 		return "write error: " + friendlyFSError(err), nil
@@ -1374,7 +1374,7 @@ func (r *Registry) importRepo(ctx context.Context, sessionID string, args map[st
 		return "error: " + err.Error(), nil
 	}
 	req.Header = header
-	req.Header.Set("User-Agent", "Waze-Agent")
+	req.Header.Set("User-Agent", "Macron-Agent")
 	resp, err := r.HTTP.Do(req)
 	if err != nil {
 		return "error: download failed: " + err.Error(), nil
