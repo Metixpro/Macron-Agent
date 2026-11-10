@@ -87,7 +87,7 @@ def name_for(base, ext):
 def status_note(resp):
     if resp is None or resp.status < 400:
         return ""
-    if resp.status == 403 and resp.headers.get("x-waze-proxy"):
+    if resp.status == 403 and resp.headers.get("x-macron-proxy"):
         return " (refused: the browser may only reach public websites on web ports)"
     return f" (HTTP {resp.status})"
 
@@ -266,7 +266,8 @@ with sync_playwright() as pw:
             if CFG.get("screenshot", True):
                 shot = name_for(CFG.get("shot") or "screenshot", ".png")
                 page.screenshot(path=inside(shot), full_page=bool(CFG.get("full_page")))
-                files.append(shot)
+                if shot not in files:
+                    files.append(shot)
             with open(LAST, "w") as f:
                 f.write(page.url)
         ctx.storage_state(path=STATE)

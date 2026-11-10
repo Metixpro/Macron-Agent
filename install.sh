@@ -171,8 +171,10 @@ install_system_packages() {
   run_logged apt-get update -qq || die 'could not refresh system packages'
   run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgs || die 'system packages did not install'
   run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gh || warn 'GitHub CLI is unavailable'
+  run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq p7zip-full || run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq 7zip || warn '7-Zip is unavailable (password, .7z and .rar archives)'
  elif have dnf; then
   run_logged dnf install -y -q python3 python3-pip git curl ffmpeg jq unzip poppler-utils openssh-clients sshpass rsync gh || die 'system packages did not install'
+  run_logged dnf install -y -q p7zip p7zip-plugins || warn '7-Zip is unavailable (password, .7z and .rar archives)'
  elif have brew; then
   warn 'Use user scope with Homebrew; root does not own Homebrew packages.'
  else

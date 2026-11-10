@@ -399,7 +399,7 @@ func (r *Registry) packFiles(ctx context.Context, sessionID string, args map[str
 	if left > 0 {
 		s += fmt.Sprintf("; %d dependency/build/cache folders left out", left)
 	}
-	part := int64(intArg(args, "split_mb", 0, 1, 2000)) << 20
+	part := int64(intArg(args, "split_mb", 0, 0, 2000)) << 20
 	if part == 0 && st.Size() > telegramMaxBytes {
 		part = telegramPartBytes
 	}
