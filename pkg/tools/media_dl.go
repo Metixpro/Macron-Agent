@@ -674,7 +674,7 @@ func (r *Registry) compress(ctx context.Context, sessionID string, f dlFile) (dl
 	stem := strings.TrimSuffix(f.name, path.Ext(f.name))
 	audio := ext == ".mp3" || ext == ".m4a" || ext == ".opus" || ext == ".ogg"
 	var argv []string
-	out := stem + " (compressed)" + ext
+	var out string
 	switch {
 	case audio:
 		kbps := min(max(totalKbps-8, 32), 160)
@@ -828,8 +828,6 @@ func (s *cookieSlot) next() bool {
 	s.cookie, s.have = c, true
 	return true
 }
-
-func (s *cookieSlot) active() bool { return s.have }
 
 func (s *cookieSlot) path() string {
 	if !s.have || s.secret == nil {

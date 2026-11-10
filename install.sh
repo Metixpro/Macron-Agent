@@ -183,13 +183,16 @@ install_system_packages() {
 install_python_packages() {
  local req="$SCRIPT_DIR/requirements-tools.lock"
  [ -z "$SOURCE_DIR" ] || req="$SOURCE_DIR/requirements-tools.lock"
- if [ ! -f "$req" ]; then req="$TMP/requirements-tools.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-main}/requirements-tools.lock" "$req" || die 'could not download the Python lockfile'; fi
+ # The release archive was checked against its SHA-256 sum, so its lockfiles are the ones that belong to this binary.
+ if [ ! -f "$req" ] && [ -n "$RELEASE_DIR" ] && [ -f "$RELEASE_DIR/requirements-tools.lock" ]; then req="$RELEASE_DIR/requirements-tools.lock"; fi
+ if [ ! -f "$req" ]; then req="$TMP/requirements-tools.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-${RELEASE_TAG:-main}}/requirements-tools.lock" "$req" || die 'could not download the Python lockfile'; fi
  prepare_python
  run_logged "$PY" -m pip install --disable-pip-version-check --require-hashes -r "$req" || die 'Python tools did not install; rerun to finish'
  if [ "$BROWSER_AGENT" = 1 ]; then
   local agent_req="$SCRIPT_DIR/requirements-browser-agent.lock"
   [ -z "$SOURCE_DIR" ] || agent_req="$SOURCE_DIR/requirements-browser-agent.lock"
-  if [ ! -f "$agent_req" ]; then agent_req="$TMP/requirements-browser-agent.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-main}/requirements-browser-agent.lock" "$agent_req" || die 'could not download browser requirements'; fi
+  if [ ! -f "$agent_req" ] && [ -n "$RELEASE_DIR" ] && [ -f "$RELEASE_DIR/requirements-browser-agent.lock" ]; then agent_req="$RELEASE_DIR/requirements-browser-agent.lock"; fi
+  if [ ! -f "$agent_req" ]; then agent_req="$TMP/requirements-browser-agent.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-${RELEASE_TAG:-main}}/requirements-browser-agent.lock" "$agent_req" || die 'could not download browser requirements'; fi
   run_logged "$PY" -m venv "$HOME_DIR/browser-agent" || die 'could not create browser-agent environment'
   run_logged "$HOME_DIR/browser-agent/bin/python" -m pip install --disable-pip-version-check --require-hashes -r "$agent_req" || die 'browser-agent dependencies did not install'
  fi
@@ -230,7 +233,7 @@ choose_scope() {
 
 main() {
  REPO="${MACRON_REPO:-Metixpro/Macron-Agent}"
- VERSION='' PREFIX='' BINARY='' SOURCE_DIR='' INSTALL_SCOPE=''
+ VERSION='' RELEASE_TAG='' RELEASE_DIR='' PREFIX='' BINARY='' SOURCE_DIR='' INSTALL_SCOPE=''
  HOME_DIR="${MACRON_HOME:-}" SCRIPT_DIR=''
  if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; fi
  FROM_SOURCE=0 BROWSER_AGENT=0 BROWSER=0 TOOLS=1 SERVICE=1 ASSUME_YES=0 SETUP=1 UNINSTALL=0 KEEP_DATA=0 INTERACTIVE=0
@@ -392,6 +395,7 @@ download_release() {
 		tag="$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$TMP/release.json" | head -n1)"
 		[ -n "$tag" ] || return 1
 	fi
+	RELEASE_TAG="$tag"
 	local ver="${tag#v}" name base
 	name="macron-$ver-$OS-$ARCH.tar.gz"
 	base="https://github.com/$REPO/releases/download/$tag"
@@ -404,6 +408,7 @@ download_release() {
 	[ -n "$want" ] && [ "$want" = "$got" ] || die "the download does not match its SHA-256 sum; nothing was installed"
 	tar -xzf "$TMP/$name" -C "$TMP"
 	cp "$TMP/macron-$ver-$OS-$ARCH/macron" "$TMP/macron"
+	RELEASE_DIR="$TMP/macron-$ver-$OS-$ARCH"
 	ok "checked the SHA-256 sum"
 }
 

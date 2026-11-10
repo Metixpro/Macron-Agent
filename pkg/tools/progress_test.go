@@ -46,7 +46,7 @@ func TestRunCodeReportsItsOutputLive(t *testing.T) {
 	var mu sync.Mutex
 	var lines []string
 	ctx := WithProgress(context.Background(), Progress{Output: func(l string) { mu.Lock(); lines = append(lines, l); mu.Unlock() }})
-	out, err := r.Execute(ctx, "p", ToolRunCode, fmt.Sprint(`{"language":"bash","code":"echo epoch 1; sleep 0.4; echo epoch 2; sleep 0.4"}`))
+	out, err := r.Execute(ctx, "p", ToolRunCode, `{"language":"bash","code":"echo epoch 1; sleep 0.4; echo epoch 2; sleep 0.4"}`)
 	if err != nil || !strings.Contains(out, "epoch 2") {
 		t.Fatalf("%v %s", err, out)
 	}

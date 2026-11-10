@@ -1,4 +1,4 @@
-.PHONY: build release test vet fmt fmt-check check clean
+.PHONY: build release test race vet lint vuln fmt fmt-check check audit clean
 
 VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' pkg/app/app.go)
 GOFLAGS_REL := -buildvcs=false -trimpath -ldflags "-s -w"
@@ -26,8 +26,17 @@ test:
 	python3 scripts/test_install.py
 	python3 scripts/test_install_e2e.py
 
+race:
+	go test -race -count=1 ./...
+
 vet:
 	go vet ./...
+
+lint:
+	go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+
+vuln:
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
 fmt:
 	gofmt -w .
@@ -36,6 +45,8 @@ fmt-check:
 	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
 
 check: fmt-check vet test
+
+audit: lint vuln race
 
 clean:
 	go clean

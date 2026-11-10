@@ -139,6 +139,7 @@ After confirmation, uninstall stops this installation’s services and processes
 
 ```bash
 make check
+make audit   # static analysis, known vulnerabilities, race detector
 make build
 ```
 

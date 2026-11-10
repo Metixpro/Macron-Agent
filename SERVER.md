@@ -153,8 +153,8 @@ restoring into the home directory using the restore command printed by backup.
 make check
 # For optional Python integration tests in a development shell:
 PATH="$HOME/.macron/venv/bin:$PATH" make check
-# Concurrency checks for the changed Go packages:
-go test -race ./pkg/cli ./pkg/config ./pkg/agent ./pkg/machine
+# Static analysis, known vulnerabilities and every test under the race detector (CI runs this too):
+make audit
 ```
 
 `make test` also checks interactive scope selection, isolated user/system install
@@ -347,3 +347,43 @@ data; uploading a package does not install or run it on the server. Binary Andro
 XML and bytecode may require separate inspection tools for deeper analysis.
 
 The software-update entry in Settings is labelled **Update** in English.
+
+### Next release: the agent keeps its own keys and program out of a job's reach
+
+A page, file or message the agent reads can try to instruct it. The command gate
+now closes the ways such an instruction could take the agent over, in every mode,
+`/yolo` and `approvals.mode off` included:
+
+- **Never run from a job**: reading, changing, copying or deleting `config.env` and
+  `secret.key`; `macron uninstall`; `macron service stop|uninstall`; `macron config
+  set|unset` of the owners, tokens, keys, addresses and gate settings; removing or
+  moving the home folder; `find … -delete` and `mv` on system and home folders;
+  `kill $(pgrep macron)`.
+- **Asked first** (refused in scheduled and background jobs): other `macron config
+  set|unset`, `macron service restart`, `macron update`, `macron backup`, `macron
+  exec`; copying the whole home folder or the database; `curl`/`wget` uploads of a
+  file from outside the work folder; a download piped into `python`, `node`, `perl`
+  and the like.
+- `run_code` in languages other than bash is checked for the same files and for calls
+  of the `macron` program; `write_file`, `edit_file` and `run_code` writing outside
+  the work folder pass the gate like the shell command that would write the file.
+- The file tools (read, write, edit, send) cannot open `config.env`, `secret.key`
+  or the database at all, also through a link.
+
+These are deny rules, not a sandbox: the agent still runs with its account's rights.
+Change owners, tokens and gate settings yourself, from SSH. Run the service as an
+account of its own when the machine holds anything the agent must not reach.
+
+Also in this release:
+
+- A model's streamed answer is no longer cut after three minutes; only a silent
+  stream is (the provider's idle limit).
+- A crash inside a scheduled job, a background task, a tool's parallel workers or a
+  housekeeping loop is logged and reported as that job's failure instead of ending
+  the whole agent; long-lived loops start again.
+- The web tools do not open the cloud metadata addresses (169.254.0.0/16 and the
+  like), also when a public name resolves to one. This machine and private networks
+  stay reachable.
+- `macron config set` refuses a value with a line break.
+- The installer takes the Python lockfiles from the release archive it verified.
+- Release builds use Go 1.26.10 (32 standard-library advisories fixed since 1.26.0).

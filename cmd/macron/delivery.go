@@ -23,7 +23,6 @@ var (
 	audioExt = map[string]bool{".mp3": true, ".m4a": true, ".wav": true, ".ogg": true, ".flac": true}
 	imageExt = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
 	videoExt = map[string]bool{".mp4": true, ".mov": true, ".mkv": true, ".webm": true}
-	otherExt = map[string]bool{".pdf": true, ".zip": true, ".csv": true, ".gif": true, ".xlsx": true, ".docx": true, ".pptx": true}
 )
 
 type fileSig struct {

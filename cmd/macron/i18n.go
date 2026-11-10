@@ -144,19 +144,6 @@ func (b *Bot) setLang(ctx context.Context, id int64, l lang) error {
 	return nil
 }
 
-func (b *Bot) logLang() lang {
-	var first int64
-	for id := range b.owner {
-		if first == 0 || id < first {
-			first = id
-		}
-	}
-	if first == 0 {
-		return fa
-	}
-	return b.lang(first)
-}
-
 func (b *Bot) chatLang(ctx context.Context, chatID int64) lang {
 	if chatID > 0 {
 		return b.lang(chatID)
