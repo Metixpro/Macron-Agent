@@ -3,7 +3,7 @@ name: systematic-debugging
 description: "Use when code fails, a test breaks, or a program behaves wrong: find the root cause before fixing."
 version: 1.0.0
 category: dev
-author: Waze (adapted from Hermes Agent / obra superpowers)
+author: Macron (adapted from Hermes Agent / obra superpowers)
 license: MIT
 ---
 

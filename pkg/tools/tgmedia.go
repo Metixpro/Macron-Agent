@@ -142,6 +142,11 @@ func (r *Registry) compressVideo(ctx context.Context, sessionID, in, out string,
 		if err != nil {
 			return "ffmpeg finished but produced no output file", nil
 		}
+		if got.Size() >= info.Size() && float64(info.Size()) <= target*1.03 {
+			_ = r.Machine.Remove(sessionID, name)
+			return fmt.Sprintf("%s is %s, already under %d MB, and encoding it again does not make it smaller: send it as it is.",
+				in, humanSize(info.Size()), targetMB), nil
+		}
 		if float64(got.Size()) <= target*1.03 || attempt == 1 {
 			note := ""
 			if float64(got.Size()) > target*1.03 {

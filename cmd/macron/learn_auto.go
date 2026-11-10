@@ -13,6 +13,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
@@ -134,6 +135,7 @@ func (b *Bot) noteJobForReview() {
 	_ = b.st.SetSetting(ctx, settingLearnJobs, "0")
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("learn_auto")
 		defer b.wg.Done()
 		rctx, rcancel := b.ctx(time.Minute)
 		defer rcancel()

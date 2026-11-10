@@ -1,26 +1,59 @@
 import json
 import sys
-
-import pypdf
+import unicodedata
 
 d = json.load(sys.stdin)
-reader = pypdf.PdfReader(d["path"])
-if reader.is_encrypted:
-    try:
-        reader.decrypt("")
-    except Exception:
-        print("PDF is password protected", file=sys.stderr)
-        sys.exit(2)
+path = d["path"]
 
-total = len(reader.pages)
+
+def norm(t):
+    # NFKC turns the presentation forms a PDF stores for Persian and Arabic letters back into the letters themselves.
+    return unicodedata.normalize("NFKC", t or "").replace("\x00", "")
+
+
+def locked():
+    print("PDF is password protected", file=sys.stderr)
+    sys.exit(2)
+
+
+try:
+    # PyMuPDF returns right-to-left lines in reading order; pypdf returns them as drawn (mirrored).
+    import fitz
+
+    doc = fitz.open(path)
+    if doc.needs_pass and not doc.authenticate(""):
+        locked()
+    total = doc.page_count
+
+    def page_text(i):
+        return doc[i].get_text()
+
+except ImportError:
+    import pypdf
+
+    reader = pypdf.PdfReader(path)
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception:
+            locked()
+    total = len(reader.pages)
+
+    def page_text(i):
+        return reader.pages[i].extract_text()
+
+
 start = max(1, int(d.get("start", 1)))
 end = int(d.get("end", 0)) or total
 end = min(total, end, start - 1 + int(d.get("max_pages", 30)))
 out = []
 for i in range(start - 1, end):
-    text = reader.pages[i].extract_text() or ""
+    try:
+        text = norm(page_text(i))
+    except Exception:
+        text = ""
     if text.strip():
-        out.append("--- Page %d/%d ---\n%s" % (i + 1, total, text))
+        out.append("--- Page %d/%d ---\n%s" % (i + 1, total, text.rstrip("\n")))
 if start > total:
     out = ["The PDF has %d pages; page %d is past the end." % (total, start)]
 elif end < total:

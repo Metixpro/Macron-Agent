@@ -26,6 +26,14 @@ type Env struct {
 	SelfNames    []string
 	SelfDB       []string
 	SelfPID      int
+
+	// SelfHome is the agent's own folder and SelfSecrets the files in it that hold
+	// its keys, owners and settings; UserHome resolves ~ and $HOME, and WorkDir is
+	// where the work folders live. All are absolute, cleaned paths.
+	SelfHome    string
+	SelfSecrets []string
+	UserHome    string
+	WorkDir     string
 }
 
 const maxDepth = 6
@@ -37,6 +45,9 @@ func Analyze(command string, env Env) []Finding {
 	masked := maskQuotes(Clean(command))
 	if forkBombRe.MatchString(strings.Join(strings.Fields(masked), "")) || forkBombRe.MatchString(masked) {
 		out = append(out, Finding{Level: Hardline, Rule: "fork-bomb", Reason: "a fork bomb"})
+	}
+	if env.secretText(Clean(command)) {
+		out = append(out, Finding{Level: Dangerous, Rule: "self-keys", Reason: "touching the agent's own keys and settings file"})
 	}
 	if blockDevRedirRe.MatchString(masked) {
 		out = append(out, Finding{Level: Hardline, Rule: "write-block-device", Reason: "writing straight onto a disk device"})
@@ -295,7 +306,15 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 			}
 			low := strings.ToLower(name)
 
+			for _, w := range c.Words {
+				if env.secretRef(w) {
+					add(Dangerous, "self-keys", "touching the agent's own keys and settings file", w)
+				}
+			}
 			for _, r := range c.Redirs {
+				if env.secretRef(r.Target) {
+					add(Dangerous, "self-keys", "touching the agent's own keys and settings file", r.Target)
+				}
 				if !strings.Contains(r.Op, ">") {
 					continue
 				}
@@ -312,6 +331,16 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 				continue
 			}
 			flags, ops := splitFlags(args)
+			if copiers[low] {
+				for _, o := range ops {
+					switch {
+					case env.homeRef(o):
+						add(Dangerous, "self-copy", "copying the agent's whole home folder, keys included", o)
+					case env.selfDB(env.expand(o)):
+						add(Dangerous, "self-copy", "copying the agent's own database", o)
+					}
+				}
+			}
 			switch {
 			case low == "rm" || strings.HasPrefix(name, "$"):
 				recursive := hasShort(flags, "rR", "--recursive")
@@ -333,6 +362,9 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					}
 					if env.selfDB(t) {
 						add(Hardline, "self-protect", "deleting the agent's own database", t)
+					}
+					if recursive && env.homeRef(t) {
+						add(Dangerous, "self-manage", "deleting the agent's own home folder", t)
 					}
 					if topLevel(t) && target(t) == "" {
 						add(Dangerous, "rm-root-path", "deleting a folder right under /", t)
@@ -360,6 +392,9 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 					if env.SelfPID > 0 && a == itoa(env.SelfPID) {
 						add(Hardline, "self-protect", "killing the agent itself")
 					}
+				}
+				if env.findsSelf(sc.Nested) {
+					add(Dangerous, "self-manage", "killing the agent itself")
 				}
 				minusOne := false
 				for _, a := range args {
@@ -434,12 +469,41 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 						add(Hardline, "self-protect", "changing the agent's own settings behind its back")
 					}
 				}
-			case env.self(low) && len(ops) >= 3 && ops[0] == "config" && (ops[1] == "set" || ops[1] == "unset") && gateKey(ops[2]):
-				add(Hardline, "self-protect", "changing the command gate from inside a job")
+			case env.self(low):
+				env.selfCommand(flags, ops, add)
+			case low == "curl" || low == "wget":
+				env.uploadCheck(low, args, c, pl[:ci], add)
+			case interpreter(low):
+				if src := fetched(pl[:ci]); ci > 0 && src != "" && !hasShort(flags, "cem", "--eval", "--command") && !hasFileArg(ops) {
+					add(Dangerous, "pipe-to-interpreter", "code piped into "+low+" from "+src)
+				}
+			case low == "find":
+				if starts, deletes := findStarts(args); deletes {
+					for _, t := range starts {
+						switch {
+						case env.homeRef(t):
+							add(Dangerous, "self-manage", "deleting the agent's own home folder", t)
+						case target(t) != "":
+							add(Dangerous, "find-delete", "deleting everything under a system or home folder", t)
+						case topLevel(t):
+							add(Dangerous, "find-delete", "deleting files under a folder right under /", t)
+						}
+					}
+				}
 			case low == "tee" || low == "cp" || low == "mv" || low == "install" || low == "ln" || low == "truncate" || low == "shred":
 				dests := ops
 				if low != "tee" && low != "truncate" && low != "shred" && len(ops) > 0 {
 					dests = ops[len(ops)-1:]
+				}
+				if low == "mv" && len(ops) > 1 {
+					for _, src := range ops[:len(ops)-1] {
+						switch {
+						case env.homeRef(src):
+							add(Dangerous, "self-manage", "moving the agent's own home folder away", src)
+						case target(src) != "":
+							add(Dangerous, "mv-system", "moving a system or home folder away", src)
+						}
+					}
 				}
 				for _, d := range dests {
 					switch {

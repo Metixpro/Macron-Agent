@@ -24,7 +24,7 @@ VIRTUAL_TIME = r"""
   window.setInterval = (fn, ms, ...args) => later(fn, ms, args, true);
   window.clearTimeout = window.clearInterval = id => timers.delete(id);
   const run = (fn, args) => { try { typeof fn === "function" ? fn(...args) : (0, eval)(fn); } catch (e) { console.error(e && e.stack || e); } };
-  window.__wazeTick = t => {
+  window.__macronTick = t => {
     for (let n = 0; n < 5000; n++) {
       let id = 0, next = null;
       for (const [k, v] of timers) if (v.at <= t && (!next || v.at < next.at)) { id = k; next = v; }
@@ -76,7 +76,7 @@ with sync_playwright() as pw:
     ff = subprocess.Popen(encode, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     hashes, every = set(), max(1, frames // 10)
     for i in range(frames):
-        page.evaluate("t => window.__wazeTick(t)", i * 1000.0 / FPS)
+        page.evaluate("t => window.__macronTick(t)", i * 1000.0 / FPS)
         shot = base64.b64decode(cdp.send("Page.captureScreenshot", {"format": "png", "optimizeForSpeed": True})["data"])
         if i % every == 0:
             hashes.add(hashlib.md5(shot).digest())

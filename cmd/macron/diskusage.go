@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"io/fs"
 	"path/filepath"
 	"sync"
@@ -28,6 +29,7 @@ func (c *usageCache) get(root string, maxAge time.Duration, measure func(string)
 	if !c.last.Walked && (c.last.At.IsZero() || time.Since(c.last.At) > maxAge) {
 		c.last.Walked = true
 		go func() {
+			defer guard.Recover("diskusage")
 			start := time.Now()
 			size, files := measure(root)
 			c.mu.Lock()

@@ -458,7 +458,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		escalate = func(ctx context.Context) context.Context { return llm.WithEffortCap(esc(ctx), "") }
 	}
 
-	ownerChat := b.isOwner(uid) && m.Chat.Private() && !guest && !scheduled
+	ownerChat := b.isOwner(uid) && m.Chat.Private() && !guest
 	var carry int
 	var carryCompacted bool
 	if !opt.noMemory && !guest && !bg {
@@ -707,6 +707,7 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("chat")
 		defer b.wg.Done()
 		ctx, cancel := b.ctx(2 * time.Minute)
 		defer cancel()

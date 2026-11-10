@@ -31,7 +31,7 @@ class InstallationLifecycleTests(unittest.TestCase):
         self.state=self.root/"private state"
         self.target=self.prefix/"macron"
         self.env={**os.environ,"HOME":str(self.user),"SHELL":"/bin/bash","NO_COLOR":"1"}
-        for key in ["MACRON_HOME","WAZE_HOME","MACRON_PROFILE","WAZE_PROFILE","MACRON_ENV_FILE","WAZE_ENV_FILE"]:self.env.pop(key,None)
+        for key in ["MACRON_HOME","MACRON_PROFILE","MACRON_ENV_FILE"]:self.env.pop(key,None)
         args=["bash",str(SOURCE/"install.sh"),"--binary",str(self.binary),"--scope","user","--prefix",str(self.prefix),"--home",str(self.state),"--no-tools","--no-service","--no-setup","--yes"]
         result=subprocess.run(args,env=self.env,capture_output=True,text=True,timeout=30)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)

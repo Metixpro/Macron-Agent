@@ -278,7 +278,7 @@ func (s *Store) open(stored string) (string, error) {
 		return stored, nil
 	}
 	if s.aead == nil {
-		return "", errors.New("provider key is encrypted but WAZE_SECRET_KEY is not set")
+		return "", errors.New("provider key is encrypted but MACRON_SECRET_KEY is not set")
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(stored, encPrefix))
 	if err != nil || len(raw) < s.aead.NonceSize() {
@@ -286,7 +286,7 @@ func (s *Store) open(stored string) (string, error) {
 	}
 	plain, err := s.aead.Open(nil, raw[:s.aead.NonceSize()], raw[s.aead.NonceSize():], nil)
 	if err != nil {
-		return "", errors.New("cannot decrypt provider key (wrong WAZE_SECRET_KEY?)")
+		return "", errors.New("cannot decrypt provider key (wrong MACRON_SECRET_KEY?)")
 	}
 	return string(plain), nil
 }

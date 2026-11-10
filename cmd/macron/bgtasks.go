@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
@@ -100,6 +101,13 @@ func (b *Bot) launchBg(task store.BgTask) {
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
+		var err error
+		defer func() {
+			if err != nil {
+				b.finishBg(task.ID, store.BgFailed, err.Error())
+			}
+		}()
+		defer guard.Failed(fmt.Sprintf("background task #%d", task.ID), &err)
 		b.runBg(task)
 	}()
 }

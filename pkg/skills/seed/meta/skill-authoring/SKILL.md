@@ -3,7 +3,7 @@ name: skill-authoring
 description: "Use when creating or improving a skill with save_skill, so it is short, triggerable and reusable."
 version: 1.0.0
 category: meta
-author: Waze (adapted from Hermes Agent)
+author: Macron (adapted from Hermes Agent)
 license: MIT
 ---
 

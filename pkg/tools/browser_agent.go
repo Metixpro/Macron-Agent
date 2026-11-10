@@ -34,11 +34,11 @@ const (
 	bridgeTokensMax   = 1_500_000
 )
 
-var agentPythons = []string{"/usr/local/share/waze/browser-use/bin/python3", "/usr/share/waze/browser-use/bin/python3", "python3"}
+var agentPythons = []string{"/usr/local/share/macron/browser-use/bin/python3", "/usr/share/macron/browser-use/bin/python3", "python3"}
 
 func (r *Registry) findAgentPython() string {
 	pys := agentPythons
-	if env := os.Getenv("WAZE_BROWSER_USE_PYTHON"); env != "" {
+	if env := os.Getenv("MACRON_BROWSER_USE_PYTHON"); env != "" {
 		pys = append([]string{env}, pys...)
 	}
 	for _, py := range pys {

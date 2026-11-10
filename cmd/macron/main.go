@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -28,6 +27,7 @@ import (
 )
 
 func main() {
+	config.AdoptLegacyEnv()
 	config.ActivateToolEnv()
 	if len(os.Args) > 1 && runCommand(os.Args[1:]) {
 		return
@@ -86,7 +86,7 @@ func main() {
 	defer st.Close()
 	seedProvider(rootCtx, st, cfg)
 
-	llmHTTP := &http.Client{Timeout: 180 * time.Second}
+	llmHTTP := llm.NewHTTPClient()
 	usage := func(provider string, u llm.Usage, failed bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -128,8 +128,8 @@ func main() {
 	cookies.http = a.Registry.HTTP
 	a.Registry.SetCookiePool(cookies)
 	a.Registry.SetUserCookies(cookies.user)
-	go cookies.refreshLoop(rootCtx)
-	go cookies.checkLoop(rootCtx, a.Registry.TestCookie)
+	go guard.KeepRunning(rootCtx, "the cookie refresher", cookies.refreshLoop)
+	go guard.KeepRunning(rootCtx, "the cookie checker", func(ctx context.Context) { cookies.checkLoop(ctx, a.Registry.TestCookie) })
 
 	mem := memory.New(st, prov, func() int { return historyBudget(st, window()) })
 
@@ -188,17 +188,17 @@ func main() {
 	cancel()
 
 	orphans := bot.orphanedJobs(rootCtx)
-	go bot.tellRestarted(rootCtx, orphans)
+	go func() { defer guard.Recover("the restart notice"); bot.tellRestarted(rootCtx, orphans) }()
 	bgOrphans := bot.orphanedBgTasks(rootCtx)
-	go bot.tellBgRestarted(rootCtx, bgOrphans)
-	go housekeeping(rootCtx, st)
+	go func() { defer guard.Recover("the restart notice"); bot.tellBgRestarted(rootCtx, bgOrphans) }()
+	go guard.KeepRunning(rootCtx, "housekeeping", func(ctx context.Context) { housekeeping(ctx, st) })
 	bot.startSysmon(rootCtx)
-	go bot.runScheduler(rootCtx)
-	go bot.runWeeklyReports(rootCtx)
-	go bot.runEvalSchedule(rootCtx)
-	go bot.runUpdateNotices(rootCtx)
+	go guard.KeepRunning(rootCtx, "the scheduler", bot.runScheduler)
+	go guard.KeepRunning(rootCtx, "the weekly reports", bot.runWeeklyReports)
+	go guard.KeepRunning(rootCtx, "the scheduled evals", bot.runEvalSchedule)
+	go guard.KeepRunning(rootCtx, "the update notices", bot.runUpdateNotices)
 	bot.serveWeb(rootCtx)
-	go bot.reportUpdate(rootCtx)
+	go func() { defer guard.Recover("the update report"); bot.reportUpdate(rootCtx) }()
 
 	log.Printf("🤖 @%s is online (Macron Agent %s · home %s · time zone %s)", me.Username, app.Version, config.Home(), loc)
 	poll(rootCtx, bot)

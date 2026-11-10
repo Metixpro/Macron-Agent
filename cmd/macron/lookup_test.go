@@ -36,7 +36,7 @@ func TestLookupTargets(t *testing.T) {
 	}
 
 	onBot := group(43, "آمار منو بده")
-	onBot.ReplyToMessage = &telegram.Message{MessageID: 10, From: &telegram.User{ID: botID, IsBot: true, Username: "WazeBot"}, Chat: onBot.Chat, Text: "…"}
+	onBot.ReplyToMessage = &telegram.Message{MessageID: 10, From: &telegram.User{ID: botID, IsBot: true, Username: "MacronBot"}, Chat: onBot.Chat, Text: "…"}
 	if lt, _ := resolveTarget(onBot, "", botID); lt.id != 43 {
 		t.Errorf("a reply to the bot looks up the asker: %+v", lt)
 	}

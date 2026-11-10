@@ -65,6 +65,7 @@ var doctorTools = []struct {
 	{"node", "web projects, MCP servers", "nodejs npm", false},
 	{"yt-dlp", "YouTube and social media downloads", "yt-dlp (pip install -U yt-dlp)", false},
 	{"pdftotext", "reading PDFs", "poppler-utils", false},
+	{"7z", "password-protected, .7z and .rar archives", "p7zip-full", false},
 }
 
 func doctor(io *IO, args []string) int {
@@ -315,7 +316,11 @@ func currentUser() string {
 func checkToolDependencies(r *report) {
 	checkPython(r)
 	for _, t := range doctorTools {
-		if _, err := exec.LookPath(t.name); err == nil {
+		_, err := exec.LookPath(t.name)
+		if t.name == "7z" && err != nil {
+			_, err = exec.LookPath("7zz")
+		}
+		if err == nil {
 			r.line(ok, t.name+" ("+t.why+")", "")
 			continue
 		}

@@ -62,14 +62,14 @@ func TestTheOwnerSeesEverything(t *testing.T) {
 	h.send(private(ownerID, "ابزارهاتو با اسم دقیق بنویس"))
 	h.wantText("download_media_ytdlp")
 	last := prompts[len(prompts)-1]
-	if !strings.Contains(last, "this private conversation is with the bot's owner") || !strings.Contains(last, "The active provider is") {
+	if !strings.Contains(last, "this conversation is with your owner") || !strings.Contains(last, "The active provider is") {
 		t.Fatalf("the owner's prompt:\n%s", last)
 	}
 
 	h.tg.reset()
 	h.send(private(72, "ابزارهاتو با اسم دقیق بنویس"))
 	h.noText("download_media_ytdlp")
-	if strings.Contains(prompts[len(prompts)-1], "this private conversation is with the bot's owner") {
+	if strings.Contains(prompts[len(prompts)-1], "this conversation is with your owner") {
 		t.Error("a user is not the owner")
 	}
 
@@ -77,7 +77,7 @@ func TestTheOwnerSeesEverything(t *testing.T) {
 	g := group(ownerID, "مکرون ابزارهاتو با اسم دقیق بنویس")
 	h.send(g)
 	h.noText("download_media_ytdlp")
-	if strings.Contains(prompts[len(prompts)-1], "this private conversation is with the bot's owner") {
+	if strings.Contains(prompts[len(prompts)-1], "this conversation is with your owner") {
 		t.Error("in a group the others would see it")
 	}
 }

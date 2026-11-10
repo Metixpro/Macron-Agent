@@ -200,7 +200,7 @@ func TestUninstallOwnershipUsesServiceProperties(t *testing.T) {
 func TestRetiredFeatureSettingsCannotBeReintroduced(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(config.EnvHome, home)
-	for _, key := range []string{"image_key", "image_edit_key", "music_key", "MACRON_IMAGE_API_KEY", "WAZE_MUSIC_API_KEY"} {
+	for _, key := range []string{"image_key", "image_edit_key", "music_key", "MACRON_IMAGE_API_KEY", "MACRON_MUSIC_API_KEY"} {
 		io, _ := testIO("")
 		if handled, code := Run([]string{"config", "set", key, "not-stored"}, io); !handled || code == 0 {
 			t.Errorf("retired setting accepted: %s", key)

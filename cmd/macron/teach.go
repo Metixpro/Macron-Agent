@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
@@ -159,6 +160,7 @@ func (b *Bot) teach(ctx context.Context, l lang, text, about string) (id int64, 
 func (b *Bot) startTeaching(adminID int64, l lang, text, about string) {
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("teach")
 		defer b.wg.Done()
 		ctx, cancel := b.ctx(2 * time.Minute)
 		defer cancel()

@@ -171,7 +171,6 @@ type raw struct {
 	cores   []cpuTimes
 	rx, tx  uint64
 	svcUsec uint64
-	svcTick uint64
 	ok      bool
 }
 

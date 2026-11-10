@@ -235,16 +235,16 @@ func TestBrowserAgentWorksASiteOnItsOwn(t *testing.T) {
 			switch {
 			case !strings.Contains(req.Messages[0].Content, "<json_schema>"):
 				return "plain answer", nil
-			case strings.Contains(state, "waze phone"):
-				return `{"evaluation_previous_goal":"Results are shown","memory":"","next_goal":"Report","action":[{"done":{"text":"Found 2 results: waze phone, waze case","success":true}}]}`, nil
+			case strings.Contains(state, "macron phone"):
+				return `{"evaluation_previous_goal":"Results are shown","memory":"","next_goal":"Report","action":[{"done":{"text":"Found 2 results: macron phone, macron case","success":true}}]}`, nil
 			default:
-				return "Now I search.\n<tool_call>\n{\"name\": \"navigate\", \"arguments\": {\"url\": \"" + site.URL + "/search?q=waze\"}}\n</tool_call>", nil
+				return "Now I search.\n<tool_call>\n{\"name\": \"navigate\", \"arguments\": {\"url\": \"" + site.URL + "/search?q=macron\"}}\n</tool_call>", nil
 			}
 		}}
 		r := agentRegistry(t, m)
-		out := call(t, r, "u", ToolBrowserAgent, map[string]any{"task": "Search the shop for waze and list the results", "url": site.URL, "max_steps": 6})
-		for _, want := range []string{"Browser agent: done in", "Found 2 results: waze phone, waze case", "Files: browser-agent.png",
-			"Last page: " + site.URL + "/search?q=waze"} {
+		out := call(t, r, "u", ToolBrowserAgent, map[string]any{"task": "Search the shop for macron and list the results", "url": site.URL, "max_steps": 6})
+		for _, want := range []string{"Browser agent: done in", "Found 2 results: macron phone, macron case", "Files: browser-agent.png",
+			"Last page: " + site.URL + "/search?q=macron"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("missing %q in:\n%s", want, out)
 			}
@@ -292,9 +292,9 @@ func TestBrowserAgentRefusesBadInput(t *testing.T) {
 }
 
 func TestLiveBrowserAgent(t *testing.T) {
-	url, key, model := os.Getenv("WAZE_TEST_LLM_URL"), os.Getenv("WAZE_TEST_LLM_KEY"), os.Getenv("WAZE_TEST_LLM_MODEL")
+	url, key, model := os.Getenv("MACRON_TEST_LLM_URL"), os.Getenv("MACRON_TEST_LLM_KEY"), os.Getenv("MACRON_TEST_LLM_MODEL")
 	if url == "" || key == "" || model == "" {
-		t.Skip("WAZE_TEST_LLM_URL, WAZE_TEST_LLM_KEY and WAZE_TEST_LLM_MODEL are not set")
+		t.Skip("MACRON_TEST_LLM_URL, MACRON_TEST_LLM_KEY and MACRON_TEST_LLM_MODEL are not set")
 	}
 	site := shopSite(t)
 	r := agentRegistry(t, llm.NewClient(url, key, model))

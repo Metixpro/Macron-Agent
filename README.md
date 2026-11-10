@@ -151,6 +151,7 @@ macron uninstall
 
 ```bash
 make check
+make audit   # تحلیل ایستا، آسیب‌پذیری‌های شناخته‌شده و race detector
 make build
 ```
 

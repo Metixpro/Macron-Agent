@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
@@ -141,6 +142,7 @@ func (l *liveView) start(ctx context.Context) {
 		l.b.drafts.Store(l.draftID, draftOwner{userID: l.userID, chatID: l.chatID, key: l.runKey})
 	}
 	go func() {
+		defer guard.Recover("live")
 		defer close(l.finished)
 		tick := time.NewTicker(stepEvery)
 		defer tick.Stop()
@@ -558,6 +560,7 @@ func (l *liveView) flushGroup(ctx context.Context) {
 	case <-l.done:
 
 		go func() {
+			defer guard.Recover("live")
 			dctx, cancel := l.b.ctx(10 * time.Second)
 			defer cancel()
 			_ = l.b.api.DeleteMessage(dctx, l.chatID, sent.MessageID)
@@ -723,6 +726,7 @@ func (l *liveView) flushRich(ctx context.Context) {
 	case <-l.done:
 
 		go func() {
+			defer guard.Recover("live")
 			dctx, cancel := l.b.ctx(10 * time.Second)
 			defer cancel()
 			_ = l.b.api.DeleteMessage(dctx, l.chatID, sent.MessageID)

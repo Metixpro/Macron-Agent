@@ -198,6 +198,21 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 		if refused := r.gateCommand(ctx, sessionID, script); refused != "" {
 			return refused, nil
 		}
+	} else {
+		program := code
+		if strings.TrimSpace(program) == "" {
+			if b, _, err := r.Machine.ReadFile(sessionID, file, maxCodeBytes); err == nil {
+				program = string(b)
+			}
+		}
+		if refused := r.gateCode(ctx, sessionID, lang.Name, program); refused != "" {
+			return refused, nil
+		}
+	}
+	if strings.TrimSpace(code) != "" && file != "" {
+		if refused := r.gatePath(ctx, sessionID, ToolRunCode, file); refused != "" {
+			return refused, nil
+		}
 	}
 
 	switch {

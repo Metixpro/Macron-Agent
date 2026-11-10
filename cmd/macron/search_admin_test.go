@@ -71,8 +71,8 @@ func TestTheTregTokenFromThePanel(t *testing.T) {
 		t.Errorf("the token is stored encrypted: %q", raw)
 	}
 
-	res, err := h.bot.app.Search.Search(context.Background(), "waze", 3)
-	if err != nil || len(res) != 1 || res[0].URL != "https://core.telegram.org/bots/api" || searches[len(searches)-1] != "waze" {
+	res, err := h.bot.app.Search.Search(context.Background(), "macron", 3)
+	if err != nil || len(res) != 1 || res[0].URL != "https://core.telegram.org/bots/api" || searches[len(searches)-1] != "macron" {
 		t.Fatalf("%v %+v %v", err, res, searches)
 	}
 	if strings.Contains(h.bot.redact("token treg-good-token here"), "treg-good-token") {

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
@@ -404,6 +405,7 @@ func (b *Bot) withFileJob(uid int64, answer func(string, bool), job func(ctx con
 	}
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("filepanel")
 		defer b.wg.Done()
 		defer b.fileJobs.Delete(uid)
 		ctx, cancel := b.ctx(15 * time.Minute)
@@ -426,7 +428,7 @@ func (b *Bot) sendZip(ctx context.Context, l lang, chatID int64, session string,
 		return
 	}
 	_ = b.api.SendChatAction(ctx, chatID, "upload_document")
-	tmp, err := os.CreateTemp("", "waze-zip-*.zip")
+	tmp, err := os.CreateTemp("", "macron-zip-*.zip")
 	if err != nil {
 		log.Printf("zip: %v", err)
 		b.sendHTML(ctx, chatID, l.t(textError), telegram.SendOptions{})

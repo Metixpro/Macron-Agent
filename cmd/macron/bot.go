@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -213,15 +212,6 @@ func (b *Bot) button(label, data, style string) telegram.InlineKeyboardButton {
 	return btn
 }
 
-func (b *Bot) urlButton(label, url string) telegram.InlineKeyboardButton {
-	btn := telegram.InlineKeyboardButton{Text: label, URL: url, Style: telegram.StylePrimary}
-	if set := b.premium(); set != nil {
-		btn.Text, btn.IconCustomEmojiID = set.Button(label)
-	}
-	btn.Text = bidiLabel(btn.Text)
-	return btn
-}
-
 func (b *Bot) bidi(chatID int64, html string) string {
 	if !hasPersian(html) {
 		return html
@@ -263,8 +253,6 @@ func (b *Bot) parseCommand(text string) (cmd, args string, ignore, named bool) {
 	return strings.ToLower(name), strings.TrimSpace(rest), false, hasTarget
 }
 
-var wakeRe = regexp.MustCompile(`^(?i)\s*(?:م(?:ا)?[کك]رون|macron)(?:\s*(?:ai|ای[\s\x{200c}]?آی))?(?:$|[\s\p{P}]+)`)
-
 const (
 	textOnlyName      = "(فقط اسمم رو صدا زد)"
 	textCalledOnReply = "(روی یه پیام ریپلای کرد و صدام زد: یعنی درباره همون پیام کمکش کنم؛ بسته به پیام، جوابش رو بدم، توضیحش بدم، ترجمه‌اش کنم، خلاصه‌اش کنم یا نظرم رو بگم)"
@@ -275,28 +263,6 @@ func (b *Bot) calledOnly(m *telegram.Message) string {
 		return b.langOf(m.From).t(textCalledOnReply)
 	}
 	return b.langOf(m.From).t(textOnlyName)
-}
-
-func (b *Bot) addressed(m *telegram.Message) (bool, string) {
-	text := m.Body()
-	if loc := wakeRe.FindStringIndex(text); loc != nil {
-		rest := strings.TrimSpace(text[loc[1]:])
-		if rest == "" && !m.HasMedia() {
-			rest = b.calledOnly(m)
-		}
-		return true, rest
-	}
-	if r := m.RepliedInChat(); r != nil && r.From != nil && r.From.ID == b.me.ID {
-		return true, text
-	}
-	if b.me.Username != "" && strings.Contains(strings.ToLower(text), "@"+strings.ToLower(b.me.Username)) {
-		rest := stripMention(text, b.me.Username)
-		if rest == "" && !m.HasMedia() {
-			rest = b.calledOnly(m)
-		}
-		return true, rest
-	}
-	return false, text
 }
 
 func userInfo(u *telegram.User) store.UserInfo {

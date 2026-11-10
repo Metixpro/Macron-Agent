@@ -3,7 +3,7 @@ name: graphify
 description: "Use when exploring a big or unfamiliar codebase, or asked how its parts connect or depend on each other: builds a queryable code knowledge graph with the graphify CLI."
 version: 1.0.0
 category: dev
-author: Graphify Labs (adapted for Waze)
+author: Graphify Labs (adapted for Macron)
 license: MIT
 ---
 

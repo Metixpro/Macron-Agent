@@ -26,8 +26,6 @@ const (
 	delegateReport   = 8000
 )
 
-var subLocalTools = map[string]bool{"view_image": true, "send_file": true}
-
 var toolsets = map[string][]string{
 	"web": {"web_search", "web_fetch", "deep_research", "crypto_currency_price", tools.ToolMarketPrice, "whois_lookup", "github_inspect"},
 	"code": {tools.ToolRunCode, "bash_execute", tools.ToolShellJobs, tools.ToolProjectTree, tools.ToolSearchCode, tools.ToolFindFiles,

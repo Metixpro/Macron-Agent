@@ -3,7 +3,7 @@ name: price-watch
 description: "Use when the user wants a product, currency or crypto price tracked, compared, or alerted on a target."
 version: 1.0.0
 category: productivity
-author: Waze (adapted from Hermes Agent)
+author: Macron (adapted from Hermes Agent)
 license: MIT
 ---
 

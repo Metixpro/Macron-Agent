@@ -29,7 +29,7 @@ case "$url" in
     cf=""; prev=""; for a in "$@"; do [ "$prev" = "--cookies" ] && cf="$a"; prev="$a"; done
     if [ -n "$cf" ] && grep -q 'LOGIN_INFO' "$cf" 2>/dev/null; then echo "YouTube Turns 20"; exit 0; fi
     echo "ERROR: [youtube] _GuOjXYl5ew: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies" >&2; exit 1 ;;
-  *subclip*) cp sub_src.mp4 "Sub Clip.mp4"; printf 'WAZEFILE\t./Sub Clip.mp4\tSub Clip\tUploader\t4\t360\n'; exit 0 ;;
+  *subclip*) cp sub_src.mp4 "Sub Clip.mp4"; printf 'MACRONFILE\t./Sub Clip.mp4\tSub Clip\tUploader\t4\t360\n'; exit 0 ;;
   *watch?v=blocked*)
     if printf '%s\n' "$@" | grep -q -- '--skip-download'; then printf 'Hamim\tKhorshido Mah (Official Video)\n'; exit 0; fi
     echo "thumb" > "$name.webp"
@@ -42,11 +42,11 @@ case "$url" in
   *agegate*) echo "ERROR: [youtube] abc: Sign in to confirm your age. This video may be inappropriate for some users." >&2; exit 1 ;;
   *forbid*) echo "ERROR: unable to download video data: HTTP Error 403: Forbidden" >&2; exit 1 ;;
   *photos*) echo "ERROR: [Instagram] abc: No video formats found!" >&2; exit 1 ;;
-  *big*) cp big_src.mp4 "Big Clip.mp4"; printf 'WAZEFILE\t./Big Clip.mp4\tBig Clip\tUploader\t6\t720\n'; exit 0 ;;
+  *big*) cp big_src.mp4 "Big Clip.mp4"; printf 'MACRONFILE\t./Big Clip.mp4\tBig Clip\tUploader\t6\t720\n'; exit 0 ;;
 esac
 if [ "$audio" = 1 ]; then
   if [ -f song_src.mp3 ]; then cp song_src.mp3 "$name.mp3"; else echo "ID3 fake mp3" > "$name.mp3"; fi
-  printf 'WAZEFILE\t./%s.mp3\tTest Song\tSinger\t215\tNA\n' "$name"
+  printf 'MACRONFILE\t./%s.mp3\tTest Song\tSinger\t215\tNA\n' "$name"
 else
-  echo "fake mp4" > "Test Video.mp4"; printf 'WAZEFILE\t/workspace/Test Video.mp4\tTest Video\tNA\t95\t720\n'
+  echo "fake mp4" > "Test Video.mp4"; printf 'MACRONFILE\t/workspace/Test Video.mp4\tTest Video\tNA\t95\t720\n'
 fi

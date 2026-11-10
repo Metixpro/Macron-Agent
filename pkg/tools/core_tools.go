@@ -414,6 +414,9 @@ func (r *Registry) writeFile(ctx context.Context, sessionID string, args map[str
 	if len(content) > maxWriteBytes {
 		return fmt.Sprintf("error: content is %s, larger than the 2 MB limit", humanSize(int64(len(content)))), nil
 	}
+	if refused := r.gatePath(ctx, sessionID, "write_file", name); refused != "" {
+		return refused, nil
+	}
 	data := []byte(content)
 	if boolArg(args, "append") {
 		old, truncated, err := r.Machine.ReadFile(sessionID, name, maxAppendBytes)
@@ -448,6 +451,9 @@ func (r *Registry) readFile(ctx context.Context, sessionID string, args map[stri
 	}
 	if name == "" {
 		return "error: filename is required", nil
+	}
+	if refused := r.gateRead(ctx, sessionID, "read_file", name); refused != "" {
+		return refused, nil
 	}
 	if from, to := intArg(args, "start_line", 0, 0, 1<<30), intArg(args, "end_line", 0, 0, 1<<30); from > 0 || to > 0 {
 		return r.readLines(sessionID, name, max(from, 1), to), nil

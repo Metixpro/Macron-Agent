@@ -14,6 +14,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/memory"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
@@ -26,7 +27,6 @@ const statsQueryTime = 15 * time.Second
 type adminInput struct {
 	kind     string
 	target   int64
-	mode     string
 	draft    store.Provider
 	panelMsg int64
 	expires  time.Time
@@ -480,12 +480,14 @@ func (b *Bot) viewStats(ctx context.Context, l lang) panelView {
 	)
 	wg.Add(2)
 	go func() {
+		defer guard.Recover("admin")
 		defer wg.Done()
 		qctx, cancel := context.WithTimeout(ctx, statsQueryTime)
 		defer cancel()
 		o, err = b.st.Overview(qctx)
 	}()
 	go func() {
+		defer guard.Recover("admin")
 		defer wg.Done()
 		qctx, cancel := context.WithTimeout(ctx, statsQueryTime)
 		defer cancel()
@@ -593,8 +595,6 @@ func (b *Bot) sendChart(ctx context.Context, chatID, admin int64) {
 	caption := l.f("📈 پیام‌های ۱۴ روز اخیر\n👥 کاربر جدید: %d · بیشترین فعال در یک روز: %d", newUsers, active)
 	_ = b.api.SendPhoto(ctx, chatID, telegram.File{Name: "stats.png", Reader: f}, caption)
 }
-
-const usersPerPage = 8
 
 var reactionEmojis = []string{"👀", "👍", "✍", "🫡", "🤔", "⚡"}
 

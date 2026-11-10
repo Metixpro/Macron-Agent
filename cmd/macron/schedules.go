@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/sched"
 	"github.com/Metixpro/macron-agent/pkg/store"
@@ -311,7 +312,10 @@ func (b *Bot) runDueSchedules(ctx context.Context, now time.Time) {
 		b.wg.Add(1)
 		go func(x store.Schedule, rule sched.Rule) {
 			defer b.wg.Done()
-			err := b.fireSchedule(x, rule, now)
+			err := func() (err error) {
+				defer guard.Failed(fmt.Sprintf("schedule #%d", x.ID), &err)
+				return b.fireSchedule(x, rule, now)
+			}()
 			msg := ""
 			if err != nil {
 				msg = err.Error()

@@ -163,15 +163,6 @@ func (r *activeRun) take() []*interjection {
 	return xs
 }
 
-func (r *activeRun) add(xs []*interjection) {
-	if len(xs) == 0 {
-		return
-	}
-	r.mu.Lock()
-	r.pending = append(r.pending, xs...)
-	r.mu.Unlock()
-}
-
 func (r *activeRun) answered() {
 	r.mu.Lock()
 	r.answering = true
@@ -329,18 +320,6 @@ func (b *Bot) interjection(ctx context.Context, u *store.User, m *telegram.Messa
 	}
 	memo := strings.TrimSpace(strings.Join(append(notes, text), " "))
 	return &interjection{m: m, text: text, msg: msg, memo: memo}, nil
-}
-
-func (b *Bot) repliesToOwnJob(m *telegram.Message) bool {
-	if m.RepliedInChat() == nil || m.From == nil {
-		return false
-	}
-	v, ok := b.runs.Load(m.From.ID)
-	if !ok {
-		return false
-	}
-	run := v.(*activeRun)
-	return run.chatID == m.Chat.ID && run.msgID == m.RepliedInChat().MessageID
 }
 
 func (b *Bot) followUp(u *store.User, xs []*interjection) {

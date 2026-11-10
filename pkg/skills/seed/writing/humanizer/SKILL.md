@@ -3,7 +3,7 @@ name: humanizer
 description: "Use when asked to humanize, de-AI or naturalize a text (Persian or English), or to rewrite it in a real voice."
 version: 1.0.0
 category: writing
-author: Waze (adapted from Hermes Agent / blader/humanizer)
+author: Macron (adapted from Hermes Agent / blader/humanizer)
 license: MIT
 ---
 

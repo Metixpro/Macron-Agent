@@ -16,7 +16,7 @@ func TestDocHTML(t *testing.T) {
 		`<a href="https://example.com">لینک</a>`, `<table dir="rtl">`, `<th style="text-align:right">فروش</th>`, "<td>آبان</td><td style=\"text-align:right\"></td>",
 		`<ul dir="rtl"><li>یک<ul dir="ltr"><li>nested</li></ul></li><li>☑ done</li></ul><ol dir="ltr"><li>first</li><li>second</li></ol>`,
 		`<blockquote dir="rtl"><p dir="rtl">نقل</p>`, `<pre dir="ltr"><code class="language-go">fmt.Println(&#34;&lt;b&gt;&#34;)</code></pre>`, "<hr>",
-		`<img src="https://waze.local/chart.png" alt="نمودار">`, "&lt;script&gt;",
+		`<img src="https://macron.local/chart.png" alt="نمودار">`, "&lt;script&gt;",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)

@@ -3,7 +3,7 @@ name: code-review
 description: "Use when asked to review, audit, clean up or simplify code or a pull request."
 version: 1.0.0
 category: dev
-author: Waze (adapted from Hermes Agent)
+author: Macron (adapted from Hermes Agent)
 license: MIT
 ---
 

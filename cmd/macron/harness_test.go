@@ -393,7 +393,7 @@ func newHarness(t *testing.T) *harness {
 	b := &Bot{
 		api: telegram.NewBotWithBase("42:TOKEN-SECRET", tgSrv.URL), app: a, st: st, prov: prov,
 		mem: memory.New(st, prov, func() int { return historyBudget(st, agent.DefaultContextWindow) }),
-		me:  telegram.User{ID: 42, Username: "WazeBot", FirstName: "Waze"}, loc: loc, owner: map[int64]bool{ownerID: true},
+		me:  telegram.User{ID: 42, Username: "MacronBot", FirstName: "Macron"}, loc: loc, owner: map[int64]bool{ownerID: true},
 		gate: guard.NewGate(10), flood: guard.NewRateLimiter(1000, time.Minute), runTimeout: 30 * time.Second,
 		jobCtx: context.Background(), started: time.Now(), brain: br,
 	}

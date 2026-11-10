@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
@@ -157,6 +158,7 @@ func (r *Registry) searchImage(ctx context.Context, sessionID string, args map[s
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				defer guard.Recover("an image download")
 				data[j], dead[j] = r.downloadImage(ctx, h.url)
 			}()
 		}
@@ -242,6 +244,7 @@ func askImageEngines(ctx context.Context, query string, engines ...func(context.
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer guard.Recover("an image search")
 			results[i] = engine(ctx, query)
 		}()
 	}

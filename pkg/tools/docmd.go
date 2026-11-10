@@ -208,7 +208,7 @@ func mdInline(s string) string {
 		sub := mdImageRe.FindStringSubmatch(m)
 		src := sub[2]
 		if !strings.HasPrefix(src, "https://") && !strings.HasPrefix(src, "http://") {
-			src = "https://waze.local/" + strings.TrimLeft(strings.TrimPrefix(src, "/workspace"), "/")
+			src = "https://macron.local/" + strings.TrimLeft(strings.TrimPrefix(src, "/workspace"), "/")
 		}
 		return hold(`<img src="` + html.EscapeString(src) + `" alt="` + html.EscapeString(sub[1]) + `">`)
 	})

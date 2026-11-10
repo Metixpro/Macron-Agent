@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"path"
 	"regexp"
@@ -14,7 +13,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-const wikimediaUA = "Waze-Agent/1.0 (+https://github.com/Metixpro/macron-agent)"
+const wikimediaUA = "Macron-Agent/1.0 (+https://github.com/Metixpro/macron-agent)"
 
 var (
 	imageExts = []string{".jpg", ".jpeg", ".png", ".webp"}
@@ -91,31 +90,6 @@ func (r *Registry) registerMediaTools() {
 			"text_content": prop("string", "create: the document in Markdown"),
 			"title":        prop("string", "create: the cover title (dated)"),
 		}, []string{"action", "filename"}, r.pdfTool)
-}
-
-func (r *Registry) saveStream(sessionID, name string, src io.Reader, max int64) (int64, error) {
-	if rem := r.Machine.FreeSpace(); rem < max {
-		max = rem
-	}
-	if max <= 0 {
-		return 0, machine.ErrNoSpace
-	}
-	f, err := r.Machine.Create(sessionID, name)
-	if err != nil {
-		return 0, err
-	}
-	n, err := copyLimited(f, src, max)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		_ = r.Machine.Remove(sessionID, name)
-		if err == ErrTooLarge {
-			return 0, fmt.Errorf("file is larger than %s", humanSize(max))
-		}
-		return 0, err
-	}
-	return n, nil
 }
 
 func (r *Registry) generateChart(ctx context.Context, sessionID string, args map[string]any) (string, error) {

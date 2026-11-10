@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
@@ -454,6 +455,7 @@ func (b *Bot) viewExams(ctx context.Context, l lang) panelView {
 func (b *Bot) startExam(adminID int64) {
 	b.wg.Add(1)
 	go func() {
+		defer guard.Recover("learn_admin")
 		defer b.wg.Done()
 		ctx, cancel := b.ctx(time.Duration(len(evalCases)+2) * evalCaseTime)
 		defer cancel()

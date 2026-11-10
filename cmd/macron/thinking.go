@@ -91,15 +91,6 @@ func (t *thinkLog) progress(sub int, name, text string) {
 	}
 }
 
-func (t *thinkLog) busy() bool {
-	for _, s := range t.steps {
-		if s.active {
-			return true
-		}
-	}
-	return false
-}
-
 func (t *thinkLog) current() (thinkStep, bool) {
 	for i := len(t.steps) - 1; i >= 0; i-- {
 		if t.steps[i].active && !t.steps[i].agent {

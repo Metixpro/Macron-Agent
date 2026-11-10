@@ -770,6 +770,9 @@ func (r *Registry) editFile(ctx context.Context, sessionID string, args map[stri
 	if len(edits) == 0 {
 		return "error: give old_text and new_text, or edits [{old_text, new_text}]", nil
 	}
+	if refused := r.gatePath(ctx, sessionID, ToolEditFile, name); refused != "" {
+		return refused, nil
+	}
 	data, truncated, err := r.Machine.ReadFile(sessionID, name, maxEditBytes)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -1258,6 +1261,7 @@ func (r *Registry) extract(ctx context.Context, sessionID, name, dest, password 
 			if err != nil {
 				return "error: the archive is damaged: " + err.Error()
 			}
+			//lint:ignore SA1019 archives written by old tar programs still mark files this way
 			if h.Typeflag == tar.TypeDir || h.Typeflag == tar.TypeReg || h.Typeflag == tar.TypeRegA {
 				names = append(names, entryName{h.Name, h.Typeflag == tar.TypeDir})
 			}
@@ -1281,6 +1285,7 @@ func (r *Registry) extract(ctx context.Context, sessionID, name, dest, password 
 				if target, ok := x.target(h.Name); ok {
 					x.mkdir(target)
 				}
+			//lint:ignore SA1019 archives written by old tar programs still mark files this way
 			case tar.TypeReg, tar.TypeRegA:
 				if target, ok := x.target(h.Name); ok {
 					if err := x.write(target, tr); err != nil {
@@ -1369,7 +1374,7 @@ func (r *Registry) importRepo(ctx context.Context, sessionID string, args map[st
 		return "error: " + err.Error(), nil
 	}
 	req.Header = header
-	req.Header.Set("User-Agent", "Waze-Agent")
+	req.Header.Set("User-Agent", "Macron-Agent")
 	resp, err := r.HTTP.Do(req)
 	if err != nil {
 		return "error: download failed: " + err.Error(), nil

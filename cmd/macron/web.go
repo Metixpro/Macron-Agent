@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/app"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
@@ -217,6 +218,7 @@ func (b *Bot) serveWeb(ctx context.Context) {
 	serve := func(name, addr string, h http.Handler) {
 		srv := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
 		go func() {
+			defer guard.Recover("web")
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

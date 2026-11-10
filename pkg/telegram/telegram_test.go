@@ -391,7 +391,7 @@ func TestPollsAndAlbums(t *testing.T) {
 func TestGuestMessageUpdate(t *testing.T) {
 	var u Update
 	raw := `{"update_id":9,"guest_message":{"message_id":3,"chat":{"id":-100,"type":"supergroup"},"from":{"id":5,"first_name":"A"},
-		"text":"@WazeBot 2+2","guest_query_id":"GQ1","reply_to_message":{"message_id":2,"chat":{"id":-100,"type":"supergroup"},"text":"hi"}}}`
+		"text":"@MacronBot 2+2","guest_query_id":"GQ1","reply_to_message":{"message_id":2,"chat":{"id":-100,"type":"supergroup"},"text":"hi"}}}`
 	if err := json.Unmarshal([]byte(raw), &u); err != nil || u.GuestMessage == nil || u.GuestMessage.GuestQueryID != "GQ1" ||
 		u.GuestMessage.ReplyToMessage == nil {
 		t.Fatalf("guest message: %+v %v", u.GuestMessage, err)

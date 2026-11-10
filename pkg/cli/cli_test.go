@@ -157,7 +157,7 @@ func TestConfigCommandMasksSecrets(t *testing.T) {
 	if strings.Contains(out.String(), "SECRETVALUE") || !strings.Contains(out.String(), "MACRON_MODEL=m") {
 		t.Errorf("list:\n%s", out)
 	}
-	io, out = testIO("")
+	io, _ = testIO("")
 	if _, code := Run([]string{"config", "set", "MACRON_OWNERS", "abc"}, io); code == 0 {
 		t.Error("a bad owner id is refused")
 	}
@@ -457,5 +457,24 @@ func TestDoctorChecksMoaPresets(t *testing.T) {
 	s := out.String()
 	if !strings.Contains(s, `"ghost" is not a provider`) || !strings.Contains(s, "cannot be a mixture") || r.fails != 2 {
 		t.Fatalf("%d fails:\n%s", r.fails, s)
+	}
+}
+
+func TestConfigSetRefusesASecondLine(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("MACRON_HOME", home)
+	t.Setenv("MACRON_ENV_FILE", "")
+	for _, bad := range [][2]string{{"FOO", "a\nMACRON_OWNERS=1"}, {"FOO", "a\rb"}, {"FOO\nBAR", "x"}, {"A=B", "x"}, {"", "x"}} {
+		io, _ := testIO("")
+		if _, code := Run([]string{"config", "set", bad[0], bad[1]}, io); code == 0 {
+			t.Errorf("config set %q %q was accepted", bad[0], bad[1])
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(home, "config.env")); strings.Contains(string(data), "MACRON_OWNERS") {
+		t.Errorf("a line break in a value added a setting:\n%s", data)
+	}
+	io, out := testIO("")
+	if _, code := Run([]string{"config", "set", "FOO", "one line"}, io); code != 0 {
+		t.Errorf("a plain value is kept: %d %s", code, out)
 	}
 }

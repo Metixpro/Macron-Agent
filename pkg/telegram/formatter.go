@@ -293,9 +293,7 @@ func SplitMarkdown(md string, limit int) []string {
 		n := utf8.RuneCountInString(blk)
 		if n > limit {
 			emit()
-			for _, piece := range splitBigBlock(blk, limit) {
-				parts = append(parts, piece)
-			}
+			parts = append(parts, splitBigBlock(blk, limit)...)
 			continue
 		}
 		if size > 0 && size+2+n > limit {

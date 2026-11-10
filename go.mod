@@ -1,6 +1,6 @@
 module github.com/Metixpro/macron-agent
 
-go 1.26.0
+go 1.26.10
 
 require golang.org/x/net v0.62.0
 

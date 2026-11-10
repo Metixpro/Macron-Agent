@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/memory"
 	"github.com/Metixpro/macron-agent/pkg/router"
@@ -156,6 +157,7 @@ func (b *Bot) startTriage(uid int64, m *telegram.Message, text string, eligible 
 	}
 	c := &triageCall{done: make(chan struct{})}
 	go func() {
+		defer guard.Recover("triage")
 		defer close(c.done)
 		ctx, cancel := context.WithTimeout(b.jobCtx, triageTimeout)
 		defer cancel()

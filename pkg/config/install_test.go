@@ -31,7 +31,7 @@ func TestInstallationReceiptValidatesBinaryAndOwner(t *testing.T) {
 
 func TestRetiredMediaKeysAreRemovedWithoutTouchingOtherSettings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.env")
-	input := "# keep comment\nMACRON_API_KEY=keep-this\nWAZE_IMAGE_API_KEY=remove-one\nexport MACRON_MUSIC_API_KEY=remove-two\nMACRON_MODEL=local\nOTHER_IMAGE_KEY=keep-too\n"
+	input := "# keep comment\nMACRON_API_KEY=keep-this\nMACRON_IMAGE_API_KEY=remove-one\nexport MACRON_MUSIC_API_KEY=remove-two\nMACRON_MODEL=local\nOTHER_IMAGE_KEY=keep-too\n"
 	if err := os.WriteFile(path, []byte(input), 0640); err != nil {
 		t.Fatal(err)
 	}

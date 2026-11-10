@@ -54,6 +54,17 @@ func (s *Machine) absPath(sessionID, name string) (string, error) {
 	return filepath.Clean(p), nil
 }
 
+// HostPath is where a tool's file name lands on this machine, and whether that is
+// inside the session's work folder.
+func (s *Machine) HostPath(sessionID, name string) (abs string, inside bool, err error) {
+	abs, err = s.absPath(sessionID, name)
+	if err != nil {
+		return "", false, err
+	}
+	top := s.topWorkspace(sessionID)
+	return abs, abs == top || strings.HasPrefix(abs, top+string(filepath.Separator)), nil
+}
+
 const (
 	fileMode = 0o644
 	dirMode  = 0o755

@@ -416,7 +416,7 @@ var (
 
 	streamPyRe = regexp.MustCompile(`(?m)^[ \t>*•-]*\[?\s*[a-z][a-z0-9]*_[a-z0-9_]*\(`)
 
-	streamHoldRe  = regexp.MustCompile("^[ \\t]*(?:\\{|\\[\\s*(?:\\{|[a-z_]*$|[a-z][a-z0-9]*_)|<|Action|functools|[a-z][a-z0-9]*_[a-z0-9_]*(?:\\(.*)?$)")
+	streamHoldRe  = regexp.MustCompile(`^[ \t]*(?:\{|\[\s*(?:\{|[a-z_]*$|[a-z][a-z0-9]*_)|<|Action|functools|[a-z][a-z0-9]*_[a-z0-9_]*(?:\(.*)?$)`)
 	fenceOpenRe   = regexp.MustCompile("^[ \\t]*```[A-Za-z_]*[ \\t]*$")
 	trailingTagRe = regexp.MustCompile(`<[A-Za-z0-9_:/|｜-]*$`)
 )

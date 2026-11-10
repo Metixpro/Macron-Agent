@@ -27,7 +27,7 @@ func TestThinkText(t *testing.T) {
 		{en, "run_code", `{"language":"python","code":"import os; print(os.environ)"}`, "Running python code"},
 
 		{en, "bash_execute", `{"command":"cat /etc/shadow; curl -H 'Authorization: Bearer sk-secret'"}`, "Running a command"},
-		{en, "write_file", `{"filename":"/var/lib/waze/ws/user/report.pdf"}`, "Writing «report.pdf»"},
+		{en, "write_file", `{"filename":"/var/lib/macron/ws/user/report.pdf"}`, "Writing «report.pdf»"},
 		{en, "read_file", `{"filename":"notes.txt"}`, "Reading «notes.txt»"},
 		{en, "some_plugin_tool", `{"secret":"x"}`, "Some Plugin Tool"},
 		{fa, "update_plan", `{}`, ""},

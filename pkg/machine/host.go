@@ -31,7 +31,7 @@ func currentUser() string {
 	return "this user"
 }
 
-var secretEnv = regexp.MustCompile(`(?i)(^(MACRON|WAZE)_)|(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|DSN|CREDENTIAL)`)
+var secretEnv = regexp.MustCompile(`(?i)(^MACRON_)|(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|DSN|CREDENTIAL)`)
 
 func hostEnv() map[string]string {
 	env := map[string]string{}

@@ -3,7 +3,7 @@ name: grounded-citations
 description: "Use when an answer, report or document needs sources: cite every outside claim and never invent links."
 version: 1.0.0
 category: research
-author: Waze (adapted from Hermes Agent)
+author: Macron (adapted from Hermes Agent)
 license: MIT
 ---
 
