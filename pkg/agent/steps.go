@@ -56,6 +56,8 @@ func StepLine(name, args, result string) string {
 	return s.text
 }
 
+func StepFailed(name, args, result string) bool { return describeStep(name, args, result).failed }
+
 func describeStep(name, argsJSON, result string) step {
 	a := map[string]any{}
 	_ = json.Unmarshal([]byte(argsJSON), &a)

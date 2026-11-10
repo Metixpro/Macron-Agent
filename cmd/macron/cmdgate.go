@@ -33,7 +33,9 @@ const (
 
 var gateAskTimeout = 10 * time.Minute
 
-func (b *Bot) newCommandGate() *cmdgate.Gate {
+func (b *Bot) newCommandGate() *cmdgate.Gate { return b.commandGate(b.app.Machine.BaseDir) }
+
+func (b *Bot) commandGate(workDir string) *cmdgate.Gate {
 	env := cmdgate.Env{
 		SudoPassword: os.Getenv("SUDO_PASSWORD") != "",
 		SelfNames:    []string{"macron", config.ServiceName()},
@@ -41,7 +43,7 @@ func (b *Bot) newCommandGate() *cmdgate.Gate {
 		SelfPID:      os.Getpid(),
 		SelfHome:     config.Home(),
 		SelfSecrets:  ownSecrets(),
-		WorkDir:      b.app.Machine.BaseDir,
+		WorkDir:      workDir,
 	}
 	env.UserHome, _ = os.UserHomeDir()
 	g := cmdgate.New(env, os.Getenv("MACRON_YOLO") == "1")

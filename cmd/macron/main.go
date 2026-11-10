@@ -29,9 +29,19 @@ import (
 func main() {
 	config.AdoptLegacyEnv()
 	config.ActivateToolEnv()
-	if len(os.Args) > 1 && runCommand(os.Args[1:]) {
+	args := os.Args[1:]
+	switch {
+	case len(args) == 0 && interactiveTerminal():
+		os.Exit(runTerminal())
+	case len(args) > 1 && (args[0] == "telegram" || args[0] == "tg") && args[1] == "run":
+		args = args[2:]
+	case len(args) > 0 && runCommand(args):
 		return
 	}
+	runBot(args)
+}
+
+func runBot(args []string) {
 	_ = config.LoadDefaultDotEnv()
 	cfg := &config.Config{OptionalAPIURL: true}
 	cfg.Bind(flag.CommandLine)
@@ -41,7 +51,7 @@ func main() {
 	rate := flag.Int("rate-limit", 0, "max requests per minute per user (0 = no limit, the default: only the owner can write)")
 	maxJobs := flag.Int("max-concurrent", 64, "max requests processed at the same time")
 	check := flag.Bool("check", false, "check that the bot starts here (settings, database, Telegram), print «ok VERSION» and exit (the updater's trial run)")
-	flag.Parse()
+	_ = flag.CommandLine.Parse(args)
 
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "token" {
@@ -56,14 +66,14 @@ func main() {
 		log.Printf("⚠️  %s", w)
 	}
 	if *tokenFlag == "" {
-		log.Fatalf("❌ no settings yet (%s). Run «macron setup» first: it asks for the bot token from @BotFather, your Telegram id and a model", config.EnvFilePath())
+		log.Fatalf("❌ Telegram is not connected yet (%s). Run «macron telegram»: it asks for the bot token from @BotFather and your Telegram id", config.EnvFilePath())
 	}
 	owners, err := config.ParseIDs(*ownersFlag)
 	if err != nil {
 		log.Fatalf("❌ %s: %v", config.EnvOwners, err)
 	}
 	if len(owners) == 0 {
-		log.Fatalf("❌ no owner: the agent answers only its owners. Run «macron setup», or put your Telegram id in %s (send /id to @userinfobot to see it)", config.EnvOwners)
+		log.Fatalf("❌ no owner: the bot answers only its owners. Run «macron telegram setup», or put your Telegram id in %s (send /id to @userinfobot to see it)", config.EnvOwners)
 	}
 	secretKey, err := config.SecretKey()
 	if err != nil {

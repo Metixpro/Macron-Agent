@@ -34,8 +34,8 @@ func (s *Store) Retention(ctx context.Context) (map[string]int64, error) {
 		{"bg_tasks", `DELETE FROM bg_tasks WHERE rowid IN (SELECT rowid FROM bg_tasks WHERE created_at < ? AND status NOT IN ('queued', 'running') LIMIT ?)`, []any{now.Add(-keepBgTasks)}},
 		{"cmd_audit", `DELETE FROM cmd_audit WHERE rowid IN (SELECT rowid FROM cmd_audit WHERE at < ? LIMIT ?)`, []any{now.Add(-keepCmdAudit)}},
 		{"widgets", `DELETE FROM widgets WHERE rowid IN (SELECT rowid FROM widgets WHERE COALESCE(used_at, created_at) < ? LIMIT ?)`, []any{now.Add(-keepWidgets)}},
-		{"context_messages", `DELETE FROM context_messages WHERE rowid IN (SELECT rowid FROM context_messages WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
-		{"context_memory", `DELETE FROM context_memory WHERE rowid IN (SELECT rowid FROM context_memory WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
+		{"context_messages", `DELETE FROM context_messages WHERE rowid IN (SELECT rowid FROM context_messages WHERE user_id > 0 AND user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
+		{"context_memory", `DELETE FROM context_memory WHERE rowid IN (SELECT rowid FROM context_memory WHERE user_id > 0 AND user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
 		{"user_facts", `DELETE FROM user_facts WHERE rowid IN (SELECT rowid FROM user_facts WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
 		{"user_cookies", `DELETE FROM user_cookies WHERE rowid IN (SELECT rowid FROM user_cookies WHERE user_id NOT IN (SELECT id FROM users) LIMIT ?)`, nil},
 	}

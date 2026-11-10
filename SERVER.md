@@ -31,11 +31,12 @@ For unattended user installation:
 
 ```sh
 bash install.sh --scope user --yes --no-setup
-macron setup
+macron setup --yes --api-url URL --model NAME     # the model (the key: macron config set MACRON_API_KEY …)
+macron telegram setup --yes --token TOKEN --owner ID
 ```
 
 `--prefix` selects the binary directory, `--home` selects private data,
-`--no-service` leaves service installation disabled. An installation receipt
+`--no-service` keeps the Telegram bot from being started in the background. An installation receipt
 remembers the scope and home, so later CLI calls and updates use the same paths.
 
 ## Build and install from source
@@ -121,12 +122,23 @@ requests to that provider. Web/media tools require their respective networks.
 ## Telegram service
 
 ```sh
-macron setup
+macron telegram            # connect the bot, or show its state and actions
+macron telegram status
+macron telegram restart
+macron telegram logs -f
 macron doctor
-macron service install
-macron service status
-macron logs -f
 ```
+
+`macron telegram` checks the token with Telegram, finds your id from a message
+you send the bot, saves both in `config.env`, makes a trial run
+(`macron telegram run --check`) and keeps the bot running: as a systemd unit
+(`ExecStart=… telegram run`) or a launchd agent, or, where systemd is not running
+(containers, WSL without systemd), as a background process recorded in
+`telegram.pid` with its log in `macron.log`; that one is started again after a
+reboot with `macron telegram start`. `macron service install` still writes the
+unit directly. `macron telegram run` runs the bot in the foreground. A bare
+`macron` opens the terminal interface when it has a terminal; without one (an
+older unit file) it still runs the bot.
 
 Use a dedicated ordinary account. Service files now preserve spaces, literal
 percent/dollar characters and XML characters in paths, and use UMask=0077 for new
@@ -433,3 +445,27 @@ files it was made from. The built-in `telegram-widgets` skill teaches the format
 Widgets need a Telegram server with Bot API 10.4 (a local Bot API server must be
 updated); in production they work in private chats, which is where Macron runs.
 
+
+### 1.5.0: the terminal interface and `macron telegram`
+
+`macron` with no arguments opens an interactive terminal interface in the current
+folder: streamed Markdown answers, each tool step as it happens (a command with its
+last output lines and exit status, a file written with its first lines, an edit as a
+diff), the plan as a checklist, sub-agents with their progress, and an approval
+prompt for flagged commands (once, for this session, always, or no — which also
+stops the turn). Esc interrupts; messages typed while it works are handed to it at
+its next step. Slash commands: `/model` (a filterable list from the provider),
+`/approvals`, `/yolo`, `/new`, `/clear`, `/compact`, `/status`, `/init` (writes
+`MACRON.md`), `/telegram` (runs the Telegram setup in place) and `/exit`.
+
+The folder is the workspace: tools use relative paths from it, and its `MACRON.md`,
+`AGENTS.md` or `CLAUDE.md` is read every turn. Each folder has its own
+conversation, kept in the database with the same exact work records as Telegram,
+so running `macron` there again continues the work without re-reading files. The
+agent's scratch folders (`.agents/`, `.jobs/`, `.run/`…) are added to the
+repository's `.git/info/exclude`. The first run asks for a model when none is set.
+
+`macron telegram` connects the bot step by step and keeps it running (see
+"Telegram service"). `macron setup` now sets up the model and the time zone and
+only offers Telegram; the installer does the same, and starts the bot only when a
+token is configured. Systemd units and launchd agents run `macron telegram run`.

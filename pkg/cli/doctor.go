@@ -118,10 +118,10 @@ func doctor(io *IO, args []string) int {
 	token := getEnv(env, keyToken)
 	owners := getEnv(env, keyOwners)
 	if token == "" {
-		r.line(fail, "no bot token", "run: macron setup")
+		r.line(ok, "Telegram is not connected (optional)", "to reach Macron from your phone: macron telegram")
 	} else if !*offline {
 		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		me, err := telegram.NewBotWithBase(token, telegramAPI).GetMe(cctx)
+		me, err := telegram.NewBotWithBase(token, telegramBase()).GetMe(cctx)
 		cancel()
 		if err != nil {
 			r.line(fail, "Telegram refuses the bot token: "+shorten(err), "get a new token from @BotFather and run: macron config set TELEGRAM_BOT_TOKEN <token>")
@@ -129,9 +129,9 @@ func doctor(io *IO, args []string) int {
 			r.line(ok, "Telegram: the bot is @"+me.Username, "")
 		}
 	}
-	if _, err := config.ParseIDs(owners); err != nil || owners == "" {
-		r.line(fail, "no valid owner id", "run: macron config set MACRON_OWNERS <your numeric Telegram id>")
-	} else {
+	if _, err := config.ParseIDs(owners); token != "" && (err != nil || owners == "") {
+		r.line(fail, "no valid owner id for the bot", "run: macron telegram setup")
+	} else if token != "" {
 		r.line(ok, "owner(s): "+owners, "")
 	}
 
@@ -176,15 +176,14 @@ func doctor(io *IO, args []string) int {
 		}
 	}
 
-	if serviceSupported() {
+	if st := telegramState(); token != "" && st.running {
+		r.line(ok, "the Telegram bot is running ("+st.how+")", "")
+	} else if token != "" {
+		r.line(warn, "the Telegram bot is not running", "run: macron telegram start")
+	}
+	if serviceSupported() && token != "" {
 		u, _ := currentUnit()
-		ctl := systemctl(u)
 		if runtime.GOOS == "linux" {
-			if err := exec.Command(ctl[0], append(ctl[1:], "is-active", "--quiet", unitName)...).Run(); err != nil {
-				r.line(warn, "the agent is not running as a service", "run: macron service install")
-			} else {
-				r.line(ok, "the agent runs as a service", "")
-			}
 			if !u.System {
 				out, _ := exec.Command("loginctl", "show-user", currentUser(), "-p", "Linger", "--value").Output()
 				if strings.TrimSpace(string(out)) == "yes" {

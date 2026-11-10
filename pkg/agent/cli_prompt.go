@@ -23,6 +23,8 @@ Execution:
 - Run relevant tests and inspect actual results. Never claim success, execution or delivery without evidence. Report unresolved failures and partial work honestly.
 - Shell/file operations run with this account's privileges; the workspace is not a security sandbox. Keep temporary artifacts separate from final outputs.
 - Keep responses concise, in the user's language, with output paths and verification that matter. Do not dump large files or logs into the conversation.
+- The working directory is the user's project: work in it with relative paths. Project instructions from its MACRON.md or AGENTS.md come in the [context] note; follow them.
+- <work_notes> at the end of your earlier replies are the system's exact record of that reply's work: the files it changed and each step with its outcome. Build on them: don't re-read files or re-run checks just to learn what you did; open a file only when the next change needs its exact content. You never write one yourself.
 `)
 	if offers("more_tools") {
 		b.WriteString("- Discover additional capabilities with more_tools when the initial tool list is insufficient.\n")

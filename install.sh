@@ -18,8 +18,8 @@ Macron Agent · Installer
   --tools               install Python tools (default)
   --browser             add a private Chromium download
   --browser-agent       add the autonomous browser environment
-  --no-service          leave background-service installation disabled
-  --no-setup            leave configuration for later
+  --no-service          do not run the Telegram bot in the background
+  --no-setup            leave the model and Telegram for later
   --yes                 use defaults without questions
   --uninstall           run the complete macron uninstaller
   --keep-data           with --uninstall: preserve private data
@@ -211,8 +211,8 @@ report_dependencies() {
 
 start_service() {
  [ "$SERVICE" = 1 ] || return 0
- if [ "$OS" = linux ] && ! have systemctl; then warn 'systemd is unavailable; start macron manually'; return 0; fi
- if "$TARGET" service install; then ok 'Background service configured'; else warn 'Service unavailable; run macron manually or inspect macron service status'; fi
+ if { [ "$OS" = darwin ] || have systemctl; } && "$TARGET" service install; then ok 'Telegram bot service configured'; return 0; fi
+ if "$TARGET" telegram start; then ok 'Telegram bot running in the background'; else warn 'The Telegram bot did not start; see: macron telegram logs'; fi
 }
 
 choose_scope() {
@@ -324,16 +324,28 @@ main() {
  if [ "$TOOLS" = 1 ]; then install_system_packages; else say '  Skipped (--no-tools)'; fi
  phase 4 'Private Python tools'
  if [ "$TOOLS" = 1 ]; then install_python_packages; report_dependencies; else say '  Skipped (--no-tools)'; fi
- phase 5 'Configuration'
- local configured=0
- if [ -f "$HOME_DIR/config.env" ]; then ok "your settings in $HOME_DIR are kept"; configured=1
- elif [ "$SETUP" = 1 ] && [ "$INTERACTIVE" = 1 ]; then "$TARGET" setup --no-service </dev/tty && configured=1
- else say '  Configure later with macron setup --no-service'; fi
- phase 6 'Background service'
- if [ "$SERVICE" = 0 ]; then say '  Manual start (--no-service)'; elif [ "$configured" = 1 ]; then start_service; else say '  Waiting for configuration'; fi
+ phase 5 'Model'
+ if [ -f "$HOME_DIR/config.env" ]; then ok "your settings in $HOME_DIR are kept"
+ elif [ "$SETUP" = 1 ] && [ "$INTERACTIVE" = 1 ]; then "$TARGET" setup --no-telegram </dev/tty || warn 'Choose it later: macron setup'
+ else say '  Later: macron asks for it the first time it runs (or: macron setup)'; fi
+ phase 6 'Telegram'
+ local telegram=0
+ if [ -f "$HOME_DIR/config.env" ] && grep -q '^TELEGRAM_BOT_TOKEN=..*' "$HOME_DIR/config.env"; then
+  telegram=1
+  if [ "$SERVICE" = 1 ]; then start_service; else say '  Connected; start it with: macron telegram start'; fi
+ elif [ "$SETUP" = 1 ] && [ "$INTERACTIVE" = 1 ]; then
+  ask 'Connect a Telegram bot too, to reach Macron from your phone? y/N' N
+  case "$ANSWER" in
+   y|Y|yes|YES)
+    if [ "$SERVICE" = 1 ]; then "$TARGET" telegram setup </dev/tty && telegram=1; else "$TARGET" telegram setup --no-service </dev/tty && telegram=1; fi ;;
+   *) say '  Later: macron telegram' ;;
+  esac
+ else say '  Later: macron telegram'; fi
+ local run="$TARGET"
+ if [ "$(command -v macron 2>/dev/null || true)" = "$TARGET" ]; then run=macron; fi
  printf '\n%s✓ Macron Agent %s installed%s\n  Program  %s\n  Data     %s\n  Log      %s\n' "$GREEN" "$new_version" "$RESET" "$TARGET" "$HOME_DIR" "$LOG"
- if [ "$configured" = 0 ]; then printf '\nNext: %q setup --no-service\n' "$TARGET"; fi
- if [ "$SERVICE" = 0 ] || [ "$configured" = 0 ]; then printf 'Run:  %q\n' "$TARGET"; fi
+ printf '\nStart: open a project folder and run %q\n' "$run"
+ if [ "$telegram" = 0 ]; then printf 'Phone: %q telegram\n' "$run"; fi
  printf 'Remove this installation: %q uninstall\n' "$TARGET"
 }
 

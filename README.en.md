@@ -27,9 +27,38 @@ On Linux or macOS:
 curl -fsSL https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.sh | bash
 ```
 
-Choose **current user** or **system/root** first. The installer shows the paths, verifies the download and guides you through bot and model setup. Enter your bot token, owner ID and model credentials in the wizard.
+Choose **current user** or **system/root** first. The installer shows the paths, verifies the download and sets up the model; connecting Telegram is optional, there or later with `macron telegram`.
 
 User installations need no `sudo`. Python packages go into a private environment; a compatible Python is provisioned when needed. Missing optional system executables are reported.
+
+### In the terminal
+
+In any project folder, just run:
+
+```bash
+macron
+```
+
+An interactive terminal interface opens: answers stream in rendered Markdown, every step (a command with its last output lines, a file written, an edit's diff) is listed as it happens, the plan's checklist updates, and risky commands wait for your approval in a prompt. Macron works in that folder and follows the project's `MACRON.md` (or `AGENTS.md`). Each folder keeps its conversation: run `macron` there again and it continues with the exact record of what was done.
+
+| Key or command | Does |
+|---|---|
+| `Enter` · `Ctrl+J` | send · new line |
+| `Esc` | interrupt |
+| `/model` · `/approvals` · `/yolo` | switch the model · how commands are approved · no prompts for 30 minutes |
+| `/new` · `/compact` · `/status` | fresh conversation · summarize the history · status |
+| `/init` | write `MACRON.md` for the project |
+| `/telegram` | connect and manage the Telegram bot |
+
+If no model is set up yet, the first `macron` asks for one.
+
+### In Telegram
+
+```bash
+macron telegram
+```
+
+It walks through the bot token (from @BotFather) and your id (send the bot a message and it sees it), saves the settings and keeps the bot running in the background: as a systemd or launchd service that starts at boot, or as a background process where there is no system service. Later, the same command shows its state and offers restart, stop, the log and changing the bot. `macron telegram status|start|stop|restart|logs -f` work too.
 
 Talk to the bot in a **private chat**. It answers configured owners only and does not operate in groups or channels. Progress appears in a native rich card with a checklist, expandable execution details, code blocks and a **Stop** button underneath. The final answer replaces the card. New text guides the active task; use `/queue next task` for a separate turn. Manage premium emoji packs and mappings under **Settings → Premium emoji**.
 
@@ -51,13 +80,15 @@ Some capabilities need additional packages or service credentials. Check your in
 macron doctor --tools-only
 ```
 
-## Run a task from the terminal
+## Run one task without the interface
+
+For scripts and cron:
 
 ```bash
 macron exec "Inspect this project and run its tests"
 ```
 
-Configure the model through setup or `MACRON_API_URL`, `MACRON_MODEL` and `MACRON_API_KEY`. Each invocation gets its own workspace, whose path is printed to the terminal. OpenAI-compatible endpoints are supported, including local model servers. `exec` runs one task; an interactive terminal chat is not included yet.
+Configure the model through setup or `MACRON_API_URL`, `MACRON_MODEL` and `MACRON_API_KEY`. Each invocation gets its own workspace, whose path is printed to the terminal. OpenAI-compatible endpoints are supported, including local model servers.
 
 ## Telegram commands
 
@@ -108,7 +139,7 @@ Requires Git, Make and **Go 1.26+**:
 git clone https://github.com/Metixpro/Macron-Agent.git
 cd Macron-Agent
 make build
-./bin/macron setup
+./bin/macron
 ```
 
 To prepare tools and browser support from the checkout:
@@ -120,8 +151,8 @@ To prepare tools and browser support from the checkout:
 ## Service and updates
 
 ```bash
-macron service status
-macron service restart
+macron telegram status
+macron telegram restart
 macron update
 ```
 

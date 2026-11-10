@@ -44,13 +44,13 @@ func systemdWord(s string, execValue bool) string {
 
 func renderSystemd(u unit) string {
 	var sb strings.Builder
-	sb.WriteString("[Unit]\nDescription=Macron Agent (personal AI agent in Telegram)\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\n")
+	sb.WriteString("[Unit]\nDescription=Macron Agent (Telegram bot)\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\n")
 	if u.System && u.User != "" {
 		fmt.Fprintf(&sb, "User=%s\n", u.User)
 	}
 	fmt.Fprintf(&sb, "Environment=%s\n", systemdWord("MACRON_HOME="+u.Home, false))
 	fmt.Fprintf(&sb, "WorkingDirectory=%s\n", systemdPath(u.Home))
-	fmt.Fprintf(&sb, "ExecStart=%s\n", systemdWord(u.Binary, true))
+	fmt.Fprintf(&sb, "ExecStart=%s telegram run\n", systemdWord(u.Binary, true))
 	sb.WriteString("Restart=always\nRestartSec=5\nTimeoutStopSec=45\nKillMode=process\nLimitNOFILE=65536\nUMask=0077\n\n[Install]\n")
 	if u.System {
 		sb.WriteString("WantedBy=multi-user.target\n")
@@ -106,7 +106,7 @@ func renderLaunchd(u unit) string {
 <plist version="1.0">
 <dict>
 	<key>Label</key><string>%s</string>
-	<key>ProgramArguments</key><array><string>%s</string></array>
+	<key>ProgramArguments</key><array><string>%s</string><string>telegram</string><string>run</string></array>
 	<key>EnvironmentVariables</key><dict><key>MACRON_HOME</key><string>%s</string></dict>
 	<key>WorkingDirectory</key><string>%s</string>
 	<key>RunAtLoad</key><true/>
@@ -205,8 +205,9 @@ func serviceInstall(io *IO) int {
 		io.printf("❌ %v\n", err)
 		return 1
 	}
-	if _, err := os.Stat(filepath.Join(u.Home, config.FileConfig)); err != nil {
-		io.printf("❌ no settings yet (%s): run «macron setup» first\n", filepath.Join(u.Home, config.FileConfig))
+	env, err := loadEnvFile(filepath.Join(u.Home, config.FileConfig))
+	if err != nil || getEnv(env, keyToken) == "" {
+		io.println("❌ Telegram is not connected yet: run «macron telegram» (it sets up the bot and this service)")
 		return 1
 	}
 	if runtime.GOOS == "darwin" {

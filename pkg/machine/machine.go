@@ -38,6 +38,9 @@ type Machine struct {
 
 	shellStart sync.Mutex
 	reaper     sync.Once
+
+	bindMu sync.RWMutex
+	bound  map[string]string
 }
 
 type ExecutionResult struct {
@@ -145,7 +148,31 @@ func SubPath(id string) string {
 }
 
 func (s *Machine) topWorkspace(sessionID string) string {
-	return filepath.Join(s.BaseDir, SafeSessionID(ParentSession(sessionID)))
+	key := SafeSessionID(ParentSession(sessionID))
+	s.bindMu.RLock()
+	dir, ok := s.bound[key]
+	s.bindMu.RUnlock()
+	if ok {
+		return dir
+	}
+	return filepath.Join(s.BaseDir, key)
+}
+
+func (s *Machine) Bind(sessionID, dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("%s is not a folder", abs)
+	}
+	s.bindMu.Lock()
+	if s.bound == nil {
+		s.bound = map[string]string{}
+	}
+	s.bound[SafeSessionID(ParentSession(sessionID))] = abs
+	s.bindMu.Unlock()
+	return abs, nil
 }
 
 func (s *Machine) touch(ws string) {

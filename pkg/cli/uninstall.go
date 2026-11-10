@@ -161,7 +161,7 @@ func serviceBelongs(data []byte, binary, home string, plist bool) bool {
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "ExecStart=") {
-				if strings.TrimPrefix(line, "ExecStart=") == systemdWord(binary, true) {
+				if cmd := strings.TrimPrefix(line, "ExecStart="); cmd == systemdWord(binary, true) || cmd == systemdWord(binary, true)+" telegram run" {
 					actualBinary = binary
 				}
 			}

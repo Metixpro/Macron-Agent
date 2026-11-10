@@ -71,19 +71,20 @@ func (io *IO) yes(question string, def bool) bool {
 	return def
 }
 
-const usage = `Macron Agent %s: a personal AI agent that lives in your Telegram.
+const usage = `Macron Agent %s: a personal AI agent that works on this machine.
 
 Usage:
-  macron                 start the agent (what the service runs)
-  macron exec [FLAGS] TASK  run a local task without Telegram
-  macron setup           first-time setup: bot token, your Telegram id, a model
-  macron doctor          check that everything works, and say what to fix
-  macron service ACTION  install | uninstall | start | stop | restart | status
-  macron logs [-f]       the agent's log
-  macron update          update to the newest release (--check: only look)
-  macron config ACTION   list | get KEY | set KEY VALUE | unset KEY | path
+  macron                  the agent in this terminal, working in the current folder
+  macron telegram         connect the Telegram bot and keep it running (status, logs, restart…)
+  macron exec [FLAGS] TASK  run one task without the interface and print the answer
+  macron setup            choose the model (and optionally connect Telegram)
+  macron doctor           check that everything works, and say what to fix
+  macron service ACTION   install | uninstall | start | stop | restart | status
+  macron logs [-f]        the Telegram bot's log
+  macron update           update to the newest release (--check: only look)
+  macron config ACTION    list | get KEY | set KEY VALUE | unset KEY | path
   macron uninstall [--yes]  remove this installation, service and all its data
-  macron backup [FILE]   save the home folder (database and notes) as one archive
+  macron backup [FILE]    save the home folder (database and notes) as one archive
   macron version
 
 Everything the agent is lives in one folder: %s
@@ -103,6 +104,11 @@ func Run(args []string, io *IO) (handled bool, code int) {
 		return true, execTask(io, rest)
 	case "setup":
 		return true, setup(io, rest)
+	case "telegram", "tg":
+		if len(rest) > 0 && rest[0] == "run" {
+			return false, 0
+		}
+		return true, telegramCmd(io, rest)
 	case "doctor":
 		return true, doctor(io, rest)
 	case "service":
