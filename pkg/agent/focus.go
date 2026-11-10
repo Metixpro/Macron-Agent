@@ -189,8 +189,6 @@ func focusText(req Request) string {
 	return sb.String()
 }
 
-func focusTools(defs []llm.Tool, text string) []llm.Tool { return focusPicked(defs, text, nil) }
-
 func focusWant(defs []llm.Tool, text string) map[string]bool {
 	want := map[string]bool{}
 	for _, n := range focusCore {

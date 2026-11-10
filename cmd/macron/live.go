@@ -205,8 +205,6 @@ func (l *liveView) discard() {
 	}
 }
 
-func (l *liveView) toolStart(sub int, name string) { l.toolStartWith(sub, name, "") }
-
 func (l *liveView) toolStartWith(sub int, name, args string) {
 	note := ""
 	if toolLabel(name) != "" && !l.termOn() {

@@ -51,7 +51,6 @@ func (b *Bot) newCommandGate() *cmdgate.Gate {
 	return g
 }
 
-// ownSecrets are the files that hold the agent's keys, owners and settings.
 func ownSecrets() []string {
 	out := []string{config.HomePath(config.FileConfig), config.HomePath(config.FileSecret)}
 	if p := config.EnvFilePath(); p != out[0] {

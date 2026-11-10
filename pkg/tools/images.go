@@ -334,10 +334,6 @@ func queryTerms(q string) []string {
 	return terms
 }
 
-func relevantHit(h imageHit, terms []string) bool {
-	return matchedTerms(h, terms) >= (len(terms)+1)/2
-}
-
 func matchedTerms(h imageHit, terms []string) int {
 	if len(terms) == 0 {
 		return 0

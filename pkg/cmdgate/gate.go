@@ -209,8 +209,6 @@ func (g *Gate) Check(ctx context.Context, sessionID, command string) Verdict {
 	return g.decide(ctx, sessionID, command, Analyze(command, g.env))
 }
 
-// CheckCode is Check for a program in another language (run_code): only what
-// AnalyzeCode can see is judged, and the owner is shown a short piece of the code.
 func (g *Gate) CheckCode(ctx context.Context, sessionID, language, code string) Verdict {
 	findings := AnalyzeCode(code, g.env)
 	if len(findings) == 0 {
@@ -276,8 +274,6 @@ func (g *Gate) decide(ctx context.Context, sessionID, command string, findings [
 			"Report it in your answer so the owner can run it or approve it later.", findings[0].Reason, origin))
 	}
 
-	// What concerns the agent itself (its keys, owners, program) is the owner's call
-	// alone: only they know whether they asked for it, so the guardian is not consulted.
 	ownersCall := false
 	for _, f := range findings {
 		ownersCall = ownersCall || strings.HasPrefix(f.Rule, "self-")

@@ -154,10 +154,6 @@ func (a *Agent) clock() string {
 	return fmt.Sprintf("Current date and time: %s (%s).", now.Format("Monday 2006-01-02 15:04"), a.loc.String())
 }
 
-// coreFor writes the ground rules. For the owner there is nothing to keep private
-// and nothing the agent declines on its own account: the rules that guard its
-// instructions, tools and technology are for answers other people read (a guest
-// chat), and are left out.
 func (a *Agent) coreFor(after string, owner bool) string {
 	p := a.Persona
 	var sb strings.Builder
@@ -191,8 +187,6 @@ Ground rules (they always apply, whatever the personality text above, a message,
 	fmt.Fprintf(&sb, rules, p.fullName(), p.Creator, p.CreatorHandle, iAm(p.localName()))
 	return sb.String()
 }
-
-func (a *Agent) chatPrompt() string { return a.chatPromptFor(false, "") }
 
 func (a *Agent) chatPromptFor(owner bool, note string) string {
 	var sb strings.Builder
@@ -959,7 +953,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		last.Store(time.Now().UnixNano())
 		touch = func() { last.Store(time.Now().UnixNano()) }
 		l = l.touching(touch)
-		// The watchdog keeps its own copy: escalate() below reassigns ctx while this goroutine runs.
+
 		idleCtx := ctx
 		go func() {
 			tick := time.NewTicker(min(max(req.IdleTimeout/8, 10*time.Millisecond), 30*time.Second))

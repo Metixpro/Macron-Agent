@@ -7,7 +7,7 @@ path = d["path"]
 
 
 def norm(t):
-    # NFKC turns the presentation forms a PDF stores for Persian and Arabic letters back into the letters themselves.
+
     return unicodedata.normalize("NFKC", t or "").replace("\x00", "")
 
 
@@ -17,7 +17,7 @@ def locked():
 
 
 try:
-    # PyMuPDF returns right-to-left lines in reading order; pypdf returns them as drawn (mirrored).
+
     import fitz
 
     doc = fitz.open(path)

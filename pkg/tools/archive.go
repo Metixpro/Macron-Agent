@@ -255,6 +255,7 @@ func (r *Registry) listArchive(ctx context.Context, sessionID, name, password st
 			if err != nil {
 				break
 			}
+
 			//lint:ignore SA1019 archives written by old tar programs still mark files this way
 			if h.Typeflag == tar.TypeReg || h.Typeflag == tar.TypeRegA {
 				items = append(items, item{h.Name, h.Size, false})

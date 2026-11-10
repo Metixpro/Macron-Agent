@@ -6,13 +6,6 @@ import (
 	"strings"
 )
 
-// This file holds the rules about the agent itself: the files with its keys and
-// owners, its own program, and the ways a fetched instruction could carry data off
-// the machine. None of them refuses: the agent does whatever its owner asks on
-// their own server, so these only make it ask the owner first (and, like every
-// question, they are skipped with approvals off or /yolo). What they stop is a
-// page or a file talking the agent into taking itself over unnoticed.
-
 func (env Env) expand(w string) string {
 	w = strings.TrimSpace(w)
 	if env.UserHome != "" {
@@ -29,8 +22,6 @@ func (env Env) expand(w string) string {
 	return w
 }
 
-// tail is the short way a secret file is written from a folder above the home
-// (".macron/config.env"); it is only used when the home folder's name is telling.
 func (env Env) tail(secret string) string {
 	if env.SelfHome == "" || !strings.HasPrefix(secret, env.SelfHome+"/") {
 		return ""
@@ -103,8 +94,6 @@ func (env Env) dbText(text string) bool {
 	return false
 }
 
-// outside tells a file named from elsewhere on the machine from one in the work
-// folder: only the first can be somebody's key or the agent's own data.
 func (env Env) outside(file string) bool {
 	if file == "" || file == "-" {
 		return false
@@ -249,7 +238,6 @@ func fetched(stages []Cmd) string {
 	return ""
 }
 
-// uploads lists the local files a curl or wget command sends away ("-" is its stdin).
 func uploads(name string, args []string) []string {
 	var out []string
 	fromData := func(v string, form bool) {
@@ -379,8 +367,6 @@ func selfCall(name string) *regexp.Regexp {
 	return regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `(?:\.service)?["'\s,\]\[]+(?:--?[\w-]+["'\s,]+)*(uninstall|service|config|update|exec|backup|setup)\b`)
 }
 
-// AnalyzeCode judges a program in a language other than shell. Nothing can read
-// what such code will do, so it only looks for the agent's own files and program.
 func AnalyzeCode(code string, env Env) []Finding {
 	text := Clean(code)
 	var out []Finding

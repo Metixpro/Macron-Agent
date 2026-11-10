@@ -27,9 +27,6 @@ type Env struct {
 	SelfDB       []string
 	SelfPID      int
 
-	// SelfHome is the agent's own folder and SelfSecrets the files in it that hold
-	// its keys, owners and settings; UserHome resolves ~ and $HOME, and WorkDir is
-	// where the work folders live. All are absolute, cleaned paths.
 	SelfHome    string
 	SelfSecrets []string
 	UserHome    string

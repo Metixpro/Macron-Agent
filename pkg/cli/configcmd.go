@@ -227,8 +227,6 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// checkEnvPair keeps one `config set` to one line of config.env: a line break in the
-// value would add a second setting (e.g. another owner) under an innocent key.
 func checkEnvPair(key, value string) error {
 	if key == "" || strings.ContainsAny(key, "=# \t\r\n\x00") {
 		return fmt.Errorf("%q is not a usable setting name", key)

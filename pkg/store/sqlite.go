@@ -133,6 +133,7 @@ func (c *tconn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, 
 	if b, ok := c.Conn.(driver.ConnBeginTx); ok {
 		return b.BeginTx(ctx, opts)
 	}
+
 	//lint:ignore SA1019 the fallback for a driver without BeginTx
 	return c.Conn.Begin()
 }

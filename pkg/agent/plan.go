@@ -232,11 +232,6 @@ func firstString(m map[string]any, keys ...string) string {
 	return ""
 }
 
-func parsePlan(args map[string]any) ([]PlanItem, error) {
-	items, _, err := parsePlanMarks(args)
-	return items, err
-}
-
 func parsePlanMarks(args map[string]any) (items []PlanItem, marked bool, _ error) {
 	raw := planRaw(args)
 	if len(raw) == 0 {

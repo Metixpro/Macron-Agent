@@ -185,7 +185,6 @@ install_system_packages() {
 install_python_packages() {
  local req="$SCRIPT_DIR/requirements-tools.lock"
  [ -z "$SOURCE_DIR" ] || req="$SOURCE_DIR/requirements-tools.lock"
- # The release archive was checked against its SHA-256 sum, so its lockfiles are the ones that belong to this binary.
  if [ ! -f "$req" ] && [ -n "$RELEASE_DIR" ] && [ -f "$RELEASE_DIR/requirements-tools.lock" ]; then req="$RELEASE_DIR/requirements-tools.lock"; fi
  if [ ! -f "$req" ]; then req="$TMP/requirements-tools.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-${RELEASE_TAG:-main}}/requirements-tools.lock" "$req" || die 'could not download the Python lockfile'; fi
  prepare_python

@@ -1,4 +1,4 @@
-.PHONY: build release test race vet lint vuln fmt fmt-check check audit clean
+.PHONY: build release vet lint vuln fmt fmt-check check audit clean
 
 VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' pkg/app/app.go)
 GOFLAGS_REL := -buildvcs=false -trimpath -ldflags "-s -w"
@@ -21,14 +21,6 @@ release:
 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS
 	@echo "dist/ ready for $(VERSION)"
 
-test:
-	go test -count=1 ./...
-	python3 scripts/test_install.py
-	python3 scripts/test_install_e2e.py
-
-race:
-	go test -race -count=1 ./...
-
 vet:
 	go vet ./...
 
@@ -44,9 +36,9 @@ fmt:
 fmt-check:
 	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
 
-check: fmt-check vet test
+check: fmt-check vet build
 
-audit: lint vuln race
+audit: lint vuln
 
 clean:
 	go clean

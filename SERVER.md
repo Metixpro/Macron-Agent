@@ -348,7 +348,7 @@ XML and bytecode may require separate inspection tools for deeper analysis.
 
 The software-update entry in Settings is labelled **Update** in English.
 
-### Next release: the owner is asked before a job touches the agent itself
+### 1.3.4: the owner is asked before a job touches the agent itself
 
 The agent does whatever its owner asks on the server; none of this refuses. A page,
 file or message it reads can also try to instruct it, so the command gate now asks
@@ -392,3 +392,6 @@ Also in this release:
 - `macron config set` refuses a value with a line break.
 - The installer takes the Python lockfiles from the release archive it verified.
 - Release builds use Go 1.26.10 (32 standard-library advisories fixed since 1.26.0).
+
+The main branch no longer includes test files or explanatory source comments.
+Build directives and module dependency annotations remain where required.

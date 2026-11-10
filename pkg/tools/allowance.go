@@ -96,19 +96,6 @@ func firstItems(items string, n int) string {
 	return strings.Join(out, ",")
 }
 
-func oneImage(h ToolHandler) ToolHandler {
-	return func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
-		if n, note := take(ctx, kindImages, 1); n == 0 {
-			return "error: " + note, nil
-		}
-		out, err := h(ctx, sessionID, args)
-		if err != nil || !strings.Contains(out, "queued for delivery") {
-			giveBack(ctx, kindImages, 1)
-		}
-		return out, err
-	}
-}
-
 func oneDownload(h ToolHandler) ToolHandler {
 	return func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 		if n, note := take(ctx, kindDownloads, 1); n == 0 {
