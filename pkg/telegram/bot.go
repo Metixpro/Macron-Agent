@@ -218,7 +218,7 @@ func (b *Bot) GetUpdates(ctx context.Context, offset int64, timeout int) ([]Upda
 }
 
 var AllowedUpdates = []string{"message", "edited_message", "callback_query", "my_chat_member", "stopped_message_generation", "poll_answer",
-	"guest_message", "pre_checkout_query", "message_reaction"}
+	"guest_message", "pre_checkout_query", "message_reaction", "widget_query", "shared_widget_query"}
 
 func decodeUpdates(raw []json.RawMessage) []Update {
 	updates := make([]Update, 0, len(raw))

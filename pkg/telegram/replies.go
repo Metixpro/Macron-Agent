@@ -20,6 +20,7 @@ type ExternalReplyInfo struct {
 	Location  *Location      `json:"location,omitempty"`
 	Contact   *Contact       `json:"contact,omitempty"`
 	Poll      *Poll          `json:"poll,omitempty"`
+	Widget    *Widget        `json:"widget,omitempty"`
 }
 
 type Story struct {
@@ -45,7 +46,7 @@ func (m *Message) Replied() *Message {
 	}
 	e := m.ExternalReply
 	r := &Message{MessageID: e.MessageID, Photo: e.Photo, Document: e.Document, Video: e.Video, Animation: e.Animation,
-		Audio: e.Audio, Voice: e.Voice, VideoNote: e.VideoNote, Sticker: e.Sticker, Location: e.Location, Contact: e.Contact, Poll: e.Poll}
+		Audio: e.Audio, Voice: e.Voice, VideoNote: e.VideoNote, Sticker: e.Sticker, Location: e.Location, Contact: e.Contact, Poll: e.Poll, Widget: e.Widget}
 	if e.Chat != nil {
 		r.Chat = *e.Chat
 	}

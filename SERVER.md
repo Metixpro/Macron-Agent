@@ -396,7 +396,7 @@ Also in this release:
 The main branch no longer includes test files or explanatory source comments.
 Build directives and module dependency annotations remain where required.
 
-### Next release: exact work records and cached history
+### 1.4.0: exact work records, cached history and Telegram widgets
 
 Each reply now keeps an exact record of its work for the next request: the files
 it changed, and every step with its outcome (a command's exit code and last output
@@ -418,4 +418,18 @@ failed commands are now marked as failed in the live card and the tool statistic
 With Anthropic, the end of the conversation history is a cache breakpoint, so a new
 request reads the earlier conversation from the cache. Through OpenRouter, Claude
 models get the same cache markers.
+
+Telegram widgets (Bot API 10.4): the agent can put an interactive mini app inside
+a message — a dashboard, a form, a calculator, a game, a live status panel — with
+`send_widget`, and push new data into it with `update_widget`. A widget is one HTML
+document with inline CSS and JavaScript (no network, at most 32 KB and 4 KB
+compressed); `send_widget` measures it before sending. A widget's requests
+(`TelegramWidget.request`) are answered by a handler script in the workspace
+(`.py`, `.js`, `.sh`…) that runs on this server, so a tap needs no model call; it
+can also update the widget's data by printing `{"answer", "chat_data",
+"public_data"}`. Failures reach the widget as `{"error": …}` and are logged in
+`.widgets/N.log`. Replying to a widget tells the agent which one it is and the
+files it was made from. The built-in `telegram-widgets` skill teaches the format.
+Widgets need a Telegram server with Bot API 10.4 (a local Bot API server must be
+updated); in production they work in private chats, which is where Macron runs.
 

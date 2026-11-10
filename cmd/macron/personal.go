@@ -46,6 +46,10 @@ func senderOf(u telegram.Update) (int64, bool) {
 			return u.MessageReaction.User.ID, true
 		}
 		return 0, true
+	case u.WidgetQuery != nil:
+		return u.WidgetQuery.From.ID, true
+	case u.SharedWidgetQuery != nil:
+		return u.SharedWidgetQuery.From.ID, true
 	}
 	return 0, false
 }
@@ -81,6 +85,8 @@ func (b *Bot) allowedUpdate(u telegram.Update) bool {
 		chat = &u.MessageReaction.Chat
 	case u.StoppedMessageGeneration != nil:
 		chat = &u.StoppedMessageGeneration.Chat
+	case u.WidgetQuery != nil && u.WidgetQuery.Chat != nil:
+		chat = u.WidgetQuery.Chat
 	}
 	if chat != nil && !chat.Private() {
 		return false

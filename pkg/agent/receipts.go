@@ -43,7 +43,7 @@ var (
 	writeTools = setOf("write_file", "edit_file", "create_spreadsheet", "generate_chart",
 		"generate_qr", "text_to_speech", "pdf_tool", "media_convert", "split_video", "create_motion_graphic", "send_file",
 		"download_file", "download_media_ytdlp", "import_repo", "extract_archive", "pack_files", "remember", "save_skill", "create_schedule",
-		"schedule", "create_poll", "react", "send_effect")
+		"schedule", "create_poll", "react", "send_effect", "send_widget", "update_widget")
 
 	destroyTools = setOf("apply_patch", "cancel_schedule", "forget")
 	stopTools    = setOf("cancel_schedule")

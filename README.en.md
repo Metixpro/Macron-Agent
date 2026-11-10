@@ -43,6 +43,7 @@ Talk to the bot in a **private chat**. It answers configured owners only and doe
 | Memory and skills | Persistent conversations, history search, editable skills and learning |
 | Background work | Scheduling, background tasks, task board and helper agents |
 | Models and extensions | Custom providers, routing, multiple models, plugins and MCP |
+| Telegram widgets | Interactive dashboards, forms, calculators and games inside messages, answered by scripts on your server |
 
 Some capabilities need additional packages or service credentials. Check your installation with:
 

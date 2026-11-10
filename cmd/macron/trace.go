@@ -78,6 +78,8 @@ var toolLabels = map[string]string{
 	toolDice:                    "Dice",
 	toolLocation:                "Location",
 	toolCreatePoll:              "Poll",
+	toolSendWidget:              "Widget",
+	toolUpdateWidget:            "Widget",
 	toolChatInfo:                "Chat Info",
 	toolLookup:                  "Lookup",
 	tools.ToolListSkills:        "Skills",

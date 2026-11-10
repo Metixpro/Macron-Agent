@@ -1300,6 +1300,7 @@ func (b *Bot) localTools(u *store.User, m *telegram.Message, react *reactor, box
 	out := b.requestTools(u, m, react, box, b.prov.VisionFor(b.route(context.Background(), opt.tier)))
 	if m.Chat.Private() && !guest {
 		out = append(out, b.pluginsTool(u, m)...)
+		out = append(out, b.widgetTools(u, m)...)
 	}
 	if !guest && !scheduled && !bg {
 		out = append(out, b.backgroundTool(u, m))

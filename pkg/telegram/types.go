@@ -291,6 +291,7 @@ type Message struct {
 	RichMessage          json.RawMessage `json:"rich_message,omitempty"`
 	ViaBot               *User           `json:"via_bot,omitempty"`
 	Poll                 *Poll           `json:"poll,omitempty"`
+	Widget               *Widget         `json:"widget,omitempty"`
 	Dice                 *Dice           `json:"dice,omitempty"`
 	EditDate             int64           `json:"edit_date,omitempty"`
 
@@ -465,6 +466,42 @@ type Update struct {
 	EditedMessage            *Message                  `json:"edited_message,omitempty"`
 	PreCheckoutQuery         *PreCheckoutQuery         `json:"pre_checkout_query,omitempty"`
 	MessageReaction          *MessageReactionUpdated   `json:"message_reaction,omitempty"`
+	WidgetQuery              *WidgetQuery              `json:"widget_query,omitempty"`
+	SharedWidgetQuery        *SharedWidgetQuery        `json:"shared_widget_query,omitempty"`
+}
+
+type Widget struct {
+	ID         string `json:"id,omitempty"`
+	Width      int    `json:"width,omitempty"`
+	Height     int    `json:"height,omitempty"`
+	HTML       string `json:"html"`
+	PublicData string `json:"public_data,omitempty"`
+	ChatData   string `json:"chat_data,omitempty"`
+}
+
+type WidgetQueryType struct {
+	Type string `json:"type"`
+}
+
+type WidgetQuery struct {
+	ID              string          `json:"id"`
+	From            User            `json:"from"`
+	Chat            *Chat           `json:"chat,omitempty"`
+	MessageID       int64           `json:"message_id,omitempty"`
+	InlineMessageID string          `json:"inline_message_id,omitempty"`
+	ChatInstance    string          `json:"chat_instance"`
+	ChatType        string          `json:"chat_type,omitempty"`
+	Type            WidgetQueryType `json:"type"`
+	Data            string          `json:"data"`
+	WidgetID        string          `json:"widget_id,omitempty"`
+}
+
+type SharedWidgetQuery struct {
+	ID       string          `json:"id"`
+	From     User            `json:"from"`
+	Type     WidgetQueryType `json:"type"`
+	Data     string          `json:"data"`
+	WidgetID string          `json:"widget_id"`
 }
 
 type MessageReactionUpdated struct {

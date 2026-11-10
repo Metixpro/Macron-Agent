@@ -42,11 +42,14 @@ func (b *Bot) replyContext(ctx context.Context, uid int64, m *telegram.Message, 
 		switch {
 		case body != "":
 			line += ":\n<replied_message>\n" + textutil.TruncateRunes(body, 6000, "…") + "\n</replied_message>"
-		case quote == "" && !r.HasMedia() && r.Poll == nil:
+		case quote == "" && !r.HasMedia() && r.Poll == nil && r.Widget == nil:
 			line += " (its text is not visible to you; if the request depends on it, ask them to quote or forward it)"
 		}
 		if r.Poll != nil {
 			line += "\nIt is a poll: «" + r.Poll.Question + "»"
+		}
+		if s := b.widgetAbout(ctx, r); s != "" {
+			line += "\n" + s
 		}
 		if r.From != nil && r.From.ID == b.me.ID {
 			if s := b.replyToAnswer(m, uid); s != "" {

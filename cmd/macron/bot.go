@@ -165,6 +165,10 @@ func (b *Bot) dispatch(u telegram.Update) {
 			b.handleGuest(u.GuestMessage)
 		case u.MessageReaction != nil:
 			b.handleReaction(u.MessageReaction)
+		case u.WidgetQuery != nil:
+			b.handleWidgetQuery(u.WidgetQuery)
+		case u.SharedWidgetQuery != nil:
+			b.handleSharedWidgetQuery(u.SharedWidgetQuery)
 		}
 	}()
 }

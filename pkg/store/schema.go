@@ -361,4 +361,23 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_kanban_user ON kanban (user_id, status)`,
 	},
 	{`DELETE FROM settings WHERE k IN ('image_key', 'image_edit_key', 'music_key')`},
+	{
+		`CREATE TABLE IF NOT EXISTS widgets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			chat_id INTEGER NOT NULL,
+			message_id INTEGER NOT NULL,
+			shared_id TEXT NOT NULL DEFAULT '',
+			title TEXT NOT NULL DEFAULT '',
+			file TEXT NOT NULL DEFAULT '',
+			handler TEXT NOT NULL DEFAULT '',
+			session TEXT NOT NULL DEFAULT '',
+			public_data TEXT NOT NULL DEFAULT '',
+			chat_data TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL,
+			used_at DATETIME
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_widgets_message ON widgets (chat_id, message_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_widgets_shared ON widgets (shared_id)`,
+	},
 }

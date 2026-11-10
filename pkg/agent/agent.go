@@ -330,6 +330,10 @@ func (a *Agent) systemPromptFor(local map[string]LocalTool, offered map[string]b
 		}
 		sb.WriteString("- Telegram extras, when they make the chat better: " + extras + ".\n")
 	}
+	if has("send_widget") {
+		sb.WriteString("- When the owner wants something to use rather than read (a dashboard to refresh, a form, a calculator, a game, " +
+			"a live status), make it a widget with send_widget; read the telegram-widgets skill first.\n")
+	}
 	if has("schedule") {
 		sb.WriteString("- Reminders and scheduled tasks (\"remind me…\", \"every day at 10 send…\") → schedule; a task's text is a complete " +
 			"instruction for your future self. Work out the exact local date and time from the current time (given right before the user's " +

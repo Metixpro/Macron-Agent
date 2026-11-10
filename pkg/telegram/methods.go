@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/json"
 	"errors"
@@ -556,4 +557,104 @@ func (b *Bot) GetStickerSet(ctx context.Context, name string) (*StickerSet, erro
 		return nil, err
 	}
 	return &s, nil
+}
+
+const (
+	MaxWidgetHTML   = 32768
+	MaxWidgetPacked = 4096
+	MaxWidgetData   = 1024
+	MaxWidgetAnswer = 1024
+)
+
+type WidgetSpec struct {
+	HTML         string
+	Width        int
+	Height       int
+	PublicData   string
+	ChatData     string
+	Caption      string
+	AllowQueries bool
+	Shared       bool
+}
+
+func WidgetSize(html string) (raw, packed int) {
+	var buf bytes.Buffer
+	w, _ := zlib.NewWriterLevel(&buf, zlib.BestCompression)
+	_, _ = w.Write([]byte(html))
+	_ = w.Close()
+	return len(html), buf.Len()
+}
+
+func (b *Bot) SendWidget(ctx context.Context, chatID int64, w WidgetSpec, opts SendOptions) (*Message, error) {
+	p := map[string]any{"chat_id": chatID, "html": w.HTML}
+	if w.Width > 0 {
+		p["width"] = w.Width
+	}
+	if w.Height > 0 {
+		p["height"] = w.Height
+	}
+	if w.PublicData != "" {
+		p["public_data"] = w.PublicData
+	}
+	if w.ChatData != "" {
+		p["chat_data"] = w.ChatData
+	}
+	if w.Caption != "" {
+		p["caption"] = w.Caption
+	}
+	if w.AllowQueries {
+		p["allow_queries"] = true
+	}
+	if w.Shared {
+		p["is_shared"] = true
+	}
+	opts.apply(p)
+	var m Message
+	if err := b.call(ctx, "sendWidget", p, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (b *Bot) SendSharedWidget(ctx context.Context, chatID int64, widgetID, chatData, caption string, opts SendOptions) (*Message, error) {
+	p := map[string]any{"chat_id": chatID, "widget_id": widgetID}
+	if chatData != "" {
+		p["chat_data"] = chatData
+	}
+	if caption != "" {
+		p["caption"] = caption
+	}
+	opts.apply(p)
+	var m Message
+	if err := b.call(ctx, "sendSharedWidget", p, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (b *Bot) EditWidgetData(ctx context.Context, chatID, messageID int64, publicData, chatData *string) error {
+	p := map[string]any{"chat_id": chatID, "message_id": messageID}
+	if publicData != nil {
+		p["public_data"] = *publicData
+	}
+	if chatData != nil {
+		p["chat_data"] = *chatData
+	}
+	return b.call(ctx, "editMessageWidgetData", p, nil)
+}
+
+func (b *Bot) EditSharedWidgetData(ctx context.Context, widgetID, publicData string, cacheTime int) error {
+	p := map[string]any{"widget_id": widgetID, "public_data": publicData}
+	if cacheTime > 0 {
+		p["cache_time"] = min(max(cacheTime, 5), 3600)
+	}
+	return b.call(ctx, "editSharedWidgetData", p, nil)
+}
+
+func (b *Bot) AnswerWidgetQuery(ctx context.Context, queryID, data string) error {
+	p := map[string]any{"widget_query_id": queryID}
+	if data != "" {
+		p["data"] = data
+	}
+	return b.call(ctx, "answerWidgetQuery", p, nil)
 }

@@ -196,6 +196,8 @@ var thinkKinds = map[string]thinkKind{
 	"list_files":                {"خوندن «%s»", "نگاه به فایل‌ها", []string{"filename", "path"}, true},
 	toolSendFile:                {"", "آماده کردن فایل برای ارسال", nil, false},
 	toolAskUser:                 {"", "پرسیدن یه سؤال", nil, false},
+	toolSendWidget:              {"ساخت ویجت «%s»", "ساخت ویجت", []string{"title"}, false},
+	toolUpdateWidget:            {"", "به‌روزرسانی ویجت", nil, false},
 }
 
 func thinkText(l lang, name, argsJSON string) string {
