@@ -12,7 +12,7 @@ type secretDir struct {
 }
 
 func newSecretDir() (*secretDir, error) {
-	dir, err := os.MkdirTemp("", "waze-secret-")
+	dir, err := os.MkdirTemp("", "macron-secret-")
 	if err != nil {
 		return nil, err
 	}

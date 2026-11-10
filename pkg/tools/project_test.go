@@ -381,7 +381,7 @@ func TestProjectBuildAndGit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	git := "git -c user.name=Waze -c user.email=waze@local"
+	git := "git -c user.name=Macron -c user.email=macron@local"
 	out := call(t, r, "g", "bash_execute", map[string]any{"command": "cd calc && git init -q && " + git + " add -A && " + git + " commit -qm init && python3 -m unittest -q 2>&1; echo EXIT=$?"})
 	if !strings.Contains(out, "FAILED") || !strings.Contains(out, "EXIT=1") {
 		t.Fatalf("the failing test must show:\n%s", out)

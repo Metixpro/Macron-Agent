@@ -78,7 +78,7 @@ func (c *ServerConfig) Check() error {
 	}
 	for k := range c.Env {
 		if !envNameRe.MatchString(k) || reservedEnv(k) {
-			return fmt.Errorf("env %q: use UPPER_CASE names (not PATH, HOME, PYTHON…, WAZE…)", k)
+			return fmt.Errorf("env %q: use UPPER_CASE names (not PATH, HOME, PYTHON…, MACRON…)", k)
 		}
 	}
 	if c.TimeoutSeconds < 0 || c.TimeoutSeconds > 900 {
@@ -431,7 +431,7 @@ func (c *httpConn) post(ctx context.Context, body []byte) (*http.Response, error
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.Header.Set("User-Agent", "waze-agent")
+	req.Header.Set("User-Agent", "macron-agent")
 	for k, v := range c.headers {
 		req.Header.Set(k, v)
 	}
@@ -761,7 +761,7 @@ func handshake(ctx context.Context, t transport, version string) ([]mcpTool, str
 	res, err := t.request(ctx, "initialize", map[string]any{
 		"protocolVersion": mcpProtocol,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "waze-agent", "version": version},
+		"clientInfo":      map[string]any{"name": "macron-agent", "version": version},
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("initialize: %w", err)

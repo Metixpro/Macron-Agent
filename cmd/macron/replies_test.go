@@ -38,7 +38,7 @@ func TestPrivateReplyIncludesOriginalMessageAndRichText(t *testing.T) {
 func TestGuestExternalReply(t *testing.T) {
 	h := newHarness(t)
 	h.tg.files["ext"] = testJPEG(40, 40)
-	m := guestMsg(74, "@WazeBot")
+	m := guestMsg(74, "@MacronBot")
 	m.Quote = &telegram.TextQuote{Text: "Bonjour tout le monde"}
 	m.ExternalReply = &telegram.ExternalReplyInfo{Origin: &telegram.MessageOrigin{Type: "user", SenderUser: &telegram.User{ID: 99, FirstName: "Lea"}},
 		Photo: []telegram.PhotoSize{{FileID: "ext", Width: 40, Height: 40}}}

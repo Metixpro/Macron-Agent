@@ -136,7 +136,7 @@ func (m *Manifest) Check() error {
 	}
 	for k := range m.Env {
 		if !envNameRe.MatchString(k) || reservedEnv(k) {
-			return fmt.Errorf("env %q: use UPPER_CASE names (not PATH, HOME, PYTHON…, WAZE…)", k)
+			return fmt.Errorf("env %q: use UPPER_CASE names (not PATH, HOME, PYTHON…, MACRON…)", k)
 		}
 	}
 	if len(m.Tools) == 0 || len(m.Tools) > maxTools {
@@ -219,7 +219,7 @@ func reservedEnv(k string) bool {
 		"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY":
 		return true
 	}
-	return strings.HasPrefix(k, "PYTHON") || strings.HasPrefix(k, "WAZE") || strings.HasPrefix(k, "BASH_") || strings.HasPrefix(k, "LD_")
+	return strings.HasPrefix(k, "PYTHON") || strings.HasPrefix(k, "MACRON") || strings.HasPrefix(k, "BASH_") || strings.HasPrefix(k, "LD_")
 }
 
 func oneLine(s string, n int) string {
@@ -287,7 +287,7 @@ func ManifestForScript(fileName string, code []byte) (*Manifest, error) {
 		}
 		val = strings.TrimSpace(val)
 		switch strings.ToLower(strings.TrimSpace(key)) {
-		case "plugin", "waze-plugin", "id":
+		case "plugin", "macron-plugin", "id":
 			m.ID = slug(val)
 		case "name":
 			m.Name = val

@@ -168,7 +168,7 @@ func TestPhotoReplyAndProfileReachTheModel(t *testing.T) {
 	m := private(12, "")
 	m.Caption = "این چیه؟"
 	m.Photo = []telegram.PhotoSize{{FileID: "ph1", Width: 800, Height: 600}}
-	m.ReplyToMessage = &telegram.Message{MessageID: 5, From: &telegram.User{ID: 42, FirstName: "Waze"}, Text: "قبلاً گفتم کیک شکلاتی بپز",
+	m.ReplyToMessage = &telegram.Message{MessageID: 5, From: &telegram.User{ID: 42, FirstName: "Macron"}, Text: "قبلاً گفتم کیک شکلاتی بپز",
 		Photo: []telegram.PhotoSize{{FileID: "old", Width: 300, Height: 300}}}
 	h.send(m)
 
@@ -309,7 +309,7 @@ func TestGroupIgnoresOtherBotsAndChannelPosts(t *testing.T) {
 	if strings.Contains(h.tg.allText(), textUnknownCommand) || h.llm.count() != 0 {
 		t.Error("another bot's command is ignored in a group")
 	}
-	h.send(group("/warn@WazeBot"))
+	h.send(group("/warn@MacronBot"))
 	if len(h.tg.calls) != 0 {
 		t.Error("a command named for this bot must also be ignored in groups")
 	}

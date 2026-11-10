@@ -102,7 +102,7 @@ func TestUserCookies(t *testing.T) {
 	}
 	h.tg.reset()
 	h.bot.openCookiesPanel(ctx, group(user, "/cookies"))
-	h.wantText("@WazeBot")
+	h.wantText("@MacronBot")
 }
 
 func TestCookiesFromLinks(t *testing.T) {

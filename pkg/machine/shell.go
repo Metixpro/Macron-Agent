@@ -161,7 +161,7 @@ func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 		return nil, errors.New("the server runs as many background shells as it can; try again in a few minutes")
 	}
 
-	opts := RunOptions{InSession: true, Env: map[string]string{"WAZE_SHELL": "1"}}
+	opts := RunOptions{InSession: true, Env: map[string]string{"MACRON_SHELL": "1"}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, "python3", "-I", "-c", shellSupervisor, strconv.Itoa(jobLogKeep))
 	cmd.Dir = ws

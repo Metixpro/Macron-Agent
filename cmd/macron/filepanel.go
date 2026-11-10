@@ -428,7 +428,7 @@ func (b *Bot) sendZip(ctx context.Context, l lang, chatID int64, session string,
 		return
 	}
 	_ = b.api.SendChatAction(ctx, chatID, "upload_document")
-	tmp, err := os.CreateTemp("", "waze-zip-*.zip")
+	tmp, err := os.CreateTemp("", "macron-zip-*.zip")
 	if err != nil {
 		log.Printf("zip: %v", err)
 		b.sendHTML(ctx, chatID, l.t(textError), telegram.SendOptions{})

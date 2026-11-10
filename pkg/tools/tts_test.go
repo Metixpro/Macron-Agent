@@ -51,7 +51,7 @@ func leftovers(t *testing.T, r *Registry, session string) []string {
 }
 
 func TestTextToSpeechWithPiper(t *testing.T) {
-	model := os.Getenv("WAZE_PIPER_MODEL")
+	model := os.Getenv("MACRON_PIPER_MODEL")
 	if model == "" {
 		model = "/opt/piper-voices/fa_IR-mana-medium.onnx"
 	}

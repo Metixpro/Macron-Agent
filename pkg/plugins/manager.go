@@ -554,7 +554,7 @@ func (m *Manager) runScript(ctx context.Context, p *plugin, sessionID, tool stri
 		return "", err
 	}
 	root := p.dir
-	env := map[string]string{"WAZE_PLUGIN": p.man.ID, "WAZE_TOOL": tool, "WAZE_SESSION": sessionID}
+	env := map[string]string{"MACRON_PLUGIN": p.man.ID, "MACRON_TOOL": tool, "MACRON_SESSION": sessionID}
 	for k, v := range p.state.Env {
 		if _, declared := p.man.Env[k]; declared {
 			env[k] = v
@@ -877,7 +877,7 @@ func (m *Manager) SetEnv(ctx context.Context, key, name, value string) error {
 			return fmt.Errorf("%s does not use %q; it uses: %s", p.man.ID, name, strings.Join(names, ", "))
 		}
 	} else if p.srv.URL == "" && (!envNameRe.MatchString(name) || reservedEnv(name)) {
-		return fmt.Errorf("%q: use UPPER_CASE names (not PATH, HOME, PYTHON…, WAZE…)", name)
+		return fmt.Errorf("%q: use UPPER_CASE names (not PATH, HOME, PYTHON…, MACRON…)", name)
 	} else if p.srv.URL != "" && !headerRe.MatchString(name) {
 		return fmt.Errorf("%q is not an HTTP header name", name)
 	}
@@ -1152,7 +1152,7 @@ func readZip(f *zip.File, limit int64) ([]byte, error) {
 
 func (m *Manager) writePlugin(id string, files map[string]fileData) error {
 	if m.Dir == "" {
-		return errors.New("no plugins folder is set (WAZE_PLUGINS_DIR)")
+		return errors.New("no plugins folder is set (MACRON_PLUGINS_DIR)")
 	}
 	if !idRe.MatchString(id) {
 		return fmt.Errorf("bad plugin id %q", id)

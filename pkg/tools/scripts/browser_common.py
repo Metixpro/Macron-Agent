@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 
 CFG = json.load(sys.stdin)
 WS = os.path.realpath(os.getcwd())
-LOCAL_HOST = "waze.local"
+LOCAL_HOST = "macron.local"
 CDN_HOSTS = {"cdn.jsdelivr.net", "fastly.jsdelivr.net", "gcore.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com", "esm.sh", "cdn.skypack.dev"}
 TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml",
          ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8", ".wasm": "application/wasm", ".woff2": "font/woff2",

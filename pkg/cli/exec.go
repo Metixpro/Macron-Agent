@@ -48,13 +48,8 @@ func execTask(term *IO, args []string) int {
 		if v, ok := os.LookupEnv(key); ok {
 			return v
 		}
-		if v, ok := os.LookupEnv(strings.Replace(key, "MACRON_", "WAZE_", 1)); ok {
-			return v
-		}
-		if v, ok := env.Get(key); ok {
-			return v
-		}
-		return getEnv(env, strings.Replace(key, "MACRON_", "WAZE_", 1))
+		v, _ := env.Get(key)
+		return v
 	}
 	endpoint, model := value(keyAPIURL), value(keyModel)
 	u, err := url.Parse(endpoint)
@@ -110,7 +105,7 @@ func execTask(term *IO, args []string) int {
 	ctx, cancel := context.WithTimeout(root, *timeout)
 	defer cancel()
 	fmt.Fprintln(term.Err, "workspace:", config.HomePath("workspaces", session))
-	result, err := a.Do(ctx, agent.Request{SessionID: session, Input: llm.Message{Role: "user", Content: prompt}, About: b.User.Raw() + "\n" + b.Memory.Raw(), Lang: "en", ToolFilter: filter, FocusTools: !*allTools && filter == nil, EfficientTools: !*allTools && filter == nil})
+	result, err := a.Do(ctx, agent.Request{SessionID: session, Input: llm.Message{Role: "user", Content: prompt}, About: b.User.Raw() + "\n" + b.Memory.Raw(), Lang: "en", Owner: true, ToolFilter: filter, FocusTools: !*allTools && filter == nil, EfficientTools: !*allTools && filter == nil})
 	if result != nil && result.Answer != "" {
 		fmt.Fprintln(term.Out, result.Answer)
 	}

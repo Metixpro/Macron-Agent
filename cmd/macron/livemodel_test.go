@@ -138,9 +138,9 @@ func shown(h *harness) []string {
 }
 
 func TestLiveModelNeverShowsItsCalls(t *testing.T) {
-	url, key, model := os.Getenv("WAZE_TEST_LLM_URL"), os.Getenv("WAZE_TEST_LLM_KEY"), os.Getenv("WAZE_TEST_LLM_MODEL")
+	url, key, model := os.Getenv("MACRON_TEST_LLM_URL"), os.Getenv("MACRON_TEST_LLM_KEY"), os.Getenv("MACRON_TEST_LLM_MODEL")
 	if url == "" || key == "" || model == "" {
-		t.Skip("WAZE_TEST_LLM_URL, WAZE_TEST_LLM_KEY and WAZE_TEST_LLM_MODEL are not set")
+		t.Skip("MACRON_TEST_LLM_URL, MACRON_TEST_LLM_KEY and MACRON_TEST_LLM_MODEL are not set")
 	}
 	h := newHarness(t)
 	proxy := &labProxy{target: strings.TrimRight(url, "/"), key: key}
@@ -154,13 +154,13 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 	}
 	_ = h.bot.prov.Reload(bg)
 	h.bot.runTimeout = 4 * time.Minute
-	if os.Getenv("WAZE_TEST_LLM_PLUGINS") != "" {
+	if os.Getenv("MACRON_TEST_LLM_PLUGINS") != "" {
 		h.bot.app.Registry.SetPlugins(labPlugins{})
 	}
-	if os.Getenv("WAZE_TEST_LLM_FOCUS") != "" {
+	if os.Getenv("MACRON_TEST_LLM_FOCUS") != "" {
 		h.bot.saveToolSkill(bg, p.ID, toolSkill{Mode: toolModeFocus})
 	}
-	if os.Getenv("WAZE_TEST_LLM_WEB") != "" {
+	if os.Getenv("MACRON_TEST_LLM_WEB") != "" {
 		web := netclient.NewClient(netclient.Options{UseEnvProxy: true, Timeout: 25 * time.Second})
 		engine := search.NewEngine(web)
 		h.bot.app.Search, h.bot.app.Registry.Search, h.bot.app.Registry.HTTP = engine, engine, web
@@ -168,8 +168,8 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 		_ = h.st.SetSetting(bg, store.SettingAgentSteps, "80")
 	}
 
-	jobs := strings.Split(os.Getenv("WAZE_TEST_LLM_JOBS"), "|")
-	if os.Getenv("WAZE_TEST_LLM_JOBS") == "" {
+	jobs := strings.Split(os.Getenv("MACRON_TEST_LLM_JOBS"), "|")
+	if os.Getenv("MACRON_TEST_LLM_JOBS") == "" {
 		jobs = []string{
 			"یه فایل hello.py بساز که Hello Macron چاپ کنه، اجراش کن و خروجی رو بگو",
 			"یه نمودار میله‌ای از فروش چهار ماه بکش: فروردین ۱۲، اردیبهشت ۱۸، خرداد ۹، تیر ۲۴",
@@ -178,7 +178,7 @@ func TestLiveModelNeverShowsItsCalls(t *testing.T) {
 			"مرسی، عالی بود",
 		}
 	}
-	logDir := os.Getenv("WAZE_TEST_LLM_LOG")
+	logDir := os.Getenv("MACRON_TEST_LLM_LOG")
 	leaks := 0
 	for i, job := range jobs {
 		h.tg.reset()

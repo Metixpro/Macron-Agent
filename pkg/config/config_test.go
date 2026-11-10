@@ -82,19 +82,19 @@ func TestWarnings(t *testing.T) {
 
 func TestLoadDotEnv(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
-	content := "# comment\n\nWAZE_T_A=plain\nexport WAZE_T_B=\"quoted value\"\nWAZE_T_C='single'\nWAZE_T_D=with comment # trailing\nWAZE_T_E=already\nbadline\n=novalue\nWAZE_T_F=a=b=c\n"
+	content := "# comment\n\nMACRON_T_A=plain\nexport MACRON_T_B=\"quoted value\"\nMACRON_T_C='single'\nMACRON_T_D=with comment # trailing\nMACRON_T_E=already\nbadline\n=novalue\nMACRON_T_F=a=b=c\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("WAZE_T_E", "from-process")
-	for _, k := range []string{"WAZE_T_A", "WAZE_T_B", "WAZE_T_C", "WAZE_T_D", "WAZE_T_F"} {
+	t.Setenv("MACRON_T_E", "from-process")
+	for _, k := range []string{"MACRON_T_A", "MACRON_T_B", "MACRON_T_C", "MACRON_T_D", "MACRON_T_F"} {
 		os.Unsetenv(k)
 		t.Cleanup(func() { os.Unsetenv(k) })
 	}
 	if err := LoadDotEnv(path); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"WAZE_T_A": "plain", "WAZE_T_B": "quoted value", "WAZE_T_C": "single", "WAZE_T_D": "with comment", "WAZE_T_E": "from-process", "WAZE_T_F": "a=b=c"}
+	want := map[string]string{"MACRON_T_A": "plain", "MACRON_T_B": "quoted value", "MACRON_T_C": "single", "MACRON_T_D": "with comment", "MACRON_T_E": "from-process", "MACRON_T_F": "a=b=c"}
 	for k, v := range want {
 		if got := os.Getenv(k); got != v {
 			t.Errorf("%s = %q, want %q", k, got, v)
@@ -135,6 +135,6 @@ func TestOptionalAPIURL(t *testing.T) {
 	c.Bind(fs)
 	_ = fs.Parse(nil)
 	if warns, err := c.Validate(fs); err != nil || len(warns) != 0 {
-		t.Fatalf("the bot may start without WAZE_API_URL: %v %v", warns, err)
+		t.Fatalf("the bot may start without MACRON_API_URL: %v %v", warns, err)
 	}
 }

@@ -161,13 +161,13 @@ func guestMsg(userID int64, text string) *telegram.Message {
 
 func TestStripMention(t *testing.T) {
 	for in, want := range map[string]string{
-		"@WazeBot 25 * 40":            "25 * 40",
-		"@wazebot: py print('hello')": "py print('hello')",
-		"این چیه @WazeBot":            "این چیه",
-		"@WazeBot":                    "",
-		"@WazeBotX hi":                "@WazeBotX hi",
+		"@MacronBot 25 * 40":            "25 * 40",
+		"@macronbot: py print('hello')": "py print('hello')",
+		"این چیه @MacronBot":            "این چیه",
+		"@MacronBot":                    "",
+		"@MacronBotX hi":                "@MacronBotX hi",
 	} {
-		if got := stripMention(in, "WazeBot"); got != want {
+		if got := stripMention(in, "MacronBot"); got != want {
 			t.Errorf("stripMention(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -176,11 +176,11 @@ func TestStripMention(t *testing.T) {
 func TestGuestQueryGetsOneInPlaceAnswer(t *testing.T) {
 	h := newHarness(t)
 	h.llm.reply = say("**۱۰۰۰** 🙂")
-	h.bot.dispatch(telegram.Update{UpdateID: 1, GuestMessage: guestMsg(70, "@WazeBot 25 * 40")})
+	h.bot.dispatch(telegram.Update{UpdateID: 1, GuestMessage: guestMsg(70, "@MacronBot 25 * 40")})
 	h.bot.wg.Wait()
 
 	req := llmText(h.llm.last())
-	if !strings.Contains(req, `"content":"25 * 40"`) || !strings.Contains(req, "guest mode") || strings.Contains(req, "@WazeBot") {
+	if !strings.Contains(req, `"content":"25 * 40"`) || !strings.Contains(req, "guest mode") || strings.Contains(req, "@MacronBot") {
 		t.Errorf("the model gets the request without the mention, knowing it is a guest:\n%s", req)
 	}
 	answers := h.tg.of("answerGuestQuery")
@@ -215,7 +215,7 @@ func TestGuestQueryGetsOneInPlaceAnswer(t *testing.T) {
 func TestGuestRepliesSeeTheRepliedMessage(t *testing.T) {
 	h := newHarness(t)
 	h.tg.files["ph"] = testJPEG(50, 50)
-	m := guestMsg(71, "@WazeBot این رو ترجمه کن")
+	m := guestMsg(71, "@MacronBot این رو ترجمه کن")
 	m.ReplyToMessage = &telegram.Message{MessageID: 5, From: &telegram.User{ID: 99, FirstName: "Sara"}, Text: "Good morning everyone",
 		Chat: m.Chat, Photo: []telegram.PhotoSize{{FileID: "ph", Width: 50, Height: 50}}}
 	h.bot.handleGuest(m)
@@ -236,7 +236,7 @@ func TestGuestFallbacksAndLimits(t *testing.T) {
 	h := newHarness(t)
 	h.bot.richOff.Store(true)
 	h.llm.reply = say("**جواب** " + strings.Repeat("خیلی طولانی ", 900))
-	h.bot.handleGuest(guestMsg(73, "@WazeBot یه متن بلند بنویس"))
+	h.bot.handleGuest(guestMsg(73, "@MacronBot یه متن بلند بنویس"))
 	answers := h.tg.of("answerGuestQuery")
 	if len(answers) != 1 {
 		t.Fatalf("one answer: %d", len(answers))
@@ -251,7 +251,7 @@ func TestGuestFallbacksAndLimits(t *testing.T) {
 	}
 	last := edits[len(edits)-1].body
 	text, _ := last["text"].(string)
-	if last["inline_message_id"] != "im-gq-73" || last["parse_mode"] != "HTML" || last["rich_message"] != nil || len([]rune(text)) > telegram.MaxGuestTextChars || !strings.HasPrefix(text, "<b>جواب</b>") || !strings.Contains(text, "پیوی @WazeBot") {
+	if last["inline_message_id"] != "im-gq-73" || last["parse_mode"] != "HTML" || last["rich_message"] != nil || len([]rune(text)) > telegram.MaxGuestTextChars || !strings.HasPrefix(text, "<b>جواب</b>") || !strings.Contains(text, "پیوی @MacronBot") {
 		t.Errorf("an HTML answer that fits one message and points to the private chat: %d chars, %.80q…", len([]rune(text)), text)
 	}
 
@@ -266,7 +266,7 @@ func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 	old := guestEditEvery
 	guestEditEvery = 0
 	t.Cleanup(func() { guestEditEvery = old })
-	m := guestMsg(75, "@WazeBot قیمت دلار؟")
+	m := guestMsg(75, "@MacronBot قیمت دلار؟")
 	g := h.bot.guestThinking(bg, m.GuestQueryID, fa)
 	if g == nil || g.inlineID != "im-gq-75" || !g.rich {
 		t.Fatalf("a rich placeholder with its inline id: %+v", g)
@@ -304,7 +304,7 @@ func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 
 	h.llm.reply = say("")
 	h.tg.reset()
-	h.bot.handleGuest(guestMsg(76, "@WazeBot ؟"))
+	h.bot.handleGuest(guestMsg(76, "@MacronBot ؟"))
 	edits = h.tg.of("editMessageText")
 	if len(edits) == 0 || strings.Contains(fmt.Sprint(edits[len(edits)-1].body), thinkingStatus(fa)) {
 		t.Errorf("an empty run ends the placeholder with a short note: %v", edits)
@@ -324,7 +324,7 @@ func TestGuestPlaceholderShowsTheWork(t *testing.T) {
 	h.bot.guestStubOff.Store(true)
 	h.llm.reply = say("۴")
 	h.tg.reset()
-	h.bot.handleGuest(guestMsg(77, "@WazeBot ۲+۲"))
+	h.bot.handleGuest(guestMsg(77, "@MacronBot ۲+۲"))
 	answers := h.tg.of("answerGuestQuery")
 	if len(answers) != 1 || !strings.Contains(fmt.Sprint(answers[0].body["result"]), "markdown:۴") || len(h.tg.of("editMessageText")) != 0 {
 		t.Errorf("without a placeholder the answer is the one reply: %v", answers)

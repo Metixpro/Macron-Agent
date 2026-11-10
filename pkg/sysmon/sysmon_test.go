@@ -160,9 +160,9 @@ func TestSamplerRatesTopAndHistory(t *testing.T) {
 
 func TestServiceCgroup(t *testing.T) {
 	f := newFakeProc(t)
-	cg := filepath.Join(f.root, "cg", "system.slice", "waze-bot.service")
+	cg := filepath.Join(f.root, "cg", "system.slice", "macron-bot.service")
 	_ = os.MkdirAll(cg, 0o755)
-	_ = os.WriteFile(filepath.Join(f.root, "self", "cgroup"), []byte("0::/system.slice/waze-bot.service\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(f.root, "self", "cgroup"), []byte("0::/system.slice/macron-bot.service\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(cg, "memory.current"), []byte("2147483648\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(cg, "memory.max"), []byte("8589934592\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(cg, "memory.high"), []byte("max\n"), 0o644)

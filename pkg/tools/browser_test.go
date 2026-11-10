@@ -39,7 +39,7 @@ func shopSite(t *testing.T) *httptest.Server {
 				visitor = "welcome back"
 			}
 			http.SetCookie(w, &http.Cookie{Name: "seen", Value: "yes", Path: "/"})
-			fmt.Fprintf(w, `<html><head><title>Waze Shop</title></head><body><h1>Shop</h1><p id="visitor">%s</p>
+			fmt.Fprintf(w, `<html><head><title>Macron Shop</title></head><body><h1>Shop</h1><p id="visitor">%s</p>
 				<form action="/search"><input name="q" placeholder="Search products"><button type="submit">Search</button></form>
 				<a href="/about">About us</a><div id="late"></div>
 				<script>setTimeout(() => document.getElementById("late").textContent = "loaded later", 300)</script></body></html>`, visitor)
@@ -63,7 +63,7 @@ func TestBrowserDrivesARealPage(t *testing.T) {
 			map[string]any{"action": "wait", "text": "loaded later"},
 			map[string]any{"action": "extract", "selector": "#visitor"},
 		}})
-		for _, want := range []string{"Page: Waze Shop", `✓ 2. extract #visitor → ["first visit"]`, `input[name="q"] ← input[text] "Search products"`,
+		for _, want := range []string{"Page: Macron Shop", `✓ 2. extract #visitor → ["first visit"]`, `input[name="q"] ← input[text] "Search products"`,
 			`text="About us"`, "Files: screenshot.png", "loaded later"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("missing %q in:\n%s", want, out)
@@ -73,9 +73,9 @@ func TestBrowserDrivesARealPage(t *testing.T) {
 			t.Errorf("screenshot: %v", err)
 		}
 
-		out = call(t, r, "u", ToolBrowser, map[string]any{"actions": `[{"action":"fill","selector":"input[name=\"q\"]","text":"waze"},
+		out = call(t, r, "u", ToolBrowser, map[string]any{"actions": `[{"action":"fill","selector":"input[name=\"q\"]","text":"macron"},
 				{"action":"press","key":"Enter"},{"action":"extract","selector":".item"},{"action":"eval","script":"document.title"}]`, "screenshot": false})
-		for _, want := range []string{"Page: Results", `["waze phone", "waze case"]`, `→ "Results"`} {
+		for _, want := range []string{"Page: Results", `["macron phone", "macron case"]`, `→ "Results"`} {
 			if !strings.Contains(out, want) {
 				t.Errorf("form: missing %q in:\n%s", want, out)
 			}

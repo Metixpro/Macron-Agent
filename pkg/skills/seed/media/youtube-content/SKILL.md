@@ -3,7 +3,7 @@ name: youtube-content
 description: "Use when the user shares a YouTube link and wants a summary, transcript, chapters, quotes or a post from it."
 version: 1.0.0
 category: media
-author: Waze (adapted from Hermes Agent)
+author: Macron (adapted from Hermes Agent)
 license: MIT
 ---
 

@@ -3,7 +3,7 @@ name: arxiv
 description: "Use when looking for scientific papers or preprints, or summarizing a paper from arXiv."
 version: 1.0.0
 category: research
-author: Waze (adapted from Hermes Agent)
+author: Macron (adapted from Hermes Agent)
 license: MIT
 ---
 

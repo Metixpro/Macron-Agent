@@ -321,7 +321,7 @@ var english = map[string]string{
 	"#%d لغو شد":             "#%d cancelled",
 	"🔎 <b>جستجوی وب</b>\n\n": "🔎 <b>Web search</b>\n\n",
 	"1️⃣ <b>treg.to</b>: ✅ روشن (توکن از پنل)\n":                            "1️⃣ <b>treg.to</b>: ✅ on (token from the panel)\n",
-	"1️⃣ <b>treg.to</b>: ✅ روشن (توکن از <code>WAZE_TREG_TOKEN</code>)\n":   "1️⃣ <b>treg.to</b>: ✅ on (token from <code>WAZE_TREG_TOKEN</code>)\n",
+	"1️⃣ <b>treg.to</b>: ✅ روشن (توکن از <code>MACRON_TREG_TOKEN</code>)\n": "1️⃣ <b>treg.to</b>: ✅ on (token from <code>MACRON_TREG_TOKEN</code>)\n",
 	"1️⃣ <b>treg.to</b>: ❌ خاموش (توکن نداره)\n":                            "1️⃣ <b>treg.to</b>: ❌ off (no token)\n",
 	"\n📈 از آخرین ری‌استارت: %s جستجوی موفق با treg، %s بی‌نتیجه، %s خطا\n": "\n📈 Since the last restart: %s searches answered by treg, %s with no results, %s errors\n",
 	"آخرین جواب از: <code>%s</code>\n":                                      "Last answer from: <code>%s</code>\n",

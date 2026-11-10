@@ -71,8 +71,8 @@ files first; the default removal cannot be undone.
 ## Run tasks from SSH or cron, without Telegram
 
 Set `MACRON_API_URL`, `MACRON_MODEL`, and, for authenticated providers,
-`MACRON_API_KEY` in the environment or private `config.env`. Existing WAZE aliases
-are supported. Exported environment settings take precedence over the file.
+`MACRON_API_KEY` in the environment or private `config.env`. Exported environment
+settings take precedence over the file.
 For example, with an already-running Ollama and a downloaded tool-capable model:
 
 ```sh
@@ -348,31 +348,39 @@ XML and bytecode may require separate inspection tools for deeper analysis.
 
 The software-update entry in Settings is labelled **Update** in English.
 
-### Next release: the agent keeps its own keys and program out of a job's reach
+### Next release: the owner is asked before a job touches the agent itself
 
-A page, file or message the agent reads can try to instruct it. The command gate
-now closes the ways such an instruction could take the agent over, in every mode,
-`/yolo` and `approvals.mode off` included:
+The agent does whatever its owner asks on the server; none of this refuses. A page,
+file or message it reads can also try to instruct it, so the command gate now asks
+the owner first (one tap) when a job is about to act on the agent itself or carry a
+file off the machine. With `approvals.mode off` or `/yolo` nothing is asked, as for
+every other command; scheduled and background jobs have nobody to ask, so there
+these are refused and reported.
 
-- **Never run from a job**: reading, changing, copying or deleting `config.env` and
-  `secret.key`; `macron uninstall`; `macron service stop|uninstall`; `macron config
-  set|unset` of the owners, tokens, keys, addresses and gate settings; removing or
-  moving the home folder; `find … -delete` and `mv` on system and home folders;
-  `kill $(pgrep macron)`.
-- **Asked first** (refused in scheduled and background jobs): other `macron config
-  set|unset`, `macron service restart`, `macron update`, `macron backup`, `macron
-  exec`; copying the whole home folder or the database; `curl`/`wget` uploads of a
-  file from outside the work folder; a download piped into `python`, `node`, `perl`
-  and the like.
-- `run_code` in languages other than bash is checked for the same files and for calls
-  of the `macron` program; `write_file`, `edit_file` and `run_code` writing outside
-  the work folder pass the gate like the shell command that would write the file.
-- The file tools (read, write, edit, send) cannot open `config.env`, `secret.key`
-  or the database at all, also through a link.
+- `config.env` and `secret.key`: reading, changing, copying or deleting them, from
+  the shell, from `run_code` in any language, and from `read_file`, `write_file`
+  and `edit_file` (also through a link).
+- The `macron` program: `uninstall`, `service stop|restart|install`, `update`,
+  `backup`, `exec`, and `config set|unset` (the gate's own settings stay on the
+  floor, as before).
+- Copying the whole home folder or the database; removing or moving the home folder;
+  `find … -delete` and `mv` on system and home folders; `kill $(pgrep macron)`.
+- `curl`/`wget` uploads of a file from outside the work folder, and a download piped
+  into `python`, `node`, `perl` and the like.
+- `write_file`, `edit_file` and `run_code` writing outside the work folder pass the
+  gate like the shell command that would write the same file.
 
-These are deny rules, not a sandbox: the agent still runs with its account's rights.
-Change owners, tokens and gate settings yourself, from SSH. Run the service as an
-account of its own when the machine holds anything the agent must not reach.
+These questions are the owner's alone: the guardian model is not consulted for them.
+
+The owner's prompt carries no rule that keeps anything from them. The answers kept
+for other readers («جزئیات فنی پیش خودمون می‌مونه») and the check that withheld an
+answer naming tools now apply only to guest answers shown in other chats; they no
+longer reach the owner's casual messages, scheduled jobs or `macron exec`.
+
+Settings and tool variables are named `MACRON_…` only. A `config.env` or service
+environment that still uses the names from before the rename is read once and
+rewritten with the new ones. Plugins receive `MACRON_PLUGIN`, `MACRON_TOOL` and
+`MACRON_SESSION`; a script plugin's header is `# plugin:` or `# macron-plugin:`.
 
 Also in this release:
 
@@ -381,9 +389,6 @@ Also in this release:
 - A crash inside a scheduled job, a background task, a tool's parallel workers or a
   housekeeping loop is logged and reported as that job's failure instead of ending
   the whole agent; long-lived loops start again.
-- The web tools do not open the cloud metadata addresses (169.254.0.0/16 and the
-  like), also when a public name resolves to one. This machine and private networks
-  stay reachable.
 - `macron config set` refuses a value with a line break.
 - The installer takes the Python lockfiles from the release archive it verified.
 - Release builds use Go 1.26.10 (32 standard-library advisories fixed since 1.26.0).

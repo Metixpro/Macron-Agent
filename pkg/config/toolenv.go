@@ -13,10 +13,10 @@ func ActivateToolEnv() {
 			_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", browsers)
 		}
 	}
-	if os.Getenv("WAZE_BROWSER_USE_PYTHON") == "" {
+	if os.Getenv("MACRON_BROWSER_USE_PYTHON") == "" {
 		py := HomePath("browser-agent", "bin", "python3")
 		if fi, err := os.Stat(py); err == nil && fi.Mode()&0111 != 0 {
-			_ = os.Setenv("WAZE_BROWSER_USE_PYTHON", py)
+			_ = os.Setenv("MACRON_BROWSER_USE_PYTHON", py)
 		}
 	}
 	bin := HomePath("venv", "bin")

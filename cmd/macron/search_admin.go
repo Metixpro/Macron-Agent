@@ -34,7 +34,7 @@ func (b *Bot) viewSearch(l lang) panelView {
 	case strings.TrimSpace(panel) != "":
 		sb.WriteString(l.t("1️⃣ <b>treg.to</b>: ✅ روشن (توکن از پنل)\n"))
 	case s.On:
-		sb.WriteString(l.t("1️⃣ <b>treg.to</b>: ✅ روشن (توکن از <code>WAZE_TREG_TOKEN</code>)\n"))
+		sb.WriteString(l.t("1️⃣ <b>treg.to</b>: ✅ روشن (توکن از <code>MACRON_TREG_TOKEN</code>)\n"))
 	default:
 		sb.WriteString(l.t("1️⃣ <b>treg.to</b>: ❌ خاموش (توکن نداره)\n"))
 	}

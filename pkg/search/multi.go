@@ -872,7 +872,7 @@ func (e *Engine) wikiAnswer(ctx context.Context, query string) *QuickAnswer {
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Waze-Agent/1.0 (+https://github.com/Metixpro/macron-agent)")
+	req.Header.Set("User-Agent", "Macron-Agent/1.0 (+https://github.com/Metixpro/macron-agent)")
 	resp, err := e.HTTPClient.Do(req)
 	if err != nil {
 		return nil

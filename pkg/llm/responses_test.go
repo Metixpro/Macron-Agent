@@ -470,11 +470,11 @@ func TestAnyFormatReadsAStreamItWasNotAskedFor(t *testing.T) {
 }
 
 func TestLiveResponses(t *testing.T) {
-	key := os.Getenv("WAZE_TEST_RESPONSES_KEY")
+	key := os.Getenv("MACRON_TEST_RESPONSES_KEY")
 	if key == "" {
-		t.Skip("WAZE_TEST_RESPONSES_KEY is not set")
+		t.Skip("MACRON_TEST_RESPONSES_KEY is not set")
 	}
-	base, model := os.Getenv("WAZE_TEST_RESPONSES_URL"), os.Getenv("WAZE_TEST_RESPONSES_MODEL")
+	base, model := os.Getenv("MACRON_TEST_RESPONSES_URL"), os.Getenv("MACRON_TEST_RESPONSES_MODEL")
 	if base == "" {
 		base = "https://api.kie.ai/openai/v1"
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
-const wikimediaUA = "Waze-Agent/1.0 (+https://github.com/Metixpro/macron-agent)"
+const wikimediaUA = "Macron-Agent/1.0 (+https://github.com/Metixpro/macron-agent)"
 
 var (
 	imageExts = []string{".jpg", ".jpeg", ".png", ".webp"}

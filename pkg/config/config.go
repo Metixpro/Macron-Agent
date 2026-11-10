@@ -15,31 +15,31 @@ import (
 )
 
 const (
-	EnvAPIURL        = "WAZE_API_URL"
-	EnvAPIKey        = "WAZE_API_KEY"
-	EnvModel         = "WAZE_MODEL"
-	EnvWorkspaceDir  = "WAZE_WORKSPACE_DIR"
-	EnvEnvProxy      = "WAZE_USE_ENV_PROXY"
+	EnvAPIURL        = "MACRON_API_URL"
+	EnvAPIKey        = "MACRON_API_KEY"
+	EnvModel         = "MACRON_MODEL"
+	EnvWorkspaceDir  = "MACRON_WORKSPACE_DIR"
+	EnvEnvProxy      = "MACRON_USE_ENV_PROXY"
 	EnvGitHubToken   = "GITHUB_TOKEN"
 	EnvBotToken      = "TELEGRAM_BOT_TOKEN"
-	EnvServerToken   = "WAZE_SERVER_TOKEN"
-	EnvListen        = "WAZE_LISTEN"
-	EnvCORS          = "WAZE_CORS_ORIGINS"
-	EnvOwners        = "WAZE_OWNERS"
-	EnvSecretKey     = "WAZE_SECRET_KEY"
-	EnvTimezone      = "WAZE_TIMEZONE"
-	EnvCookiesDir    = "WAZE_COOKIES_DIR"
-	EnvTregToken     = "WAZE_TREG_TOKEN"
-	EnvReaderURL     = "WAZE_READER_URL"
-	EnvReaderKey     = "WAZE_READER_KEY"
-	EnvPiperModel    = "WAZE_PIPER_MODEL"
-	EnvContextWindow = "WAZE_CONTEXT_WINDOW"
-	EnvSkillsDir     = "WAZE_SKILLS_DIR"
-	EnvSkillsWrite   = "WAZE_SKILLS_WRITE"
-	EnvPluginsDir    = "WAZE_PLUGINS_DIR"
-	EnvMCPConfig     = "WAZE_MCP_CONFIG"
-	EnvTelegramAPI   = "WAZE_TELEGRAM_API"
-	EnvTelegramLocal = "WAZE_TELEGRAM_LOCAL"
+	EnvServerToken   = "MACRON_SERVER_TOKEN"
+	EnvListen        = "MACRON_LISTEN"
+	EnvCORS          = "MACRON_CORS_ORIGINS"
+	EnvOwners        = "MACRON_OWNERS"
+	EnvSecretKey     = "MACRON_SECRET_KEY"
+	EnvTimezone      = "MACRON_TIMEZONE"
+	EnvCookiesDir    = "MACRON_COOKIES_DIR"
+	EnvTregToken     = "MACRON_TREG_TOKEN"
+	EnvReaderURL     = "MACRON_READER_URL"
+	EnvReaderKey     = "MACRON_READER_KEY"
+	EnvPiperModel    = "MACRON_PIPER_MODEL"
+	EnvContextWindow = "MACRON_CONTEXT_WINDOW"
+	EnvSkillsDir     = "MACRON_SKILLS_DIR"
+	EnvSkillsWrite   = "MACRON_SKILLS_WRITE"
+	EnvPluginsDir    = "MACRON_PLUGINS_DIR"
+	EnvMCPConfig     = "MACRON_MCP_CONFIG"
+	EnvTelegramAPI   = "MACRON_TELEGRAM_API"
+	EnvTelegramLocal = "MACRON_TELEGRAM_LOCAL"
 )
 
 const DefaultModel = "claude-sonnet-5"
@@ -139,7 +139,7 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.Model, "model", envOr(EnvModel, DefaultModel), "model id (env "+EnvModel+")")
 	fs.StringVar(&c.WorkspaceDir, "workspace-dir", envOr(EnvWorkspaceDir, HomePath("workspaces")), "base directory of the per-user workspaces (env "+EnvWorkspaceDir+")")
 	fs.DurationVar(&c.WorkspaceTTL, "workspace-ttl", 0, "delete work-folder files (uploads and results) older than this (0 = never, the default)")
-	fs.BoolVar(&c.UseEnvProxy, "use-env-proxy", envBool(EnvEnvProxy), "send outbound tool traffic through HTTP(S)_PROXY (the proxy, not the agent, then decides which addresses can be reached)")
+	fs.BoolVar(&c.UseEnvProxy, "use-env-proxy", envBool(EnvEnvProxy), "send outbound tool traffic through HTTP(S)_PROXY")
 	fs.IntVar(&c.MaxSteps, "max-steps", 200, "maximum tool-calling rounds per request (the bot's admin panel can change it)")
 	fs.DurationVar(&c.RunTimeout, "run-timeout", 3*time.Hour, "time limit for one request (the bot's admin panel can change it)")
 	fs.IntVar(&c.Slots, "slots", 0, "commands (code, downloads, conversions) running at the same time; 0 = 8, or twice the CPUs")
@@ -232,9 +232,8 @@ func isLocalHost(h string) bool {
 }
 
 func LoadDefaultDotEnv() error {
-	err := LoadDotEnv(EnvFilePath())
-	AliasEnv()
-	return err
+	AdoptLegacyEnv()
+	return LoadDotEnv(EnvFilePath())
 }
 
 func ParseIDs(s string) (map[int64]bool, error) {

@@ -29,7 +29,7 @@ var (
 
 	chromeBinaries = []string{"/usr/lib/chromium/chromium"}
 
-	webLibDirs = []string{"/usr/local/share/waze/weblibs", "/usr/share/waze/weblibs"}
+	webLibDirs = []string{"/usr/local/share/macron/weblibs", "/usr/share/macron/weblibs"}
 
 	revisionRe = regexp.MustCompile(`-(\d+)/`)
 	schemeRe   = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+.-]*):(?:[^\d]|$)`)
@@ -241,7 +241,7 @@ func (r *Registry) renderPage(ctx context.Context, url string) (*search.Page, er
 	return &search.Page{URL: res.Page.URL, Title: res.Page.Title, Text: res.Page.Text}, nil
 }
 
-const renderSession = "waze-render"
+const renderSession = "macron-render"
 
 type browserPage struct {
 	Title string `json:"title"`

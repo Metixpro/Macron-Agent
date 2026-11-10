@@ -74,29 +74,10 @@ func EnvFilePath() string {
 	return HomePath(FileConfig)
 }
 
-func AliasEnv() {
-	for _, kv := range os.Environ() {
-		k, v, ok := strings.Cut(kv, "=")
-		if !ok || v == "" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(k, "MACRON_"):
-			if _, set := os.LookupEnv("WAZE_" + strings.TrimPrefix(k, "MACRON_")); !set {
-				_ = os.Setenv("WAZE_"+strings.TrimPrefix(k, "MACRON_"), v)
-			}
-		case strings.HasPrefix(k, "WAZE_"):
-			if _, set := os.LookupEnv("MACRON_" + strings.TrimPrefix(k, "WAZE_")); !set {
-				_ = os.Setenv("MACRON_"+strings.TrimPrefix(k, "WAZE_"), v)
-			}
-		}
-	}
-}
-
-const EnvDB = "WAZE_DB"
+const EnvDB = "MACRON_DB"
 
 func SecretKey() (string, error) {
-	if k := strings.TrimSpace(os.Getenv("WAZE_SECRET_KEY")); k != "" {
+	if k := strings.TrimSpace(os.Getenv("MACRON_SECRET_KEY")); k != "" {
 		return k, nil
 	}
 	path := HomePath(FileSecret)

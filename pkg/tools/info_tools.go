@@ -495,7 +495,7 @@ func (r *Registry) githubGet(ctx context.Context, apiPath, accept string) ([]byt
 		return nil, err
 	}
 	req.Header.Set("Accept", accept)
-	req.Header.Set("User-Agent", "Waze-Agent")
+	req.Header.Set("User-Agent", "Macron-Agent")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if r.GitHubToken != "" {
 		req.Header.Set("Authorization", "Bearer "+r.GitHubToken)

@@ -27,6 +27,7 @@ import (
 )
 
 func main() {
+	config.AdoptLegacyEnv()
 	config.ActivateToolEnv()
 	if len(os.Args) > 1 && runCommand(os.Args[1:]) {
 		return
@@ -159,8 +160,6 @@ func main() {
 		workFiles:  cfg.WorkspaceTTL,
 	}
 	a.Registry.Gate, a.Registry.CheckpointDir = bot.newCommandGate(), config.HomePath("checkpoints")
-	db := store.DBPath(*dsnFlag)
-	a.Machine.Protect(append(ownSecrets(), db, db+"-wal", db+"-shm", db+"-journal")...)
 	a.Agent.Teachings = bot.teachings
 	api.OnSent = bot.noteSent
 	bot.reloadEmoji(rootCtx)

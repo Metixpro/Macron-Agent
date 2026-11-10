@@ -36,7 +36,7 @@ func TestToolDefinitionsStayShort(t *testing.T) {
 	if total > 25950 {
 		t.Errorf("the definitions take %d bytes", total)
 	}
-	if dir := os.Getenv("WAZE_TOOLS_DUMP"); dir != "" {
+	if dir := os.Getenv("MACRON_TOOLS_DUMP"); dir != "" {
 		raw, _ := json.MarshalIndent(r.GetTools(), "", " ")
 		_ = os.WriteFile(dir+"/tools.json", raw, 0o644)
 	}

@@ -18,7 +18,7 @@ func TestBackgroundJobsShareTheShell(t *testing.T) {
 	if job.ID != 1 || !job.Running || job.Log != JobsDir+"/1.log" {
 		t.Fatalf("job: %+v", job)
 	}
-	res := s.Run(ctx, "dev", RunOptions{Shell: `test -n "$WAZE_SHELL" || exit 9; for i in $(seq 1 50); do curl -s localhost:8765/hello.txt && exit 0; sleep 0.1; done; exit 7`,
+	res := s.Run(ctx, "dev", RunOptions{Shell: `test -n "$MACRON_SHELL" || exit 9; for i in $(seq 1 50); do curl -s localhost:8765/hello.txt && exit 0; sleep 0.1; done; exit 7`,
 		InSession: true, Timeout: 20 * time.Second})
 	if res.ExitCode != 0 || !strings.Contains(res.Stdout, "hello from the server") {
 		t.Fatalf("a later command reaches the server on localhost: %+v", res)
@@ -50,7 +50,7 @@ func TestBackgroundJobsShareTheShell(t *testing.T) {
 		t.Errorf("a stopped server is gone: %q", res.Stdout)
 	}
 
-	if res := s.Run(ctx, "dev", RunOptions{Shell: "test -n \"$WAZE_SHELL\" && echo shell || echo own", Timeout: 10 * time.Second}); strings.TrimSpace(res.Stdout) != "own" {
+	if res := s.Run(ctx, "dev", RunOptions{Shell: "test -n \"$MACRON_SHELL\" && echo shell || echo own", Timeout: 10 * time.Second}); strings.TrimSpace(res.Stdout) != "own" {
 		t.Errorf("a server tool runs on its own: %q", res.Stdout)
 	}
 	if !s.StopShell("dev") || s.Jobs("dev")[0].Running {

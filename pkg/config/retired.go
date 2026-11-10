@@ -12,13 +12,7 @@ func RetiredKey(key string) bool {
 	case "image_key", "image_edit_key", "music_key":
 		return true
 	}
-	base := ""
-	if strings.HasPrefix(key, "MACRON_") {
-		base = strings.TrimPrefix(key, "MACRON_")
-	} else if strings.HasPrefix(key, "WAZE_") {
-		base = strings.TrimPrefix(key, "WAZE_")
-	}
-	switch base {
+	switch strings.TrimPrefix(key, prefix) {
 	case "IMAGE_API_URL", "IMAGE_API_KEY", "IMAGE_EDIT_URL", "IMAGE_EDIT_KEY", "MUSIC_API_URL", "MUSIC_API_KEY":
 		return true
 	}
@@ -37,14 +31,28 @@ func PruneRetiredEnv(path string) error {
 	if err != nil {
 		return err
 	}
-	var kept strings.Builder
-	changed := false
-	for _, line := range strings.SplitAfter(string(data), "\n") {
+	keyOf := func(line string) string {
 		raw := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "export "))
 		key, _, _ := strings.Cut(raw, "=")
-		key = strings.TrimSpace(key)
-		removed := RetiredKey(key)
-		if removed {
+		return strings.TrimSpace(key)
+	}
+	lines := strings.SplitAfter(string(data), "\n")
+	current := map[string]bool{}
+	for _, line := range lines {
+		current[keyOf(line)] = true
+	}
+	var kept strings.Builder
+	changed := false
+	for _, line := range lines {
+		key := keyOf(line)
+		if renamed, legacy := renameLegacyKey(key); legacy {
+			changed = true
+			if current[renamed] {
+				continue
+			}
+			line, key = strings.Replace(line, key, renamed, 1), renamed
+		}
+		if RetiredKey(key) {
 			changed = true
 			continue
 		}

@@ -27,7 +27,7 @@ const (
 	dlPostTimeout    = 12 * time.Minute
 	dlAttemptTimeout = 4 * time.Minute
 	dlMaxItems       = 10
-	dlMarker         = "WAZEFILE"
+	dlMarker         = "MACRONFILE"
 	dlCookiesFile    = ".dl_cookies.txt"
 	cookiesName      = "cookies.txt"
 )

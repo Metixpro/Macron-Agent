@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-var longText = strings.Repeat("Waze reads blocked pages through a reader. ", 20)
+var longText = strings.Repeat("Macron reads blocked pages through a reader. ", 20)
 
 func site(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

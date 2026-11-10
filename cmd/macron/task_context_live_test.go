@@ -13,7 +13,7 @@ import (
 )
 
 func TestLiveModelSwitchesFromCompletedTaskToAPK(t *testing.T) {
-	endpoint, key, model := os.Getenv("WAZE_TEST_LLM_URL"), os.Getenv("WAZE_TEST_LLM_KEY"), os.Getenv("WAZE_TEST_LLM_MODEL")
+	endpoint, key, model := os.Getenv("MACRON_TEST_LLM_URL"), os.Getenv("MACRON_TEST_LLM_KEY"), os.Getenv("MACRON_TEST_LLM_MODEL")
 	if endpoint == "" || key == "" || model == "" {
 		t.Skip("live model credentials not configured")
 	}
