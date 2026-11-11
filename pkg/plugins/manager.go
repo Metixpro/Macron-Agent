@@ -170,6 +170,7 @@ func (p *plugin) access() string {
 type toolRef struct {
 	key, name string
 	def       llm.Tool
+	readOnly  bool
 }
 
 type Manager struct {
@@ -393,7 +394,7 @@ func (m *Manager) rebuildLocked() {
 			if _, taken := index[name]; taken || (m.Reserved != nil && m.Reserved(name)) || len(index) >= maxPluginTools {
 				continue
 			}
-			index[name] = toolRef{key: k, name: t.orig, def: t.Tool}
+			index[name] = toolRef{key: k, name: t.orig, def: t.Tool, readOnly: t.readOnly}
 		}
 	}
 	m.index = index
@@ -406,7 +407,8 @@ func (m *Manager) rebuildLocked() {
 
 type exposedTool struct {
 	llm.Tool
-	orig string
+	orig     string
+	readOnly bool
 }
 
 func (m *Manager) toolsOf(p *plugin) []exposedTool {
@@ -438,7 +440,7 @@ func (m *Manager) toolsOf(p *plugin) []exposedTool {
 				desc = string(r[:maxDescRunes])
 			}
 			out = append(out, exposedTool{Tool: llm.Tool{Type: "function", Function: llm.ToolDef{Name: mcpToolName(p.srv.ID, t.Name),
-				Description: "[" + label + "] " + desc, Parameters: schema}}, orig: t.Name})
+				Description: "[" + label + "] " + desc, Parameters: schema}}, orig: t.Name, readOnly: t.Annotations.ReadOnlyHint})
 		}
 	}
 	return out
@@ -479,6 +481,17 @@ func (m *Manager) Has(name string) bool {
 	defer m.mu.RUnlock()
 	_, ok := m.index[name]
 	return ok
+}
+
+func (m *Manager) Trusted(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ref, ok := m.index[name]
+	if !ok {
+		return false
+	}
+	p := m.plugins[ref.key]
+	return ref.readOnly || p != nil && p.access() == AccessEveryone
 }
 
 func (m *Manager) Allowed(name, sessionID string) bool {

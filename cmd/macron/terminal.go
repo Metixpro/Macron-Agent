@@ -41,7 +41,7 @@ const (
 
 var projectNotes = []string{"MACRON.md", "AGENTS.md", "CLAUDE.md"}
 
-var hiddenWork = []string{machine.SubDir + "/", machine.JobsDir + "/", ".tool-output/", ".run/", ".docindex/", ".widgets/"}
+var hiddenWork = []string{machine.SubDir + "/", machine.JobsDir + "/", ".tool-output/", ".run/", ".docindex/", ".widgets/", ".macron_page_watches/", ".macron_price_alerts/"}
 
 func interactiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("TERM") != "dumb"

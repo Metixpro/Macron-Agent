@@ -125,6 +125,68 @@ func (r *Registry) registerDevTools() {
 			"stdin":           prop("string", ""),
 			"timeout_seconds": prop("integer", "Default 60, max 7200"),
 		}, nil, r.runCode)
+
+	r.add(ToolPythonKernel,
+		"Run code in a persistent Python kernel session that retains state, variables, and imports across turns.",
+		map[string]any{
+			"code":   prop("string", "Python code to execute or evaluate"),
+			"action": enumProp("execute", "execute", "reset", "variables"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			code := strArg(args, "code")
+			action := strArg(args, "action")
+			if action == "" || action == "execute" {
+				if refused := r.gateCode(ctx, sessionID, "python", code); refused != "" {
+					return refused, nil
+				}
+			}
+			return r.ExecuteInPythonKernel(ctx, sessionID, action, code)
+		})
+
+	r.add(ToolGitHubWorkflow,
+		"Manage GitHub pull requests, issues, and discussions.",
+		map[string]any{
+			"action": enumProp("create_pr", "create_pr", "list_issues", "create_issue", "add_comment"),
+			"repo":   prop("string", "GitHub repository (owner/repo)"),
+			"title":  prop("string", "PR or Issue title"),
+			"body":   prop("string", "PR or Issue body description"),
+			"head":   prop("string", "Head branch name"),
+			"base":   prop("string", "Base branch name (default 'main')"),
+			"number": prop("integer", "Issue/PR number (for add_comment)"),
+		}, []string{"action", "repo"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			repo := strArg(args, "repo")
+			title := strArg(args, "title")
+			body := strArg(args, "body")
+			head := strArg(args, "head")
+			base := strArg(args, "base")
+			number := intArg(args, "number", 0, 0, 1000000)
+			if action != "list_issues" {
+				if refused := r.gateSend(ctx, sessionID, "GitHub "+repo, action+": "+title+"\n"+body); refused != "" {
+					return refused, nil
+				}
+			}
+			return r.ExecuteGitHubWorkflow(ctx, sessionID, action, repo, title, body, base, head, number)
+		})
+
+	r.add(ToolLivePreview,
+		"Serve a workspace folder over HTTP on this server (127.0.0.1) to preview a static site in a browser.",
+		map[string]any{
+			"action":  enumProp("start", "start", "stop"),
+			"port":    prop("integer", "Port (default: a free one)"),
+			"sub_dir": prop("string", "Folder to serve (default: the workspace)"),
+		}, nil, func(_ context.Context, sessionID string, args map[string]any) (string, error) {
+			if strArg(args, "action") == "stop" {
+				if StopLivePreview(sessionID) {
+					return "Preview stopped.", nil
+				}
+				return "No preview was running.", nil
+			}
+			out, err := r.StartLivePreview(sessionID, intArg(args, "port", 0, 0, 65535), strArg(args, "sub_dir"))
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return out, nil
+		})
 }
 
 func (r *Registry) pickLanguage(name, file string) (language, error) {

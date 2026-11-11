@@ -277,6 +277,10 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 	if m := schemeRe.FindStringSubmatch(cfg["url"].(string)); m != nil && !strings.EqualFold(m[1], "http") && !strings.EqualFold(m[1], "https") {
 		return "error: only http(s) pages or workspace files can be opened", nil
 	}
+	acts, _ := cfg["actions"].([]any)
+	if refused := r.gateBrowser(ctx, sessionID, cfg["url"].(string), acts); refused != "" {
+		return refused, nil
+	}
 	var res struct {
 		Page    browserPage `json:"page"`
 		Error   string      `json:"error"`

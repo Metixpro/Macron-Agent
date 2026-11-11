@@ -751,6 +751,109 @@ func (r *Registry) registerDocumentTools() {
 			"to_page":     prop("integer", "Default from_page"),
 			"max_results": prop("integer", "search: default 6, max 12"),
 		}, []string{"action", "filename"}, r.documentReader)
+
+	r.add(ToolOfficeDoc,
+		"Make a real Word (.docx) or PowerPoint (.pptx) file from content, or fill {{placeholders}} in a .docx/.pptx template. Persian text is set right-to-left.",
+		map[string]any{
+			"action":   enumProp("create_docx", "create_docx", "create_pptx", "fill_template"),
+			"filename": prop("string", "Output file, e.g. report.docx or deck.pptx"),
+			"title":    prop("string", "Document title, or the title slide"),
+			"subtitle": prop("string", "pptx: title slide subtitle"),
+			"blocks": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+				"description": "docx: [{heading, level}, {text (**bold** ok)}, {bullets:[...]}, {numbered:[...]}, {table:[[header...],[row...]]}, {image: file, width_inches}, {page_break:true}] · pptx: one per slide [{title, bullets:[...], image: file, notes}]"},
+			"template": prop("string", "fill_template: the .docx/.pptx template in the workspace"),
+			"values":   map[string]any{"type": "object", "description": "fill_template: {placeholder: text} for {{placeholder}}"},
+			"rtl":      map[string]any{"type": "boolean", "description": "Force right-to-left (default: automatic per paragraph)"},
+		}, []string{"action", "filename"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			out, err := r.OfficeDocument(ctx, sessionID, strArg(args, "action"), strArg(args, "filename"), args)
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return out, nil
+		})
+
+	r.add(ToolDocumentDiff,
+		"Compare two text files or documents (PDF, Word, PowerPoint, Excel: their text) and show what was added and removed.",
+		map[string]any{
+			"file_a": prop("string", "First document path"),
+			"file_b": prop("string", "Second document path"),
+			"format": enumProp("unified", "unified", "summary"),
+		}, []string{"file_a", "file_b"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			fileA := strArg(args, "file_a")
+			fileB := strArg(args, "file_b")
+			format := strArg(args, "format")
+			rep, err := r.CompareDocuments(ctx, sessionID, fileA, fileB, format)
+			if err != nil {
+				return "diff error: " + err.Error(), nil
+			}
+			return rep.Format(format), nil
+		})
+
+	r.add(ToolOCR,
+		"Extract and recognize Persian and English text from images or scanned documents.",
+		map[string]any{
+			"filename": prop("string", "Image or document file in workspace"),
+			"lang":     enumProp("fas+eng", "fas+eng", "fas", "eng"),
+		}, []string{"filename"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			fn := strArg(args, "filename")
+			lang := strArg(args, "lang")
+			return r.RunOCR(ctx, sessionID, fn, lang)
+		})
+
+	r.add(ToolTranslateDoc,
+		"Translate a long text file (Markdown, HTML, subtitles, JSON…) part by part, keeping its formatting, tables and code.",
+		map[string]any{
+			"filename":    prop("string", "File to translate"),
+			"target_lang": prop("string", "Target language (e.g. Persian, English)"),
+			"output_file": prop("string", "Optional destination path"),
+		}, []string{"filename", "target_lang"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			out, err := r.TranslateDocument(ctx, sessionID, strArg(args, "filename"), strArg(args, "target_lang"), strArg(args, "output_file"))
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return out, nil
+		})
+
+	r.add(ToolGenerateDiagram,
+		"Render Mermaid, Graphviz, or SVG architecture diagrams and flowcharts directly into workspace files.",
+		map[string]any{
+			"code":        prop("string", "Diagram source code (Mermaid, Graphviz DOT, or SVG)"),
+			"type":        enumProp("mermaid", "mermaid", "graphviz", "svg"),
+			"output_file": prop("string", "Destination path (e.g. architecture.svg, flow.html)"),
+		}, []string{"code"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			code := strArg(args, "code")
+			dt := strArg(args, "type")
+			out := strArg(args, "output_file")
+			return r.GenerateDiagram(ctx, sessionID, dt, code, out)
+		})
+
+	r.add(ToolGenerateImage,
+		"Make an image from a text description with the configured image API (OpenAI or compatible).",
+		map[string]any{
+			"prompt":      prop("string", "What the image shows, its style and composition"),
+			"size":        enumProp("1024x1024", "1024x1024", "1536x1024", "1024x1536", "auto"),
+			"output_file": prop("string", "e.g. poster.png"),
+		}, []string{"prompt"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			out, err := r.GenerateImage(ctx, sessionID, strArg(args, "prompt"), strArg(args, "size"), strArg(args, "output_file"))
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return out, nil
+		})
+
+	r.add(ToolMediaSummary,
+		"Summarize a transcript text file of a podcast, video or meeting (summary or minutes with decisions and action items); timestamps and speakers only where the transcript has them.",
+		map[string]any{
+			"action":   enumProp("timestamped_summary", "timestamped_summary", "meeting_minutes"),
+			"filename": prop("string", "Audio/video transcript file"),
+		}, []string{"filename"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "timestamped_summary"
+			}
+			fn := strArg(args, "filename")
+			return r.SummarizeMedia(ctx, sessionID, action, fn, nil)
+		})
 }
 
 func (r *Registry) documentReader(ctx context.Context, sessionID string, args map[string]any) (string, error) {

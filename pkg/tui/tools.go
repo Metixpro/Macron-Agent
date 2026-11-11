@@ -17,15 +17,24 @@ var toolTitles = map[string]string{
 	"list_skills": "Skills", "shell_jobs": "Jobs", "document_reader": "Read", "pdf_tool": "PDF", "query_data": "Query",
 	"remember": "Remember", "forget": "Forget", "more_tools": "Tools", "tool_search": "Tools", "save_skill": "Save Skill",
 	agent.ToolDelegate: "Task", "search_past_chats": "Recall", "download": "Download", "http_request": "HTTP",
+	"python_kernel": "Python", "database_query": "SQL", "deploy_service": "Deploy", "office_document": "Office", "document_diff": "Diff",
+	"ocr_image": "OCR", "translate_document": "Translate", "generate_diagram": "Diagram", "generate_image": "Image",
+	"media_summary": "Summarize", "cloud_storage": "Cloud", "tsetmc_stock": "Bourse", "price_alert": "Price Alert", "page_watch": "Watch",
+	"academic_search": "Papers", "fact_check": "Fact Check", "create_dashboard": "Dashboard", "openapi_call": "API",
+	"statistics_forecast": "Stats", "github_workflow": "GitHub", "live_preview": "Preview", "email_client": "Email",
+	"calendar_client": "Calendar", "iran_messenger": "Message", "external_messenger": "Message", "task_board": "Tasks",
+	"generate_briefing": "Briefing", "rag_search": "Search Docs", "crawl_site": "Crawl", "deep_research": "Research",
+	"currency_gold_price": "Prices", "crypto_currency_price": "Crypto",
 }
 
 var lookTools = map[string]bool{
 	"search_code": true, "find_files": true, "project_tree": true, "code_outline": true, "list_files": true,
 	"web_search": true, "web_fetch": true, "read_skill": true, "list_skills": true, "document_reader": true,
 	"view_image": true, "search_past_chats": true, "shell_jobs": true, "more_tools": true, "tool_search": true,
+	"academic_search": true, "rag_search": true, "tsetmc_stock": true, "database_query": true,
 }
 
-var argKeys = []string{"command", "filename", "path", "pattern", "query", "url", "title", "goal", "name", "sql", "fact", "action", "language", "file", "id"}
+var argKeys = []string{"command", "deploy_cmd", "code", "filename", "file", "path", "pattern", "query", "symbol", "claim", "url", "topic", "title", "goal", "name", "sql", "fact", "to", "repo", "spec_path", "prompt", "remote_path", "action", "language", "id"}
 
 var (
 	exitRe  = regexp.MustCompile(`^\[(?:exit (-?\d+)[^\]]*|timed out[^\]]*|could not run: [^\]]*)\]$`)
@@ -212,7 +221,7 @@ func toolBody(name, args, result string, failed bool, width int) []string {
 	var body []string
 	add := func(s string) { body = append(body, s) }
 	switch name {
-	case "bash_execute", "run_code":
+	case "bash_execute", "run_code", "python_kernel":
 		if name == "bash_execute" && (a["background"] == true || strArg(a, "background") == "true") {
 			add(agent.StepLine(name, args, result))
 			break

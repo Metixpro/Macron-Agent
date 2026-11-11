@@ -102,6 +102,24 @@ func intArg(args map[string]any, key string, def, lo, hi int) int {
 	return min(max(n, lo), hi)
 }
 
+func floatArg(args map[string]any, key string) float64 {
+	switch v := args[key].(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
 func sanitizeBase(s string) string {
 	s = strings.ReplaceAll(s, "\\", "/")
 	s = path.Base(strings.TrimSpace(s))

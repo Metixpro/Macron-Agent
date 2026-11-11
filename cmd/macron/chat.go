@@ -1356,6 +1356,9 @@ func (b *Bot) requestTools(u *store.User, m *telegram.Message, react *reactor, b
 			case info.Size() > b.api.UploadLimit():
 				return agent.ToolOutput{Text: fmt.Sprintf("error: the file is larger than Telegram's %d MB limit; compress or split it", b.api.UploadLimit()>>20)}, nil
 			}
+			if refused := b.gateSendFile(ctx, session, name); refused != "" {
+				return agent.ToolOutput{Text: refused}, nil
+			}
 			caption, _ := args["caption"].(string)
 			box.add(name, textutil.TruncateRunes(strings.TrimSpace(caption), 300, "…"))
 			note := ""

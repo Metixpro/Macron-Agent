@@ -134,6 +134,9 @@ func (r *Registry) browserAgent(ctx context.Context, sessionID string, args map[
 	if _, set := args["vision"]; set {
 		vision = boolArg(args, "vision")
 	}
+	if refused := r.gateBrowserAgent(ctx, sessionID, task, url, domains, files); refused != "" {
+		return refused, nil
+	}
 	timeout := min(90*time.Second+time.Duration(steps)*40*time.Second, 20*time.Minute)
 	bridge, err := newLLMBridge(ctx, r.LLM, steps)
 	if err != nil {

@@ -239,6 +239,13 @@ func (b *Bot) serveWeb(ctx context.Context) {
 			go serve("dashboard", addr, b.dashboardHandler())
 		}
 	}
+	if addr := strings.TrimSpace(os.Getenv(envAPIAddr)); addr != "" {
+		if !loopback(addr) {
+			log.Printf("🌐 the OpenAI-compatible API only listens on this machine (127.0.0.1:PORT), not on %s; it stays off", addr)
+		} else {
+			go serve("the OpenAI-compatible API", addr, b.apiHandler())
+		}
+	}
 }
 
 func (b *Bot) dashboardCommand(ctx context.Context, m *telegram.Message, l lang) {
@@ -247,6 +254,12 @@ func (b *Bot) dashboardCommand(ctx context.Context, m *telegram.Message, l lang)
 		sb.WriteString(l.f("🌐 داشبورد (فقط روی همین سرور؛ از راه دور با <code>ssh -L</code>):\n<code>http://%s/?token=%s</code>", esc(addr), esc(b.secretSetting(ctx, settingDashToken))))
 	} else {
 		sb.WriteString(l.t("🌐 داشبورد خاموشه. روشنش کن: <code>macron config set MACRON_DASHBOARD_ADDR 127.0.0.1:8788</code> و ری‌استارت."))
+	}
+	if addr := strings.TrimSpace(os.Getenv(envAPIAddr)); addr != "" && loopback(addr) {
+		sb.WriteString(l.f("\n\n🔌 API سازگار با OpenAI (فقط روی همین سرور):\n<code>http://%s/v1</code> · مدل <code>macron</code> یا <code>macron/NAME</code>\nکلید: <tg-spoiler><code>%s</code></tg-spoiler>",
+			esc(addr), esc(b.secretSetting(ctx, settingAPIToken))))
+	} else {
+		sb.WriteString(l.t("\n\n🔌 API سازگار با OpenAI خاموشه: <code>macron config set MACRON_API_ADDR 127.0.0.1:8789</code>"))
 	}
 	if addr := strings.TrimSpace(os.Getenv(envWebhookAddr)); addr != "" {
 		sb.WriteString(l.f("\n\n🪝 وب‌هوک: <code>POST http://%s/hook/NAME</code> با <code>X-Macron-Timestamp</code> و <code>X-Macron-Signature: sha256=HMAC(secret, ts.body)</code>\nsecret: <tg-spoiler><code>%s</code></tg-spoiler>",

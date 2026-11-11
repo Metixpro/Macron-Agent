@@ -40,6 +40,8 @@ const (
 	EnvMCPConfig     = "MACRON_MCP_CONFIG"
 	EnvTelegramAPI   = "MACRON_TELEGRAM_API"
 	EnvTelegramLocal = "MACRON_TELEGRAM_LOCAL"
+	EnvSandbox       = "MACRON_SANDBOX"
+	EnvSandboxNoNet  = "MACRON_SANDBOX_NO_NET"
 )
 
 const DefaultModel = "claude-sonnet-5"
@@ -80,6 +82,8 @@ type Config struct {
 	MaxSteps      int
 	Slots         int
 	RunTimeout    time.Duration
+	Sandbox       string
+	SandboxNoNet  bool
 
 	OptionalAPIURL bool
 }
@@ -147,6 +151,8 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.SkillsDir, "skills-dir", os.Getenv(EnvSkillsDir), "folder of procedural skills (<category>/<name>/SKILL.md); default ~/.macron/skills (env "+EnvSkillsDir+")")
 	fs.StringVar(&c.PluginsDir, "plugins-dir", os.Getenv(EnvPluginsDir), "folder of plugins (<id>/plugin.json); default ~/.macron/plugins (env "+EnvPluginsDir+")")
 	fs.StringVar(&c.MCPConfig, "mcp-config", envOr(EnvMCPConfig, HomePath("mcp_servers.json")), "MCP servers, in mcp_servers.json form (env "+EnvMCPConfig+")")
+	fs.StringVar(&c.Sandbox, "sandbox", envOr(EnvSandbox, ""), "sandbox backend for code and commands (bwrap or off; env "+EnvSandbox+")")
+	fs.BoolVar(&c.SandboxNoNet, "sandbox-no-net", envBool(EnvSandboxNoNet), "disable network access inside the sandbox (env "+EnvSandboxNoNet+")")
 	c.GitHubToken = os.Getenv(EnvGitHubToken)
 	c.TregToken = os.Getenv(EnvTregToken)
 	c.ReaderURL = "https://r.jina.ai/"

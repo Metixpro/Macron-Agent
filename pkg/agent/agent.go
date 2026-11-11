@@ -932,6 +932,8 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	claimed := false
 	servedBy := ""
 	led, backNudges := &ledger{}, 0
+	vGate := newVerifyGate()
+	vNudged := false
 	if req.Earlier || req.Resume != nil {
 		led.rs = append(led.rs, receipt{name: "earlier_work"})
 	}
@@ -1253,6 +1255,16 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 				messages = append(messages, llm.Message{Role: "user", Content: noticeClaimed})
 				continue
 			}
+			if canRetry && !vNudged && !chat && offered != nil && (callable["bash_execute"] || callable["run_code"]) {
+				if needs, prompt := vGate.NeedsVerification(visible); needs {
+					vNudged = true
+					if l.OnText != nil {
+						l.OnText("")
+					}
+					messages = append(messages, llm.Message{Role: "user", Content: prompt})
+					continue
+				}
+			}
 			if canRetry && !lookedUp && !chat && offered != nil && callable["web_search"] && len(res.ToolsUsed) == 0 && asksFirst(visible) {
 				lookedUp = true
 				messages = append(messages, llm.Message{Role: "user", Content: noticeLookItUp})
@@ -1353,6 +1365,19 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			if name != ToolPlan {
 				work.add(name, tc.Function.Arguments, out.msg.Content)
 				led.add(name, tc.Function.Arguments, out.msg.Content, out.refused)
+				vGate.SetRound(step)
+				switch name {
+				case "write_file", "edit_file", "apply_patch":
+					if path := extractFilePath(tc.Function.Arguments); path != "" {
+						vGate.RecordFileModification(path)
+					}
+				case "bash_execute", "run_code", "shell_jobs":
+					code := 0
+					if out.refused || failedOutput(out.msg.Content) || execFailedRe.MatchString(out.msg.Content) {
+						code = 1
+					}
+					vGate.RecordExecution(name, tc.Function.Arguments, code)
+				}
 			}
 			if res.Calls == nil {
 				res.Calls, res.Failed, res.Errors = map[string]int{}, map[string]int{}, map[string]string{}

@@ -469,3 +469,62 @@ repository's `.git/info/exclude`. The first run asks for a model when none is se
 "Telegram service"). `macron setup` now sets up the model and the time zone and
 only offers Telegram; the installer does the same, and starts the bot only when a
 token is configured. Systemd units and launchd agents run `macron telegram run`.
+
+### 1.6.0: approval gates for every action, a sandbox, and new tools
+
+Built on PR #1 by ArtixPortal, reviewed and reworked: what was kept was fixed until
+it works and is honest, and what was only a sketch was left out.
+
+Approvals now cover more than shell commands. Reading private keys and
+credentials (`~/.ssh`, cloud and tool credentials, `/etc/shadow`, process
+environments), reaching cloud metadata services and destroying git history
+(force push, `reset --hard`, `clean -f`, history rewrites) are flagged. Browser
+actions that act on a site (sending a form, pressing a buy, send or delete button,
+uploading, page scripts) are asked first, as are plugin and MCP tools that are not
+read-only, `send_file` for a file outside the workspace, the Python kernel, the
+deploy tool and every tool that sends something out (email, messengers, cloud
+uploads, task boards, GitHub writes, OpenAPI calls other than GET). `macron exec`
+uses the same gate and settings: it asks in a terminal and refuses flagged steps
+when nobody can answer (cron, pipes) unless `--yolo` or `MACRON_YOLO=1`.
+
+`MACRON_SANDBOX=bwrap` runs commands in a bubblewrap container: the system is
+read-only, private keys and the agent's own settings, key and database are hidden,
+other sessions' workspaces are invisible, and only the workspace (with the terminal
+interface, the project folder) and build caches (`~/.cache`, `~/go`, `~/.npm`,
+`~/.cargo`…) are writable. `MACRON_SANDBOX_NO_NET=1` also cuts the network.
+
+A question the agent asks with a poll now survives a restart (kept in the
+database for the poll's lifetime). Before saying it is done after changing code,
+the agent checks it once (tests, a build, or a run without side effects) when
+nothing has run since the change.
+
+New tools, each loaded only when a message asks for it:
+- `tsetmc_stock` (prices, volume, EPS, best bid/ask and Codal letters from TSETMC,
+  or the indices), `price_alert`, `page_watch` (both check when called; schedule a
+  recurring check for alerts) and `generate_briefing`.
+- `office_document` (Word and PowerPoint with python-docx/python-pptx, right to left
+  for Persian, template filling), `ocr_image` (tesseract, then the vision model),
+  `translate_document` (long text files in parts), `generate_diagram` (Graphviz,
+  mermaid-cli), `document_diff`, `media_summary` (from a transcript),
+  `generate_image` (`MACRON_IMAGE_API_KEY`).
+- `database_query` (one read-only statement in a read-only transaction; the
+  connection string comes from a `config.env` variable), `python_kernel`,
+  `create_dashboard`, `statistics_forecast`, `openapi_call` (a bearer token from a
+  `config.env` variable), `deploy_service`, `live_preview`, `crawl_site`,
+  `rag_search`, `academic_search` (arXiv, Semantic Scholar), `fact_check`.
+- `email_client` (SMTP), `calendar_client`, `iran_messenger` (Bale, Eitaa, Rubika
+  bots), `external_messenger` (Slack, Discord, WhatsApp Cloud API),
+  `cloud_storage` (S3 with SigV4 for AWS, MinIO and R2, and WebDAV), `task_board`
+  (Notion, Trello, Todoist), `github_workflow`.
+
+Their keys go in `config.env` (see `config.env.example`); tools never take a token
+or password as a parameter. When a service does not answer, the tool says so; it
+never fills in made-up numbers.
+
+`MACRON_API_ADDR=127.0.0.1:8789` serves an OpenAI-compatible API on this machine
+(`/v1/chat/completions` with streaming, `/v1/models`) that answers with your
+providers and their failover; model `macron` or `macron/<provider>`. It needs the
+key `/dashboard` shows.
+
+
+Builds use Go 1.26.11, which fixes a crash of HTTP servers (GO-2026-6859). New dependencies: the pgx (PostgreSQL) and MySQL drivers.

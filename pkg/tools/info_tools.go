@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"math"
 	"net"
@@ -49,6 +50,142 @@ func (r *Registry) registerInfoTools() {
 			"repo":       prop("string", "owner/repo or a link"),
 			"query_type": enumProp("", "summary", "readme", "releases", "commits"),
 		}, []string{"repo"}, r.githubInspect)
+
+	r.add(ToolEmailClient,
+		"Send emails via SMTP with subject, body, and recipients.",
+		map[string]any{
+			"to":      prop("string", "Recipient email addresses (comma separated)"),
+			"subject": prop("string", "Email subject"),
+			"body":    prop("string", "Email text content"),
+			"host":    prop("string", "SMTP host override"),
+			"port":    prop("integer", "SMTP port (default 587)"),
+		}, []string{"to", "subject", "body"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			to := strArg(args, "to")
+			sub := strArg(args, "subject")
+			body := strArg(args, "body")
+			host := strArg(args, "host")
+			port := intArg(args, "port", 587, 1, 65535)
+			if refused := r.gateSend(ctx, sessionID, "email "+to, "subject: "+sub+"\n"+body); refused != "" {
+				return refused, nil
+			}
+			if err := SendEmail(ctx, host, port, "", "", "", to, sub, body); err != nil {
+				return "email error: " + err.Error(), nil
+			}
+			return fmt.Sprintf("✅ Email sent to %s with subject: %s", to, sub), nil
+		})
+
+	r.add(ToolCalendarClient,
+		"Generate an iCalendar (.ics) event file for appointments and meetings.",
+		map[string]any{
+			"title":       prop("string", "Event title"),
+			"description": prop("string", "Event details"),
+			"location":    prop("string", "Event location"),
+			"start":       prop("string", "Start, local time: YYYY-MM-DD HH:MM, YYYY-MM-DD or RFC3339 (default: tomorrow at this hour)"),
+			"duration":    prop("string", "Duration (e.g. 1h, 30m, 1h30m; default 1h)"),
+			"filename":    prop("string", "Output .ics filename (default 'event.ics')"),
+		}, []string{"title"}, func(_ context.Context, sessionID string, args map[string]any) (string, error) {
+			title := strArg(args, "title")
+			desc := strArg(args, "description")
+			loc := strArg(args, "location")
+			start, err := eventStart(strArg(args, "start"))
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			length := time.Hour
+			if d := strArg(args, "duration"); d != "" {
+				if length, err = time.ParseDuration(d); err != nil || length <= 0 {
+					return "error: duration must look like 1h, 30m or 1h30m", nil
+				}
+			}
+			end := start.Add(length)
+			fn := strArg(args, "filename")
+			if fn == "" {
+				fn = "event.ics"
+			}
+			ics := GenerateICalendar(title, desc, loc, start, end)
+			if err := r.Machine.WriteFile(sessionID, fn, []byte(ics)); err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return fmt.Sprintf("Calendar event %q (%s, %s) saved to %s; send it so the user can add it to their calendar.", title, start.Format("2006-01-02 15:04 MST"), length, fn), nil
+		})
+
+	r.add(ToolIranMessenger,
+		"Send messages to Iranian messengers: Bale (بله), Eitaa (ایتا), and Rubika (روبیکا).",
+		map[string]any{
+			"messenger": enumProp("bale", "bale", "eitaa", "rubika"),
+			"chat_id":   prop("string", "Destination channel or user chat ID"),
+			"text":      prop("string", "Message content"),
+		}, []string{"messenger", "chat_id", "text"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			m := strArg(args, "messenger")
+			cid := strArg(args, "chat_id")
+			txt := strArg(args, "text")
+			if refused := r.gateSend(ctx, sessionID, m+" chat "+cid, txt); refused != "" {
+				return refused, nil
+			}
+			return r.SendIranMessenger(ctx, m, "", cid, txt)
+		})
+
+	r.add(ToolExternalMessenger,
+		"Send a message to Discord or Slack (webhook or bot from config.env) or WhatsApp (Cloud API).",
+		map[string]any{
+			"platform": enumProp("discord", "discord", "slack", "whatsapp"),
+			"text":     prop("string", "Message body"),
+			"channel":  prop("string", "Slack channel ID"),
+			"to":       prop("string", "WhatsApp recipient phone number"),
+		}, []string{"platform", "text"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			p := strArg(args, "platform")
+			txt := strArg(args, "text")
+			ch := strArg(args, "channel")
+			to := strArg(args, "to")
+			if refused := r.gateSend(ctx, sessionID, strings.TrimSpace(p+" "+ch+to), txt); refused != "" {
+				return refused, nil
+			}
+			return r.SendExternalMessenger(ctx, p, "", "", ch, to, txt)
+		})
+
+	r.add(ToolCloudStorage,
+		"Upload, download, or list files on S3, MinIO, R2, or WebDAV (Nextcloud).",
+		map[string]any{
+			"provider":    enumProp("s3", "s3", "webdav", "minio"),
+			"action":      enumProp("upload", "upload", "download", "list"),
+			"remote_path": prop("string", "Remote path or key"),
+			"local_path":  prop("string", "Local workspace file path"),
+			"endpoint":    prop("string", "Custom S3 or WebDAV endpoint URL"),
+		}, []string{"action", "remote_path"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			prov := strArg(args, "provider")
+			act := strArg(args, "action")
+			rp := strArg(args, "remote_path")
+			lp := strArg(args, "local_path")
+			ep := strArg(args, "endpoint")
+			if act == "upload" {
+				if refused := r.gateSend(ctx, sessionID, strings.TrimSpace(prov+" storage"), "upload "+lp+" → "+rp+" "+ep); refused != "" {
+					return refused, nil
+				}
+			}
+			return r.ExecuteCloudStorage(ctx, sessionID, prov, act, rp, lp, ep, "", "")
+		})
+
+	r.add(ToolTaskBoard,
+		"Create or list tasks on Notion, Trello, and Todoist boards.",
+		map[string]any{
+			"platform":     enumProp("notion", "notion", "trello", "todoist"),
+			"action":       enumProp("create_task", "create_task", "list_tasks"),
+			"title":        prop("string", "Task title"),
+			"container_id": prop("string", "Database ID (Notion), List ID (Trello), or Project ID (Todoist)"),
+			"description":  prop("string", "Task description"),
+		}, []string{"platform", "action", "title"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			p := strArg(args, "platform")
+			act := strArg(args, "action")
+			title := strArg(args, "title")
+			cid := strArg(args, "container_id")
+			desc := strArg(args, "description")
+			if act != "list_tasks" {
+				if refused := r.gateSend(ctx, sessionID, p+" board", title+"\n"+desc); refused != "" {
+					return refused, nil
+				}
+			}
+			return r.ManageTaskBoard(ctx, p, act, "", cid, "", title, desc)
+		})
 }
 
 var (
@@ -639,4 +776,24 @@ func (r *Registry) githubInspect(ctx context.Context, _ string, args map[string]
 			d.FullName, map[bool]string{true: " (archived)", false: ""}[d.Archived], d.URL, d.Description, d.Language, d.Stars, d.Forks,
 			d.Issues, d.Branch, license, textutil.TruncateRunes(d.Pushed, 10, ""), strings.Join(d.Topics, ", ")), nil
 	}
+}
+
+func eventStart(v string) (time.Time, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return time.Now().Add(24 * time.Hour).Truncate(time.Hour), nil
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return t, nil
+	}
+	loc, err := config.Location()
+	if err != nil {
+		loc = time.Local
+	}
+	for _, layout := range []string{"2006-01-02 15:04", "2006-01-02T15:04", "2006-01-02"} {
+		if t, err := time.ParseInLocation(layout, v, loc); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("start %q is not a date: use YYYY-MM-DD HH:MM", v)
 }

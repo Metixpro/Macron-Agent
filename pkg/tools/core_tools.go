@@ -98,17 +98,278 @@ func (r *Registry) registerCoreTools() {
 	r.add("list_files", "List files and directories in the workspace.", nil, nil, r.listFiles)
 
 	r.add("deep_research",
-		"Research a complex topic from many sources into a cited report (saved too). Slow.",
+		"Research a complex topic from many sources into a cited report (saved too). Slow; depth 2-3 adds rounds that search what the first sources left open.",
 		map[string]any{
-			"topic":   prop("string", ""),
+			"topic":   prop("string", "Topic or question to research"),
 			"breadth": prop("integer", "Search angles (default 3, max 5)"),
+			"depth":   prop("integer", "Iterative research depth/rounds (default 1, max 3)"),
 		}, []string{"topic"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 			topic := strArg(args, "topic")
 			if topic == "" {
 				return "error: topic is required", nil
 			}
-			return r.RunDeepResearch(ctx, sessionID, topic, intArg(args, "breadth", 3, 1, 5))
+			breadth := intArg(args, "breadth", 3, 1, 5)
+			depth := intArg(args, "depth", 1, 1, 3)
+			return r.RunIterativeResearch(ctx, sessionID, topic, breadth, depth)
 		})
+
+	r.add(ToolRAGSearch,
+		"Find the passages most related to a question across the workspace's text and code files (word and spelling similarity, not exact match), with file:line citations.",
+		map[string]any{
+			"query": prop("string", "Search query or question"),
+			"limit": prop("integer", "Maximum passages to return (default 5)"),
+		}, []string{"query"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			q := strArg(args, "query")
+			if q == "" {
+				return "error: query is required", nil
+			}
+			limit := intArg(args, "limit", 5, 1, 10)
+			chunks, err := r.SearchWorkspaceRAG(ctx, sessionID, q, limit)
+			if err != nil {
+				return "rag error: " + err.Error(), nil
+			}
+			if len(chunks) == 0 {
+				return "No matching passages found in workspace documents.", nil
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("### RAG Search Results (%d passages found)\n\n", len(chunks)))
+			for i, c := range chunks {
+				sb.WriteString(fmt.Sprintf("[%d] `%s:%d-%d` (relevance: %.0f%%)\n```\n%s\n```\n\n",
+					i+1, c.File, c.LineStart, c.LineEnd, c.Score*100, c.Text))
+			}
+			return strings.TrimSpace(sb.String()), nil
+		})
+
+	r.add(ToolAcademicSearch,
+		"Search scientific and academic publications on arXiv and Semantic Scholar with abstracts and citations.",
+		map[string]any{
+			"query":  prop("string", "Academic topic, paper title, or author"),
+			"source": enumProp("all", "arxiv", "semantic_scholar", "all"),
+			"limit":  prop("integer", "Maximum papers to return (default 5, max 10)"),
+		}, []string{"query"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			q := strArg(args, "query")
+			if q == "" {
+				return "error: query is required", nil
+			}
+			source := strArg(args, "source")
+			limit := intArg(args, "limit", 5, 1, 10)
+			papers, err := r.SearchAcademic(ctx, q, source, limit)
+			if err != nil {
+				return "academic search error: " + err.Error(), nil
+			}
+			return FormatAcademicPapers(papers), nil
+		})
+
+	r.add(ToolCrawlSite,
+		"Crawl a website domain into clean Markdown files in the workspace for offline knowledge-base reference.",
+		map[string]any{
+			"url":       prop("string", "Starting URL to crawl"),
+			"max_pages": prop("integer", "Maximum pages to crawl within the domain (default 15, max 50)"),
+			"folder":    prop("string", "Destination folder in workspace (default 'knowledge_base')"),
+		}, []string{"url"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			u := strArg(args, "url")
+			if u == "" {
+				return "error: url is required", nil
+			}
+			maxPages := intArg(args, "max_pages", 15, 1, 50)
+			folder := strArg(args, "folder")
+			res, err := r.CrawlToKnowledgeBase(ctx, sessionID, u, folder, maxPages)
+			if err != nil {
+				return "crawl error: " + err.Error(), nil
+			}
+			if len(res) == 0 {
+				return "No pages could be crawled from " + u, nil
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("### Crawled %d pages into knowledge base\n\n", len(res)))
+			for i, p := range res {
+				sb.WriteString(fmt.Sprintf("%d. [%s](%s) -> `%s` (%d words)\n", i+1, p.Title, p.URL, p.Path, p.WordCount))
+			}
+			return strings.TrimSpace(sb.String()), nil
+		})
+
+	r.add(ToolFactCheck,
+		"Fact-check a claim against independent multi-source web evidence with a verdict and confidence score.",
+		map[string]any{
+			"claim": prop("string", "The statement, claim, or news item to verify"),
+		}, []string{"claim"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			claim := strArg(args, "claim")
+			if claim == "" {
+				return "error: claim is required", nil
+			}
+			res, err := r.RunFactCheck(ctx, claim)
+			if err != nil {
+				return "fact check error: " + err.Error(), nil
+			}
+			return res.Format(), nil
+		})
+
+	r.add(ToolPageWatch,
+		"Watch a web page for changes: create saves a baseline, check compares and shows what changed. It checks only when called: for alerts, schedule a recurring check.",
+		map[string]any{
+			"action":   enumProp("check", "create", "check", "list", "delete"),
+			"url":      prop("string", "Target URL to monitor (for create)"),
+			"title":    prop("string", "Descriptive title for the monitor"),
+			"watch_id": prop("string", "ID of the watch (for check or delete)"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "list"
+			}
+			switch action {
+			case "create":
+				u := strArg(args, "url")
+				if u == "" {
+					return "error: url is required for create", nil
+				}
+				w, err := r.CreatePageWatch(ctx, sessionID, u, strArg(args, "selector"), strArg(args, "title"))
+				if err != nil {
+					return "error creating page watch: " + err.Error(), nil
+				}
+				return fmt.Sprintf("✅ Page monitor created: %s (%s). ID: %s", w.Title, w.URL, w.ID), nil
+			case "check":
+				id := strArg(args, "watch_id")
+				if id == "" {
+					return "error: watch_id is required for check", nil
+				}
+				_, report, err := r.CheckPageWatch(ctx, sessionID, id)
+				if err != nil {
+					return "error checking page watch: " + err.Error(), nil
+				}
+				return report, nil
+			case "delete":
+				id := strArg(args, "watch_id")
+				if id == "" {
+					return "error: watch_id is required for delete", nil
+				}
+				path := fmt.Sprintf("%s/%s.json", pageWatchDir, id)
+				_ = r.Machine.Remove(sessionID, path)
+				return fmt.Sprintf("Page monitor %s deleted.", id), nil
+			default:
+				list, err := r.ListPageWatches(sessionID)
+				if err != nil {
+					return "error: " + err.Error(), nil
+				}
+				if len(list) == 0 {
+					return "No active page watches in this session.", nil
+				}
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("### Active Page Monitors (%d)\n", len(list)))
+				for i, w := range list {
+					sb.WriteString(fmt.Sprintf("%d. **%s** (%s) — Changes detected: %d, ID: `%s`\n",
+						i+1, w.Title, w.URL, w.ChangeCount, w.ID))
+				}
+				return strings.TrimSpace(sb.String()), nil
+			}
+		})
+
+	r.add(ToolPriceAlert,
+		"Price alerts for dollar, gold, coins and crypto: create, list, check (compares with live rates), delete. It checks only when called: for alerts, schedule a recurring check.",
+		map[string]any{
+			"action":       enumProp("check", "set", "check", "list", "delete"),
+			"asset":        prop("string", "Asset: usd, eur, gold18, emami, btc, eth, usdt"),
+			"operator":     enumProp(">=", ">", ">=", "<", "<="),
+			"target_price": prop("number", "Target price threshold"),
+			"alert_id":     prop("string", "Alert ID (for delete)"),
+			"note":         prop("string", "Optional reminder note"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "list"
+			}
+			switch action {
+			case "set":
+				asset := strArg(args, "asset")
+				if asset == "" {
+					return "error: asset is required (e.g. usd, gold18, emami, btc)", nil
+				}
+				target := floatArg(args, "target_price")
+				if target <= 0 {
+					return "error: valid target_price is required", nil
+				}
+				a, err := r.CreatePriceAlert(sessionID, asset, strArg(args, "operator"), target, strArg(args, "note"))
+				if err != nil {
+					return "error setting alert: " + err.Error(), nil
+				}
+				return fmt.Sprintf("✅ هشدار قیمت ثبت شد: %s وقتی که قیمت %s %.0f شود. (شناسه: %s)",
+					a.AssetFa, a.Operator, a.TargetPrice, a.ID), nil
+			case "check":
+				notifications, err := r.CheckPriceAlerts(ctx, sessionID)
+				if err != nil {
+					return "error checking alerts: " + err.Error(), nil
+				}
+				if len(notifications) == 0 {
+					return "تمام هشدارهای قیمت بررسی شدند؛ هیچ هشداری فعال نشد (قیمت‌ها در محدوده عادی هستند).", nil
+				}
+				return strings.Join(notifications, "\n\n"), nil
+			case "delete":
+				id := strArg(args, "alert_id")
+				if id == "" {
+					return "error: alert_id is required", nil
+				}
+				_ = r.DeletePriceAlert(sessionID, id)
+				return fmt.Sprintf("هشدار قیمت %s حذف شد.", id), nil
+			default:
+				list, err := r.ListPriceAlerts(sessionID)
+				if err != nil {
+					return "error: " + err.Error(), nil
+				}
+				if len(list) == 0 {
+					return "هیچ هشدار قیمت فعالی ثبت نشده است.", nil
+				}
+				var sb strings.Builder
+				sb.WriteString("### هشدارهای قیمت فعال:\n")
+				for i, a := range list {
+					st := "در انتظار"
+					if a.Triggered {
+						st = "فعال‌شده 🚨"
+					}
+					sb.WriteString(fmt.Sprintf("%d. **%s**: شرط `%s %.0f` (%s) — شناسه: `%s`\n",
+						i+1, a.AssetFa, a.Operator, a.TargetPrice, st, a.ID))
+				}
+				return strings.TrimSpace(sb.String()), nil
+			}
+		})
+
+	r.add(ToolTSETMCStock,
+		"Tehran Stock Exchange from TSETMC: a symbol's prices, volume, EPS, best bid/ask and latest Codal letters, or the main indices.",
+		map[string]any{
+			"symbol": prop("string", "Symbol (e.g. فولاد, فملی, شستا); empty or شاخص for the indices"),
+		}, nil, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			out, err := r.QueryTSETMC(ctx, strArg(args, "symbol"))
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return out, nil
+		})
+
+	r.add(ToolDeployService,
+		"Execute automated service deployment with healthcheck verification and automatic rollback on failure.",
+		map[string]any{
+			"deploy_cmd":   prop("string", "Deployment shell command (e.g. docker compose up -d or systemctl restart app)"),
+			"health_url":   prop("string", "Healthcheck endpoint to verify (e.g. http://127.0.0.1:8080/health)"),
+			"rollback_cmd": prop("string", "Rollback command to execute if healthcheck fails"),
+		}, []string{"deploy_cmd"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			deploy := strArg(args, "deploy_cmd")
+			health := strArg(args, "health_url")
+			rollback := strArg(args, "rollback_cmd")
+			for _, c := range []string{deploy, rollback} {
+				if c == "" {
+					continue
+				}
+				if refused := r.gateCommand(ctx, sessionID, c); refused != "" {
+					return refused, nil
+				}
+			}
+			return r.DeployWithRollback(ctx, sessionID, deploy, health, rollback)
+		})
+
+	r.add(ToolGenerateBriefing,
+		"Compile a morning briefing report with Jalali date, market summary, exchange rates, and active alerts.",
+		nil, nil, func(ctx context.Context, sessionID string, _ map[string]any) (string, error) {
+			return r.GenerateMorningBriefing(ctx, sessionID)
+		})
+
 }
 
 func (r *Registry) webSearch(ctx context.Context, _ string, args map[string]any) (string, error) {

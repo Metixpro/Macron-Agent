@@ -380,4 +380,12 @@ var migrations = [][]string{
 		`CREATE INDEX IF NOT EXISTS idx_widgets_message ON widgets (chat_id, message_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_shared ON widgets (shared_id)`,
 	},
+	{
+		`CREATE TABLE IF NOT EXISTS suspensions (
+			poll_id TEXT NOT NULL PRIMARY KEY,
+			data BLOB NOT NULL,
+			created_at DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_suspensions_created ON suspensions (created_at)`,
+	},
 }

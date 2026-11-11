@@ -74,6 +74,16 @@ func EnvFilePath() string {
 	return HomePath(FileConfig)
 }
 
+func SecretFiles() []string {
+	out := []string{HomePath(FileConfig), HomePath(FileSecret)}
+	if p := EnvFilePath(); p != out[0] {
+		if abs, err := filepath.Abs(p); err == nil {
+			out = append(out, filepath.Clean(abs))
+		}
+	}
+	return out
+}
+
 const EnvDB = "MACRON_DB"
 
 func SecretKey() (string, error) {

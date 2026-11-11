@@ -73,6 +73,10 @@ Talk to the bot in a **private chat**. It answers configured owners only and doe
 | Background work | Scheduling, background tasks, task board and helper agents |
 | Models and extensions | Custom providers, routing, multiple models, plugins and MCP |
 | Telegram widgets | Interactive dashboards, forms, calculators and games inside messages, answered by scripts on your server |
+| Markets | Tehran Stock Exchange prices, volume, EPS, order book and Codal letters per symbol, the indices, price alerts and a morning briefing |
+| Documents and media | Real Word and PowerPoint files (right-to-left aware), Persian OCR, long-file translation, diagrams, document comparison, minutes from a transcript |
+| Data and development | Read-only queries on PostgreSQL, MySQL and SQLite, a persistent Python kernel, HTML dashboards, statistics and forecasts, OpenAPI calls, deploy with rollback |
+| Connections | Email, .ics calendar events, Bale, Eitaa, Rubika, Slack, Discord, WhatsApp, S3 and WebDAV, Notion, Trello, Todoist and GitHub; anything sent out is asked first |
 
 Some capabilities need additional packages or service credentials. Check your installation with:
 

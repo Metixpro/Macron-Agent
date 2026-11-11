@@ -22,12 +22,20 @@ import (
 
 type Config struct {
 	BaseDir       string
+	HomeDir       string
 	MaxConcurrent int
+
+	Sandbox      string
+	SandboxNoNet bool
+	ReadOnly     []string
+	Writable     []string
+	Hide         []string
 }
 
 type Machine struct {
 	BaseDir string
 	cfg     Config
+	sb      *sandbox
 	sem     chan struct{}
 	heavy   chan struct{}
 
@@ -103,10 +111,21 @@ func New(cfg Config) (*Machine, error) {
 	if err := os.MkdirAll(cfg.BaseDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
+	sb, note := newSandbox(cfg)
+	if note != "" {
+		log.Printf("sandbox: %s", note)
+	} else if sb != nil {
+		netNote := "with network access"
+		if sb.noNet {
+			netNote = "network disabled"
+		}
+		log.Printf("🔒 commands run in a bubblewrap sandbox (%s, workspace %s)", netNote, cfg.BaseDir)
+	}
 	log.Printf("🖥  running on this machine with the rights of %s", currentUser())
 	return &Machine{
 		BaseDir: cfg.BaseDir,
 		cfg:     cfg,
+		sb:      sb,
 		sem:     make(chan struct{}, cfg.MaxConcurrent),
 		heavy:   make(chan struct{}, max(2, runtime.NumCPU())),
 		touched: make(map[string]time.Time),
@@ -132,7 +151,14 @@ const (
 	SubDir = ".agents"
 )
 
-func SubSession(parent, name string) string { return ParentSession(parent) + subSep + name }
+func SubSession(parent, name string) string {
+	top := ParentSession(parent)
+	if strings.Contains(parent, subSep) {
+		_, sub, _ := strings.Cut(parent, subSep)
+		return top + subSep + sub + "_" + name
+	}
+	return top + subSep + name
+}
 
 func ParentSession(id string) string {
 	p, _, _ := strings.Cut(id, subSep)
@@ -346,6 +372,8 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 	argv = s.hostArgv(ws, argv)
 	if opts.HostExecutable {
 		argv[0] = hostExecutable
+	} else {
+		argv = s.sandboxed(ws, argv)
 	}
 	cmd := exec.CommandContext(execCtx, argv[0], argv[1:]...)
 	cmd.Dir = ws

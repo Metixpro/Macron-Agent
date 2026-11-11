@@ -190,7 +190,8 @@ func (t *fileTracker) placed(answer string) []string {
 			continue
 		}
 		for _, g := range mediaRef.FindAllStringSubmatch(line, -1) {
-			if name := workspaceName(g[2]); name != "" && !isURL(name) && t.exists(name) {
+
+			if name := workspaceName(g[2]); name != "" && !isURL(name) && t.exists(name) && t.sb.Inside(t.session, name) {
 				out = appendNew(out, name)
 			}
 		}

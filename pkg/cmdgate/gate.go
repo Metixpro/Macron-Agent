@@ -217,8 +217,37 @@ func (g *Gate) CheckCode(ctx context.Context, sessionID, language, code string) 
 	return g.decide(ctx, sessionID, "["+language+" code] "+shorten(code, 600), findings)
 }
 
+type Action struct {
+	Key    string
+	Detail string
+	Level  Level
+	Rule   string
+	Reason string
+	Also   []Finding
+}
+
+func (g *Gate) CheckAction(ctx context.Context, sessionID string, a Action) Verdict {
+	findings := append([]Finding(nil), a.Also...)
+	if a.Level > Safe {
+		findings = append(findings, Finding{Level: a.Level, Rule: a.Rule, Reason: a.Reason})
+	}
+	if len(findings) == 0 {
+		return Verdict{Allow: true}
+	}
+	sortFindings(findings)
+	shown := a.Detail
+	if shown == "" {
+		shown = a.Key
+	}
+	return g.decideAs(ctx, sessionID, a.Key, shown, findings)
+}
+
 func (g *Gate) decide(ctx context.Context, sessionID, command string, findings []Finding) Verdict {
-	norm := Normal(command)
+	return g.decideAs(ctx, sessionID, command, command, findings)
+}
+
+func (g *Gate) decideAs(ctx context.Context, sessionID, key, shown string, findings []Finding) Verdict {
+	norm := Normal(key)
 	origin := OriginOf(ctx)
 	worst := Worst(findings)
 	p := g.policy()
@@ -280,7 +309,7 @@ func (g *Gate) decide(ctx context.Context, sessionID, command string, findings [
 	}
 	guardianSaid := ""
 	if p.Mode == ModeSmart && g.Guardian != nil && !ownersCall {
-		risk, why, err := g.Guardian(ctx, p.SmartPolicy, command, findings)
+		risk, why, err := g.Guardian(ctx, p.SmartPolicy, shown, findings)
 		switch {
 		case err != nil:
 			guardianSaid = "the guardian could not judge it: " + shorten(err.Error(), 120)
@@ -299,7 +328,7 @@ func (g *Gate) decide(ctx context.Context, sessionID, command string, findings [
 		g.audit(sessionID, origin, norm, "denied", "nobody", rule)
 		return g.refuse(sessionID, p, findings, fmt.Sprintf("[!] Not run: %s, and there is nobody to approve it here.", findings[0].Reason))
 	}
-	switch ask(ctx, Question{Command: command, Findings: findings, Guardian: guardianSaid}) {
+	switch ask(ctx, Question{Command: shown, Findings: findings, Guardian: guardianSaid}) {
 	case Once:
 		g.audit(sessionID, origin, norm, "allowed", "owner:once", rule)
 	case Session:

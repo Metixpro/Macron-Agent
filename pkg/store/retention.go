@@ -31,6 +31,7 @@ func (s *Store) Retention(ctx context.Context) (map[string]int64, error) {
 		{"schedules", `DELETE FROM schedules WHERE rowid IN (SELECT rowid FROM schedules WHERE status IN (?, ?) AND COALESCE(last_run, created_at) < ? LIMIT ?)`,
 			[]any{ScheduleDone, ScheduleCancelled, now.Add(-keepEndedJobs)}},
 		{"open_jobs", `DELETE FROM open_jobs WHERE rowid IN (SELECT rowid FROM open_jobs WHERE updated_at < ? LIMIT ?)`, []any{now.Add(-keepOpenJobs)}},
+		{"suspensions", `DELETE FROM suspensions WHERE rowid IN (SELECT rowid FROM suspensions WHERE created_at < ? LIMIT ?)`, []any{now.Add(-keepOpenJobs)}},
 		{"bg_tasks", `DELETE FROM bg_tasks WHERE rowid IN (SELECT rowid FROM bg_tasks WHERE created_at < ? AND status NOT IN ('queued', 'running') LIMIT ?)`, []any{now.Add(-keepBgTasks)}},
 		{"cmd_audit", `DELETE FROM cmd_audit WHERE rowid IN (SELECT rowid FROM cmd_audit WHERE at < ? LIMIT ?)`, []any{now.Add(-keepCmdAudit)}},
 		{"widgets", `DELETE FROM widgets WHERE rowid IN (SELECT rowid FROM widgets WHERE COALESCE(used_at, created_at) < ? LIMIT ?)`, []any{now.Add(-keepWidgets)}},

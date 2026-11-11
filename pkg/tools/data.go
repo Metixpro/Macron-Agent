@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -28,6 +30,121 @@ func (r *Registry) registerDataTools() {
 			"max_rows": prop("integer", "Default 50, max 500"),
 			"output":   prop("string", ""),
 		}, []string{"files"}, r.queryData)
+
+	r.add(ToolDatabaseQuery,
+		"Read from a PostgreSQL, MySQL or SQLite database: one SELECT/WITH/EXPLAIN/SHOW query in a read-only transaction.",
+		map[string]any{
+			"engine":  enumProp("sqlite", "sqlite", "postgres", "mysql"),
+			"dsn_env": prop("string", "postgres/mysql: name of the config.env variable holding the connection string (never the string itself)"),
+			"file":    prop("string", "sqlite: the database file in the workspace"),
+			"query":   prop("string", ""),
+			"limit":   prop("integer", "Rows to return (default 50, max 500)"),
+		}, []string{"query"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			engine := strArg(args, "engine")
+			target := strArg(args, "file")
+			if engine == "postgres" || engine == "mysql" {
+				name := strArg(args, "dsn_env")
+				if name == "" {
+					return "error: dsn_env is required: put the connection string in config.env (macron config set NAME '...') and pass NAME", nil
+				}
+				if target = os.Getenv(name); target == "" {
+					return fmt.Sprintf("error: %s is not set: macron config set %s '<connection string>' and restart", name, name), nil
+				}
+			} else if target == "" {
+				return "error: file is required for sqlite", nil
+			}
+			res, err := r.ExecuteReadOnlyQuery(ctx, sessionID, engine, target, strArg(args, "query"), intArg(args, "limit", 50, 1, 500))
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return res.FormatMarkdown(), nil
+		})
+
+	r.add(ToolStatsForecast,
+		"Calculate descriptive statistics and time-series linear trend forecasts for numeric data.",
+		map[string]any{
+			"action": enumProp("descriptive", "descriptive", "forecast"),
+			"data":   arrayProp("number", "Array of numeric values to analyze"),
+			"steps":  prop("integer", "Forecast periods forward (for forecast, default 3)"),
+		}, []string{"data"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "descriptive"
+			}
+			var nums []float64
+			if rawList, ok := args["data"].([]any); ok {
+				for _, v := range rawList {
+					switch n := v.(type) {
+					case float64:
+						nums = append(nums, n)
+					case int:
+						nums = append(nums, float64(n))
+					}
+				}
+			}
+			if len(nums) == 0 {
+				for _, s := range anyList(args["data"]) {
+					if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+						nums = append(nums, f)
+					}
+				}
+			}
+			if len(nums) == 0 {
+				return "error: numeric data array is required", nil
+			}
+			if action == "forecast" {
+				steps := intArg(args, "steps", 3, 1, 20)
+				fc := ComputeLinearForecast(nums, steps)
+				return fc.Format(), nil
+			}
+			ds := ComputeDescriptiveStats(nums)
+			return ds.Format(), nil
+		})
+
+	r.add(ToolCreateDashboard,
+		"Generate a responsive, standalone HTML dashboard with KPI metric cards, interactive charts, and tables.",
+		map[string]any{
+			"title":       prop("string", "Dashboard title"),
+			"output_file": prop("string", "Destination HTML filename (default 'dashboard.html')"),
+		}, []string{"title"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			title := strArg(args, "title")
+			outFile := strArg(args, "output_file")
+			if outFile == "" {
+				outFile = "dashboard.html"
+			}
+			html := GenerateHTMLDashboard(title, nil, nil, nil)
+			if err := r.Machine.WriteFile(sessionID, outFile, []byte(html)); err != nil {
+				return "error saving dashboard: " + err.Error(), nil
+			}
+			return fmt.Sprintf("✅ Interactive HTML dashboard generated at `%s`.", outFile), nil
+		})
+
+	r.add(ToolOpenAPICall,
+		"Call an operation of a REST API from its OpenAPI / Swagger JSON spec in the workspace (by operation_id or endpoint+method).",
+		map[string]any{
+			"spec_path":    prop("string", "Path to OpenAPI spec file in workspace"),
+			"operation_id": prop("string", "Operation ID (e.g. getUserById)"),
+			"endpoint":     prop("string", "Endpoint path (e.g. /api/v1/users)"),
+			"method":       enumProp("GET", "GET", "POST", "PUT", "PATCH", "DELETE"),
+			"base_url":     prop("string", "Server URL override"),
+			"params":       map[string]any{"type": "object", "description": "Path parameters ({id}) and query parameters"},
+			"body":         map[string]any{"type": "object", "description": "JSON body for POST, PUT and PATCH"},
+			"auth_env":     prop("string", "Name of the config.env variable holding a bearer token for this API (never the token itself)"),
+		}, []string{"spec_path"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			spec := strArg(args, "spec_path")
+			opID := strArg(args, "operation_id")
+			endpoint := strArg(args, "endpoint")
+			method := strArg(args, "method")
+			baseURL := strArg(args, "base_url")
+			params, _ := args["params"].(map[string]any)
+			body, _ := args["body"].(map[string]any)
+			out, err := r.CallOpenAPIEndpoint(ctx, sessionID, spec, opID, endpoint, method, baseURL, strArg(args, "auth_env"), params, body)
+			if err != nil {
+				return "error: " + err.Error(), nil
+			}
+			return out, nil
+		})
+
 	r.registerSpreadsheetTools()
 }
 
