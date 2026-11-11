@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -28,6 +29,102 @@ func (r *Registry) registerDataTools() {
 			"max_rows": prop("integer", "Default 50, max 500"),
 			"output":   prop("string", ""),
 		}, []string{"files"}, r.queryData)
+
+	r.add(ToolDatabaseQuery,
+		"Safely run read-only SELECT queries against external PostgreSQL, MySQL, or SQLite databases.",
+		map[string]any{
+			"engine": enumProp("postgres", "postgres", "mysql", "sqlite"),
+			"dsn":    prop("string", "Database connection string or SQLite path"),
+			"query":  prop("string", "SELECT query to execute"),
+			"limit":  prop("integer", "Maximum rows to return (default 50, max 200)"),
+		}, []string{"dsn", "query"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			engine := strArg(args, "engine")
+			dsn := strArg(args, "dsn")
+			q := strArg(args, "query")
+			limit := intArg(args, "limit", 50, 1, 200)
+			res, err := r.ExecuteReadOnlyQuery(ctx, engine, dsn, q, limit)
+			if err != nil {
+				return "db error: " + err.Error(), nil
+			}
+			return res.FormatMarkdown(), nil
+		})
+
+	r.add(ToolStatsForecast,
+		"Calculate descriptive statistics and time-series linear trend forecasts for numeric data.",
+		map[string]any{
+			"action": enumProp("descriptive", "descriptive", "forecast"),
+			"data":   arrayProp("number", "Array of numeric values to analyze"),
+			"steps":  prop("integer", "Forecast periods forward (for forecast, default 3)"),
+		}, []string{"data"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "descriptive"
+			}
+			var nums []float64
+			if rawList, ok := args["data"].([]any); ok {
+				for _, v := range rawList {
+					switch n := v.(type) {
+					case float64:
+						nums = append(nums, n)
+					case int:
+						nums = append(nums, float64(n))
+					}
+				}
+			}
+			if len(nums) == 0 {
+				for _, s := range anyList(args["data"]) {
+					if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+						nums = append(nums, f)
+					}
+				}
+			}
+			if len(nums) == 0 {
+				return "error: numeric data array is required", nil
+			}
+			if action == "forecast" {
+				steps := intArg(args, "steps", 3, 1, 20)
+				fc := ComputeLinearForecast(nums, steps)
+				return fc.Format(), nil
+			}
+			ds := ComputeDescriptiveStats(nums)
+			return ds.Format(), nil
+		})
+
+	r.add(ToolCreateDashboard,
+		"Generate a responsive, standalone HTML dashboard with KPI metric cards, interactive charts, and tables.",
+		map[string]any{
+			"title":       prop("string", "Dashboard title"),
+			"output_file": prop("string", "Destination HTML filename (default 'dashboard.html')"),
+		}, []string{"title"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			title := strArg(args, "title")
+			outFile := strArg(args, "output_file")
+			if outFile == "" {
+				outFile = "dashboard.html"
+			}
+			html := GenerateHTMLDashboard(title, nil, nil, nil)
+			if err := r.Machine.WriteFile(sessionID, outFile, []byte(html)); err != nil {
+				return "error saving dashboard: " + err.Error(), nil
+			}
+			return fmt.Sprintf("✅ Interactive HTML dashboard generated at `%s`.", outFile), nil
+		})
+
+	r.add(ToolOpenAPICall,
+		"Invoke REST API operations defined in an OpenAPI / Swagger specification.",
+		map[string]any{
+			"spec_path":    prop("string", "Path to OpenAPI spec file in workspace"),
+			"operation_id": prop("string", "Operation ID (e.g. getUserById)"),
+			"endpoint":     prop("string", "Endpoint path (e.g. /api/v1/users)"),
+			"method":       enumProp("GET", "GET", "POST", "PUT", "DELETE"),
+			"base_url":     prop("string", "Server URL override"),
+		}, []string{"spec_path"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			spec := strArg(args, "spec_path")
+			opID := strArg(args, "operation_id")
+			endpoint := strArg(args, "endpoint")
+			method := strArg(args, "method")
+			baseURL := strArg(args, "base_url")
+			return r.CallOpenAPIEndpoint(ctx, sessionID, spec, opID, endpoint, method, baseURL, nil, nil)
+		})
+
 	r.registerSpreadsheetTools()
 }
 

@@ -125,6 +125,90 @@ func (r *Registry) registerDevTools() {
 			"stdin":           prop("string", ""),
 			"timeout_seconds": prop("integer", "Default 60, max 7200"),
 		}, nil, r.runCode)
+
+	r.add(ToolPythonKernel,
+		"Run code in a persistent Python kernel session that retains state, variables, and imports across turns.",
+		map[string]any{
+			"code":   prop("string", "Python code to execute or evaluate"),
+			"action": enumProp("execute", "execute", "reset", "variables"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			code := strArg(args, "code")
+			action := strArg(args, "action")
+			return r.ExecuteInPythonKernel(ctx, sessionID, action, code)
+		})
+
+	r.add(ToolCodeIntel,
+		"Code intelligence: find symbol definitions, outline functions/classes, and look up references.",
+		map[string]any{
+			"action": enumProp("symbols", "symbols", "definition"),
+			"file":   prop("string", "Target source file"),
+			"symbol": prop("string", "Symbol name to look up"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			file := strArg(args, "file")
+			sym := strArg(args, "symbol")
+			if action == "definition" {
+				matches, err := r.FindDefinition(ctx, sessionID, sym)
+				if err != nil {
+					return "definition lookup error: " + err.Error(), nil
+				}
+				if len(matches) == 0 {
+					return fmt.Sprintf("Symbol %q definition not found in workspace.", sym), nil
+				}
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("🔍 Definitions found for `%s`:\n", sym))
+				for _, m := range matches {
+					sb.WriteString(fmt.Sprintf("- `%s:%d` (%s)\n", m.File, m.Line, m.Kind))
+				}
+				return strings.TrimSpace(sb.String()), nil
+			}
+			data, _, err := r.Machine.ReadFile(sessionID, file, 128<<10)
+			if err != nil {
+				return "error reading file: " + err.Error(), nil
+			}
+			syms := ExtractFileSymbols(file, string(data))
+			if len(syms) == 0 {
+				return fmt.Sprintf("No top-level symbols found in %s.", file), nil
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("📋 Symbols in `%s` (%d found):\n", file, len(syms)))
+			for _, s := range syms {
+				sb.WriteString(fmt.Sprintf("- `%s:%d` [%s] %s\n", s.File, s.Line, s.Kind, s.Name))
+			}
+			return strings.TrimSpace(sb.String()), nil
+		})
+
+	r.add(ToolGitHubWorkflow,
+		"Manage GitHub pull requests, issues, and discussions.",
+		map[string]any{
+			"action": enumProp("create_pr", "create_pr", "list_issues", "create_issue", "add_comment"),
+			"repo":   prop("string", "GitHub repository (owner/repo)"),
+			"title":  prop("string", "PR or Issue title"),
+			"body":   prop("string", "PR or Issue body description"),
+			"head":   prop("string", "Head branch name"),
+			"base":   prop("string", "Base branch name (default 'main')"),
+			"number": prop("integer", "Issue/PR number (for add_comment)"),
+		}, []string{"action", "repo"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			repo := strArg(args, "repo")
+			title := strArg(args, "title")
+			body := strArg(args, "body")
+			head := strArg(args, "head")
+			base := strArg(args, "base")
+			number := intArg(args, "number", 0, 0, 1000000)
+			return r.ExecuteGitHubWorkflow(ctx, sessionID, action, repo, title, body, base, head, number)
+		})
+
+	r.add(ToolLivePreview,
+		"Start a local HTTP preview server in the workspace for instant browser previewing.",
+		map[string]any{
+			"port":    prop("integer", "Port number (default: auto free port)"),
+			"sub_dir": prop("string", "Subdirectory to serve (default: workspace root)"),
+		}, nil, func(_ context.Context, sessionID string, args map[string]any) (string, error) {
+			port := intArg(args, "port", 0, 0, 65535)
+			sub := strArg(args, "sub_dir")
+			return r.StartLivePreview(sessionID, port, sub)
+		})
 }
 
 func (r *Registry) pickLanguage(name, file string) (language, error) {
