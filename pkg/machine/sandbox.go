@@ -199,7 +199,7 @@ func pathExists(p string) bool {
 
 // topOf returns the session's own root workspace for ws, which may be a sub-agent's folder inside it.
 func topOf(ws string) string {
-	slash := filepath.ToSlash(ws)
+	slash := strings.ReplaceAll(ws, "\\", "/")
 	if i := strings.Index(slash, "/"+SubDir+"/"); i >= 0 {
 		return ws[:i]
 	}
