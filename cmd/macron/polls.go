@@ -197,14 +197,35 @@ func (b *Bot) suspendFor(pollID string, s *agent.Suspended) {
 		b.suspended.Delete(oldest)
 	}
 	b.suspended.Store(pollID, suspension{s: s, at: time.Now()})
+	if b.st != nil {
+		if data, err := s.Bytes(); err == nil {
+			ctx, cancel := b.ctx(5 * time.Second)
+			_ = b.st.SaveSuspension(ctx, pollID, data)
+			cancel()
+		}
+	}
 }
 
 func (b *Bot) resumeOf(pollID string) *agent.Suspended {
-	v, ok := b.suspended.LoadAndDelete(pollID)
-	if !ok || time.Since(v.(suspension).at) > suspendTTL {
-		return nil
+	if v, ok := b.suspended.LoadAndDelete(pollID); ok && time.Since(v.(suspension).at) <= suspendTTL {
+		if b.st != nil {
+			ctx, cancel := b.ctx(5 * time.Second)
+			_ = b.st.DropSuspension(ctx, pollID)
+			cancel()
+		}
+		return v.(suspension).s
 	}
-	return v.(suspension).s
+	if b.st != nil {
+		ctx, cancel := b.ctx(5 * time.Second)
+		defer cancel()
+		if data, err := b.st.Suspension(ctx, pollID); err == nil && len(data) > 0 {
+			_ = b.st.DropSuspension(ctx, pollID)
+			if s, err := agent.SuspendedFromBytes(data); err == nil && s.Age() <= suspendTTL {
+				return s
+			}
+		}
+	}
+	return nil
 }
 
 var pollWait = 10 * time.Minute

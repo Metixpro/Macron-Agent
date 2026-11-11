@@ -891,6 +891,10 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		return append(messages, input), lay
 	}
 	messages, lay := build()
+	var ws string
+	if a.Registry != nil && a.Registry.Machine != nil {
+		ws, _ = a.Registry.Machine.Workspace(req.SessionID)
+	}
 	if r := req.Resume; r != nil && req.depth == 0 && !chat && len(r.messages) > 0 {
 
 		answer := input
@@ -902,6 +906,13 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		messages, lay = append(slices.Clone(r.messages), answer), r.lay
 		if len(r.plan) > 0 {
 			plan.set(r.plan)
+		}
+	} else if ws != "" && req.depth == 0 && !chat {
+		if prior, err := LoadTaskState(ws); err == nil && prior != nil && prior.Interrupted {
+			messages = append(messages, llm.Message{Role: "user", Content: prior.ResumeNotice()})
+			if len(prior.Plan) > 0 {
+				plan.set(prior.Plan)
+			}
 		}
 	}
 	if req.depth == 0 && req.ContextCarry > 0 {
@@ -932,6 +943,8 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	claimed := false
 	servedBy := ""
 	led, backNudges := &ledger{}, 0
+	vGate := newVerifyGate()
+	vNudged := false
 	if req.Earlier || req.Resume != nil {
 		led.rs = append(led.rs, receipt{name: "earlier_work"})
 	}
@@ -1253,6 +1266,15 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 				messages = append(messages, llm.Message{Role: "user", Content: noticeClaimed})
 				continue
 			}
+			if canRetry && !vNudged && !chat && offered != nil {
+				if needs, prompt := vGate.NeedsVerification(visible); needs {
+					vNudged = true
+					res.quality(resp.Provider, func(q *CallQuality) { q.Stalled++ })
+					escalate("files were modified without verification")
+					messages = append(messages, llm.Message{Role: "user", Content: prompt})
+					continue
+				}
+			}
 			if canRetry && !lookedUp && !chat && offered != nil && callable["web_search"] && len(res.ToolsUsed) == 0 && asksFirst(visible) {
 				lookedUp = true
 				messages = append(messages, llm.Message{Role: "user", Content: noticeLookItUp})
@@ -1296,6 +1318,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			}
 			if failures > 0 {
 				res.Trail = work.String()
+			}
+			if ws != "" && req.depth == 0 {
+				ClearTaskState(ws)
 			}
 			return res, nil
 		}
@@ -1353,6 +1378,19 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			if name != ToolPlan {
 				work.add(name, tc.Function.Arguments, out.msg.Content)
 				led.add(name, tc.Function.Arguments, out.msg.Content, out.refused)
+				vGate.SetRound(step)
+				switch name {
+				case "write_file", "edit_file", "apply_patch":
+					if path := extractFilePath(tc.Function.Arguments); path != "" {
+						vGate.RecordFileModification(path)
+					}
+				case "bash_execute", "run_code", "shell_jobs":
+					code := 0
+					if out.refused || failedOutput(out.msg.Content) || execFailedRe.MatchString(out.msg.Content) {
+						code = 1
+					}
+					vGate.RecordExecution(name, tc.Function.Arguments, code)
+				}
 			}
 			if res.Calls == nil {
 				res.Calls, res.Failed, res.Errors = map[string]int{}, map[string]int{}, map[string]string{}
@@ -1451,6 +1489,15 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		}
 		if resp.FinishReason == "length" {
 			messages = append(messages, llm.Message{Role: "user", Content: noticeCutCalls})
+		}
+		if ws != "" && req.depth == 0 {
+			_ = SaveTaskState(ws, TaskState{
+				SessionID:   req.SessionID,
+				Goal:        req.Input.Text(),
+				Plan:        plan.get(),
+				Step:        step,
+				Interrupted: true,
+			})
 		}
 	}
 

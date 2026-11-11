@@ -132,6 +132,13 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_polls_created ON polls (created_at)`,
 
+		`CREATE TABLE IF NOT EXISTS suspensions (
+			poll_id TEXT NOT NULL PRIMARY KEY,
+			data BLOB NOT NULL,
+			created_at DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_suspensions_created ON suspensions (created_at)`,
+
 		`CREATE TABLE IF NOT EXISTS schedules (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,

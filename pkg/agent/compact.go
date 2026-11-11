@@ -541,6 +541,11 @@ func (a *Agent) compactNow(ctx context.Context, messages []llm.Message, lay *lay
 		return messages
 	}
 	*lay = kept
+	if a.Registry != nil && a.Registry.Machine != nil {
+		if ws, err := a.Registry.Machine.Workspace(req.SessionID); err == nil && ws != "" {
+			out = PreserveProjectAcrossCompaction(ws, out)
+		}
+	}
 	res.Compactions++
 	after := meter.used(out)
 	meter.floor = after
