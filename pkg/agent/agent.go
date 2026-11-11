@@ -728,7 +728,8 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	}
 	reqTools := req.Tools
 	plan, pace := &planState{}, &planPace{}
-	if req.depth == 0 {
+	const maxDelegateDepth = 3
+	if req.depth < maxDelegateDepth {
 		reqTools = append(reqTools[:len(reqTools):len(reqTools)], a.delegateTool(req, l), a.planTool(plan, l))
 	}
 	for _, t := range reqTools {

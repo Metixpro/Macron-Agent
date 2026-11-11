@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -121,7 +122,64 @@ func execTask(term *IO, args []string) int {
 		ctx = cmdgate.WithAsker(ctx, termAsker(term))
 	}
 	fmt.Fprintln(term.Err, "workspace:", config.HomePath("workspaces", session))
-	result, err := a.Do(ctx, agent.Request{SessionID: session, Input: llm.Message{Role: "user", Content: prompt}, About: b.User.Raw() + "\n" + b.Memory.Raw(), Lang: "en", Owner: true, ToolFilter: filter, FocusTools: !*allTools && filter == nil, EfficientTools: !*allTools && filter == nil})
+
+	var currentPlan []agent.PlanItem
+	var planMu sync.Mutex
+	reporter := agent.NewAutoReporter(20 * time.Second)
+	var l *agent.EventListener
+	l = &agent.EventListener{
+		OnStep: func(step, maxSteps int) {
+			planMu.Lock()
+			done, total := 0, len(currentPlan)
+			cur := ""
+			for _, it := range currentPlan {
+				if it.Status == agent.PlanDone {
+					done++
+				} else if it.Status == agent.PlanInProgress {
+					cur = it.Text
+				}
+			}
+			planMu.Unlock()
+			if msg, ok := reporter.Check(done, total, cur, "en"); ok {
+				fmt.Fprintln(term.Err, msg)
+			}
+		},
+		OnPlan: func(items []agent.PlanItem) {
+			planMu.Lock()
+			currentPlan = items
+			planMu.Unlock()
+			done, total := 0, len(items)
+			for _, it := range items {
+				if it.Status == agent.PlanDone {
+					done++
+				}
+			}
+			pct := float64(done) / float64(max(1, total)) * 100.0
+			fmt.Fprintf(term.Err, "[plan] %d/%d steps (%.0f%%)\n", done, total, pct)
+		},
+		OnToolStart: func(name, args string) {
+			fmt.Fprintf(term.Err, "-> %s\n", name)
+		},
+		OnToolEnd: func(name, args, result string, took time.Duration) {
+			fmt.Fprintf(term.Err, "<- %s (%v)\n", name, took.Round(time.Millisecond))
+		},
+		SubAgent: func(title, subSession string) *agent.EventListener {
+			fmt.Fprintf(term.Err, "   [sub-agent: %s]\n", title)
+			return l
+		},
+	}
+
+	result, err := a.Do(ctx, agent.Request{
+		SessionID:      session,
+		Input:          llm.Message{Role: "user", Content: prompt},
+		About:          b.User.Raw() + "\n" + b.Memory.Raw(),
+		Lang:           "en",
+		Owner:          true,
+		ToolFilter:     filter,
+		FocusTools:     !*allTools && filter == nil,
+		EfficientTools: !*allTools && filter == nil,
+		Listener:       l,
+	})
 	if result != nil && result.Answer != "" {
 		fmt.Fprintln(term.Out, result.Answer)
 	}

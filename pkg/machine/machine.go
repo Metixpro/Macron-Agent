@@ -151,7 +151,14 @@ const (
 	SubDir = ".agents"
 )
 
-func SubSession(parent, name string) string { return ParentSession(parent) + subSep + name }
+func SubSession(parent, name string) string {
+	top := ParentSession(parent)
+	if strings.Contains(parent, subSep) {
+		_, sub, _ := strings.Cut(parent, subSep)
+		return top + subSep + sub + "_" + name
+	}
+	return top + subSep + name
+}
 
 func ParentSession(id string) string {
 	p, _, _ := strings.Cut(id, subSep)
