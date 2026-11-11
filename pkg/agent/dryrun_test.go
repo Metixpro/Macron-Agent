@@ -20,25 +20,25 @@ func TestDryRunContext(t *testing.T) {
 
 func TestSimulateToolCall(t *testing.T) {
 	// 1. write_file simulation
-	action, ok := SimulateToolCall("write_file", map[string]any{"path": "app.py", "content": "print('hi')"})
+	action, ok := SimulateToolCall("write_file", `{"path": "app.py", "content": "print('hi')"}`)
 	if !ok || !action.Mutating || !strings.Contains(action.Simulation, "DRY-RUN PREVIEW") {
 		t.Errorf("write_file simulation failed: %+v", action)
 	}
 
 	// 2. bash_execute simulation
-	action, ok = SimulateToolCall("bash_execute", map[string]any{"command": "rm -rf /tmp/data"})
+	action, ok = SimulateToolCall("bash_execute", `{"command": "rm -rf /tmp/data"}`)
 	if !ok || !action.Mutating || !strings.Contains(action.Simulation, "DRY-RUN PREVIEW") {
 		t.Errorf("bash_execute simulation failed: %+v", action)
 	}
 
 	// 3. non-mutating command simulation
-	action, ok = SimulateToolCall("bash_execute", map[string]any{"command": "ls -la"})
+	action, ok = SimulateToolCall("bash_execute", `{"command": "ls -la"}`)
 	if !ok || action.Mutating {
 		t.Errorf("ls -la should not be mutating: %+v", action)
 	}
 
 	// 4. unknown tool
-	_, ok = SimulateToolCall("unknown_tool", nil)
+	_, ok = SimulateToolCall("unknown_tool", "")
 	if ok {
 		t.Error("unknown tool should return ok=false")
 	}

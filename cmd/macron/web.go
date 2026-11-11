@@ -62,6 +62,10 @@ func signHook(secret, ts string, body []byte) string {
 
 func (b *Bot) webhookHandler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/chat/completions", b.ServeOpenAIChatCompletions)
+	mux.HandleFunc("/chat/completions", b.ServeOpenAIChatCompletions)
+	mux.HandleFunc("/v1/models", b.ServeOpenAIModels)
+	mux.HandleFunc("/miniapp/", b.ServeMiniApp)
 	mux.HandleFunc("/hook/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)

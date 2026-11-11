@@ -616,6 +616,8 @@ type Request struct {
 	Owner     bool
 	OwnerNote string
 
+	SpecialistMode string
+
 	FocusTools bool
 
 	EfficientTools bool
@@ -879,6 +881,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		messages := []llm.Message{{Role: "system", Content: system, Stable: len(system)}}
 		if m := strings.TrimSpace(req.Memory); m != "" {
 			messages = append(messages, llm.Message{Role: "system", Content: "[memory] What you remember from earlier in this conversation:\n" + m})
+		}
+		if sp := GetSpecialistPrompt(req.SpecialistMode); sp != "" {
+			messages = append(messages, llm.Message{Role: "system", Content: sp})
 		}
 		lay := layout{histFrom: len(messages)}
 		hist := fitHistory(thinNotes(SanitizeHistory(req.History, 0, 0), notesKept), keep)
@@ -1688,6 +1693,14 @@ func (a *Agent) runTool(ctx context.Context, sessionID string, tc llm.ToolCall, 
 		})
 	}
 	fixed, problem := prepareCall(name, args, defs)
+	if msg, blocked := CheckConfidentialGate(ctx, name); blocked {
+		return llm.Message{Role: "tool", ToolCallID: tc.ID, Name: name, Content: msg}, nil, false, true
+	}
+	if IsDryRun(ctx) {
+		if sim, ok := SimulateToolCall(name, fixed); ok {
+			return llm.Message{Role: "tool", ToolCallID: tc.ID, Name: name, Content: sim.Simulation}, nil, false, false
+		}
+	}
 	switch {
 	case problem != "":
 		result = problem

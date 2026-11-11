@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -29,7 +30,13 @@ type DryRunAction struct {
 }
 
 // SimulateToolCall produces a preview outcome for mutating tools in dry-run mode.
-func SimulateToolCall(name string, args map[string]any) (DryRunAction, bool) {
+func SimulateToolCall(name, argsJSON string) (DryRunAction, bool) {
+	var args map[string]any
+	_ = json.Unmarshal([]byte(argsJSON), &args)
+	if args == nil {
+		args = make(map[string]any)
+	}
+
 	switch name {
 	case "write_file":
 		path, _ := args["path"].(string)
@@ -87,3 +94,4 @@ func SimulateToolCall(name string, args map[string]any) (DryRunAction, bool) {
 	}
 	return DryRunAction{}, false
 }
+

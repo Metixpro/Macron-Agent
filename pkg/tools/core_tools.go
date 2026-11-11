@@ -343,6 +343,53 @@ func (r *Registry) registerCoreTools() {
 			}
 			return overview.Format(), nil
 		})
+
+	r.add(ToolDeployService,
+		"Execute automated service deployment with healthcheck verification and automatic rollback on failure.",
+		map[string]any{
+			"deploy_cmd":   prop("string", "Deployment shell command (e.g. docker compose up -d or systemctl restart app)"),
+			"health_url":   prop("string", "Healthcheck endpoint to verify (e.g. http://127.0.0.1:8080/health)"),
+			"rollback_cmd": prop("string", "Rollback command to execute if healthcheck fails"),
+		}, []string{"deploy_cmd"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			deploy := strArg(args, "deploy_cmd")
+			health := strArg(args, "health_url")
+			rollback := strArg(args, "rollback_cmd")
+			return r.DeployWithRollback(ctx, sessionID, deploy, health, rollback)
+		})
+
+	r.add(ToolGenerateBriefing,
+		"Compile a morning briefing report with Jalali date, market summary, exchange rates, and active alerts.",
+		nil, nil, func(ctx context.Context, sessionID string, _ map[string]any) (string, error) {
+			return r.GenerateMorningBriefing(ctx, sessionID)
+		})
+
+	r.add(ToolEncryptedBackup,
+		"Create an AES-256-GCM encrypted cloud backup of agent state, database, SOUL, and memory.",
+		map[string]any{
+			"destination": prop("string", "Local or cloud directory path"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			dest := strArg(args, "destination")
+			return r.CreateEncryptedBackup(ctx, sessionID, "", dest)
+		})
+
+	r.add(ToolProcessInbox,
+		"Auto-process dropped documents, images, and datasets in the workspace inbox/ folder.",
+		nil, nil, func(ctx context.Context, sessionID string, _ map[string]any) (string, error) {
+			items, err := r.ProcessInboxFolder(ctx, sessionID)
+			if err != nil {
+				return "inbox error: " + err.Error(), nil
+			}
+			if len(items) == 0 {
+				return "No pending files found in inbox/ folder.", nil
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("📬 Processed %d items from inbox/:\n\n", len(items)))
+			for i, it := range items {
+				sb.WriteString(fmt.Sprintf("%d. `%s` -> %s: `%s` (%s)\n",
+					i+1, it.OriginalFile, it.Action, it.OutputFile, it.Summary))
+			}
+			return strings.TrimSpace(sb.String()), nil
+		})
 }
 
 func (r *Registry) webSearch(ctx context.Context, _ string, args map[string]any) (string, error) {
