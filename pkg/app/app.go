@@ -38,7 +38,11 @@ func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, cli
 
 	sb, err := machine.New(machine.Config{
 		BaseDir:       cfg.WorkspaceDir,
+		HomeDir:       config.Home(),
 		MaxConcurrent: cfg.Slots,
+		Sandbox:       cfg.Sandbox,
+		SandboxNoNet:  cfg.SandboxNoNet,
+		Hide:          config.SecretFiles(),
 	})
 	if err != nil {
 		return nil, err

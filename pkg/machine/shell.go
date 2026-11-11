@@ -163,7 +163,8 @@ func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 
 	opts := RunOptions{InSession: true, Env: map[string]string{"MACRON_SHELL": "1"}}
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "python3", "-I", "-c", shellSupervisor, strconv.Itoa(jobLogKeep))
+	argv := s.sandboxed(ws, []string{"python3", "-I", "-c", shellSupervisor, strconv.Itoa(jobLogKeep)})
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = ws
 	cmd.Env = flattenEnv(s.baseEnv(opts, ws))
 	cmd.WaitDelay = 3 * time.Second

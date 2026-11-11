@@ -33,7 +33,13 @@ func (s *Machine) Start(ctx context.Context, sessionID string, opts RunOptions) 
 	if len(argv) == 0 {
 		return nil, errors.New("empty command")
 	}
+	hostExecutable := argv[0]
 	argv = s.hostArgv(ws, argv)
+	if opts.HostExecutable {
+		argv[0] = hostExecutable
+	} else {
+		argv = s.sandboxed(ws, argv)
+	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = ws
 	cmd.Env = flattenEnv(s.baseEnv(opts, ws))

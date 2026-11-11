@@ -73,7 +73,11 @@ func execTask(term *IO, args []string) int {
 		fmt.Fprintln(term.Err, err)
 		return 1
 	}
-	m, err := machine.New(machine.Config{BaseDir: config.HomePath("workspaces")})
+	m, err := machine.New(machine.Config{
+		BaseDir: config.HomePath("workspaces"),
+		HomeDir: config.Home(),
+		Hide:    config.SecretFiles(),
+	})
 	if err != nil {
 		fmt.Fprintln(term.Err, err)
 		return 1
