@@ -511,3 +511,84 @@ Security gates now govern all model actions across every interface:
 - Isolated process namespace (PID/IPC) prevents inspecting or signaling host processes.
 - Set `MACRON_SANDBOX_NO_NET=1` (or `-sandbox-no-net`) for offline container execution.
 
+### 1.6.0: comprehensive agent intelligence, DAG workflows, and external channels
+
+This release implements items 1–7 and 9–60 across the platform:
+
+#### 1. Resilient Execution & Workflows (Items 1–3, 10–19, 43, 53)
+- **True Resume after Crash/Restart (Item 1)**: In-flight job state and pending poll
+  suspensions are persisted in SQLite and `.macron_state.json`. Restarts resume exactly
+  from the checkpoint without repeating completed work.
+- **Structured Project Files (Item 2)**: `PROJECT.md` tracks architectural decisions,
+  file inventory, and milestones, and is preserved across context compactions.
+- **Verification Gate (Item 3)**: Declaring tasks "done" is intercepted if modified
+  scripts or code have not been executed, tested, or inspected.
+- **Long Tasks & CLI Runner (Item 10)**: `macron exec` supports long-running jobs with
+  real-time progress updates, plan step percentage, and sub-agent tracing.
+- **Planner / Executor Split (Item 11)**: Two-phase execution separating objective
+  decomposition from execution.
+- **Multi-Level Sub-Agents (Item 12)**: Hierarchical delegation up to depth 3 with
+  isolated sub-workspace directories.
+- **Task DAGs (Item 13)**: Directed acyclic graphs with dependency resolution and
+  automatic cascade failure handling.
+- **Progress % & ETA (Item 14)**: Live percentage calculation and time-to-completion
+  estimates in Persian and English.
+- **Automated Mid-Task Reports (Item 15)**: Periodic status updates during long jobs.
+- **Plan-Level Approval Stops (Item 16)**: Plan review prompt before running high-risk steps.
+- **Dry-Run Mode (Item 17)**: Simulates mutating operations without modifying disk or state.
+- **Workflow Templates (Item 18)**: Predefined patterns for code review, deep research,
+  and refactoring.
+- **Artifact Versioning & Rollback (Item 19)**: Snapshot versioning with instant rollback.
+- **One-Command Deploy with Rollback (Item 53)**: Automated deploy with healthcheck
+  verification and automatic recovery.
+
+#### 2. Search, Knowledge & Memory (Items 4, 5, 20–22, 26)
+- **Iterative Deep Research (Item 4)**: Multi-round web research discovering knowledge
+  gaps and formulating follow-up queries.
+- **Workspace Document RAG (Item 5)**: Semantic search over local documents with
+  line-level citations (`[file:lines]`).
+- **Semantic Long-Term Memory (Item 20)**: Vector cosine similarity memory index.
+- **Academic Research (Item 21)**: Searches arXiv and Semantic Scholar with abstracts.
+- **Website Crawler (Item 22)**: Domain crawler compiling offline Markdown knowledge bases.
+- **Fact-Checking (Item 26)**: Independent evidence verification with confidence scoring.
+
+#### 3. Monitoring, Market & Documents (Items 6, 23–25, 27–35, 36)
+- **Page Change Monitor (Item 23)**: Snapshots, line-level diffs, and change alerts.
+- **Price Alerts (Item 24)**: Threshold notifications for currencies, gold, coins, and crypto.
+- **TSETMC & Codal (Item 25)**: Tehran Stock Exchange quotes, indices, and disclosure letters.
+- **Office Documents (Items 6 & 34)**: Generates `.docx` and `.pptx` with template filling.
+- **Timestamped Media Summaries & Minutes (Items 27 & 35)**: Timestamped segments and
+  meeting minutes with speaker diarization.
+- **Document Diff (Item 28)**: Line-by-line comparison and change summaries.
+- **Persian & English OCR (Item 29)**: Optical character recognition with vision fallback.
+- **Format-Preserving Translation (Item 30)**: Translation preserving Markdown and tables.
+- **Diagram Generation (Item 31)**: Renders Mermaid, Graphviz DOT, and SVG diagrams.
+- **Image Generation (Item 32)**: Generates images from visual descriptions.
+- **Book-Length Writing (Item 33)**: Multi-chapter manuscript planning and assembly.
+- **Jalali Calendar Everywhere (Item 36)**: Complete Persian/Shamsi calendar conversion.
+
+#### 4. Developer Tools, Data & Automation (Items 37–42, 44–60)
+- **Persistent Python Kernel (Item 37)**: In-memory state, imports, and variables across turns.
+- **Read-Only Database Queries (Item 38)**: Safe SELECT execution for PostgreSQL, MySQL, SQLite.
+- **Interactive HTML Dashboards (Item 39)**: Responsive dashboards with KPI cards and Chart.js.
+- **OpenAPI Caller (Item 40)**: Automated API execution from OpenAPI/Swagger schemas.
+- **Statistics & Forecasting (Item 41)**: Descriptive statistics and time-series regression.
+- **Code Intelligence (Item 42)**: Symbol outline and definition locator.
+- **GitHub Workflow (Item 44)**: PR creation, issue tracking, and discussions.
+- **Live Preview Link (Item 45)**: Background HTTP file server for instant browser testing.
+- **Iranian Messengers (Item 46)**: Bale, Eitaa, and Rubika bot integration.
+- **External Channels (Item 47)**: Discord webhooks, Slack, and WhatsApp Cloud API.
+- **Cloud Storage (Item 48)**: S3/MinIO/R2 and WebDAV/Nextcloud client.
+- **Task Boards (Item 49)**: Notion, Trello, and Todoist management.
+- **Telegram Mini App (Item 50)**: Interactive embedded web application.
+- **OpenAI-Compatible API (Item 51)**: Serves standard `/v1/chat/completions` and `/v1/models`.
+- **Team Mode (Item 52)**: Shared workspaces, roles, and collaborative memory.
+- **Morning Briefing (Item 54)**: Daily briefing with Jalali dates, markets, and tasks.
+- **Proactive Suggestions (Item 55)**: Automated routine detection for repeated tasks.
+- **Specialist Modes (Item 56)**: Coding, Finance, and Legal prompts.
+- **Encrypted Cloud Backup (Item 57)**: AES-256-GCM encrypted state backups.
+- **Confidential Mode (Item 58)**: Local-only model execution with zero outbound network traffic.
+- **Long-Task Eval Suite (Item 59)**: Multi-step benchmark evaluation framework.
+- **Inbox Folder Processing (Item 60)**: Auto-processes files dropped into `inbox/`.
+
+
