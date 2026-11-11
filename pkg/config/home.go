@@ -74,6 +74,18 @@ func EnvFilePath() string {
 	return HomePath(FileConfig)
 }
 
+// SecretFiles lists the files that hold the agent's keys: config.env (and the file MACRON_ENV_FILE names) and
+// secret.key.
+func SecretFiles() []string {
+	out := []string{HomePath(FileConfig), HomePath(FileSecret)}
+	if p := EnvFilePath(); p != out[0] {
+		if abs, err := filepath.Abs(p); err == nil {
+			out = append(out, filepath.Clean(abs))
+		}
+	}
+	return out
+}
+
 const EnvDB = "MACRON_DB"
 
 func SecretKey() (string, error) {

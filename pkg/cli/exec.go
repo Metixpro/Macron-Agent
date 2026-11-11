@@ -15,6 +15,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/brain"
+	"github.com/Metixpro/macron-agent/pkg/cmdgate"
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
@@ -30,12 +31,13 @@ func execTask(term *IO, args []string) int {
 	allTools := fs.Bool("all-tools", false, "advertise every available tool immediately instead of automatic discovery")
 	selected := fs.String("tools", "", "comma-separated tool names (default: all available tools)")
 	steps := fs.Int("max-steps", 30, "maximum tool rounds")
+	yolo := fs.Bool("yolo", false, "run what the command gate flags without asking (what it blocks outright still never runs)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if prompt == "" || *timeout <= 0 || *steps < 1 || *steps > 1000 {
-		fmt.Fprintln(term.Err, "usage: macron exec [--timeout 10m] [--max-steps 30] TASK")
+		fmt.Fprintln(term.Err, "usage: macron exec [--timeout 10m] [--max-steps 30] [--yolo] TASK")
 		return 2
 	}
 	env, err := loadEnvFile(config.EnvFilePath())
@@ -86,6 +88,13 @@ func execTask(term *IO, args []string) int {
 	client := llm.NewClient(endpoint, value(keyAPIKey), model)
 	client.API = llm.DetectAPI(endpoint)
 	reg := tools.NewRegistry(m, search.NewEngine(nil), client, tools.Options{Skills: sk, SkillWrite: func(string) bool { return true }})
+	dbPath := value(config.EnvDB)
+	if dbPath == "" {
+		dbPath = config.HomePath(config.FileDB)
+	}
+	gate, closeGate := execGate(term, client, dbPath, m.BaseDir, *yolo || os.Getenv("MACRON_YOLO") == "1")
+	defer closeGate()
+	reg.Gate, reg.CheckpointDir = gate, config.HomePath("checkpoints")
 	var filter func(string) bool
 	if *selected != "" {
 		allowed := map[string]bool{}
@@ -104,6 +113,9 @@ func execTask(term *IO, args []string) int {
 	defer stop()
 	ctx, cancel := context.WithTimeout(root, *timeout)
 	defer cancel()
+	if term.Interactive {
+		ctx = cmdgate.WithAsker(ctx, termAsker(term))
+	}
 	fmt.Fprintln(term.Err, "workspace:", config.HomePath("workspaces", session))
 	result, err := a.Do(ctx, agent.Request{SessionID: session, Input: llm.Message{Role: "user", Content: prompt}, About: b.User.Raw() + "\n" + b.Memory.Raw(), Lang: "en", Owner: true, ToolFilter: filter, FocusTools: !*allTools && filter == nil, EfficientTools: !*allTools && filter == nil})
 	if result != nil && result.Answer != "" {

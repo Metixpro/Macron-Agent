@@ -145,6 +145,9 @@ func (r *Registry) Execute(ctx context.Context, sessionID, name, argsJSON string
 			return "", fmt.Errorf("tool %q not found", name)
 		}
 		h = func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			if refused := r.gatePlugin(ctx, sessionID, p, name, args); refused != "" {
+				return refused, nil
+			}
 			return p.Call(ctx, sessionID, name, args)
 		}
 	}

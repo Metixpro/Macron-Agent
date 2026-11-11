@@ -755,6 +755,9 @@ type mcpTool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+	Annotations struct {
+		ReadOnlyHint bool `json:"readOnlyHint"`
+	} `json:"annotations"`
 }
 
 func handshake(ctx context.Context, t transport, version string) ([]mcpTool, string, error) {

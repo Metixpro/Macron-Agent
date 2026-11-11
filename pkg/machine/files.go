@@ -63,6 +63,24 @@ func (s *Machine) HostPath(sessionID, name string) (abs string, inside bool, err
 	return abs, abs == top || strings.HasPrefix(abs, top+string(filepath.Separator)), nil
 }
 
+// Inside reports whether name is an existing file or folder of the session's workspace once every symlink on the way
+// is resolved, so a link that points out of the workspace does not count.
+func (s *Machine) Inside(sessionID, name string) bool {
+	abs, inside, err := s.HostPath(sessionID, name)
+	if err != nil || !inside {
+		return false
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return false
+	}
+	top, err := filepath.EvalSymlinks(s.topWorkspace(sessionID))
+	if err != nil {
+		return false
+	}
+	return real == top || strings.HasPrefix(real, top+string(filepath.Separator))
+}
+
 const (
 	fileMode = 0o644
 	dirMode  = 0o755
