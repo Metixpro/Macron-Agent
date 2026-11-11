@@ -98,16 +98,110 @@ func (r *Registry) registerCoreTools() {
 	r.add("list_files", "List files and directories in the workspace.", nil, nil, r.listFiles)
 
 	r.add("deep_research",
-		"Research a complex topic from many sources into a cited report (saved too). Slow.",
+		"Research a complex topic from many sources into a cited report (saved too). Supports iterative rounds with depth.",
 		map[string]any{
-			"topic":   prop("string", ""),
+			"topic":   prop("string", "Topic or question to research"),
 			"breadth": prop("integer", "Search angles (default 3, max 5)"),
+			"depth":   prop("integer", "Iterative research depth/rounds (default 1, max 3)"),
 		}, []string{"topic"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 			topic := strArg(args, "topic")
 			if topic == "" {
 				return "error: topic is required", nil
 			}
-			return r.RunDeepResearch(ctx, sessionID, topic, intArg(args, "breadth", 3, 1, 5))
+			breadth := intArg(args, "breadth", 3, 1, 5)
+			depth := intArg(args, "depth", 1, 1, 3)
+			return r.RunIterativeResearch(ctx, sessionID, topic, breadth, depth)
+		})
+
+	r.add(ToolRAGSearch,
+		"Search documents and files in the workspace using semantic RAG with line-level citations.",
+		map[string]any{
+			"query": prop("string", "Search query or question"),
+			"limit": prop("integer", "Maximum passages to return (default 5)"),
+		}, []string{"query"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			q := strArg(args, "query")
+			if q == "" {
+				return "error: query is required", nil
+			}
+			limit := intArg(args, "limit", 5, 1, 10)
+			chunks, err := r.SearchWorkspaceRAG(ctx, sessionID, q, limit)
+			if err != nil {
+				return "rag error: " + err.Error(), nil
+			}
+			if len(chunks) == 0 {
+				return "No matching passages found in workspace documents.", nil
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("### RAG Search Results (%d passages found)\n\n", len(chunks)))
+			for i, c := range chunks {
+				sb.WriteString(fmt.Sprintf("[%d] `%s:%d-%d` (relevance: %.0f%%)\n```\n%s\n```\n\n",
+					i+1, c.File, c.LineStart, c.LineEnd, c.Score*100, c.Text))
+			}
+			return strings.TrimSpace(sb.String()), nil
+		})
+
+	r.add(ToolAcademicSearch,
+		"Search scientific and academic publications on arXiv and Semantic Scholar with abstracts and citations.",
+		map[string]any{
+			"query":  prop("string", "Academic topic, paper title, or author"),
+			"source": enumProp("all", "arxiv", "semantic_scholar", "all"),
+			"limit":  prop("integer", "Maximum papers to return (default 5, max 10)"),
+		}, []string{"query"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			q := strArg(args, "query")
+			if q == "" {
+				return "error: query is required", nil
+			}
+			source := strArg(args, "source")
+			limit := intArg(args, "limit", 5, 1, 10)
+			papers, err := r.SearchAcademic(ctx, q, source, limit)
+			if err != nil {
+				return "academic search error: " + err.Error(), nil
+			}
+			return FormatAcademicPapers(papers), nil
+		})
+
+	r.add(ToolCrawlSite,
+		"Crawl a website domain into clean Markdown files in the workspace for offline knowledge-base reference.",
+		map[string]any{
+			"url":       prop("string", "Starting URL to crawl"),
+			"max_pages": prop("integer", "Maximum pages to crawl within the domain (default 15, max 50)"),
+			"folder":    prop("string", "Destination folder in workspace (default 'knowledge_base')"),
+		}, []string{"url"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			u := strArg(args, "url")
+			if u == "" {
+				return "error: url is required", nil
+			}
+			maxPages := intArg(args, "max_pages", 15, 1, 50)
+			folder := strArg(args, "folder")
+			res, err := r.CrawlToKnowledgeBase(ctx, sessionID, u, folder, maxPages)
+			if err != nil {
+				return "crawl error: " + err.Error(), nil
+			}
+			if len(res) == 0 {
+				return "No pages could be crawled from " + u, nil
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("### Crawled %d pages into knowledge base\n\n", len(res)))
+			for i, p := range res {
+				sb.WriteString(fmt.Sprintf("%d. [%s](%s) -> `%s` (%d words)\n", i+1, p.Title, p.URL, p.Path, p.WordCount))
+			}
+			return strings.TrimSpace(sb.String()), nil
+		})
+
+	r.add(ToolFactCheck,
+		"Fact-check a claim against independent multi-source web evidence with a verdict and confidence score.",
+		map[string]any{
+			"claim": prop("string", "The statement, claim, or news item to verify"),
+		}, []string{"claim"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			claim := strArg(args, "claim")
+			if claim == "" {
+				return "error: claim is required", nil
+			}
+			res, err := r.RunFactCheck(ctx, claim)
+			if err != nil {
+				return "fact check error: " + err.Error(), nil
+			}
+			return res.Format(), nil
 		})
 }
 
