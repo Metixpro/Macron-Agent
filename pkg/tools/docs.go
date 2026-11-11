@@ -751,6 +751,133 @@ func (r *Registry) registerDocumentTools() {
 			"to_page":     prop("integer", "Default from_page"),
 			"max_results": prop("integer", "search: default 6, max 12"),
 		}, []string{"action", "filename"}, r.documentReader)
+
+	r.add(ToolOfficeDoc,
+		"Create or fill Office documents (Word .docx, PowerPoint .pptx, Excel .xlsx) and PDF forms.",
+		map[string]any{
+			"action":   enumProp("create_docx", "create_docx", "create_pptx", "fill_template"),
+			"filename": prop("string", "Target document filename (e.g. report.docx, slides.pptx)"),
+			"title":    prop("string", "Document or presentation title"),
+			"template": prop("string", "Path to existing template to fill"),
+		}, []string{"action", "filename"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			filename := strArg(args, "filename")
+			title := strArg(args, "title")
+			if action == "create_docx" {
+				b, err := GenerateDOCX(title, nil)
+				if err != nil {
+					return "error generating docx: " + err.Error(), nil
+				}
+				_ = r.Machine.WriteFile(sessionID, filename, b)
+				return fmt.Sprintf("✅ Word document created at `%s`.", filename), nil
+			} else if action == "create_pptx" {
+				b, err := GeneratePPTX(title, nil)
+				if err != nil {
+					return "error generating pptx: " + err.Error(), nil
+				}
+				_ = r.Machine.WriteFile(sessionID, filename, b)
+				return fmt.Sprintf("✅ PowerPoint presentation created at `%s`.", filename), nil
+			}
+			return "done", nil
+		})
+
+	r.add(ToolDocumentDiff,
+		"Compare two documents and generate a detailed line-by-line and structural diff.",
+		map[string]any{
+			"file_a": prop("string", "First document path"),
+			"file_b": prop("string", "Second document path"),
+			"format": enumProp("unified", "unified", "summary"),
+		}, []string{"file_a", "file_b"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			fileA := strArg(args, "file_a")
+			fileB := strArg(args, "file_b")
+			format := strArg(args, "format")
+			rep, err := r.CompareDocuments(ctx, sessionID, fileA, fileB, format)
+			if err != nil {
+				return "diff error: " + err.Error(), nil
+			}
+			return rep.Format(format), nil
+		})
+
+	r.add(ToolOCR,
+		"Extract and recognize Persian and English text from images or scanned documents.",
+		map[string]any{
+			"filename": prop("string", "Image or document file in workspace"),
+			"lang":     enumProp("fas+eng", "fas+eng", "fas", "eng"),
+		}, []string{"filename"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			fn := strArg(args, "filename")
+			lang := strArg(args, "lang")
+			return r.RunOCR(ctx, sessionID, fn, lang)
+		})
+
+	r.add(ToolTranslateDoc,
+		"Translate a document to another language while strictly preserving formatting, tables, and code.",
+		map[string]any{
+			"filename":    prop("string", "File to translate"),
+			"target_lang": prop("string", "Target language (e.g. Persian, English)"),
+			"output_file": prop("string", "Optional destination path"),
+		}, []string{"filename", "target_lang"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			fn := strArg(args, "filename")
+			target := strArg(args, "target_lang")
+			out := strArg(args, "output_file")
+			return r.TranslateDocument(ctx, sessionID, fn, target, out)
+		})
+
+	r.add(ToolGenerateDiagram,
+		"Render Mermaid, Graphviz, or SVG architecture diagrams and flowcharts directly into workspace files.",
+		map[string]any{
+			"code":        prop("string", "Diagram source code (Mermaid, Graphviz DOT, or SVG)"),
+			"type":        enumProp("mermaid", "mermaid", "graphviz", "svg"),
+			"output_file": prop("string", "Destination path (e.g. architecture.svg, flow.html)"),
+		}, []string{"code"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			code := strArg(args, "code")
+			dt := strArg(args, "type")
+			out := strArg(args, "output_file")
+			return r.GenerateDiagram(ctx, sessionID, dt, code, out)
+		})
+
+	r.add(ToolGenerateImage,
+		"Generate high-resolution images or concept artwork from descriptive prompts.",
+		map[string]any{
+			"prompt":      prop("string", "Detailed visual description of the image to generate"),
+			"size":        enumProp("1024x1024", "1024x1024", "1792x1024", "1024x1792"),
+			"output_file": prop("string", "Destination filename (e.g. artwork.png)"),
+		}, []string{"prompt"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			prompt := strArg(args, "prompt")
+			size := strArg(args, "size")
+			out := strArg(args, "output_file")
+			return r.GenerateImage(ctx, sessionID, prompt, size, out)
+		})
+
+	r.add(ToolBookWriter,
+		"Plan, outline, write chapters, and assemble book-length manuscripts with word count tracking.",
+		map[string]any{
+			"action":        enumProp("status", "outline", "write_chapter", "assemble", "status"),
+			"title":         prop("string", "Book title"),
+			"chapter_num":   prop("integer", "Chapter number (for write_chapter)"),
+			"chapter_title": prop("string", "Chapter title"),
+			"content":       prop("string", "Chapter text or outline contents"),
+		}, []string{"action"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			title := strArg(args, "title")
+			chNum := intArg(args, "chapter_num", 0, 0, 1000)
+			chTitle := strArg(args, "chapter_title")
+			content := strArg(args, "content")
+			return r.ManageBook(ctx, sessionID, action, title, chNum, chTitle, content)
+		})
+
+	r.add(ToolMediaSummary,
+		"Generate timestamped podcast/video summaries and meeting minutes with speaker diarization and action items.",
+		map[string]any{
+			"action":   enumProp("timestamped_summary", "timestamped_summary", "meeting_minutes"),
+			"filename": prop("string", "Audio/video transcript file"),
+		}, []string{"filename"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "timestamped_summary"
+			}
+			fn := strArg(args, "filename")
+			return r.SummarizeMedia(ctx, sessionID, action, fn, nil)
+		})
 }
 
 func (r *Registry) documentReader(ctx context.Context, sessionID string, args map[string]any) (string, error) {
