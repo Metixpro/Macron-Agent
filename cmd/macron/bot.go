@@ -14,6 +14,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/brain"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/emoji"
 	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/memory"
@@ -338,6 +339,61 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 	case "/help":
 		b.reply(m, l.t(personalHelp))
+		return
+	case "/version":
+		msg := fmt.Sprintf("🤖 <b>Macron Agent v%s</b>\n- وضعیت: آپدیت فعال روی سرور توسعه\n- پوشه داده‌ها: <code>%s</code>\n- تمام قابلیت‌های ۱ تا ۷ و ۹ تا ۶۰ با موفقیت مستقر شده‌اند.\nبرای مشاهده لیست ابزارها /tools را بزنید.",
+			app.Version, esc(config.Home()))
+		b.reply(m, msg)
+		return
+	case "/tools":
+		toolsList := `🛠 <b>فهرست ابزارهای فعال نسخه ۱.۶.۰:</b>
+
+• <b>پژوهش و RAG:</b>
+<code>deep_research</code> (پژوهش عمیق تکرارشونده)
+<code>rag_search</code> (جستجوی برداری اسناد با ارجاع دقیق)
+<code>academic_search</code> (مقاله‌های علمی arXiv و Semantic Scholar)
+<code>crawl_site</code> (کراول سایت به پایگاه دانش Markdown)
+<code>fact_check</code> (راستی‌آزمایی و ارزیابی صحت ادعا)
+
+• <b>بازار، بورس و پایش:</b>
+<code>tsetmc_stock</code> (اطلاعات بورس تهران و کدال)
+<code>currency_gold_price</code> (قیمت لحظه‌ای طلا، ارز و سکه)
+<code>crypto_currency_price</code> (قیمت رمزارزها)
+<code>price_alert</code> (هشدارهای آستانه قیمت)
+<code>page_watch</code> (پایش و مانیتورینگ تغییرات وب)
+<code>generate_briefing</code> (گزارش صبحگاهی روزانه)
+
+• <b>اسناد، آفیس و رسانه:</b>
+<code>office_document</code> (تولید docx و pptx و پر کردن قالب‌ها)
+<code>document_diff</code> (مقایسه و دیف خط‌به‌خط اسناد)
+<code>ocr_image</code> (نویسه‌خوان تصویری فارسی و انگلیسی)
+<code>translate_document</code> (ترجمه با حفظ ساختار و جداول)
+<code>generate_diagram</code> (رندر دیاگرام Mermaid, Graphviz, SVG)
+<code>generate_image</code> (تولید تصویر از متن)
+<code>book_writer</code> (نگارش فصلی و تدوین کامل کتاب)
+<code>media_summary</code> (خلاصه پادکست/ویدیو و صورتجلسه)
+
+• <b>کدنویسی، داده و سیستم:</b>
+<code>python_kernel</code> (کرنل پایتون پایا با حفظ متغیرها)
+<code>database_query</code> (کوئری امن SELECT روی Postgres/MySQL/SQLite)
+<code>create_dashboard</code> (ساخت داشبورد مستقل HTML با Chart.js)
+<code>openapi_call</code> (فراخوانی خودکار اندپوینت‌های OpenAPI/Swagger)
+<code>statistics_forecast</code> (آمار توصیفی و پیش‌بینی رگرسیون)
+<code>code_intelligence</code> (پیمایش نمادها و پرش به تعریف LSP)
+<code>github_workflow</code> (مدیریت Pull Request و Issue)
+<code>live_preview</code> (پیش‌نمایش زنده وب روی پورت محلی)
+<code>deploy_service</code> (استقرار سرویس با بازگشت خودکار)
+<code>encrypted_cloud_backup</code> (بکاپ رمزنگاری‌شده AES-256)
+<code>process_inbox</code> (پردازش خودکار فایل‌های ریخته‌شده در inbox)
+
+• <b>پیام‌رسان‌ها و سرویس‌های ابری:</b>
+<code>cloud_storage</code> (اتصال به S3, MinIO, R2, WebDAV)
+<code>iran_messenger</code> (ارسال پیام به بله، ایتا، روبیکا)
+<code>external_messenger</code> (دیسکورد، اسلک، واتساپ)
+<code>task_board</code> (مدیریت تسک‌های Notion, Trello, Todoist)
+<code>email_client</code> (ارسال ایمیل از طریق SMTP)
+<code>calendar_client</code> (تولید رویدادهای تقویم .ics)`
+		b.reply(m, toolsList)
 		return
 	case "/language":
 		b.sendLanguage(m, l)

@@ -153,6 +153,8 @@ const personalHelp = `<b>چطوری باهام کار کنی؟</b>
 /files — فایل‌هام
 /reminders — یادآورها
 /tasks — کارهای پس‌زمینه
+/version — نسخه و وضعیت استقرار
+/tools — فهرست کامل ابزارهای جدید
 /settings — پنل
 /language — زبان (فارسی / English)
 /cancel — توقف کار فعلی`
