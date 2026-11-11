@@ -49,6 +49,116 @@ func (r *Registry) registerInfoTools() {
 			"repo":       prop("string", "owner/repo or a link"),
 			"query_type": enumProp("", "summary", "readme", "releases", "commits"),
 		}, []string{"repo"}, r.githubInspect)
+
+	r.add(ToolEmailClient,
+		"Send emails via SMTP with subject, body, and recipients.",
+		map[string]any{
+			"to":      prop("string", "Recipient email addresses (comma separated)"),
+			"subject": prop("string", "Email subject"),
+			"body":    prop("string", "Email text content"),
+			"host":    prop("string", "SMTP host override"),
+			"port":    prop("integer", "SMTP port (default 587)"),
+		}, []string{"to", "subject", "body"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			to := strArg(args, "to")
+			sub := strArg(args, "subject")
+			body := strArg(args, "body")
+			host := strArg(args, "host")
+			port := intArg(args, "port", 587, 1, 65535)
+			if err := SendEmail(ctx, host, port, "", "", "", to, sub, body); err != nil {
+				return "email error: " + err.Error(), nil
+			}
+			return fmt.Sprintf("✅ Email sent to %s with subject: %s", to, sub), nil
+		})
+
+	r.add(ToolCalendarClient,
+		"Generate an iCalendar (.ics) event file for appointments and meetings.",
+		map[string]any{
+			"title":       prop("string", "Event title"),
+			"description": prop("string", "Event details"),
+			"location":    prop("string", "Event location"),
+			"start":       prop("string", "Start date/time (RFC3339 or YYYY-MM-DD HH:MM)"),
+			"duration":    prop("string", "Duration (e.g. 1h, 30m, default 1h)"),
+			"filename":    prop("string", "Output .ics filename (default 'event.ics')"),
+		}, []string{"title"}, func(_ context.Context, sessionID string, args map[string]any) (string, error) {
+			title := strArg(args, "title")
+			desc := strArg(args, "description")
+			loc := strArg(args, "location")
+			start := time.Now().Add(24 * time.Hour)
+			end := start.Add(time.Hour)
+			fn := strArg(args, "filename")
+			if fn == "" {
+				fn = "event.ics"
+			}
+			ics := GenerateICalendar(title, desc, loc, start, end)
+			_ = r.Machine.WriteFile(sessionID, fn, []byte(ics))
+			return fmt.Sprintf("📅 Calendar event created and saved to `%s`.", fn), nil
+		})
+
+	r.add(ToolIranMessenger,
+		"Send messages to Iranian messengers: Bale (بله), Eitaa (ایتا), and Rubika (روبیکا).",
+		map[string]any{
+			"messenger": enumProp("bale", "bale", "eitaa", "rubika"),
+			"chat_id":   prop("string", "Destination channel or user chat ID"),
+			"text":      prop("string", "Message content"),
+			"token":     prop("string", "Bot token override"),
+		}, []string{"messenger", "chat_id", "text"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			m := strArg(args, "messenger")
+			cid := strArg(args, "chat_id")
+			txt := strArg(args, "text")
+			tok := strArg(args, "token")
+			return r.SendIranMessenger(ctx, m, tok, cid, txt)
+		})
+
+	r.add(ToolExternalMessenger,
+		"Send messages to Discord channels, Slack channels, or WhatsApp.",
+		map[string]any{
+			"platform":    enumProp("discord", "discord", "slack", "whatsapp"),
+			"text":        prop("string", "Message body"),
+			"webhook_url": prop("string", "Incoming webhook URL (Discord or Slack)"),
+			"channel":     prop("string", "Slack channel ID"),
+			"to":          prop("string", "WhatsApp recipient phone number"),
+		}, []string{"platform", "text"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			p := strArg(args, "platform")
+			txt := strArg(args, "text")
+			wh := strArg(args, "webhook_url")
+			ch := strArg(args, "channel")
+			to := strArg(args, "to")
+			return r.SendExternalMessenger(ctx, p, wh, "", ch, to, txt)
+		})
+
+	r.add(ToolCloudStorage,
+		"Upload, download, or list files on S3, MinIO, R2, or WebDAV (Nextcloud).",
+		map[string]any{
+			"provider":    enumProp("s3", "s3", "webdav", "minio"),
+			"action":      enumProp("upload", "upload", "download", "list"),
+			"remote_path": prop("string", "Remote path or key"),
+			"local_path":  prop("string", "Local workspace file path"),
+			"endpoint":    prop("string", "Custom S3 or WebDAV endpoint URL"),
+		}, []string{"action", "remote_path"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			prov := strArg(args, "provider")
+			act := strArg(args, "action")
+			rp := strArg(args, "remote_path")
+			lp := strArg(args, "local_path")
+			ep := strArg(args, "endpoint")
+			return r.ExecuteCloudStorage(ctx, sessionID, prov, act, rp, lp, ep, "", "")
+		})
+
+	r.add(ToolTaskBoard,
+		"Create or list tasks on Notion, Trello, and Todoist boards.",
+		map[string]any{
+			"platform":     enumProp("notion", "notion", "trello", "todoist"),
+			"action":       enumProp("create_task", "create_task", "list_tasks"),
+			"title":        prop("string", "Task title"),
+			"container_id": prop("string", "Database ID (Notion), List ID (Trello), or Project ID (Todoist)"),
+			"description":  prop("string", "Task description"),
+		}, []string{"platform", "action", "title"}, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			p := strArg(args, "platform")
+			act := strArg(args, "action")
+			title := strArg(args, "title")
+			cid := strArg(args, "container_id")
+			desc := strArg(args, "description")
+			return r.ManageTaskBoard(ctx, p, act, "", cid, "", title, desc)
+		})
 }
 
 var (

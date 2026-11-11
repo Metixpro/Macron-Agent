@@ -594,12 +594,17 @@ const (
 	StylePrimary = "primary"
 )
 
+type WebAppInfo struct {
+	URL string `json:"url"`
+}
+
 type InlineKeyboardButton struct {
-	Text              string `json:"text"`
-	CallbackData      string `json:"callback_data,omitempty"`
-	URL               string `json:"url,omitempty"`
-	Style             string `json:"style,omitempty"`
-	IconCustomEmojiID string `json:"icon_custom_emoji_id,omitempty"`
+	Text              string      `json:"text"`
+	CallbackData      string      `json:"callback_data,omitempty"`
+	URL               string      `json:"url,omitempty"`
+	WebApp            *WebAppInfo `json:"web_app,omitempty"`
+	Style             string      `json:"style,omitempty"`
+	IconCustomEmojiID string      `json:"icon_custom_emoji_id,omitempty"`
 }
 
 type InlineKeyboardMarkup struct {
