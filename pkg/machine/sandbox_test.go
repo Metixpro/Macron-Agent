@@ -1,8 +1,13 @@
 package machine
 
 import (
+	"context"
+	"os"
+	"os/exec"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestSandboxOffWords(t *testing.T) {
@@ -20,16 +25,28 @@ func TestSandboxOffWords(t *testing.T) {
 
 func TestSandboxTopOf(t *testing.T) {
 	cases := map[string]string{
-		"/workspaces/s1":                       "/workspaces/s1",
-		"/workspaces/s1/.agents/sub":           "/workspaces/s1",
-		"/workspaces/s1/.agents/sub/deeper":    "/workspaces/s1",
-		`C:\workspaces\s1\.agents\sub`:        `C:\workspaces\s1`,
+		"/workspaces/s1":                    "/workspaces/s1",
+		"/workspaces/s1/.agents/sub":        "/workspaces/s1",
+		"/workspaces/s1/.agents/sub/deeper": "/workspaces/s1",
+		`C:\workspaces\s1\.agents\sub`:      `C:\workspaces\s1`,
 	}
 	for in, want := range cases {
 		if got := topOf(in); got != want {
 			t.Errorf("topOf(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+func containsSubslice(haystack, needle []string) bool {
+	if len(needle) == 0 {
+		return true
+	}
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		if slices.Equal(haystack[i:i+len(needle)], needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSandboxWrapStructure(t *testing.T) {
@@ -47,32 +64,25 @@ func TestSandboxWrapStructure(t *testing.T) {
 		t.Fatalf("cmd[0] = %v, want /usr/bin/bwrap", cmd)
 	}
 
-	wantFlags := []string{
-		"--ro-bind", "/", "/",
-		"--dev", "/dev",
-		"--proc", "/proc",
-		"--tmpfs", "/dev/shm",
-		"--tmpfs", "/tmp",
-		"--bind", "/base/workspaces/session-1", "/base/workspaces/session-1",
-		"--chdir", "/base/workspaces/session-1",
-		"--unshare-pid",
-		"--die-with-parent",
-		"--new-session",
-		"--unshare-net",
-		"--", "python3", "script.py",
+	expectedSequences := [][]string{
+		{"--ro-bind", "/", "/"},
+		{"--dev", "/dev"},
+		{"--proc", "/proc"},
+		{"--tmpfs", "/dev/shm"},
+		{"--tmpfs", "/tmp"},
+		{"--bind", "/base/workspaces/session-1", "/base/workspaces/session-1"},
+		{"--chdir", "/base/workspaces/session-1"},
+		{"--unshare-pid"},
+		{"--die-with-parent"},
+		{"--new-session"},
+		{"--unshare-net"},
+		{"--", "python3", "script.py"},
 	}
 
-	for i := 0; i < len(wantFlags)-1; i += 2 {
-		flag, val := wantFlags[i], wantFlags[i+1]
-		idx := slices.Index(cmd, flag)
-		if idx < 0 || idx+1 >= len(cmd) || cmd[idx+1] != val {
-			t.Errorf("missing or mismatched flag pair: %s %s in %v", flag, val, cmd)
+	for _, seq := range expectedSequences {
+		if !containsSubslice(cmd, seq) {
+			t.Errorf("missing expected sequence %v in command: %v", seq, cmd)
 		}
-	}
-
-	last3 := cmd[len(cmd)-3:]
-	if last3[0] != "--" || last3[1] != "python3" || last3[2] != "script.py" {
-		t.Errorf("tail = %v, want [--, python3, script.py]", last3)
 	}
 }
 
@@ -84,5 +94,55 @@ func TestMachineSandboxedDefault(t *testing.T) {
 	raw := []string{"echo", "hi"}
 	if got := m.sandboxed("/tmp/ws", raw); !slices.Equal(got, raw) {
 		t.Errorf("sandboxed without sandbox modified argv: %v", got)
+	}
+}
+
+func TestSandboxExecutionOnLinux(t *testing.T) {
+	if _, err := exec.LookPath("bwrap"); err != nil {
+		t.Skip("bwrap not available on this machine")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "macron-sb-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ws := tmpDir + "/ws"
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := New(Config{
+		BaseDir: tmpDir,
+		Sandbox: "bwrap",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if !m.Sandboxed() {
+		t.Fatal("expected machine to be sandboxed with bwrap")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Can write inside workspace
+	res := m.runIn(ctx, ws, RunOptions{
+		Shell: "echo 'hello sandbox' > test.txt && cat test.txt",
+	})
+	if res.ExitCode != 0 {
+		t.Fatalf("run in workspace failed (code %d): %s %s", res.ExitCode, res.Error, res.Stderr)
+	}
+	if strings.TrimSpace(res.Stdout) != "hello sandbox" {
+		t.Fatalf("unexpected stdout: %q", res.Stdout)
+	}
+
+	// 2. Cannot write to root filesystem
+	res = m.runIn(ctx, ws, RunOptions{
+		Shell: "echo 'blocked' > /test_leak.txt",
+	})
+	if res.ExitCode == 0 {
+		t.Fatal("expected writing to / to fail inside sandbox")
 	}
 }
