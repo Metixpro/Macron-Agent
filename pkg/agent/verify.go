@@ -54,7 +54,12 @@ func (v *VerifyGate) RecordFileModification(path string) {
 	if verifiableExts[ext] {
 		v.modifiedFiles[path] = v.round
 		delete(v.verifiedFiles, path)
+		v.nudges = 0
 	}
+}
+
+func (v *VerifyGate) ResetNudges() {
+	v.nudges = 0
 }
 
 func (v *VerifyGate) RecordExecution(toolName, cmd string, exitCode int) {
