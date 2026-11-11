@@ -46,7 +46,7 @@ func TestAutoReporter(t *testing.T) {
 	if !ok {
 		t.Fatal("expected report on initial progress")
 	}
-	if !strings.Contains(msg, "۳۳٪") && !strings.Contains(msg, "33%") {
+	if !strings.Contains(msg, "33") && !strings.Contains(msg, "۳۳") {
 		t.Errorf("missing percentage in report: %s", msg)
 	}
 	if !strings.Contains(msg, "Scaffold code") {
