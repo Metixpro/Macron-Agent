@@ -79,8 +79,21 @@ For example, with an already-running Ollama and a downloaded tool-capable model:
 ```sh
 export MACRON_API_URL=http://127.0.0.1:11434/v1
 export MACRON_MODEL=qwen3:8b
-macron exec --timeout 5m --max-steps 20 'Create a Python script that checks disk usage and test it'
+macron exec --timeout 5m --max-steps 20 [--yolo] 'Create a Python script that checks disk usage and test it'
 ```
+
+Interactive runs ask for human confirmation on flagged or sensitive commands
+(modifying system files, outside-workspace actions, destructive commands, or
+unknown scripts) according to the configured gate policy (`smart`, `manual`,
+`off`). For unattended cron or pipeline scripts, passing `--yolo` (or
+`MACRON_YOLO=1`) allows flagged commands without an interactive prompt.
+
+To isolate command execution from the host, set `MACRON_SANDBOX=bwrap` (or pass
+`-sandbox bwrap`). The bubblewrap container mounts the system read-only, hides
+private keys and configuration (`~/.ssh`, `~/.gnupg`, `~/.macron/config.env`,
+`macron.db`, `secret.key`), isolates other sessions' workspaces, and assigns a
+private PID namespace. Pass `MACRON_SANDBOX_NO_NET=1` (or `-sandbox-no-net`) to
+run fully offline.
 
 For specialized jobs, reduce the advertised tool schemas explicitly:
 
@@ -469,3 +482,32 @@ repository's `.git/info/exclude`. The first run asks for a model when none is se
 "Telegram service"). `macron setup` now sets up the model and the time zone and
 only offers Telegram; the installer does the same, and starts the bot only when a
 token is configured. Systemd units and launchd agents run `macron telegram run`.
+
+### 1.5.1: comprehensive action gates and bubblewrap sandbox (items 7 & 43)
+
+Security gates now govern all model actions across every interface:
+- **Browser actions**: navigation, text selection and search queries run freely;
+  form submissions, buttons with action verbs (buy, pay, delete, checkout, send),
+  file uploads, and DOM eval scripts that trigger submissions pass through the gate
+  for owner confirmation.
+- **Plugins and MCP tools**: tools marked read-only run without prompt; mutative
+  or external action tools ask for confirmation.
+- **File delivery (`send_file`)**: sending files located outside the session
+  workspace requires explicit approval.
+- **CLI task runner (`macron exec`)**: gated via the shared gate policy. In
+  interactive terminals, users are prompted (`[o]nce`, `[s]ession`, `[a]lways`,
+  `[N]o`). Headless or automated jobs refuse unapproved sensitive actions unless
+  `--yolo` or `MACRON_YOLO=1` is provided.
+
+**Bubblewrap sandbox (`bwrap`)**:
+- Set `MACRON_SANDBOX=bwrap` (or `-sandbox bwrap`) to run workspace commands and
+  session shells inside an isolated sandbox container.
+- Read-only system root (`/`) protects system configuration and binaries.
+- Sensitive user files (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, etc.) and the
+  app's own credentials (`config.env`, `secret.key`, `macron.db`) are hidden via
+  clean `tmpfs` mounts.
+- Sibling session workspaces are invisible; only the active session's workspace
+  is writable.
+- Isolated process namespace (PID/IPC) prevents inspecting or signaling host processes.
+- Set `MACRON_SANDBOX_NO_NET=1` (or `-sandbox-no-net`) for offline container execution.
+
