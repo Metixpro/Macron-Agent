@@ -143,10 +143,15 @@ func (b *Bot) dispatch(u telegram.Update) {
 		defer func() {
 			if p := recover(); p != nil {
 				log.Printf("panic while handling update %d: %v\n%s", u.UpdateID, p, debug.Stack())
-				if m := u.Message; m != nil {
+				if m := u.Message; m != nil && m.From != nil {
 					ctx, cancel := b.ctx(10 * time.Second)
 					defer cancel()
-					_, _ = b.api.SendHTML(ctx, m.Chat.ID, b.bidi(m.Chat.ID, b.langOf(m.From).t(textError)), telegram.SendOptions{ReplyTo: m.MessageID})
+					l := b.langOf(m.From)
+					text := l.t(textError)
+					if b.isOwner(m.From.ID) {
+						text += "\n" + l.t("یه خطای داخلی بود (جزئیاتش توی لاگه: macron telegram logs):") + "\n<code>" + esc(shortText(fmt.Sprint(p), 300)) + "</code>"
+					}
+					_, _ = b.api.SendHTML(ctx, m.Chat.ID, b.bidi(m.Chat.ID, text), telegram.SendOptions{ReplyTo: m.MessageID})
 				}
 			}
 		}()
@@ -293,14 +298,18 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	defer cancel()
 
 	l := b.langOf(m.From)
+	uid := m.From.ID
+	admin := b.isAdmin(uid)
 	user, _, err := b.st.TouchUser(ctx, userInfo(m.From))
 	if err != nil {
 		log.Printf("touch user %d: %v", m.From.ID, err)
-		b.reply(m, l.t(textError))
-		return
+		if !admin {
+			b.reply(m, l.t(textError))
+			return
+		}
+		b.reply(m, l.t(textError)+"\n"+l.t("دیتابیس خطا داد (شاید دیسک پره، یا یه برنامهٔ دیگه قفلش کرده):")+"\n<code>"+esc(shortText(err.Error(), 300))+"</code>")
+		user = &store.User{ID: uid, Username: m.From.Username, FirstName: m.From.FirstName, LastName: m.From.LastName, LanguageCode: m.From.LanguageCode}
 	}
-	uid := m.From.ID
-	admin := b.isAdmin(uid)
 
 	if admin && m.Chat.Private() {
 

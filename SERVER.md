@@ -528,3 +528,7 @@ key `/dashboard` shows.
 
 
 Builds use Go 1.26.11, which fixes a crash of HTTP servers (GO-2026-6859). New dependencies: the pgx (PostgreSQL) and MySQL drivers.
+
+### 1.6.1: commands keep working when the database refuses
+
+When the database refused a write (a full disk, or another program holding it locked), every message, commands included, got only «Something went wrong». The owner now sees the database error itself, and commands such as /update and /settings still run. A crash while handling a message also shows the owner its cause.
