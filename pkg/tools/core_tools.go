@@ -203,6 +203,146 @@ func (r *Registry) registerCoreTools() {
 			}
 			return res.Format(), nil
 		})
+
+	r.add(ToolPageWatch,
+		"Monitor web pages for changes, take baseline snapshots, compute diffs, and generate change alerts.",
+		map[string]any{
+			"action":   enumProp("check", "create", "check", "list", "delete"),
+			"url":      prop("string", "Target URL to monitor (for create)"),
+			"title":    prop("string", "Descriptive title for the monitor"),
+			"watch_id": prop("string", "ID of the watch (for check or delete)"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "list"
+			}
+			switch action {
+			case "create":
+				u := strArg(args, "url")
+				if u == "" {
+					return "error: url is required for create", nil
+				}
+				w, err := r.CreatePageWatch(ctx, sessionID, u, strArg(args, "selector"), strArg(args, "title"))
+				if err != nil {
+					return "error creating page watch: " + err.Error(), nil
+				}
+				return fmt.Sprintf("✅ Page monitor created: %s (%s). ID: %s", w.Title, w.URL, w.ID), nil
+			case "check":
+				id := strArg(args, "watch_id")
+				if id == "" {
+					return "error: watch_id is required for check", nil
+				}
+				_, report, err := r.CheckPageWatch(ctx, sessionID, id)
+				if err != nil {
+					return "error checking page watch: " + err.Error(), nil
+				}
+				return report, nil
+			case "delete":
+				id := strArg(args, "watch_id")
+				if id == "" {
+					return "error: watch_id is required for delete", nil
+				}
+				path := fmt.Sprintf("%s/%s.json", pageWatchDir, id)
+				_ = r.Machine.Remove(sessionID, path)
+				return fmt.Sprintf("Page monitor %s deleted.", id), nil
+			default:
+				list, err := r.ListPageWatches(sessionID)
+				if err != nil {
+					return "error: " + err.Error(), nil
+				}
+				if len(list) == 0 {
+					return "No active page watches in this session.", nil
+				}
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("### Active Page Monitors (%d)\n", len(list)))
+				for i, w := range list {
+					sb.WriteString(fmt.Sprintf("%d. **%s** (%s) — Changes detected: %d, ID: `%s`\n",
+						i+1, w.Title, w.URL, w.ChangeCount, w.ID))
+				}
+				return strings.TrimSpace(sb.String()), nil
+			}
+		})
+
+	r.add(ToolPriceAlert,
+		"Set, check, and manage threshold price alerts for gold, currencies, coins, and crypto.",
+		map[string]any{
+			"action":       enumProp("check", "set", "check", "list", "delete"),
+			"asset":        prop("string", "Asset: usd, eur, gold18, emami, btc, eth, usdt"),
+			"operator":     enumProp(">=", ">", ">=", "<", "<="),
+			"target_price": prop("number", "Target price threshold"),
+			"alert_id":     prop("string", "Alert ID (for delete)"),
+			"note":         prop("string", "Optional reminder note"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			action := strArg(args, "action")
+			if action == "" {
+				action = "list"
+			}
+			switch action {
+			case "set":
+				asset := strArg(args, "asset")
+				if asset == "" {
+					return "error: asset is required (e.g. usd, gold18, emami, btc)", nil
+				}
+				target := floatArg(args, "target_price")
+				if target <= 0 {
+					return "error: valid target_price is required", nil
+				}
+				a, err := r.CreatePriceAlert(sessionID, asset, strArg(args, "operator"), target, strArg(args, "note"))
+				if err != nil {
+					return "error setting alert: " + err.Error(), nil
+				}
+				return fmt.Sprintf("✅ هشدار قیمت ثبت شد: %s وقتی که قیمت %s %.0f شود. (شناسه: %s)",
+					a.AssetFa, a.Operator, a.TargetPrice, a.ID), nil
+			case "check":
+				notifications, err := r.CheckPriceAlerts(ctx, sessionID)
+				if err != nil {
+					return "error checking alerts: " + err.Error(), nil
+				}
+				if len(notifications) == 0 {
+					return "تمام هشدارهای قیمت بررسی شدند؛ هیچ هشداری فعال نشد (قیمت‌ها در محدوده عادی هستند).", nil
+				}
+				return strings.Join(notifications, "\n\n"), nil
+			case "delete":
+				id := strArg(args, "alert_id")
+				if id == "" {
+					return "error: alert_id is required", nil
+				}
+				_ = r.DeletePriceAlert(sessionID, id)
+				return fmt.Sprintf("هشدار قیمت %s حذف شد.", id), nil
+			default:
+				list, err := r.ListPriceAlerts(sessionID)
+				if err != nil {
+					return "error: " + err.Error(), nil
+				}
+				if len(list) == 0 {
+					return "هیچ هشدار قیمت فعالی ثبت نشده است.", nil
+				}
+				var sb strings.Builder
+				sb.WriteString("### هشدارهای قیمت فعال:\n")
+				for i, a := range list {
+					st := "در انتظار"
+					if a.Triggered {
+						st = "فعال‌شده 🚨"
+					}
+					sb.WriteString(fmt.Sprintf("%d. **%s**: شرط `%s %.0f` (%s) — شناسه: `%s`\n",
+						i+1, a.AssetFa, a.Operator, a.TargetPrice, st, a.ID))
+				}
+				return strings.TrimSpace(sb.String()), nil
+			}
+		})
+
+	r.add(ToolTSETMCStock,
+		"Query Tehran Stock Exchange (TSETMC) live stock quotes, market indices, and Codal disclosure announcements.",
+		map[string]any{
+			"symbol": prop("string", "Stock ticker symbol (e.g. 'فولاد', 'فملی', 'خودرو', 'شپنا', 'شستا') or 'شاخص' for index overview"),
+		}, nil, func(ctx context.Context, _ string, args map[string]any) (string, error) {
+			sym := strArg(args, "symbol")
+			overview, err := r.QueryTSETMC(ctx, sym)
+			if err != nil {
+				return "tsetmc error: " + err.Error(), nil
+			}
+			return overview.Format(), nil
+		})
 }
 
 func (r *Registry) webSearch(ctx context.Context, _ string, args map[string]any) (string, error) {
