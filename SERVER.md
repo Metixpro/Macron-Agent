@@ -548,3 +548,13 @@ Messages you send while Macron is working now reach it right away, the way Herme
 - Tool-call IDs that a provider repeats (some send `call_0` for every call) are made unique, so results always pair with their calls.
 - A long message that Telegram splits into pieces reaches Macron as one message. Only a piece near Telegram's length limit waits (1.5 seconds) for the rest; ordinary messages are not delayed.
 - After a restart (an update, `macron telegram restart`, a crash) Telegram no longer hands the last messages over again: Macron tells Telegram what it handled before it stops, and skips anything it handled in the day before a crash.
+
+### 1.9.0: answers that stay good
+
+Tested against a real model (DeepSeek V4.1 Flash) in Telegram:
+
+- A check that looks for "done" claims with no tool behind them mistook «تسک زمان‌بندی‌شده» (a noun) for "I scheduled it", questioned a good answer, and the reply to that question replaced the answer. A word joined with a half space to «شده» is now read as a description, not a claim, and every such check lets the model answer «[KEEP]», which sends its first answer unchanged.
+- Only one such check runs per request, so one check can no longer lead to another (a greeting had turned into restarting an old server).
+- The context Macron gets with each message names the background jobs running now, so it no longer says a server is up after a restart ended it.
+- The conversation uses the model's own temperature, as Hermes Agent does, instead of 0.3; a temperature set for a provider in the settings still wins, and Macron's internal helpers keep 0.3.
+- Answers match the weight of the question: a short question or «کوتاه بگو» gets a short answer, without filler or news about earlier jobs.

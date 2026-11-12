@@ -244,7 +244,7 @@ How you work (like a capable professional at a computer, not a chatbot):
 	}
 	sb.WriteString(`6. Verify before you say it's done: ` + verify + `. Fix what is wrong instead of reporting it. Never say something was done or sent unless a tool result of this request shows it: after you stop, delete, log out or change something, check it with one read-only call and report what that showed.
 7. Persist. When a way fails, read the error and try another (another source, site, mirror, tool, parameters, or code); try at least two real alternatives before saying something can't be done, and never hand the user a job you can still do yourself.
-8. Report. Lead with the outcome; then only what the user needs (key facts, what you assumed, anything left). Finish the whole job before you answer.
+8. Report. Lead with the outcome; then only what the user needs (key facts, what you assumed, anything left). Match the length to the ask: a one-line question, or «کوتاه بگو», gets a few lines; finished work gets what changed, what was checked and what is left, never a replay of the steps. No filler, no restating the request, no summary of what you just said, no news about earlier jobs the user did not ask about. Agree because it is right, not because the user said it. Finish the whole job before you answer.
 `)
 	return sb.String()
 }
@@ -929,6 +929,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	seen := map[string]bool{}
 	calls := map[string]int{}
 	var callIDs map[string]bool
+	held, settled, reviewed := "", false, false
 
 	seenOut, gen := map[string]cachedOut{}, 0
 	noTools := &textTools{}
@@ -1233,6 +1234,12 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		if len(toolCalls) == 0 && resp.FinishReason == "length" {
 			visible = a.continueCut(ctx, messages, visible, onText)
 		}
+		if held != "" {
+			if len(toolCalls) == 0 && strings.Contains(visible, keepMark) {
+				visible, settled = held, true
+			}
+			held = ""
+		}
 
 		assistant := llm.Message{Role: "assistant", Content: visible, ToolCalls: toolCalls}
 		if textMode {
@@ -1252,17 +1259,20 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 				}
 			}
 			canRetry := !req.AnswerOnLastStep && step < maxSteps-1 && ctx.Err() == nil
+			canRetry = canRetry && !settled
 			if canRetry && nudges < maxNudges(maxSteps) && failures > nudgedAt && givesUp(visible) {
 				nudges, nudgedAt = nudges+1, failures
 				escalate("it gave up after a failed step")
-				messages = append(messages, llm.Message{Role: "user", Content: noticePersist})
+				held = visible
+				messages = append(messages, llm.Message{Role: "user", Content: noticePersist + noticeKeep})
 				continue
 			}
-			if canRetry && !acted && offered != nil && announcesWork(visible, len(res.ToolsUsed) == 0) {
-				acted = true
+			if canRetry && !acted && !reviewed && offered != nil && announcesWork(visible, len(res.ToolsUsed) == 0) {
+				acted, reviewed = true, true
 				res.quality(resp.Provider, func(q *CallQuality) { q.Stalled++ })
 				escalate("it announced work and called nothing")
-				messages = append(messages, llm.Message{Role: "user", Content: noticeActNow})
+				held = visible
+				messages = append(messages, llm.Message{Role: "user", Content: noticeActNow + noticeKeep})
 				continue
 			}
 			if names := imitatedCalls(visible, known); canRetry && !faked && offered != nil && len(names) > 0 {
@@ -1274,18 +1284,20 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			}
 			if bad := led.unbacked(visible); canRetry && backNudges < 2 && !chat && offered != nil && len(bad) > 0 {
 				backNudges++
-				claimed = true
+				claimed, reviewed = true, true
 				log.Printf("agent: session %s: the answer claims %s; receipts: %s", req.SessionID, claimWords(bad), led.summary())
 				res.quality(resp.Provider, func(q *CallQuality) { q.Stalled++ })
 				escalate("it said it was done and the tools did not")
-				messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeUnbacked, claimWords(bad), led.summary())})
+				held = visible
+				messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeUnbacked, claimWords(bad), led.summary()) + noticeKeep})
 				continue
 			}
-			if canRetry && !claimed && !chat && offered != nil && len(res.ToolsUsed) == 0 && claimsDone(visible) {
-				claimed = true
+			if canRetry && !claimed && !reviewed && !chat && offered != nil && len(res.ToolsUsed) == 0 && claimsDone(visible) {
+				claimed, reviewed = true, true
 				res.quality(resp.Provider, func(q *CallQuality) { q.Stalled++ })
 				escalate("it said it was done and ran nothing")
-				messages = append(messages, llm.Message{Role: "user", Content: noticeClaimed})
+				held = visible
+				messages = append(messages, llm.Message{Role: "user", Content: noticeClaimed + noticeKeep})
 				continue
 			}
 			if canRetry && !vNudged && !chat && offered != nil && (callable["bash_execute"] || callable["run_code"]) {
@@ -1298,16 +1310,18 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 					continue
 				}
 			}
-			if canRetry && !lookedUp && !chat && offered != nil && callable["web_search"] && len(res.ToolsUsed) == 0 && asksFirst(visible) {
-				lookedUp = true
-				messages = append(messages, llm.Message{Role: "user", Content: noticeLookItUp})
+			if canRetry && !lookedUp && !reviewed && !chat && offered != nil && callable["web_search"] && len(res.ToolsUsed) == 0 && asksFirst(visible) {
+				lookedUp, reviewed = true, true
+				held = visible
+				messages = append(messages, llm.Message{Role: "user", Content: noticeLookItUp + noticeKeep})
 				continue
 			}
-			if ability, ok := deniesTools(visible, known); canRetry && !chat && !denied && len(res.ToolsUsed) == 0 && ok {
-				denied = true
+			if ability, ok := deniesTools(visible, known); canRetry && !chat && !denied && !reviewed && len(res.ToolsUsed) == 0 && ok {
+				denied, reviewed = true, true
 				res.quality(resp.Provider, func(q *CallQuality) { q.Stalled++ })
 				escalate("it said it could not do what its tools do")
-				messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeYouCan, ability)})
+				held = visible
+				messages = append(messages, llm.Message{Role: "user", Content: fmt.Sprintf(noticeYouCan, ability) + noticeKeep})
 				continue
 			}
 			if canRetry && !unnamed && nameless > 0 && strings.TrimSpace(visible) == "" {
@@ -1329,7 +1343,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 					continue
 				}
 			}
-			res.Answer = finalText(dropImitatedCalls(visible, known), len(res.ToolsUsed) > 0, req.Lang)
+			res.Answer = finalText(dropImitatedCalls(strings.TrimSpace(strings.ReplaceAll(visible, keepMark, "")), known), len(res.ToolsUsed) > 0, req.Lang)
 			if req.depth == 0 {
 				res.Answer = a.guard(ctx, leak, messages, res.Answer, req, known, l.OnText)
 			}
@@ -1645,7 +1659,7 @@ func (a *Agent) complete(ctx context.Context, messages []llm.Message, tools []ll
 	if noTools.noImages {
 		messages = withoutImages(messages)
 	}
-	req := llm.Request{Messages: messages, Tools: tools, OnDelta: onText}
+	req := llm.Request{Messages: messages, Tools: tools, OnDelta: onText, OwnTemperature: true}
 	if noTools.on {
 		req.Tools, req.Messages = nil, withCatalog(messages, tools)
 	}

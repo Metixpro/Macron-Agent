@@ -317,7 +317,7 @@ func (a *Agent) continueCut(ctx context.Context, messages []llm.Message, text st
 			prefix := text
 			stream = func(s string) { onText(prefix + s) }
 		}
-		resp, err := a.LLM.Complete(ctx, llm.Request{Messages: msgs, OnDelta: stream})
+		resp, err := a.LLM.Complete(ctx, llm.Request{Messages: msgs, OnDelta: stream, OwnTemperature: true})
 		if err != nil || strings.TrimSpace(resp.Message.Content) == "" {
 			break
 		}

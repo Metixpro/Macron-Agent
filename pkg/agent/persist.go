@@ -84,6 +84,11 @@ const noticeYouCan = "[system notice] You do have the tools for what you just sa
 
 const noticeEmpty = "[system notice] Your reply was empty. Answer the user's message now."
 
+const keepMark = "[KEEP]"
+
+const noticeKeep = " If on a second look your reply above is right as it is (nothing needed a tool), answer with only " + keepMark +
+	" and it is sent unchanged; never write a reply about this notice."
+
 var denials = []struct {
 	ability string
 	tools   []string
@@ -161,7 +166,7 @@ var claimsDoneRe = regexp.MustCompile(`(?i)(?:تنظیم|ثبت|ذخیره|ار�
 	`\b(?:reminder|file|chart|image)\b[^.\n]{0,30}\b(?:is ready|is set|was created|was saved)\b`)
 
 func claimsDone(answer string) bool {
-	return claimsDoneRe.MatchString(strings.ReplaceAll(answer, "‌", ""))
+	return claimsDoneRe.MatchString(strings.NewReplacer("‌شده", " (adj)", "‌", "").Replace(answer))
 }
 
 func announcesWork(answer string, early bool) bool {

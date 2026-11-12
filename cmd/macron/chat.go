@@ -905,6 +905,20 @@ func (b *Bot) workspaceAbout(session string) string {
 	if len(folders) > 0 {
 		lines = append(lines, "Folders in the workspace (projects, extracted archives): "+strings.Join(folders, ", "))
 	}
+	switch jobs := b.app.Machine.Jobs(session); {
+	case len(jobs) > 0:
+		var js []string
+		for _, j := range jobs[max(len(jobs)-5, 0):] {
+			state := "running for " + ageWord(time.Since(j.Started))
+			if !j.Running {
+				state = fmt.Sprintf("ended (exit %d)", j.Code)
+			}
+			js = append(js, fmt.Sprintf("job %d %s: %s", j.ID, state, textutil.TruncateRunes(textutil.OneLine(j.Command), 60, "…")))
+		}
+		lines = append(lines, "Background jobs now: "+strings.Join(js, "; "))
+	case len(files) > 0:
+		lines = append(lines, "Background jobs now: none (a server or watcher started earlier is not running; a restart of Macron ends them)")
+	}
 	return strings.Join(lines, "\n")
 }
 

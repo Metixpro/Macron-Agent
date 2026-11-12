@@ -34,6 +34,8 @@ type Request struct {
 
 	FailFast bool
 
+	OwnTemperature bool
+
 	effortCap   string
 	effortExact string
 	effortSet   bool
@@ -640,7 +642,7 @@ func (c *Client) encode(body ChatRequest, req Request) ([]byte, error) {
 		return json.Marshal(c.responsesBody(req))
 	}
 	reasoning := reasoningModel(c.Model)
-	if t := c.Temperature; !c.noTemperature.Load() && (c.TemperatureSet || !reasoning) {
+	if t := c.Temperature; !c.noTemperature.Load() && (c.TemperatureSet || !reasoning && !req.OwnTemperature) {
 		body.Temperature = &t
 	}
 	if body.MaxTokens > 0 && (reasoning || c.completionTokens.Load()) {

@@ -251,7 +251,7 @@ var (
 )
 
 func normFa(s string) string {
-	return strings.NewReplacer("‌", "", "ـ", "", "ي", "ی", "ك", "ک", "‏", "", "‎", "").Replace(s)
+	return strings.NewReplacer("‌شده", " (adj)", "‌", "", "ـ", "", "ي", "ی", "ك", "ک", "‏", "", "‎", "").Replace(s)
 }
 
 func claimsIn(answer string) []claim {

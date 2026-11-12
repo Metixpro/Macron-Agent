@@ -303,7 +303,7 @@ func (a *Agent) guard(ctx context.Context, g *leakGuard, messages []llm.Message,
 		stream = func(s string) { draft.push(visibleStream(s)) }
 	}
 	if ctx.Err() == nil {
-		resp, err := a.LLM.Complete(ctx, llm.Request{Messages: msgs, OnDelta: stream})
+		resp, err := a.LLM.Complete(ctx, llm.Request{Messages: msgs, OnDelta: stream, OwnTemperature: true})
 		if err == nil {
 			if t := strings.TrimSpace(stripToolMarkup(resp.Message.Content, known)); t != "" && !g.leaks(t, mentioned) {
 				return t

@@ -108,7 +108,7 @@ func (c *Client) responsesBody(req Request) map[string]any {
 	if req.MaxTokens > 0 {
 		body["max_output_tokens"] = req.MaxTokens
 	}
-	if t := c.Temperature; !c.noTemperature.Load() && (c.TemperatureSet || !reasoningModel(c.Model)) {
+	if t := c.Temperature; !c.noTemperature.Load() && (c.TemperatureSet || !reasoningModel(c.Model) && !req.OwnTemperature) {
 		body["temperature"] = t
 	}
 	if e := c.wireEffort(req); e != "" {
