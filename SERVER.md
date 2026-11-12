@@ -532,3 +532,12 @@ Builds use Go 1.26.11, which fixes a crash of HTTP servers (GO-2026-6859). New d
 ### 1.6.1: commands keep working when the database refuses
 
 When the database refused a write (a full disk, or another program holding it locked), every message, commands included, got only «Something went wrong». The owner now sees the database error itself, and commands such as /update and /settings still run. A crash while handling a message also shows the owner its cause.
+
+### 1.7.0: messages while it works
+
+Messages you send while Macron is working now reach it right away, the way Hermes Agent handles them:
+
+- A long command (a build, an install, `sleep` in a poller) no longer holds your message until it ends. Two seconds after the message comes in, the command moves to a background job and goes on there; Macron reads your message, and can follow the job with `shell_jobs` (the new `action=wait` waits for it to end). This works in Telegram and in the terminal interface.
+- Sub-agents hear you too: a message sent while they work goes to them as well as to the main agent, instead of waiting for them to finish.
+- When a message cuts a reply off while it is being written, the cut part stays in the conversation, so the next reply builds on it instead of starting over.
+- An answer that cannot be sent (Telegram out of reach, rate limits, a server error) is tried again for about a minute, then kept in the database and sent once Telegram answers, after a restart too, marked «♻️ This answer is late». Kept answers expire after a day.

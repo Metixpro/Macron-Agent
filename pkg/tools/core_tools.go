@@ -69,11 +69,12 @@ func (r *Registry) registerCoreTools() {
 				"background":      prop("boolean", "Keep it running (a dev server, a database, a watcher): later commands and run_code reach it on localhost; see "+ToolShellJobs),
 			}, []string{"command"}, r.bashExecute)
 		r.add(ToolShellJobs,
-			"The background jobs of bash_execute: list them, read a job's latest output, or stop it.",
+			"The background jobs of bash_execute: list them, read a job's latest output, wait for one to end, or stop it.",
 			map[string]any{
-				"action": enumProp("Default list", "list", "output", "kill"),
-				"job":    prop("integer", ""),
-				"lines":  prop("integer", "Output lines (default 80, max 500)"),
+				"action":          enumProp("Default list", "list", "output", "wait", "kill"),
+				"job":             prop("integer", ""),
+				"lines":           prop("integer", "Output lines (default 80, max 500)"),
+				"timeout_seconds": prop("integer", "wait: at most this long (default 120, max 7200)"),
 			}, nil, r.shellJobs)
 	}
 
@@ -659,7 +660,7 @@ func (r *Registry) bashExecute(ctx context.Context, sessionID string, args map[s
 	}
 	timeout := time.Duration(intArg(args, "timeout_seconds", 60, 1, maxBashSeconds)) * time.Second
 	before := r.rootSnapshot(sessionID)
-	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Shell: cmd, Timeout: timeout, Tee: outputTee(ctx), InSession: true})
+	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Shell: cmd, Timeout: timeout, Tee: outputTee(ctx), InSession: true, Yield: yieldOf(ctx)})
 	out := terminalTranscript(commandLabel(cmd), res, true)
 	if files := r.changedFiles(sessionID, before); len(files) > 0 {
 		out += "\n[new or changed files in the workspace: " + strings.Join(files, ", ") + "]"

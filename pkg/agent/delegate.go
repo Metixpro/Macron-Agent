@@ -222,8 +222,21 @@ func (a *Agent) delegateTool(parent Request, l *EventListener) LocalTool {
 				return allowed[name] && (filter == nil || filter(name))
 			},
 
-			Listener: &EventListener{OnToolStart: shown.OnToolStart, OnToolEnd: onEnd, OnToolProgress: shown.OnToolProgress},
-			depth:    parent.depth + 1,
+			Listener:  &EventListener{OnToolStart: shown.OnToolStart, OnToolEnd: onEnd, OnToolProgress: shown.OnToolProgress},
+			ToolYield: parent.ToolYield,
+			Overheard: parent.Overheard,
+			depth:     parent.depth + 1,
+		}
+		if parent.Overheard != nil {
+			_, from := parent.Overheard(-1)
+			sub.Inbox = func() []llm.Message {
+				msgs, next := parent.Overheard(from)
+				from = next
+				for i, m := range msgs {
+					msgs[i] = overheard(m)
+				}
+				return msgs
+			}
 		}
 
 		pctx, sctx := ctx, ctx
@@ -401,4 +414,20 @@ func workspaceNote(shared []string) string {
 	}
 	return s + "Write your results in it and name every file you made in your report (intermediate files in work/): " +
 		"only the files you name are handed over to the main workspace when you finish."
+}
+
+const overheardNote = "[The user sent this to the main agent while you work on your sub-task. If it changes your part, follow it; if not, go on. The main agent sees it too.]\n"
+
+func overheard(m llm.Message) llm.Message {
+	text := overheardNote + strings.TrimPrefix(m.Text(), InterjectionNote)
+	out := llm.Message{Role: "user", Content: text}
+	if len(m.Parts) > 0 {
+		out.Parts = []llm.Part{llm.TextPart(text)}
+		for _, p := range m.Parts {
+			if p.Type != "text" {
+				out.Parts = append(out.Parts, p)
+			}
+		}
+	}
+	return out
 }

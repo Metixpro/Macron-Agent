@@ -358,6 +358,10 @@ func terminalTranscript(cmd string, res *machine.ExecutionResult, hints bool) st
 		sb.WriteString(out + "\n")
 	}
 	switch {
+	case res.Job != 0:
+		fmt.Fprintf(&sb, "[still running after %s, now as background job %d (pid %d): the user sent a new message, so the command was moved to the background "+
+			"and goes on there; its further output goes to %s/%d.log. Read their message, then follow the job with %s (action=wait waits for its end, "+
+			"action=output shows its output, action=kill stops it)]", res.Duration, res.Job, res.PID, machine.JobsDir, res.Job, ToolShellJobs)
 	case res.ExitCode == 124 && res.Error != "":
 		fmt.Fprintf(&sb, "[timed out: %s — the program was stopped]", res.Error)
 	case res.ExitCode == -1 && res.Error != "":

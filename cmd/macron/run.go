@@ -43,6 +43,8 @@ type activeRun struct {
 	modelCancel   context.CancelFunc
 	modelRedirect bool
 	delegates     int
+	yield         chan struct{}
+	heard         []llm.Message
 }
 
 type interjection struct {
@@ -81,7 +83,7 @@ func (r *activeRun) modelRequest(ctx context.Context) (context.Context, func() b
 func (r *activeRun) steer(x *interjection) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.closed || r.answering || r.stopped.Load() || r.delegates > 0 || len(r.steering) >= maxPending {
+	if r.closed || r.answering || r.stopped.Load() || len(r.steering) >= maxPending {
 		return false
 	}
 	r.steering = append(r.steering, x)
@@ -89,7 +91,36 @@ func (r *activeRun) steer(x *interjection) bool {
 		r.modelRedirect = true
 		r.modelCancel()
 	}
+	r.arrived(x)
 	return true
+}
+
+func (r *activeRun) arrived(x *interjection) {
+	if r.delegates > 0 {
+		r.heard = append(r.heard, x.msg)
+	}
+	if r.yield != nil {
+		close(r.yield)
+		r.yield = nil
+	}
+}
+
+func (r *activeRun) toolYield() <-chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.yield == nil {
+		r.yield = make(chan struct{})
+	}
+	return r.yield
+}
+
+func (r *activeRun) overheard(from int) ([]llm.Message, int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if from < 0 || from > len(r.heard) {
+		return nil, len(r.heard)
+	}
+	return append([]llm.Message(nil), r.heard[from:]...), len(r.heard)
 }
 
 func (r *activeRun) delegation(delta int) {
@@ -125,7 +156,11 @@ func (r *activeRun) push(x *interjection) (ok, queued bool) {
 	} else {
 		r.pending = append(r.pending, x)
 	}
-	return true, r.queueNext || r.answering || r.stopped.Load()
+	queued = r.queueNext || r.answering || r.stopped.Load()
+	if !queued {
+		r.arrived(x)
+	}
+	return true, queued
 }
 
 func (x *interjection) merge(y *interjection) *interjection {

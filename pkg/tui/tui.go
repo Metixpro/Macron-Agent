@@ -35,7 +35,7 @@ type Info struct {
 
 type Engine interface {
 	Info() Info
-	Turn(ctx context.Context, text string, l *agent.EventListener, inbox func() []string) (*agent.Result, error)
+	Turn(ctx context.Context, text string, l *agent.EventListener, inbox func() []string, yield func() <-chan struct{}) (*agent.Result, error)
 	New(ctx context.Context) error
 	Compact(ctx context.Context) (string, error)
 	Models(ctx context.Context) (current string, list []string, err error)
@@ -120,12 +120,26 @@ type picker struct {
 type queue struct {
 	mu    sync.Mutex
 	items []string
+	yield chan struct{}
 }
 
 func (q *queue) add(s string) {
 	q.mu.Lock()
 	q.items = append(q.items, s)
+	if q.yield != nil {
+		close(q.yield)
+		q.yield = nil
+	}
 	q.mu.Unlock()
+}
+
+func (q *queue) signal() <-chan struct{} {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.yield == nil {
+		q.yield = make(chan struct{})
+	}
+	return q.yield
 }
 
 func (q *queue) take() []string {
@@ -683,7 +697,7 @@ func (m *model) startTurn(text string) tea.Cmd {
 			}
 			cancel()
 		}()
-		res, err := e.Turn(ctx, text, l, inbox)
+		res, err := e.Turn(ctx, text, l, inbox, q.signal)
 		return doneMsg{res: res, err: err, took: time.Since(start)}
 	}
 	return tea.Batch(run, m.spin.Tick)

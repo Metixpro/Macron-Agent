@@ -254,7 +254,7 @@ func (s *Machine) reapShells() {
 	}
 }
 
-func (s *Machine) runInShell(ctx context.Context, sh *shell, opts RunOptions) *ExecutionResult {
+func (s *Machine) runInShell(ctx context.Context, sessionID string, sh *shell, opts RunOptions) *ExecutionResult {
 	release, err := s.acquire(ctx, opts.Heavy)
 	if err != nil {
 		return &ExecutionResult{ExitCode: -1, Error: err.Error()}
@@ -297,11 +297,40 @@ func (s *Machine) runInShell(ctx context.Context, sh *shell, opts RunOptions) *E
 			_ = sh.send(map[string]any{"op": "stop", "id": id})
 		}
 	}
+	yield := opts.Yield
+	var grace <-chan time.Time
+	detachJob := 0
+	undetach := func() {
+		if detachJob != 0 {
+			sh.mu.Lock()
+			delete(sh.jobs, detachJob)
+			sh.mu.Unlock()
+			detachJob = 0
+		}
+	}
 wait:
 	for {
 		select {
+		case <-yield:
+			yield = nil
+			grace = time.After(yieldGrace)
+		case <-grace:
+			grace = nil
+			if !stopped {
+				detachJob = s.detach(sessionID, sh, id, script, start)
+			}
 		case m := <-ch:
 			switch m.Op {
+			case "detached":
+				res.Job, res.PID = m.Job, m.PID
+				sh.mu.Lock()
+				if j := sh.jobs[m.Job]; j != nil {
+					j.PID = m.PID
+				}
+				sh.mu.Unlock()
+				break wait
+			case "nodetach":
+				undetach()
 			case "out":
 				w := io.Writer(stdout)
 				if m.Err && !opts.MergeOutput {
@@ -312,6 +341,7 @@ wait:
 					_, _ = opts.Tee.Write([]byte(m.Data))
 				}
 			case "exit":
+				undetach()
 				switch {
 				case m.Error != "":
 					res.ExitCode, res.Error = -1, m.Error
@@ -356,6 +386,40 @@ wait:
 	return res
 }
 
+const yieldGrace = 2 * time.Second
+
+func (s *Machine) detach(sessionID string, sh *shell, id int, command string, start time.Time) int {
+	sh.mu.Lock()
+	running := 0
+	for _, j := range sh.jobs {
+		if j.Running {
+			running++
+		}
+	}
+	if running >= MaxJobs {
+		sh.mu.Unlock()
+		return 0
+	}
+	sh.nextJob++
+	n := sh.nextJob
+	log := fmt.Sprintf("%s/%d.log", JobsDir, n)
+	sh.jobs[n] = &Job{ID: n, Command: command, Started: start, Running: true, Log: log}
+	sh.mu.Unlock()
+	drop := func() int {
+		sh.mu.Lock()
+		delete(sh.jobs, n)
+		sh.mu.Unlock()
+		return 0
+	}
+	if err := s.WriteFile(sessionID, log, nil); err != nil {
+		return drop()
+	}
+	if err := sh.send(map[string]any{"op": "detach", "id": id, "job": n, "log": sh.ws + "/" + log}); err != nil {
+		return drop()
+	}
+	return n
+}
+
 func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job, error) {
 	ws, err := s.Workspace(sessionID)
 	if err != nil {
@@ -372,35 +436,44 @@ func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job,
 			running++
 		}
 	}
-	sh.nextJob++
-	n := sh.nextJob
-	sh.mu.Unlock()
 	if running >= MaxJobs {
+		sh.mu.Unlock()
 		return Job{}, fmt.Errorf("%d background jobs are running already; stop one first", running)
 	}
+	sh.nextJob++
+	n := sh.nextJob
 	log := fmt.Sprintf("%s/%d.log", JobsDir, n)
-	if err := s.WriteFile(sessionID, log, nil); err != nil {
+	j := &Job{ID: n, Command: command, Started: time.Now(), Running: true, Log: log}
+	sh.jobs[n] = j
+	sh.mu.Unlock()
+	fail := func(err error) (Job, error) {
+		sh.mu.Lock()
+		delete(sh.jobs, n)
+		sh.mu.Unlock()
 		return Job{}, err
+	}
+	if err := s.WriteFile(sessionID, log, nil); err != nil {
+		return fail(err)
 	}
 	id, ch := sh.call()
 	defer sh.drop(id)
 	sh.touch()
 	if err := sh.send(map[string]any{"op": "bg", "id": id, "job": n, "script": s.hostPath(ws, command), "log": ws + "/" + log}); err != nil {
-		return Job{}, fmt.Errorf("the background shell is gone: %w", err)
+		return fail(fmt.Errorf("the background shell is gone: %w", err))
 	}
 	select {
 	case m := <-ch:
 		if m.Op != "started" {
-			return Job{}, fmt.Errorf("could not start it: %s", m.Error)
+			return fail(fmt.Errorf("could not start it: %s", m.Error))
 		}
-		j := &Job{ID: n, Command: command, PID: m.PID, Started: time.Now(), Running: true, Log: log}
 		sh.mu.Lock()
-		sh.jobs[n] = j
+		j.PID = m.PID
+		out := *j
 		sh.mu.Unlock()
-		return *j, nil
+		return out, nil
 	case <-sh.done:
 		why, _ := sh.why.Load().(string)
-		return Job{}, errors.New("the background shell ended: " + why)
+		return fail(errors.New("the background shell ended: " + why))
 	case <-ctx.Done():
 		return Job{}, ctx.Err()
 	case <-time.After(20 * time.Second):
@@ -535,7 +608,7 @@ def kill(p):
     except OSError:
         pass
 
-def pump(rid, f, err):
+def pump(rid, f, err, r):
     dec = codecs.getincrementaldecoder("utf-8")("replace")
     while True:
         try:
@@ -544,9 +617,32 @@ def pump(rid, f, err):
             break
         if not d:
             break
-        t = dec.decode(d)
-        if t:
-            send({"op": "out", "id": rid, "err": err, "data": t})
+        with r["lk"]:
+            if r["log"] is not None:
+                try:
+                    r["log"].write(d)
+                except (OSError, ValueError):
+                    pass
+                continue
+            t = dec.decode(d)
+            if t:
+                send({"op": "out", "id": rid, "err": err, "data": t})
+
+def detach(m):
+    r = runs.get(m.get("id"))
+    if r is None:
+        return
+    with r["lk"]:
+        if r["ended"] or r["log"] is not None:
+            return
+        try:
+            r["log"] = open(m["log"], "ab", buffering=0)
+        except OSError as e:
+            send({"op": "nodetach", "id": m["id"], "error": str(e)})
+            return
+        r["job"] = m["job"]
+        jobs[m["job"]] = {"p": r["p"], "log": m["log"]}
+        send({"op": "detached", "id": m["id"], "job": m["job"], "pid": r["p"].pid})
 
 def run(m):
     rid, stdin = m["id"], m.get("stdin") or ""
@@ -556,7 +652,8 @@ def run(m):
     except OSError as e:
         send({"op": "exit", "id": rid, "code": -1, "error": str(e)})
         return
-    runs[rid] = p
+    r = {"p": p, "lk": threading.Lock(), "log": None, "job": None, "ended": False}
+    runs[rid] = r
     if stdin:
         def feed():
             try:
@@ -565,16 +662,36 @@ def run(m):
             except OSError:
                 pass
         threading.Thread(target=feed, daemon=True).start()
-    ts = [threading.Thread(target=pump, args=(rid, p.stdout, False), daemon=True)]
+    ts = [threading.Thread(target=pump, args=(rid, p.stdout, False, r), daemon=True)]
     if p.stderr is not None:
-        ts.append(threading.Thread(target=pump, args=(rid, p.stderr, True), daemon=True))
+        ts.append(threading.Thread(target=pump, args=(rid, p.stderr, True, r), daemon=True))
     for t in ts:
         t.start()
-    timed_out = False
-    try:
-        code = p.wait(timeout=m.get("timeout") or 60)
-    except subprocess.TimeoutExpired:
-        timed_out, code = True, None
+    timed_out, code = False, None
+    deadline = time.time() + (m.get("timeout") or 60)
+    while r["log"] is None:
+        try:
+            code = p.wait(timeout=max(min(0.25, deadline - time.time()), 0.01))
+            break
+        except subprocess.TimeoutExpired:
+            if time.time() >= deadline:
+                timed_out = True
+                break
+    with r["lk"]:
+        moved = r["log"] is not None
+        r["ended"] = not moved
+    if moved:
+        runs.pop(rid, None)
+        code = p.wait()
+        for t in ts:
+            t.join(timeout=2)
+        with r["lk"]:
+            try:
+                r["log"].close()
+            except OSError:
+                pass
+        send({"op": "jobexit", "job": r["job"], "code": code})
+        return
     kill(p)
     if code is None:
         code = p.wait()
@@ -628,12 +745,14 @@ for line in sys.stdin.buffer:
     if op == "run":
         threading.Thread(target=run, args=(m,), daemon=True).start()
     elif op == "stop" and m.get("id") in runs:
-        threading.Thread(target=kill, args=(runs[m["id"]],), daemon=True).start()
+        threading.Thread(target=kill, args=(runs[m["id"]]["p"],), daemon=True).start()
+    elif op == "detach":
+        detach(m)
     elif op == "bg":
         bg(m)
     elif op == "kill":
         threading.Thread(target=killjob, args=(m,), daemon=True).start()
-for p in list(runs.values()) + [j["p"] for j in jobs.values()]:
+for p in [r["p"] for r in list(runs.values())] + [j["p"] for j in list(jobs.values())]:
     try:
         os.killpg(p.pid, signal.SIGKILL)
     except OSError:

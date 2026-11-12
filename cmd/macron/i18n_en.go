@@ -2,7 +2,8 @@ package main
 
 var english = map[string]string{
 	"⬅️ برگشت": "⬅️ Back",
-	"\n\n<i>برای انصراف /cancel رو بفرست.</i>": "\n\n<i>Send /cancel to cancel.</i>",
+	"♻️ این جواب دیر رسید، چون اتصال به تلگرام قطع بود.": "♻️ This answer is late: the connection to Telegram was down.",
+	"\n\n<i>برای انصراف /cancel رو بفرست.</i>":           "\n\n<i>Send /cancel to cancel.</i>",
 	"❌ انصراف": "❌ Cancel",
 	"لغو شد":   "Cancelled",
 	"دارم نمودار رو می‌کشم…":          "Drawing the chart…",

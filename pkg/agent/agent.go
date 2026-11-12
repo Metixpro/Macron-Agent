@@ -600,6 +600,8 @@ type Request struct {
 
 	Inbox        func() []llm.Message
 	ModelRequest func(context.Context) (context.Context, func() bool)
+	ToolYield    func() <-chan struct{}
+	Overheard    func(from int) ([]llm.Message, int)
 
 	AutoContinue bool
 
@@ -911,9 +913,17 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	var (
 		onText func(string)
 		draft  *streamGuard
+		shown  string
 	)
 	if l.OnText != nil {
-		onText = func(s string) { draft.push(visibleStream(s)) }
+		onText = func(s string) {
+			v := visibleStream(s)
+			draft.push(v)
+			shown = ""
+			if !draft.blocked {
+				shown = v
+			}
+		}
 	}
 
 	seen := map[string]bool{}
@@ -1068,10 +1078,19 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		if req.ModelRequest != nil {
 			modelCtx, modelDone = req.ModelRequest(ctx)
 		}
+		shown = ""
 		resp, err := a.completeRobust(modelCtx, messages, lay.input, offered, stream, noTools, work.len() > 0)
 		if modelDone() && ctx.Err() == nil {
+			cut := strings.TrimSpace(shown)
 			if l.OnText != nil {
 				l.OnText("")
+			}
+			if cut != "" && req.Inbox != nil {
+				if late := req.Inbox(); len(late) > 0 {
+					messages = append(messages, llm.Message{Role: "assistant", Content: textutil.TruncateRunes(cut, cutKeepRunes, " …")},
+						llm.Message{Role: "user", Content: noticeCutOff})
+					messages = append(messages, late...)
+				}
 			}
 			step--
 			continue
@@ -1333,7 +1352,11 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			}
 			todo, at = append(todo, tc), append(at, i)
 		}
-		for j, out := range a.runTools(ctx, req.SessionID, todo, local, defs, l) {
+		toolCtx := ctx
+		if req.ToolYield != nil {
+			toolCtx = tools.WithYield(ctx, req.ToolYield())
+		}
+		for j, out := range a.runTools(toolCtx, req.SessionID, todo, local, defs, l) {
 			outs[at[j]] = out
 		}
 		for i := range toolCalls {

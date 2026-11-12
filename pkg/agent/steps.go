@@ -42,6 +42,7 @@ var (
 	appliedRe    = regexp.MustCompile(`Applied to \d+ files?: ([^\n]+)`)
 	nowSizeRe    = regexp.MustCompile(`\(now ([^)]+)\)`)
 	startedJobRe = regexp.MustCompile(`^Started background job (\d+)`)
+	movedJobRe   = regexp.MustCompile(`\[still running after [^,]+, now as background job (\d+)`)
 )
 
 func StepLine(name, args, result string) string {
@@ -113,6 +114,10 @@ func describeStep(name, argsJSON, result string) step {
 			} else {
 				s.text = "starting in the background failed: " + commandWord(cmd) + " → " + outcome(result)
 			}
+			break
+		}
+		if m := movedJobRe.FindStringSubmatch(result); m != nil {
+			s.text = "$ " + commandWord(cmd) + " → moved to background job " + m[1]
 			break
 		}
 		s.text = execLine(commandWord(cmd), result)

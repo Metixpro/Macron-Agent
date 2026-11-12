@@ -75,7 +75,9 @@ const (
 	noticeLate = "[system notice] Your answer above was not delivered: the user's message below arrived first. Handle it, " +
 		"then write one final answer that covers everything (they never saw the one above)."
 	noticeAnswerNow = "[system notice] Answer the user now from what you have, without calling any tools."
-	noticeCut       = "[system notice] Your reply was cut off by the output length limit. Continue exactly where it stopped, without " +
+	noticeCutOff    = "[system notice] Your reply above was cut off there because the user sent the message below. " +
+		"Take it into account; your next reply replaces the cut one, so make it whole."
+	noticeCut = "[system notice] Your reply was cut off by the output length limit. Continue exactly where it stopped, without " +
 		"repeating anything and without any preface."
 	noticeCutCalls = "[system notice] Your last message hit the output length limit, so a tool call may be incomplete. " +
 		"Write big content in parts (write_file with append=true, a few hundred lines per call) instead of one huge call."
@@ -113,7 +115,10 @@ func (w *workLog) len() int {
 	return len(w.steps)
 }
 
-const workLogRunes = 6000
+const (
+	workLogRunes = 6000
+	cutKeepRunes = 4000
+)
 
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)

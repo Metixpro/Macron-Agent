@@ -207,6 +207,7 @@ func runBot(args []string) {
 	go guard.KeepRunning(rootCtx, "the weekly reports", bot.runWeeklyReports)
 	go guard.KeepRunning(rootCtx, "the scheduled evals", bot.runEvalSchedule)
 	go guard.KeepRunning(rootCtx, "the update notices", bot.runUpdateNotices)
+	bot.startLate(rootCtx)
 	bot.serveWeb(rootCtx)
 	go func() { defer guard.Recover("the update report"); bot.reportUpdate(rootCtx) }()
 

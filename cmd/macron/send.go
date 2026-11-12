@@ -18,7 +18,7 @@ func (b *Bot) sendAnswer(ctx context.Context, m *telegram.Message, answer string
 		if i == 0 {
 			opts.ReplyTo = m.MessageID
 		}
-		if err := b.sendRich(ctx, m.Chat.ID, part, opts); err != nil {
+		if err := b.sendSure(ctx, m, part, opts); err != nil {
 			if telegram.IsUnreachable(err) {
 				return
 			}
@@ -34,12 +34,13 @@ func (b *Bot) sendRich(ctx context.Context, chatID int64, md string, opts telegr
 	rtl := telegram.IsMostlyRTL(md)
 	if !b.richOff.Load() {
 		if set := b.premium(); set != nil {
-			if _, err := b.api.SendRichMessage(ctx, chatID, telegram.RichMessage{Markdown: set.Markdown(md), IsRTL: rtl}, opts); err == nil {
-				return nil
+			_, err := b.api.SendRichMessage(ctx, chatID, telegram.RichMessage{Markdown: set.Markdown(md), IsRTL: rtl}, opts)
+			if err == nil || netDown(err) {
+				return err
 			}
 		}
 		_, err := b.api.SendRichMessage(ctx, chatID, telegram.RichMessage{Markdown: md, IsRTL: rtl}, opts)
-		if err == nil || telegram.IsUnreachable(err) || ctx.Err() != nil {
+		if err == nil || telegram.IsUnreachable(err) || ctx.Err() != nil || netDown(err) {
 			return err
 		}
 		if telegram.IsUnsupported(err) {
@@ -52,8 +53,9 @@ func (b *Bot) sendRich(ctx context.Context, chatID int64, md string, opts telegr
 		html = telegram.MarkRTL(html)
 	}
 	if set := b.premium(); set != nil {
-		if _, err := b.api.SendHTMLParts(ctx, chatID, set.HTML(html), opts); err == nil {
-			return nil
+		_, err := b.api.SendHTMLParts(ctx, chatID, set.HTML(html), opts)
+		if err == nil || netDown(err) {
+			return err
 		}
 	}
 	_, err := b.api.SendHTMLParts(ctx, chatID, html, opts)

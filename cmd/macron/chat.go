@@ -466,6 +466,10 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		carry, carryCompacted = b.contextCarry(cctx, uid, mc)
 		ccancel()
 	}
+	var toolYield func() <-chan struct{}
+	if !guest && !bg && !scheduled {
+		toolYield = run.toolYield
+	}
 	res, err := b.app.Agent.Do(runCtx, agent.Request{
 		SessionID: session,
 		Input:     in.msg,
@@ -486,6 +490,8 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 		Tools:            localTools,
 		Listener:         listener,
 		ModelRequest:     run.modelRequest,
+		ToolYield:        toolYield,
+		Overheard:        run.overheard,
 		Inbox: func() []llm.Message {
 			xs := run.take()
 			msgs := make([]llm.Message, len(xs))

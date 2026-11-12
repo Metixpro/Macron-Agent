@@ -281,7 +281,7 @@ func (t *terminal) about(ctx context.Context) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener, inbox func() []string) (*agent.Result, error) {
+func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener, inbox func() []string, yield func() <-chan struct{}) (*agent.Result, error) {
 	t.tidy.Add(1)
 	defer t.tidy.Done()
 	mc, err := t.mem.Load(ctx, t.uid)
@@ -319,6 +319,7 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		About:            t.about(ctx),
 		MaxSteps:         t.app.Config.MaxSteps,
 		Listener:         l,
+		ToolYield:        yield,
 		Inbox: func() []llm.Message {
 			items := inbox()
 			takenMu.Lock()

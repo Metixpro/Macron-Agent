@@ -328,6 +328,13 @@ func (b *Bot) sendAnswerWithFiles(ctx context.Context, m *telegram.Message, sess
 			if telegram.IsUnreachable(err) {
 				return shown, rest
 			}
+			if retryableSend(err) {
+				again := opts
+				again.EffectID = ""
+				if err := b.sendSure(ctx, m, p.md, again); err == nil || retryableSend(err) {
+					continue
+				}
+			}
 			log.Printf("[chat %d] answer part %d failed: %v; sending it as plain text", m.Chat.ID, i, err)
 
 			if _, err := b.api.SendHTMLParts(ctx, m.Chat.ID, telegram.EscapeHTML(p.md), telegram.SendOptions{}.InTopic(m)); err != nil {

@@ -40,6 +40,7 @@ var (
 	exitRe  = regexp.MustCompile(`^\[(?:exit (-?\d+)[^\]]*|timed out[^\]]*|could not run: [^\]]*)\]$`)
 	noiseRe = regexp.MustCompile(`^\[(?:stderr|output was longer[^\]]*)\]$`)
 	filesRe = regexp.MustCompile(`^\[new or changed files in the workspace: (.*)\]$`)
+	movedRe = regexp.MustCompile(`^\[still running after [^,]+, now as background job (\d+)`)
 )
 
 func toolArgs(args string) map[string]any {
@@ -109,6 +110,8 @@ func outputLines(result string) (lines []string, status string, code int, files 
 		case noiseRe.MatchString(t):
 		case filesRe.MatchString(t):
 			files = filesRe.FindStringSubmatch(t)[1]
+		case movedRe.MatchString(t):
+			status = "moved to background job " + movedRe.FindStringSubmatch(t)[1]
 		default:
 			lines = append(lines, strings.TrimRight(l, " "))
 		}
@@ -235,6 +238,8 @@ func toolBody(name, args, result string, failed bool, width int) []string {
 			add(stDim.Render(clip(l, w)))
 		}
 		switch {
+		case strings.HasPrefix(status, "moved"):
+			add(stWarn.Render(status))
 		case status != "" && code != 0:
 			add(stFail.Render(status))
 		case len(lines) == 0:

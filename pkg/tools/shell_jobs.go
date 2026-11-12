@@ -12,6 +12,20 @@ import (
 
 const ToolShellJobs = "shell_jobs"
 
+type yieldKey struct{}
+
+func WithYield(ctx context.Context, ch <-chan struct{}) context.Context {
+	if ch == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, yieldKey{}, ch)
+}
+
+func yieldOf(ctx context.Context) <-chan struct{} {
+	ch, _ := ctx.Value(yieldKey{}).(<-chan struct{})
+	return ch
+}
+
 var jobFirstLook = 3 * time.Second
 
 func (r *Registry) startBackground(ctx context.Context, sessionID, cmd string) string {
@@ -49,6 +63,37 @@ func (r *Registry) shellJobs(ctx context.Context, sessionID string, args map[str
 			return "error: no such job; " + jobList(jobs, r.Machine.ShellEnded(sessionID)), nil
 		}
 		return jobLine(j) + "\n" + r.jobTail(sessionID, j, intArg(args, "lines", 80, 1, 500)), nil
+	case "wait":
+		j, ok := findJob(jobs, n)
+		if !ok {
+			return "error: no such job; " + jobList(jobs, r.Machine.ShellEnded(sessionID)), nil
+		}
+		note := ""
+		deadline := time.Now().Add(time.Duration(intArg(args, "timeout_seconds", 120, 1, maxBashSeconds)) * time.Second)
+		yield := yieldOf(ctx)
+		tick := time.NewTicker(time.Second)
+		defer tick.Stop()
+	waiting:
+		for j.Running {
+			select {
+			case <-ctx.Done():
+				return "error: cancelled while waiting", nil
+			case <-yield:
+				note = "\n[stopped waiting: the user sent a new message; the job goes on]"
+				break waiting
+			case <-tick.C:
+				if found, ok := findJob(r.Machine.Jobs(sessionID), n); ok {
+					j = found
+				} else {
+					break waiting
+				}
+				if j.Running && time.Now().After(deadline) {
+					note = "\n[still running: the wait ended; wait again or look at its output]"
+					break waiting
+				}
+			}
+		}
+		return jobLine(j) + "\n" + r.jobTail(sessionID, j, intArg(args, "lines", 80, 1, 500)) + note, nil
 	case "kill":
 		if _, ok := findJob(jobs, n); !ok {
 			return "error: no such job; " + jobList(jobs, r.Machine.ShellEnded(sessionID)), nil

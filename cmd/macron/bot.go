@@ -36,6 +36,7 @@ type Bot struct {
 	owner map[int64]bool
 
 	albums        albumCollector
+	late          lateAnswers
 	gate          *guard.Gate
 	flood         *guard.RateLimiter
 	runTimeout    time.Duration

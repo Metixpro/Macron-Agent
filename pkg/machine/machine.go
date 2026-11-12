@@ -58,6 +58,8 @@ type ExecutionResult struct {
 	Duration  string `json:"duration"`
 	Truncated bool   `json:"output_truncated,omitempty"`
 	Error     string `json:"error,omitempty"`
+	Job       int    `json:"job,omitempty"`
+	PID       int    `json:"pid,omitempty"`
 }
 
 type RunOptions struct {
@@ -75,6 +77,8 @@ type RunOptions struct {
 	Tee io.Writer
 
 	Heavy bool
+
+	Yield <-chan struct{}
 }
 
 const (
@@ -312,8 +316,12 @@ func (s *Machine) Run(ctx context.Context, sessionID string, opts RunOptions) *E
 		return &ExecutionResult{ExitCode: -1, Error: err.Error()}
 	}
 	if opts.InSession {
-		if sh := s.shellOf(ws); sh != nil {
-			return s.runInShell(ctx, sh, opts)
+		sh := s.shellOf(ws)
+		if sh == nil && opts.Yield != nil && opts.Shell != "" {
+			sh, _ = s.startShell(sessionID, ws)
+		}
+		if sh != nil {
+			return s.runInShell(ctx, sessionID, sh, opts)
 		}
 	}
 	release, err := s.acquire(ctx, opts.Heavy)
