@@ -245,6 +245,8 @@ func seedProvider(ctx context.Context, st *store.Store, cfg *config.Config) {
 
 func poll(ctx context.Context, bot *Bot) {
 	var offset int64
+	skipTo := bot.lastHandledUpdate()
+	defer func() { bot.confirmUpdates(offset) }()
 	backoff := time.Second
 	for ctx.Err() == nil {
 		pctx, cancel := context.WithTimeout(ctx, 45*time.Second)
@@ -273,7 +275,14 @@ func poll(ctx context.Context, bot *Bot) {
 			if u.UpdateID >= offset {
 				offset = u.UpdateID + 1
 			}
+			if u.UpdateID <= skipTo {
+				log.Printf("update %d was handled before the restart; skipped", u.UpdateID)
+				continue
+			}
 			bot.dispatch(u)
+		}
+		if len(updates) > 0 {
+			go bot.markHandled(offset - 1)
 		}
 	}
 }

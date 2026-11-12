@@ -928,6 +928,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 
 	seen := map[string]bool{}
 	calls := map[string]int{}
+	var callIDs map[string]bool
 
 	seenOut, gen := map[string]cachedOut{}, 0
 	noTools := &textTools{}
@@ -1171,10 +1172,23 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			log.Printf("agent: %d tool calls in one step for session %s; the first %d run", len(toolCalls), req.SessionID, maxCallsPerStep)
 			toolCalls = toolCalls[:maxCallsPerStep]
 		}
-		for i := range toolCalls {
-			if toolCalls[i].ID == "" {
-				toolCalls[i].ID = fmt.Sprintf("call_%d_%d", step, i)
+		if callIDs == nil && len(toolCalls) > 0 {
+			callIDs = map[string]bool{}
+			for _, m := range messages {
+				for _, tc := range m.ToolCalls {
+					callIDs[tc.ID] = true
+				}
 			}
+		}
+		for i := range toolCalls {
+			if id := toolCalls[i].ID; id == "" || callIDs[id] {
+				fresh := fmt.Sprintf("call_%d_%d", step, i)
+				for n := 2; callIDs[fresh]; n++ {
+					fresh = fmt.Sprintf("call_%d_%d_%d", step, i, n)
+				}
+				toolCalls[i].ID = fresh
+			}
+			callIDs[toolCalls[i].ID] = true
 			if toolCalls[i].Type == "" {
 				toolCalls[i].Type = "function"
 			}
@@ -1554,28 +1568,47 @@ func (a *Agent) runTools(ctx context.Context, sessionID string, calls []llm.Tool
 			run(i)
 		}()
 	}
-	parallel := len(rest) > 1
-	for _, i := range rest {
-		parallel = parallel && parallelSafe[calls[i].Function.Name]
-	}
-	if !parallel {
-		for _, i := range rest {
-			run(i)
-		}
-		wg.Wait()
-		return outs
-	}
 	slots := make(chan struct{}, parallelTools)
-	for _, i := range rest {
-		wg.Add(1)
-		slots <- struct{}{}
-		go func() {
-			defer func() { <-slots; wg.Done() }()
-			run(i)
-		}()
+	for _, seg := range toolSegments(calls, rest) {
+		if len(seg) < 2 {
+			for _, i := range seg {
+				run(i)
+			}
+			continue
+		}
+		var sw sync.WaitGroup
+		for _, i := range seg {
+			sw.Add(1)
+			slots <- struct{}{}
+			go func() {
+				defer func() { <-slots; sw.Done() }()
+				run(i)
+			}()
+		}
+		sw.Wait()
 	}
 	wg.Wait()
 	return outs
+}
+
+func toolSegments(calls []llm.ToolCall, order []int) [][]int {
+	var segs [][]int
+	var group []int
+	for _, i := range order {
+		if parallelSafe[calls[i].Function.Name] {
+			group = append(group, i)
+			continue
+		}
+		if len(group) > 0 {
+			segs = append(segs, group)
+			group = nil
+		}
+		segs = append(segs, []int{i})
+	}
+	if len(group) > 0 {
+		segs = append(segs, group)
+	}
+	return segs
 }
 
 const toolResponsePrefix = "<tool_response"

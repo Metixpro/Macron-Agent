@@ -541,3 +541,10 @@ Messages you send while Macron is working now reach it right away, the way Herme
 - Sub-agents hear you too: a message sent while they work goes to them as well as to the main agent, instead of waiting for them to finish.
 - When a message cuts a reply off while it is being written, the cut part stays in the conversation, so the next reply builds on it instead of starting over.
 - An answer that cannot be sent (Telegram out of reach, rate limits, a server error) is tried again for about a minute, then kept in the database and sent once Telegram answers, after a restart too, marked «♻️ This answer is late». Kept answers expire after a day.
+
+### 1.8.0: tool calls and incoming messages
+
+- Tools in one batch run in ordered groups, the way Hermes Agent plans them: back-to-back safe tools (searches, page reads, file reads) run together, and every other call runs in its place in the order. Before, one command in the batch made all of it wait in line.
+- Tool-call IDs that a provider repeats (some send `call_0` for every call) are made unique, so results always pair with their calls.
+- A long message that Telegram splits into pieces reaches Macron as one message. Only a piece near Telegram's length limit waits (1.5 seconds) for the rest; ordinary messages are not delayed.
+- After a restart (an update, `macron telegram restart`, a crash) Telegram no longer hands the last messages over again: Macron tells Telegram what it handled before it stops, and skips anything it handled in the day before a crash.

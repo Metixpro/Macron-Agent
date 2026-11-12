@@ -37,6 +37,8 @@ type Bot struct {
 
 	albums        albumCollector
 	late          lateAnswers
+	splits        splitCollector
+	handled       updateMark
 	gate          *guard.Gate
 	flood         *guard.RateLimiter
 	runTimeout    time.Duration
@@ -287,6 +289,9 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 
 	if m.MediaGroupID != "" && !m.AlbumDone {
 		b.albums.add(m, &b.wg, func(items []*telegram.Message) { b.handleMessage(mergeAlbum(items)) })
+		return
+	}
+	if b.splits.take(m, &b.wg, b.handleMessage) {
 		return
 	}
 

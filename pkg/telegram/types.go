@@ -300,6 +300,7 @@ type Message struct {
 
 	Album     []*Message `json:"-"`
 	AlbumDone bool       `json:"-"`
+	SplitDone bool       `json:"-"`
 
 	GuestQueryID string `json:"guest_query_id,omitempty"`
 }
