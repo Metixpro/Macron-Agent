@@ -513,11 +513,15 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 
 		FocusTools: focus,
 		FocusPick:  focusPick,
+		Preload:    b.sticky.get(uid),
 		FocusHint:  in.hint,
 
 		Escalate: escalate,
 	})
 	run.answered()
+	if res != nil && !guest {
+		b.sticky.keep(uid, res.Loaded)
+	}
 	logTriage(trec)
 	if res != nil && !res.Escalated && !smallTalk && trimmed == 0 && focusPick == nil {
 		b.noteCache(provID, res.Usage)

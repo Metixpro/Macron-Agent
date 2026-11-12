@@ -39,6 +39,7 @@ type Bot struct {
 	late          lateAnswers
 	splits        splitCollector
 	handled       updateMark
+	sticky        stickyTools
 	gate          *guard.Gate
 	flood         *guard.RateLimiter
 	runTimeout    time.Duration

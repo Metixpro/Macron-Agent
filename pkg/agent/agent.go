@@ -626,6 +626,7 @@ type Request struct {
 	Resume *Suspended
 
 	FocusPick []string
+	Preload   []string
 
 	Escalate func(ctx context.Context) context.Context
 
@@ -635,6 +636,7 @@ type Request struct {
 type Result struct {
 	Answer    string
 	ToolsUsed []string
+	Loaded    []string
 	Steps     int
 	Usage     llm.Usage
 	EndedBy   string
@@ -750,7 +752,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	var unfocused atomic.Bool
 	allTools := -1
 
-	shelf := a.deferPlugins(toolDefs, req)
+	shelf := a.deferTools(toolDefs, req)
 	if shelf != nil {
 		search := shelf.searchTool()
 		local[ToolSearch] = search
@@ -809,6 +811,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		}
 		if out != nil {
 			out.Plan = plan.get()
+			out.Loaded = shelf.loadedNames()
 			if out.Notes == "" && work.len() > 0 {
 				out.Notes = strings.TrimSpace(work.record(noteRunes) + "\n" + planBrief(plan.get()))
 			}
@@ -851,7 +854,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		catalog = focused
 	}
 
-	full += toolCatalog(catalog, false)
+	full += toolCatalog(catalog, false) + shelf.note()
 	leak := newLeakGuard(a.leakKnown(known), full, a.soulText())
 	if owner {
 		full += ownerPrompt(req.OwnerNote)
@@ -860,9 +863,6 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	now := a.clock() + "\n" + budgetNote(maxSteps, total)
 	if focused != nil {
 		now += "\n" + noticeFocused
-	}
-	if note := shelf.note(); note != "" {
-		now += "\n" + note
 	}
 	if about := strings.TrimSpace(req.About); about != "" {
 		now = "[context]\n" + about + "\n\n" + now
@@ -1057,8 +1057,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		}
 		if chat {
 			offered, callable = []llm.Tool{useToolsDef}, map[string]bool{toolUseTools: true}
+		} else if !unfocused.Load() {
+			offered = shelf.hide(offered)
 		}
-		offered = shelf.hide(offered)
 		if req.AnswerOnLastStep && step == maxSteps {
 			offered, callable = nil, nil
 			messages = append(messages, llm.Message{Role: "user", Content: noticeAnswerNow})
@@ -1190,6 +1191,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 				toolCalls[i].ID = fresh
 			}
 			callIDs[toolCalls[i].ID] = true
+			shelf.load(toolCalls[i].Function.Name)
 			if toolCalls[i].Type == "" {
 				toolCalls[i].Type = "function"
 			}

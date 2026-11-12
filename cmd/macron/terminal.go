@@ -320,6 +320,7 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		MaxSteps:         t.app.Config.MaxSteps,
 		Listener:         l,
 		ToolYield:        yield,
+		Preload:          t.bot.sticky.get(t.uid),
 		Inbox: func() []llm.Message {
 			items := inbox()
 			takenMu.Lock()
@@ -340,6 +341,9 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		FocusTools:      true,
 		EfficientTools:  true,
 	})
+	if res != nil {
+		t.bot.sticky.keep(t.uid, res.Loaded)
+	}
 	userTurn := text
 	takenMu.Lock()
 	if len(taken) > 0 {

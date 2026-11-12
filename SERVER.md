@@ -558,3 +558,13 @@ Tested against a real model (DeepSeek V4.1 Flash) in Telegram:
 - The context Macron gets with each message names the background jobs running now, so it no longer says a server is up after a restart ended it.
 - The conversation uses the model's own temperature, as Hermes Agent does, instead of 0.3; a temperature set for a provider in the settings still wins, and Macron's internal helpers keep 0.3.
 - Answers match the weight of the question: a short question or «کوتاه بگو» gets a short answer, without filler or news about earlier jobs.
+
+### 1.10.0: fewer tools in each message
+
+Every message used to carry all of Macron's tools (about 90, some 20,000 tokens with a greeting). Now each one carries a fixed core of 27 (web, shell and code, files, memory, reminders, plan, sub-agents, skills, `tool_search`) and the rest are named in one line of the system prompt and loaded when needed:
+
+- words in the message load their group (a download, a PDF, a chart, prices, …), as the focus mode always did;
+- the model loads any other with `tool_search` (by name or by what it should do), and calling one by its name loads it too;
+- tools loaded in a chat stay loaded for its next messages (up to 30), and they go after the core, so the provider's prompt cache keeps working.
+
+A greeting now sends about 10,700 tokens instead of about 20,000, and the model picks from fewer tools.

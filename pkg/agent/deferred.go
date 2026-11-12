@@ -9,44 +9,81 @@ import (
 	"unicode"
 
 	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
 const ToolSearch = "tool_search"
 
-const deferAbove = 16
+const deferMin = 6
 
-const searchResults = 8
+const searchResults = 5
 
-type shelf struct {
-	mu     sync.Mutex
-	tools  map[string]llm.Tool
-	loaded map[string]bool
-	order  []string
+var coreTools = map[string]bool{
+	"web_search": true, "web_fetch": true, "bash_execute": true, tools.ToolRunCode: true, tools.ToolShellJobs: true,
+	"read_file": true, "write_file": true, tools.ToolEditFile: true, tools.ToolApplyPatch: true, "list_files": true,
+	tools.ToolSearchCode: true, tools.ToolFindFiles: true, "send_file": true, "view_image": true, "ask_user": true,
+	"react_to_message": true, "remember": true, "forget": true, "search_past_chats": true, "recall_history": true,
+	"schedule": true, "list_schedules": true, "cancel_schedule": true, ToolPlan: true, ToolDelegate: true,
+	tools.ToolReadSkill: true, tools.ToolSaveSkill: true, ToolSearch: true, ToolMoreTools: true,
 }
 
-func (a *Agent) deferPlugins(defs []llm.Tool, req Request) *shelf {
-	if req.depth > 0 || a.Registry == nil {
+type shelf struct {
+	mu        sync.Mutex
+	tools     map[string]llm.Tool
+	loaded    map[string]bool
+	loadOrder []string
+	order     []string
+}
+
+func (a *Agent) deferTools(defs []llm.Tool, req Request) *shelf {
+	if req.depth > 0 {
 		return nil
 	}
 	s := &shelf{tools: map[string]llm.Tool{}, loaded: map[string]bool{}}
 	for _, t := range defs {
-		if a.Registry.Plugin(t.Function.Name) {
-			s.tools[t.Function.Name] = t
-			s.order = append(s.order, t.Function.Name)
+		if n := t.Function.Name; !coreTools[n] {
+			s.tools[n] = t
+			s.order = append(s.order, n)
 		}
 	}
-	if len(s.tools) <= deferAbove {
+	if len(s.tools) <= deferMin {
 		return nil
 	}
 	sort.Strings(s.order)
+	for _, n := range req.Preload {
+		s.load(n)
+	}
 	text := focusText(req)
 	for _, n := range s.order {
 		if len(n) > 4 && strings.Contains(text, n) {
-			s.loaded[n] = true
+			s.load(n)
 		}
+	}
+	want := focusWant(defs, text)
+	for _, n := range s.order {
+		if want[n] {
+			s.load(n)
+		}
+	}
+	for _, n := range req.FocusPick {
+		s.load(n)
 	}
 	s.preload(req)
 	return s
+}
+
+func (s *shelf) load(name string) bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.tools[name]; !ok || s.loaded[name] {
+		return false
+	}
+	s.loaded[name] = true
+	s.loadOrder = append(s.loadOrder, name)
+	return true
 }
 
 const preloadMax = 8
@@ -69,7 +106,13 @@ func (s *shelf) preload(req Request) {
 			byFamily[f] = append(byFamily[f], n)
 		}
 	}
-	for _, names := range byFamily {
+	fams := make([]string, 0, len(byFamily))
+	for f := range byFamily {
+		fams = append(fams, f)
+	}
+	sort.Strings(fams)
+	for _, f := range fams {
+		names := byFamily[f]
 		score := func(n string) int {
 			k := 0
 			for _, w := range searchWords(n + " " + s.tools[n].Function.Description) {
@@ -81,7 +124,7 @@ func (s *shelf) preload(req Request) {
 		}
 		sort.SliceStable(names, func(i, j int) bool { return score(names[i]) > score(names[j]) })
 		for _, n := range names[:min(len(names), preloadMax)] {
-			s.loaded[n] = true
+			s.load(n)
 		}
 	}
 }
@@ -92,11 +135,14 @@ func (s *shelf) hide(defs []llm.Tool) []llm.Tool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]llm.Tool, 0, len(defs))
+	out := make([]llm.Tool, 0, len(defs)+len(s.loadOrder))
 	for _, t := range defs {
-		if _, shelved := s.tools[t.Function.Name]; !shelved || s.loaded[t.Function.Name] {
+		if _, shelved := s.tools[t.Function.Name]; !shelved {
 			out = append(out, t)
 		}
+	}
+	for _, n := range s.loadOrder {
+		out = append(out, s.tools[n])
 	}
 	return out
 }
@@ -105,53 +151,28 @@ func (s *shelf) note() string {
 	if s == nil {
 		return ""
 	}
-	note := fmt.Sprintf("[tools] %d more tools from plugins and MCP servers wait unloaded (%s). If a job needs one, call %s with "+
-		"what it should do; the tools it finds can be called from the next step.", len(s.tools), s.families(), ToolSearch)
-	if loaded := s.loadedNames(); len(loaded) > 0 {
-		note += " Loaded for this request: " + strings.Join(loaded, ", ") + "."
-	}
-	return note
+	return fmt.Sprintf("\n[tools] Beyond the tools in your list, these %d wait unloaded: %s. To use one, call %s with its "+
+		"name (several names, comma-separated, are fine) or with what it should do, in a few English words; it can be called "+
+		"from the next step. Calling one by its name also loads it.", len(s.order), strings.Join(s.order, ", "), ToolSearch)
 }
 
 func (s *shelf) loadedNames() []string {
+	if s == nil {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []string
-	for _, n := range s.order {
-		if s.loaded[n] {
-			out = append(out, n)
-		}
-	}
-	return out
-}
-
-func (s *shelf) families() string {
-	count := map[string]int{}
-	for _, n := range s.order {
-		f, _, _ := strings.Cut(n, "_")
-		count[f]++
-	}
-	fams := make([]string, 0, len(count))
-	for f := range count {
-		fams = append(fams, f)
-	}
-	sort.Slice(fams, func(i, j int) bool {
-		return count[fams[i]] > count[fams[j]] || count[fams[i]] == count[fams[j]] && fams[i] < fams[j]
-	})
-	if len(fams) > 12 {
-		fams = append(fams[:12], "…")
-	}
-	return strings.Join(fams, ", ")
+	return append([]string(nil), s.loadOrder...)
 }
 
 func (s *shelf) searchTool() LocalTool {
 	return LocalTool{
 		Def: llm.Tool{Type: "function", Function: llm.ToolDef{
 			Name: ToolSearch,
-			Description: "Find and load tools of the plugins and MCP servers (they are not loaded until needed). " +
-				"Say what the tool should do, in a few English words; the tools found can be called from the next step.",
+			Description: "Load tools that are not in your list yet (the [tools] note names them). Give their names, or say what " +
+				"the tool should do in a few English words; the tools loaded can be called from the next step.",
 			Parameters: map[string]any{"type": "object", "properties": map[string]any{
-				"query": map[string]any{"type": "string", "description": "What the tool should do, e.g. \"sqlite query\", \"dns lookup\""},
+				"query": map[string]any{"type": "string", "description": "Tool names, or what the tool should do, e.g. \"pdf_tool\", \"convert video to mp3\""},
 			}, "required": []string{"query"}},
 		}},
 		Handler: func(_ context.Context, args map[string]any) (ToolOutput, error) {
@@ -162,49 +183,55 @@ func (s *shelf) searchTool() LocalTool {
 }
 
 func (s *shelf) search(q string) string {
-	words := searchWords(q)
-	type hit struct {
-		name  string
-		score int
-	}
-	var hits []hit
-	for _, n := range s.order {
-		t := s.tools[n]
-		name, about := searchWords(n), searchWords(t.Function.Description)
-		score := 0
-		for _, w := range words {
-			for _, x := range name {
-				if x == w {
-					score += 4
-				} else if len(w) > 3 && strings.HasPrefix(x, w) {
-					score += 2
-				}
-			}
-			for _, x := range about {
-				if x == w {
-					score++
-				}
-			}
-		}
-		if score > 0 {
-			hits = append(hits, hit{n, score})
+	var picked []string
+	for _, part := range strings.FieldsFunc(q, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == ';' }) {
+		if _, ok := s.tools[strings.TrimSpace(part)]; ok {
+			picked = append(picked, strings.TrimSpace(part))
 		}
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
-	if len(hits) > searchResults {
-		hits = hits[:searchResults]
+	if len(picked) == 0 {
+		words := searchWords(q)
+		type hit struct {
+			name  string
+			score int
+		}
+		var hits []hit
+		for _, n := range s.order {
+			t := s.tools[n]
+			name, about := searchWords(n), searchWords(t.Function.Description)
+			score := 0
+			for _, w := range words {
+				for _, x := range name {
+					if x == w {
+						score += 4
+					} else if len(w) > 3 && strings.HasPrefix(x, w) {
+						score += 2
+					}
+				}
+				for _, x := range about {
+					if x == w {
+						score++
+					}
+				}
+			}
+			if score > 0 {
+				hits = append(hits, hit{n, score})
+			}
+		}
+		sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
+		for _, h := range hits[:min(len(hits), searchResults)] {
+			picked = append(picked, h.name)
+		}
 	}
-	if len(hits) == 0 {
-		return fmt.Sprintf("No plugin tool matches %q. The plugins' tools start with: %s. Try other words, or do the job with "+
-			"the tools you have.", q, s.families())
+	if len(picked) == 0 {
+		return fmt.Sprintf("No tool matches %q. The tools that wait unloaded are: %s. Try one of these names, or do the job "+
+			"with the tools you have.", q, strings.Join(s.order, ", "))
 	}
-	s.mu.Lock()
 	var lines []string
-	for _, h := range hits {
-		s.loaded[h.name] = true
-		lines = append(lines, "- "+h.name+": "+firstSentence(s.tools[h.name].Function.Description, 160))
+	for _, n := range picked {
+		s.load(n)
+		lines = append(lines, "- "+n+": "+firstSentence(s.tools[n].Function.Description, 160))
 	}
-	s.mu.Unlock()
 	return "Loaded; call them from the next step:\n" + strings.Join(lines, "\n")
 }
 
