@@ -93,3 +93,8 @@ func stopInstallationProcesses(binary string) error {
 	}
 	return fmt.Errorf("some Macron processes are still running; data and binary were kept")
 }
+
+func matchesInstallBinary(path, binary string) bool {
+	path = strings.TrimSuffix(path, " (deleted)")
+	return path == binary || path == binary+".old" || path == binary+".next"
+}

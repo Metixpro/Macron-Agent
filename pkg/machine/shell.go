@@ -579,13 +579,6 @@ func (s *Machine) StopShell(sessionID string) bool {
 	return true
 }
 
-func shellQuote(s string) string {
-	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?&|;<>(){}[]#~") {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 const shellSupervisor = `import codecs, json, os, signal, subprocess, sys, threading, time
 KEEP = int(sys.argv[1])
 out = sys.stdout.buffer

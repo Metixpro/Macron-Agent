@@ -444,8 +444,6 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 	return res
 }
 
-const defaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
 func (s *Machine) Available(programs ...string) map[string]bool {
 	out := map[string]bool{}
 	for _, p := range programs {

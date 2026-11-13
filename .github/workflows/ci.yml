@@ -25,6 +25,28 @@ jobs:
       - run: make check
       - name: the installer parses
         run: bash -n install.sh
+      - name: the desktop interface bundle matches its source
+        run: |
+          make ui
+          git diff --exit-code pkg/desk/web
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go build -o macron.exe ./cmd/macron
+      - run: go build -ldflags "-H windowsgui -X main.launch=desktop" -o macron-desktop.exe ./cmd/macron
+      - run: .\macron.exe version
+      - name: the Windows installer parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
 
   audit:
     runs-on: ubuntu-latest

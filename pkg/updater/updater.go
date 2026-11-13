@@ -2,6 +2,7 @@ package updater
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -57,7 +58,18 @@ type Release struct {
 func (r Release) Version() string { return strings.TrimPrefix(r.TagName, "v") }
 
 func AssetName(version string) string {
-	return fmt.Sprintf("macron-%s-%s-%s.tar.gz", strings.TrimPrefix(version, "v"), runtime.GOOS, runtime.GOARCH)
+	ext := ".tar.gz"
+	if runtime.GOOS == "windows" {
+		ext = ".zip"
+	}
+	return fmt.Sprintf("macron-%s-%s-%s%s", strings.TrimPrefix(version, "v"), runtime.GOOS, runtime.GOARCH, ext)
+}
+
+func exeName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 func Newer(a, b string) bool {
@@ -182,6 +194,23 @@ func ChecksumOf(sums, file string) (string, bool) {
 }
 
 func ExtractBinary(archive []byte) ([]byte, error) {
+	return extractFile(archive, exeName("macron"))
+}
+
+func extractFile(archive []byte, name string) ([]byte, error) {
+	if zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive))); err == nil {
+		for _, f := range zr.File {
+			if !f.FileInfo().IsDir() && filepath.Base(filepath.FromSlash(f.Name)) == name {
+				rc, err := f.Open()
+				if err != nil {
+					return nil, err
+				}
+				defer rc.Close()
+				return io.ReadAll(io.LimitReader(rc, 200<<20))
+			}
+		}
+		return nil, fmt.Errorf("no %s in the archive", name)
+	}
 	zr, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return nil, err
@@ -195,7 +224,7 @@ func ExtractBinary(archive []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if h.Typeflag == tar.TypeReg && filepath.Base(h.Name) == "macron" {
+		if h.Typeflag == tar.TypeReg && filepath.Base(h.Name) == name {
 			return io.ReadAll(io.LimitReader(tr, 200<<20))
 		}
 	}
@@ -242,7 +271,39 @@ func Install(ctx context.Context, rel *Release, step func(string)) error {
 		return err
 	}
 	step("preflight the new program")
-	return Swap(self, bin, rel.Version())
+	if err := Swap(self, bin, rel.Version()); err != nil {
+		return err
+	}
+	if runtime.GOOS == "windows" {
+		desktop := filepath.Join(filepath.Dir(self), "macron-desktop.exe")
+		if _, err := os.Stat(desktop); err == nil {
+			step("update the desktop app")
+			data, err := extractFile(archive, "macron-desktop.exe")
+			if err != nil {
+				return err
+			}
+			return replace(desktop, data)
+		}
+	}
+	return nil
+}
+
+func replace(target string, data []byte) error {
+	next := target + ".new"
+	if err := os.WriteFile(next, data, 0o755); err != nil {
+		return err
+	}
+	old := target + ".old"
+	_ = os.Remove(old)
+	if err := os.Rename(target, old); err != nil {
+		_ = os.Remove(next)
+		return err
+	}
+	if err := os.Rename(next, target); err != nil {
+		_ = os.Rename(old, target)
+		return err
+	}
+	return nil
 }
 
 var Preflight = func(path, version string) error {
@@ -281,7 +342,7 @@ func Swap(self string, bin []byte, version string) error {
 		return fmt.Errorf("cannot write next to the program (%s): %w — run the update as the user who owns it", dir, err)
 	}
 	defer os.RemoveAll(stage)
-	next := filepath.Join(stage, "macron")
+	next := filepath.Join(stage, exeName("macron"))
 	if err := os.WriteFile(next, bin, 0o755); err != nil {
 		return err
 	}
@@ -289,6 +350,17 @@ func Swap(self string, bin []byte, version string) error {
 		return err
 	}
 	old := self + ".old"
+	if runtime.GOOS == "windows" {
+		_ = os.Remove(old)
+		if err := os.Rename(self, old); err != nil {
+			return err
+		}
+		if err := os.Rename(next, self); err != nil {
+			_ = os.Rename(old, self)
+			return err
+		}
+		return nil
+	}
 	_ = os.Remove(old)
 	if err := os.Link(self, old); err != nil {
 		if data, rerr := os.ReadFile(self); rerr == nil {

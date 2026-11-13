@@ -241,11 +241,6 @@ func cleanupShellPath(prefix string) error {
 	return errors.Join(errs...)
 }
 
-func matchesInstallBinary(path, binary string) bool {
-	path = strings.TrimSuffix(path, " (deleted)")
-	return path == binary || path == binary+".old" || path == binary+".next"
-}
-
 func removeServiceLinks(service removalService) error {
 	for _, suffix := range []string{"*.wants", "*.requires"} {
 		paths, _ := filepath.Glob(filepath.Join(filepath.Dir(service.Path), suffix, service.Name))

@@ -100,3 +100,12 @@ func platformHostEnv(env map[string]string) {
 func platformDefaults(env map[string]string) {
 	env["LC_ALL"] = "C.UTF-8"
 }
+
+const defaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?&|;<>(){}[]#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
