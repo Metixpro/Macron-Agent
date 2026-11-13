@@ -87,12 +87,15 @@ func runMessenger(platform string, args []string) error {
 		fmt.Printf("ok %s %s local\n", app.Version, platform)
 		return nil
 	}
-	if err := client.Check(ctx); err != nil {
-		return err
-	}
 	if *online {
+		if err := client.Check(ctx); err != nil {
+			return err
+		}
 		fmt.Printf("ok %s %s online\n", app.Version, platform)
 		return nil
+	}
+	if err := waitReachable(ctx, platform, client.Check); err != nil {
+		return err
 	}
 	br, err := brain.Open(config.Home(), agent.DefaultSoul)
 	if err != nil {

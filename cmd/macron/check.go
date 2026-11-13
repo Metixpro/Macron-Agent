@@ -49,6 +49,9 @@ func runStartupCheck(args []string) error {
 		return err
 	}
 	platform := strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_MESSENGER")))
+	if *token != "" {
+		platform = "telegram"
+	}
 	if platform == "" {
 		platform = "cli"
 		if *token != "" || *owners != "" {

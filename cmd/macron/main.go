@@ -59,11 +59,30 @@ func runBot(args []string) {
 		return
 	}
 	_ = config.LoadDefaultDotEnv()
-	if platform := strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_MESSENGER"))); platform != "" && platform != "telegram" {
-		if err := runMessenger(platform, args); err != nil {
-			log.Fatal(err)
+	cleanCgroup()
+	side := sideMessengers()
+	if strings.TrimSpace(os.Getenv(config.EnvBotToken)) == "" {
+		platform := strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_MESSENGER")))
+		switch {
+		case len(side) == 1:
+			platform = side[0]
+		case len(side) > 1:
+			sup := superviseMessengers(side)
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			<-ctx.Done()
+			stop()
+			sup.stop()
+			return
 		}
-		return
+		if platform != "" && platform != "telegram" {
+			if err := runMessenger(platform, args); err != nil {
+				log.Fatal(err)
+			}
+			return
+		}
+	} else if len(side) > 0 {
+		sup := superviseMessengers(side)
+		defer sup.stop()
 	}
 	cfg := &config.Config{OptionalAPIURL: true}
 	cfg.Bind(flag.CommandLine)

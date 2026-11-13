@@ -76,19 +76,22 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	defer func() { cancelRun(); workers.Wait() }()
 	cursor := r.Cursor
+	wait := 3 * time.Second
 	for ctx.Err() == nil {
 		messages, next, err := r.Client.Poll(ctx, cursor)
 		if err != nil {
 			if ctx.Err() != nil {
 				break
 			}
-			log.Printf("%s polling: %v", r.Platform, err)
+			log.Printf("%s polling: %v; trying again in %s", r.Platform, err, wait)
 			select {
 			case <-ctx.Done():
-			case <-time.After(3 * time.Second):
+			case <-time.After(wait):
 			}
+			wait = min(wait*2, time.Minute)
 			continue
 		}
+		wait = 3 * time.Second
 		for _, m := range messages {
 			if !r.Owners[m.UserID] {
 				continue

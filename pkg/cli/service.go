@@ -51,7 +51,7 @@ func renderSystemd(u unit) string {
 	fmt.Fprintf(&sb, "Environment=%s\n", systemdWord("MACRON_HOME="+u.Home, false))
 	fmt.Fprintf(&sb, "WorkingDirectory=%s\n", systemdPath(u.Home))
 	fmt.Fprintf(&sb, "ExecStart=%s telegram run\n", systemdWord(u.Binary, true))
-	sb.WriteString("Restart=always\nRestartSec=5\nTimeoutStopSec=45\nKillMode=process\nLimitNOFILE=65536\nUMask=0077\n\n[Install]\n")
+	sb.WriteString("Restart=always\nRestartSec=5\nTimeoutStopSec=45\nKillMode=mixed\nLimitNOFILE=65536\nUMask=0077\n\n[Install]\n")
 	if u.System {
 		sb.WriteString("WantedBy=multi-user.target\n")
 	} else {

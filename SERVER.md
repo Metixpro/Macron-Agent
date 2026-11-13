@@ -620,3 +620,9 @@ The terminal workspace (`macron`):
 - The conversation is no longer redrawn from scratch for every new block (about 470 ms → 3 ms with 800 blocks), and the screen uses the terminal's own background.
 
 The installer prints the Macron logo, a plan, numbered steps with a progress bar, a spinner that says what it is installing and for how long, and a summary with the next steps. The `macron setup` and `macron telegram` wizards use the same colors. Without a terminal (`--yes`, pipes) the output stays plain.
+
+### 1.12.1: Telegram keeps running when Bale or Rubika is connected
+
+- The service runs Telegram and every messenger that has a token and owner IDs (Bale, Rubika) side by side. Before, `MACRON_MESSENGER=bale` (which the connections tool told the model to set) replaced Telegram with Bale, so connecting Bale switched the Telegram bot off. The variable now only matters when no Telegram bot is configured.
+- A messenger that is down (Bale answering 503) no longer stops the service: it is tried again with growing pauses (5 s up to 5 minutes), and a messenger that stops is started again the same way, while Telegram keeps working.
+- Processes an earlier run left behind (a shell supervisor, a proxy) are stopped when the service starts, and new service units use `KillMode=mixed`, so they do not pile up and hold memory.

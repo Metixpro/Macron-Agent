@@ -28,10 +28,10 @@ type ConnectionSpec struct {
 var connectionSpecs = []ConnectionSpec{
 	{"gmail", "Gmail", "OAuth: search, read and send mail", []string{"MACRON_GMAIL_ACCESS_TOKEN", "MACRON_GMAIL_CLIENT_ID", "MACRON_GMAIL_CLIENT_SECRET", "MACRON_GMAIL_REFRESH_TOKEN", "MACRON_GMAIL_FROM"}, [][]string{{"MACRON_GMAIL_ACCESS_TOKEN"}, {"MACRON_GMAIL_CLIENT_ID", "MACRON_GMAIL_CLIENT_SECRET", "MACRON_GMAIL_REFRESH_TOKEN"}}, false},
 	{"smtp", "Email / SMTP", "Send mail; STARTTLS or implicit TLS, no inbox access", []string{"MACRON_SMTP_HOST", "MACRON_SMTP_PORT", "MACRON_SMTP_USER", "MACRON_SMTP_PASS", "MACRON_SMTP_FROM", "MACRON_SMTP_TLS"}, [][]string{{"MACRON_SMTP_HOST", "MACRON_SMTP_USER", "MACRON_SMTP_PASS"}}, false},
-	{"bale", "Bale / بله", "Send messages; native private text chat: macron bale run", []string{"BALE_BOT_TOKEN", "MACRON_BALE_OWNERS", "MACRON_BALE_API", "MACRON_MESSENGER"}, [][]string{{"BALE_BOT_TOKEN"}}, true},
-	{"rubika", "Rubika / روبیکا", "Send messages; native private text chat: macron rubika run", []string{"RUBIKA_BOT_TOKEN", "MACRON_RUBIKA_OWNERS", "MACRON_RUBIKA_API", "MACRON_MESSENGER"}, [][]string{{"RUBIKA_BOT_TOKEN"}}, true},
+	{"bale", "Bale / بله", "Send messages; native private text chat: macron bale run", []string{"BALE_BOT_TOKEN", "MACRON_BALE_OWNERS", "MACRON_BALE_API"}, [][]string{{"BALE_BOT_TOKEN"}}, true},
+	{"rubika", "Rubika / روبیکا", "Send messages; native private text chat: macron rubika run", []string{"RUBIKA_BOT_TOKEN", "MACRON_RUBIKA_OWNERS", "MACRON_RUBIKA_API"}, [][]string{{"RUBIKA_BOT_TOKEN"}}, true},
 	{"eitaa", "Eitaa / ایتا", "Eitaayar outbound messages only; no native inbound listener", []string{"EITAA_BOT_TOKEN"}, [][]string{{"EITAA_BOT_TOKEN"}}, false},
-	{"telegram", "Telegram", "Private bot chat, panels, files and tools", []string{"TELEGRAM_BOT_TOKEN", "MACRON_OWNERS", "MACRON_TELEGRAM_API", "MACRON_MESSENGER"}, [][]string{{"TELEGRAM_BOT_TOKEN", "MACRON_OWNERS"}}, true},
+	{"telegram", "Telegram", "Private bot chat, panels, files and tools", []string{"TELEGRAM_BOT_TOKEN", "MACRON_OWNERS", "MACRON_TELEGRAM_API"}, [][]string{{"TELEGRAM_BOT_TOKEN", "MACRON_OWNERS"}}, true},
 	{"slack", "Slack", "Send through a webhook or bot token", []string{"SLACK_WEBHOOK_URL", "SLACK_BOT_TOKEN"}, [][]string{{"SLACK_WEBHOOK_URL"}, {"SLACK_BOT_TOKEN"}}, false},
 	{"discord", "Discord", "Send through a webhook", []string{"DISCORD_WEBHOOK_URL"}, [][]string{{"DISCORD_WEBHOOK_URL"}}, false},
 	{"whatsapp", "WhatsApp", "Send using WhatsApp Cloud API", []string{"WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID"}, [][]string{{"WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID"}}, false},
@@ -120,7 +120,7 @@ func (r *Registry) registerConnections() {
 			}
 			out := s.Name + " — " + s.Capability + "\n" + strings.Join(fields, "\n")
 			if s.Restart {
-				out += "\nNative chat also needs the platform owner IDs and its run command/service restart. To select this platform in the existing background service, set MACRON_MESSENGER=" + s.ID + "."
+				out += "\nNative chat also needs the platform owner IDs. The background service runs Telegram and every messenger that has a token and owner IDs side by side; after saving, the owner restarts it with: macron telegram restart."
 			}
 			if s.ID == "gmail" {
 				out += "\nUse a Google-authorized OAuth access token, or client ID + secret + offline refresh token. Scopes: gmail.readonly for search/read, gmail.send for sending. MACRON_GMAIL_FROM identifies the sender."
