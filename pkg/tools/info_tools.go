@@ -52,21 +52,44 @@ func (r *Registry) registerInfoTools() {
 		}, []string{"repo"}, r.githubInspect)
 
 	r.add(ToolEmailClient,
-		"Send emails via SMTP with subject, body, and recipients.",
+		"Send email via SMTP or Gmail OAuth; search/list and read Gmail messages with configured OAuth access.",
 		map[string]any{
-			"to":      prop("string", "Recipient email addresses (comma separated)"),
-			"subject": prop("string", "Email subject"),
-			"body":    prop("string", "Email text content"),
-			"host":    prop("string", "SMTP host override"),
-			"port":    prop("integer", "SMTP port (default 587)"),
-		}, []string{"to", "subject", "body"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+			"action":     enumProp("send", "send", "search", "list", "read"),
+			"provider":   enumProp("", "smtp", "gmail"),
+			"query":      prop("string", "Gmail search query (default in:inbox)"),
+			"message_id": prop("string", "Gmail message ID returned by search, required for read"),
+			"limit":      prop("integer", "Maximum Gmail search results, 1-20 (default 10)"),
+			"to":         prop("string", "Recipient email addresses (comma separated; required for send)"),
+			"subject":    prop("string", "Email subject"),
+			"body":       prop("string", "Email text content"),
+			"host":       prop("string", "SMTP host override"),
+			"port":       prop("integer", "SMTP port (default MACRON_SMTP_PORT or 587; 465 uses implicit TLS)"),
+		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 			to := strArg(args, "to")
 			sub := strArg(args, "subject")
 			body := strArg(args, "body")
 			host := strArg(args, "host")
-			port := intArg(args, "port", 587, 1, 65535)
+			port := intArg(args, "port", 0, 1, 65535)
+			action := strArg(args, "action")
+			if action == "" {
+				action = "send"
+			}
+			provider := strArg(args, "provider")
+			if provider != "" && provider != "smtp" && provider != "gmail" {
+				return "error: email provider must be smtp or gmail", nil
+			}
+			gmail := provider == "gmail" || provider == "" && gmailConfigured() && host == ""
+			if action != "send" {
+				if !gmail {
+					return "error: search/list/read requires Gmail OAuth (provider=gmail)", nil
+				}
+				return r.Gmail(ctx, action, to, sub, body, strArg(args, "query"), strArg(args, "message_id"), intArg(args, "limit", 10, 1, 20))
+			}
 			if refused := r.gateSend(ctx, sessionID, "email "+to, "subject: "+sub+"\n"+body); refused != "" {
 				return refused, nil
+			}
+			if gmail {
+				return r.Gmail(ctx, action, to, sub, body, "", "", 0)
 			}
 			if err := SendEmail(ctx, host, port, "", "", "", to, sub, body); err != nil {
 				return "email error: " + err.Error(), nil

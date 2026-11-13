@@ -184,3 +184,5 @@ The agent runs with its account's permissions. Keep tokens, keys, cookies and ba
 ## License
 
 [MIT](LICENSE). Free to use, modify and distribute with the license notice retained.
+
+Messenger chat and Gmail OAuth setup: [connection guide](docs/messengers-email.md).

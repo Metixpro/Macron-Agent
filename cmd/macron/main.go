@@ -31,6 +31,16 @@ func main() {
 	config.ActivateToolEnv()
 	args := os.Args[1:]
 	switch {
+	case len(args) > 0 && (args[0] == "bale" || args[0] == "rubika" || args[0] == "eitaa"):
+		if len(args) < 2 || args[1] != "run" {
+			fmt.Fprintf(os.Stderr, "usage: macron %s run [flags]\n", args[0])
+			os.Exit(2)
+		}
+		if err := runMessenger(args[0], args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	case len(args) == 0 && interactiveTerminal():
 		os.Exit(runTerminal())
 	case len(args) > 1 && (args[0] == "telegram" || args[0] == "tg") && args[1] == "run":
@@ -43,6 +53,12 @@ func main() {
 
 func runBot(args []string) {
 	_ = config.LoadDefaultDotEnv()
+	if platform := strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_MESSENGER"))); platform != "" && platform != "telegram" {
+		if err := runMessenger(platform, args); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	cfg := &config.Config{OptionalAPIURL: true}
 	cfg.Bind(flag.CommandLine)
 	tokenFlag := flag.String("token", os.Getenv(config.EnvBotToken), "Telegram bot token — prefer env "+config.EnvBotToken)

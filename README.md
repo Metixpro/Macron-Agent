@@ -184,3 +184,5 @@ make build
 ## لایسنس
 
 [MIT](LICENSE) — استفاده، تغییر و توزیع آزاد با حفظ اعلان لایسنس.
+
+راهنمای چت بله و روبیکا، Gmail OAuth و SMTP: [اتصال پیام‌رسان و ایمیل](docs/messengers-email.md).

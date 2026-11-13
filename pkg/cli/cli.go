@@ -76,6 +76,8 @@ const usage = `Macron Agent %s: a personal AI agent that works on this machine.
 Usage:
   macron                  the agent in this terminal, working in the current folder
   macron telegram         connect the Telegram bot and keep it running (status, logs, restart…)
+  macron bale run         chat and use tools in Bale (BALE_BOT_TOKEN, MACRON_BALE_OWNERS)
+  macron rubika run       chat and use tools in Rubika (RUBIKA_BOT_TOKEN, MACRON_RUBIKA_OWNERS)
   macron exec [FLAGS] TASK  run one task without the interface and print the answer
   macron setup            choose the model (and optionally connect Telegram)
   macron doctor           check that everything works, and say what to fix

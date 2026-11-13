@@ -75,7 +75,10 @@ func sendHTTPJSON(ctx context.Context, client *http.Client, endpoint string, pay
 		return "", scrub(err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+	if err != nil {
+		return "", scrub(fmt.Errorf("reading messenger response: %w", err))
+	}
 	text := strings.TrimSpace(string(body))
 	if resp.StatusCode/100 != 2 {
 		return "", scrub(fmt.Errorf("%s: %s", resp.Status, text))
@@ -85,11 +88,20 @@ func sendHTTPJSON(ctx context.Context, client *http.Client, endpoint string, pay
 		Status      string `json:"status"`
 		Description string `json:"description"`
 	}
-	if json.Unmarshal(body, &reply) == nil && ((reply.OK != nil && !*reply.OK) || strings.EqualFold(reply.Status, "ERROR")) {
+	if err := json.Unmarshal(body, &reply); err != nil {
+		return "", fmt.Errorf("messenger returned an invalid JSON response (HTTP %d)", resp.StatusCode)
+	}
+	if reply.OK == nil && reply.Status == "" {
+		return "", fmt.Errorf("messenger did not confirm delivery (HTTP %d)", resp.StatusCode)
+	}
+	if (reply.OK != nil && !*reply.OK) || (reply.Status != "" && !strings.EqualFold(reply.Status, "OK")) {
 		return "", scrub(fmt.Errorf("refused: %s", text))
 	}
 	if len(text) > 300 {
 		text = text[:300] + "…"
+	}
+	if secret != "" {
+		text = strings.ReplaceAll(text, secret, "•••")
 	}
 	return "sent (" + resp.Status + "): " + text, nil
 }
