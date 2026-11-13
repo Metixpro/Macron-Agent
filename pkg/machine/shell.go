@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -163,22 +164,41 @@ func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 
 	opts := RunOptions{InSession: true, Env: map[string]string{"MACRON_SHELL": "1"}}
 	ctx, cancel := context.WithCancel(context.Background())
-	argv := s.sandboxed(ws, []string{"python3", "-I", "-c", shellSupervisor, strconv.Itoa(jobLogKeep)})
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = ws
-	cmd.Env = flattenEnv(s.baseEnv(opts, ws))
-	cmd.WaitDelay = 3 * time.Second
+	var (
+		in   io.WriteCloser
+		out  io.Reader
+		wait func() error
+	)
 	stderr := &capWriter{max: 4096}
-	cmd.Stderr = stderr
-	in, err1 := cmd.StdinPipe()
-	out, err2 := cmd.StdoutPipe()
-	if err := errors.Join(err1, err2); err != nil {
-		cancel()
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		cancel()
-		return nil, err
+	if useGoShell {
+		_, w, r, ended := newGoShell(ws, flattenEnv(s.baseEnv(opts, ws)), jobLogKeep, shellArgv)
+		in, out = w, r
+		go func() {
+			<-ctx.Done()
+			_ = w.Close()
+		}()
+		wait = func() error {
+			<-ended
+			return nil
+		}
+	} else {
+		argv := s.sandboxed(ws, []string{"python3", "-I", "-c", shellSupervisor, strconv.Itoa(jobLogKeep)})
+		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+		cmd.Dir = ws
+		cmd.Env = flattenEnv(s.baseEnv(opts, ws))
+		cmd.WaitDelay = 3 * time.Second
+		cmd.Stderr = stderr
+		w, err1 := cmd.StdinPipe()
+		r, err2 := cmd.StdoutPipe()
+		if err := errors.Join(err1, err2); err != nil {
+			cancel()
+			return nil, err
+		}
+		if err := cmd.Start(); err != nil {
+			cancel()
+			return nil, err
+		}
+		in, out, wait = w, r, cmd.Wait
 	}
 	sh := &shell{ws: ws, in: in, cancel: cancel, done: make(chan struct{}), started: time.Now(), used: time.Now(),
 		calls: map[int]chan shellMsg{}, jobs: map[int]*Job{}}
@@ -186,7 +206,7 @@ func (s *Machine) startShell(sessionID, ws string) (*shell, error) {
 	s.begin(top)
 	go sh.read(out)
 	go func() {
-		err := cmd.Wait()
+		err := wait()
 		cancel()
 		s.end(top)
 		why := "it ended"
@@ -269,11 +289,7 @@ func (s *Machine) runInShell(ctx context.Context, sessionID string, sh *shell, o
 		if len(opts.Args) == 0 {
 			return &ExecutionResult{ExitCode: -1, Error: "empty command"}
 		}
-		quoted := make([]string, len(opts.Args))
-		for i, a := range opts.Args {
-			quoted[i] = shellQuote(a)
-		}
-		script = "exec " + strings.Join(quoted, " ")
+		script = argsScript(opts.Args)
 	}
 	id, ch := sh.call()
 	defer sh.drop(id)
@@ -414,7 +430,7 @@ func (s *Machine) detach(sessionID string, sh *shell, id int, command string, st
 	if err := s.WriteFile(sessionID, log, nil); err != nil {
 		return drop()
 	}
-	if err := sh.send(map[string]any{"op": "detach", "id": id, "job": n, "log": sh.ws + "/" + log}); err != nil {
+	if err := sh.send(map[string]any{"op": "detach", "id": id, "job": n, "log": filepath.Join(sh.ws, filepath.FromSlash(log))}); err != nil {
 		return drop()
 	}
 	return n
@@ -458,7 +474,7 @@ func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job,
 	id, ch := sh.call()
 	defer sh.drop(id)
 	sh.touch()
-	if err := sh.send(map[string]any{"op": "bg", "id": id, "job": n, "script": s.hostPath(ws, command), "log": ws + "/" + log}); err != nil {
+	if err := sh.send(map[string]any{"op": "bg", "id": id, "job": n, "script": s.hostPath(ws, command), "log": filepath.Join(ws, filepath.FromSlash(log))}); err != nil {
 		return fail(fmt.Errorf("the background shell is gone: %w", err))
 	}
 	select {

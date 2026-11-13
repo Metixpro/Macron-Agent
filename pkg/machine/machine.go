@@ -365,9 +365,14 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	argv := opts.Args
+	argv := resolveArgv(opts.Args)
 	if opts.Shell != "" {
-		argv = []string{"bash", "-c", opts.Shell}
+		a, cleanup, err := shellArgv(s.hostPath(ws, opts.Shell))
+		if err != nil {
+			return &ExecutionResult{ExitCode: -1, Error: err.Error()}
+		}
+		defer cleanup()
+		argv = a
 	}
 	if len(argv) == 0 {
 		return &ExecutionResult{ExitCode: -1, Error: "empty command"}
@@ -387,6 +392,7 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 	cmd.Dir = ws
 	cmd.Env = flattenEnv(s.baseEnv(opts, ws))
 	cmd.WaitDelay = 2 * time.Second
+	prepare(cmd, opts.Shell != "")
 	if len(opts.Stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(opts.Stdin)
 	}
@@ -406,7 +412,11 @@ func (s *Machine) runIn(ctx context.Context, ws string, opts RunOptions) *Execut
 	cmd.Stdout, cmd.Stderr = outW, errW
 
 	start := time.Now()
-	err := cmd.Run()
+	t, err := startTracked(cmd)
+	if err == nil {
+		err = cmd.Wait()
+	}
+	t.close()
 	res := &ExecutionResult{
 		Stdout:    strings.ToValidUTF8(stdout.String(), ""),
 		Duration:  time.Since(start).Round(time.Millisecond).String(),
@@ -439,7 +449,7 @@ const defaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bi
 func (s *Machine) Available(programs ...string) map[string]bool {
 	out := map[string]bool{}
 	for _, p := range programs {
-		if _, err := exec.LookPath(p); err == nil {
+		if available(p) {
 			out[p] = true
 		}
 	}
@@ -457,16 +467,15 @@ func (s *Machine) Check(argv ...string) bool {
 
 func (s *Machine) baseEnv(opts RunOptions, ws string) map[string]string {
 	host := hostEnv()
-	home, tmp := host["HOME"], "/tmp"
+	home, tmp := host["HOME"], os.TempDir()
 	if t := host["TMPDIR"]; t != "" {
 		tmp = t
 	}
 	env := map[string]string{
-		"LC_ALL":                        "C.UTF-8",
 		"PYTHONUNBUFFERED":              "1",
 		"PYTHONDONTWRITEBYTECODE":       "1",
 		"MPLBACKEND":                    "Agg",
-		"MPLCONFIGDIR":                  tmp + "/mpl",
+		"MPLCONFIGDIR":                  filepath.Join(tmp, "mpl"),
 		"TERM":                          "dumb",
 		"NO_COLOR":                      "1",
 		"PIP_DISABLE_PIP_VERSION_CHECK": "1",
@@ -474,16 +483,28 @@ func (s *Machine) baseEnv(opts RunOptions, ws string) map[string]string {
 		"GIT_AUTHOR_NAME": "Macron", "GIT_AUTHOR_EMAIL": "macron@localhost",
 		"GIT_COMMITTER_NAME": "Macron", "GIT_COMMITTER_EMAIL": "macron@localhost",
 	}
+	platformDefaults(env)
 	for k, v := range host {
-		env[k] = v
+		putEnv(env, k, v)
 	}
 	if env["HOME"] == "" {
 		env["HOME"] = home
 	}
 	for k, v := range opts.Env {
-		env[k] = s.hostPath(ws, v)
+		putEnv(env, k, s.hostPath(ws, v))
 	}
 	return env
+}
+
+func putEnv(env map[string]string, key, value string) {
+	if foldEnv {
+		for k := range env {
+			if k != key && strings.EqualFold(k, key) {
+				delete(env, k)
+			}
+		}
+	}
+	env[key] = value
 }
 
 func flattenEnv(m map[string]string) []string {

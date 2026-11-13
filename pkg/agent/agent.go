@@ -306,6 +306,7 @@ func (a *Agent) systemPromptFor(local map[string]LocalTool, offered map[string]b
 	hasBash := offers("bash_execute")
 	if hasBash {
 		sb.WriteString("- For exact calculations or data processing, run code instead of guessing.\n")
+		sb.WriteString(windowsNote())
 	}
 	if has("view_image") {
 		sb.WriteString("- After you create or edit an image (remove a watermark, crop, enhance, draw a chart…), look at the result with view_image before sending it. " +

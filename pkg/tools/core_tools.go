@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -61,8 +62,7 @@ func (r *Registry) registerCoreTools() {
 		}, []string{"url"}, oneDownload(r.downloadFile))
 
 	{
-		r.add("bash_execute",
-			"Run a bash script on this machine, as its user (the work folder is the current directory, also written /workspace): the full machine: any program, any file, any network, services, installs.",
+		r.add("bash_execute", shellToolDescription(),
 			map[string]any{
 				"command":         prop("string", ""),
 				"timeout_seconds": prop("integer", "Default 60, max 7200"),
@@ -843,4 +843,17 @@ func (r *Registry) readMany(ctx context.Context, sessionID, first string, list [
 		fmt.Fprintf(&sb, "=== %s ===\n%s\n\n", n, textutil.HeadTail(out, share))
 	}
 	return strings.TrimSpace(sb.String()) + more
+}
+
+func shellToolDescription() string {
+	if runtime.GOOS != "windows" {
+		return "Run a bash script on this machine, as its user (the work folder is the current directory, also written /workspace): the full machine: any program, any file, any network, services, installs."
+	}
+	shell := machine.ShellName()
+	desc := "Run a " + shell + " script on this Windows PC, as its user (the work folder is the current directory, also written /workspace): " +
+		"the full machine: any program, any file, any network, services, installs (winget). Windows paths, PowerShell cmdlets; there is no sudo."
+	if !strings.Contains(shell, "7") {
+		desc += " In PowerShell 5.1 chain with ';' and use if ($?) { } for 'only if it worked': '&&' and '||' need PowerShell 7."
+	}
+	return desc
 }

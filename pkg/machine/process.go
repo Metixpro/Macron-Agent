@@ -15,6 +15,7 @@ type Process struct {
 	Stdout io.ReadCloser
 
 	cmd    *exec.Cmd
+	tree   *tree
 	stderr *syncWriter
 	done   chan struct{}
 	once   sync.Once
@@ -26,11 +27,17 @@ func (s *Machine) Start(ctx context.Context, sessionID string, opts RunOptions) 
 	if err != nil {
 		return nil, err
 	}
-	argv := opts.Args
+	argv := resolveArgv(opts.Args)
+	cleanup := func() {}
 	if opts.Shell != "" {
-		argv = []string{"bash", "-c", opts.Shell}
+		a, c, err := shellArgv(s.hostPath(ws, opts.Shell))
+		if err != nil {
+			return nil, err
+		}
+		argv, cleanup = a, c
 	}
 	if len(argv) == 0 {
+		cleanup()
 		return nil, errors.New("empty command")
 	}
 	hostExecutable := argv[0]
@@ -44,23 +51,31 @@ func (s *Machine) Start(ctx context.Context, sessionID string, opts RunOptions) 
 	cmd.Dir = ws
 	cmd.Env = flattenEnv(s.baseEnv(opts, ws))
 	cmd.WaitDelay = 2 * time.Second
+	prepare(cmd, opts.Shell != "")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		cleanup()
 		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		cleanup()
 		return nil, err
 	}
 	p := &Process{Stdin: stdin, Stdout: stdout, cmd: cmd, stderr: &syncWriter{w: &capWriter{max: 16 << 10}}, done: make(chan struct{})}
 	cmd.Stderr = p.stderr
-	if err := cmd.Start(); err != nil {
+	t, err := startTracked(cmd)
+	if err != nil {
+		cleanup()
 		return nil, err
 	}
+	p.tree = t
 	top := s.topWorkspace(sessionID)
 	s.begin(top)
 	go func() {
 		p.err = cmd.Wait()
+		t.close()
+		cleanup()
 		s.end(top)
 		close(p.done)
 	}()
@@ -98,6 +113,7 @@ func (p *Process) Close() {
 			return
 		case <-time.After(2 * time.Second):
 		}
+		p.tree.kill()
 		if p.cmd.Process != nil {
 			_ = p.cmd.Process.Kill()
 		}

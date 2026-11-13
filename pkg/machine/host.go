@@ -42,14 +42,9 @@ func hostEnv() map[string]string {
 		}
 		env[k] = v
 	}
-	if env["PATH"] == "" {
-		env["PATH"] = defaultPath
-	}
+	platformHostEnv(env)
 	if home, err := os.UserHomeDir(); err == nil && env["HOME"] == "" {
 		env["HOME"] = home
-	}
-	if _, ok := env["LANG"]; !ok {
-		env["LANG"] = "C.UTF-8"
 	}
 
 	env["PAGER"], env["GIT_PAGER"] = "cat", "cat"

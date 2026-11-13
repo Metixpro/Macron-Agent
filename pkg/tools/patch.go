@@ -47,14 +47,20 @@ func (r *Registry) applyPatch(ctx context.Context, sessionID string, args map[st
 	}
 	defer func() { _ = r.Machine.Remove(sessionID, name) }()
 
-	script := `cd "$1" || exit 1
-export GIT_DIR=/nonexistent
-for how in "" "--recount" "--recount --unidiff-zero"; do
-	if git apply --check $how -p"$2" "$3" 2>/dev/null; then exec git apply --verbose --whitespace=nowarn $how -p"$2" "$3"; fi
-done
-exec git apply --verbose -p"$2" "$3"`
-	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Args: []string{"bash", "-c", script, "patch", dir, strip, machine.MountPoint + "/" + name},
-		Timeout: 60 * time.Second, MergeOutput: true})
+	file := machine.MountPoint + "/" + name
+	gitApply := func(extra ...string) []string {
+		return append(append([]string{"git", "-C", dir, "apply"}, extra...), "-p"+strip, file)
+	}
+	env := map[string]string{"GIT_DIR": "/nonexistent"}
+	final := gitApply("--verbose")
+	for _, how := range [][]string{nil, {"--recount"}, {"--recount", "--unidiff-zero"}} {
+		check := r.Machine.Run(ctx, sessionID, machine.RunOptions{Args: gitApply(append([]string{"--check"}, how...)...), Env: env, Timeout: 60 * time.Second})
+		if check.ExitCode == 0 {
+			final = gitApply(append([]string{"--verbose", "--whitespace=nowarn"}, how...)...)
+			break
+		}
+	}
+	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Args: final, Env: env, Timeout: 60 * time.Second, MergeOutput: true})
 	out := terminalTranscript("git apply "+path.Base(name), res, false)
 	if res.ExitCode != 0 {
 		return out + "\nNothing was changed (a patch applies whole or not at all). Read the files again and make the context lines match, " +

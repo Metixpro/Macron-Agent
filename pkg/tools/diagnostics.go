@@ -28,7 +28,7 @@ var syntaxCheckers = map[string]syntaxChecker{
 	".sh":   {"bash", "bash -n", func(f string) []string { return []string{"bash", "-n", f} }},
 	".bash": {"bash", "bash -n", func(f string) []string { return []string{"bash", "-n", f} }},
 	".rb":   {"ruby", "ruby -c", func(f string) []string { return []string{"ruby", "-c", f} }},
-	".go":   {"gofmt", "gofmt", func(f string) []string { return []string{"bash", "-c", `gofmt -e "$1" >/dev/null`, "gofmt", f} }},
+	".go":   {"gofmt", "gofmt", func(f string) []string { return []string{"gofmt", "-l", "-e", f} }},
 }
 
 const yamlCheck = "import sys\ntry:\n import yaml\nexcept ImportError:\n sys.exit(0)\nlist(yaml.safe_load_all(open(sys.argv[1],'rb')))"

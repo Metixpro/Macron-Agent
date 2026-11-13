@@ -2,12 +2,19 @@ package agent
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
+
+	"github.com/Metixpro/macron-agent/pkg/machine"
 )
 
 func (a *Agent) cliPrompt(offers func(string) bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are %s, a local server agent.\n\n%s\n", a.Persona.fullName(), a.soulText())
+	where := "a local server agent"
+	if runtime.GOOS == "windows" {
+		where = "a local agent on this Windows PC"
+	}
+	fmt.Fprintf(&b, "You are %s, %s.\n\n%s\n", a.Persona.fullName(), where, a.soulText())
 	if a.Teachings != nil {
 		if taught := strings.TrimSpace(a.Teachings()); taught != "" {
 			b.WriteString("\nOwner rules:\n" + taught + "\n")
@@ -26,6 +33,9 @@ Execution:
 - The working directory is the user's project: work in it with relative paths. Project instructions from its MACRON.md or AGENTS.md come in the [context] note; follow them.
 - <work_notes> at the end of your earlier replies are the system's exact record of that reply's work: the files it changed and each step with its outcome. Build on them: don't re-read files or re-run checks just to learn what you did; open a file only when the next change needs its exact content. You never write one yourself.
 `)
+	if offers("bash_execute") {
+		b.WriteString(windowsNote())
+	}
 	if offers(ToolSearch) {
 		b.WriteString("- Discover only the additional tools you need with tool_search; avoid loading every schema.\n")
 	} else if offers("more_tools") {
@@ -46,4 +56,13 @@ Execution:
 	}
 	b.WriteString(safetyNote)
 	return strings.TrimSpace(b.String())
+}
+
+func windowsNote() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	return "- This machine runs Windows. bash_execute runs " + machine.ShellName() + ": use PowerShell cmdlets (Get-ChildItem, Select-String, Get-Content, " +
+		"Invoke-WebRequest, Start-Process), Windows paths (C:\\Users\\...), $env:NAME for variables and winget to install software. " +
+		"There is no sudo, apt or bash unless you find them installed.\n"
 }

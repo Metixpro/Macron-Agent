@@ -3,6 +3,7 @@ package cmdgate
 import (
 	"path"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -38,6 +39,9 @@ const maxDepth = 6
 func Analyze(command string, env Env) []Finding {
 	var out []Finding
 	analyze(command, env, 0, &out)
+	if runtime.GOOS == "windows" {
+		out = append(out, analyzePowerShell(command, env)...)
+	}
 
 	masked := maskQuotes(Clean(command))
 	if forkBombRe.MatchString(strings.Join(strings.Fields(masked), "")) || forkBombRe.MatchString(masked) {

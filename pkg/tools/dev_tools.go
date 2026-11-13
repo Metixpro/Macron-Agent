@@ -29,6 +29,7 @@ const (
 type language struct {
 	Name    string
 	Program string
+	Bash    bool
 	Ext     string
 	argv    func(file string, args []string) []string
 	display func(file string) string
@@ -40,6 +41,11 @@ var languages = []language{
 		argv: func(f string, a []string) []string { return append([]string{"python3", f}, a...) }},
 	{Name: "bash", Program: "bash", Ext: ".sh",
 		argv: func(f string, a []string) []string { return append([]string{"bash", f}, a...) }},
+	{Name: "powershell", Program: "powershell", Ext: ".ps1",
+		argv: func(f string, a []string) []string {
+			return append([]string{machine.PowerShell(), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", f}, a...)
+		},
+		display: func(f string) string { return "powershell -File " + f }},
 	{Name: "node", Program: "node", Ext: ".js",
 		argv: func(f string, a []string) []string { return append([]string{"node", f}, a...) }},
 	{Name: "deno", Program: "deno", Ext: ".ts",
@@ -61,12 +67,12 @@ var languages = []language{
 	{Name: "go", Program: "go", Ext: ".go",
 		argv: func(f string, a []string) []string { return append([]string{"go", "run", f}, a...) },
 	},
-	{Name: "c", Program: "gcc", Ext: ".c",
+	{Name: "c", Program: "gcc", Bash: true, Ext: ".c",
 		argv: func(f string, a []string) []string {
 			return append([]string{"bash", "-c", `gcc -O2 -o "${TMPDIR:-/tmp}/macron-prog-$$" "$1" -lm && exec "${TMPDIR:-/tmp}/macron-prog-$$" "${@:2}"`, "cc", f}, a...)
 		},
 		display: func(f string) string { return "gcc " + f + " -o prog && ./prog" }},
-	{Name: "cpp", Program: "g++", Ext: ".cpp",
+	{Name: "cpp", Program: "g++", Bash: true, Ext: ".cpp",
 		argv: func(f string, a []string) []string {
 			return append([]string{"bash", "-c", `g++ -std=c++17 -O2 -o "${TMPDIR:-/tmp}/macron-prog-$$" "$1" && exec "${TMPDIR:-/tmp}/macron-prog-$$" "${@:2}"`, "c++", f}, a...)
 		},
@@ -77,7 +83,7 @@ var languages = []language{
 			return append([]string{"java", "-Dfile.encoding=UTF-8", f}, a...)
 		},
 		display: func(f string) string { return "java " + f }},
-	{Name: "rust", Program: "rustc", Ext: ".rs",
+	{Name: "rust", Program: "rustc", Bash: true, Ext: ".rs",
 		argv: func(f string, a []string) []string {
 			return append([]string{"bash", "-c", `rustc --edition 2021 -O -o "${TMPDIR:-/tmp}/macron-prog-$$" "$1" && exec "${TMPDIR:-/tmp}/macron-prog-$$" "${@:2}"`, "rust", f}, a...)
 		},
@@ -87,13 +93,14 @@ var languages = []language{
 var languageAliases = map[string]string{
 	"py": "python", "python3": "python", "sh": "bash", "shell": "bash", "js": "node", "javascript": "node",
 	"nodejs": "node", "rb": "ruby", "pl": "perl", "golang": "go", "c++": "cpp", "cxx": "cpp", "cc": "cpp", "rs": "rust",
+	"ps1": "powershell", "pwsh": "powershell", "ps": "powershell",
 }
 
 var extAliases = map[string]string{".mjs": "node", ".cjs": "node", ".cc": "cpp", ".cxx": "cpp", ".bash": "bash", ".python": "python",
 	".mts": "typescript", ".tsx": "typescript"}
 
 func (r *Registry) registerDevTools() {
-	have := r.Machine.Available("python3", "bash", "node", "deno", "bun", "php", "ruby", "perl", "go", "gcc", "g++", "rustc", "gofmt", "git", "java")
+	have := r.Machine.Available("python3", "bash", "powershell", "node", "deno", "bun", "php", "ruby", "perl", "go", "gcc", "g++", "rustc", "gofmt", "git", "java")
 	r.syntax = have
 	if have["git"] {
 		r.add(ToolApplyPatch,
@@ -106,7 +113,7 @@ func (r *Registry) registerDevTools() {
 	r.langs = map[string]language{}
 	var names []string
 	for _, l := range languages {
-		if have[l.Program] {
+		if have[l.Program] && (!l.Bash || have["bash"]) {
 			r.langs[l.Name] = l
 			names = append(names, l.Name)
 		}
@@ -250,7 +257,7 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 	if err != nil {
 		return "error: " + err.Error(), nil
 	}
-	if lang.Name == "bash" {
+	if lang.Name == "bash" || lang.Name == "powershell" {
 		script := code
 		if strings.TrimSpace(script) == "" {
 			if b, _, err := r.Machine.ReadFile(sessionID, file, maxCodeBytes); err == nil {
@@ -298,7 +305,7 @@ func (r *Registry) runCode(ctx context.Context, sessionID string, args map[strin
 	run := lang.argv(argFile(file), argv)
 	shown, env := commandLine(lang, file, argv), lang.env
 	if dir := r.goPackageDir(sessionID, lang, file); dir != "" {
-		run = append([]string{"bash", "-c", `cd "$1" && shift && exec go run . "$@"`, "go", dir}, argv...)
+		run = append([]string{"go", "-C", dir, "run", "."}, argv...)
 		shown = "cd " + shellQuote(dir) + " && go run ."
 		for _, a := range argv {
 			shown += " " + shellQuote(a)
