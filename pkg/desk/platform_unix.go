@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -25,3 +27,16 @@ func sshAgent() agent.ExtendedAgent {
 }
 
 func wslAvailable() bool { return false }
+
+func reveal(path string, folder bool) error {
+	if runtime.GOOS == "darwin" {
+		if folder {
+			return exec.Command("open", "-R", path).Start()
+		}
+		return exec.Command("open", path).Start()
+	}
+	if folder {
+		path = filepath.Dir(path)
+	}
+	return exec.Command("xdg-open", path).Start()
+}

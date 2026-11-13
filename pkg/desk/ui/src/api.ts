@@ -42,7 +42,12 @@ type Ok = { ok: boolean };
 const p = (id: string) => `${base}/api/projects/${encodeURIComponent(id)}`;
 const r = (path: string) => base + path;
 
+export function fileURL(project: string, name: string, download = false): string {
+  return `${p(project)}/file?name=${encodeURIComponent(name)}${download ? "&download=1" : ""}`;
+}
+
 export const server = {
+  reveal: (id: string, name: string, folder: boolean) => call<Ok>("POST", p(id) + "/reveal", { name, folder }),
   state: () => call<StateResponse>("GET", r("/api/state")),
   project: (id: string) => call<Snapshot>("GET", p(id)),
   send: (id: string, text: string) => call<Ok>("POST", p(id) + "/send", { text }),

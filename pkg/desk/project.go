@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,16 @@ type Block struct {
 	Summary string `json:"summary,omitempty"`
 	Output  string `json:"output,omitempty"`
 	Failed  bool   `json:"failed,omitempty"`
+	File    *File  `json:"file,omitempty"`
 	At      int64  `json:"at"`
+}
+
+type File struct {
+	Name    string `json:"name"`
+	Base    string `json:"base"`
+	Size    int64  `json:"size"`
+	Type    string `json:"type,omitempty"`
+	Caption string `json:"caption,omitempty"`
 }
 
 type liveTool struct {
@@ -449,6 +459,11 @@ func (p *project) listener() *agent.EventListener {
 			label, arg := tui.ToolHeading(name, args)
 			b := Block{Kind: "tool", Name: name, Label: label, Arg: arg, Args: clipRunes(args, outputLimit), Summary: agent.StepLine(name, args, result),
 				Output: clipRunes(result, outputLimit), Failed: agent.StepFailed(name, args, result)}
+			if name == "send_file" && !b.Failed {
+				if f := p.sentFile(args); f != nil {
+					b = Block{Kind: "file", File: f}
+				}
+			}
 			p.mu.Lock()
 			id := 0
 			for i, t := range p.live.Tools {
@@ -609,4 +624,33 @@ func lastLine(s string) string {
 		}
 	}
 	return ""
+}
+
+func (p *project) sentFile(args string) *File {
+	var in struct {
+		Filename string `json:"filename"`
+		Caption  string `json:"caption"`
+	}
+	if json.Unmarshal([]byte(args), &in) != nil || strings.TrimSpace(in.Filename) == "" {
+		return nil
+	}
+	p.mu.Lock()
+	sess := p.sess
+	p.mu.Unlock()
+	if sess == nil {
+		return nil
+	}
+	abs, info, err := sess.FilePath(in.Filename)
+	if err != nil {
+		return nil
+	}
+	return &File{Name: strings.TrimSpace(in.Filename), Base: filepath.Base(abs), Size: info.Size(), Type: fileType(abs), Caption: clipRunes(strings.TrimSpace(in.Caption), 300)}
+}
+
+func fileType(name string) string {
+	t := mime.TypeByExtension(strings.ToLower(filepath.Ext(name)))
+	if i := strings.IndexByte(t, ';'); i >= 0 {
+		t = t[:i]
+	}
+	return strings.TrimSpace(t)
 }

@@ -2,6 +2,7 @@ package desk
 
 import (
 	"context"
+	"io/fs"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 )
@@ -65,6 +66,7 @@ type Session interface {
 	New(ctx context.Context) error
 	Compact(ctx context.Context) (string, error)
 	SetMode(mode string) error
+	FilePath(name string) (string, fs.FileInfo, error)
 }
 
 type Host interface {

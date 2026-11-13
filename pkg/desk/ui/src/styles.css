@@ -474,6 +474,28 @@ pre.command { background: var(--sunk); border: 1px solid var(--line); border-rad
 @keyframes enter { from { opacity: 0; transform: translateY(4px); } }
 @keyframes fly { 0% { transform: translateY(0); opacity: 1; } 42% { transform: translateY(-15px); opacity: 0; } 43% { transform: translateY(13px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
 
+.file-card { margin: 0 0 18px; max-width: 520px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); overflow: hidden; }
+.file-preview { display: block; width: 100%; padding: 0; background: var(--hover); border-bottom: 1px solid var(--line); cursor: zoom-in; }
+.file-preview img { display: block; width: 100%; max-height: 380px; object-fit: contain; }
+.file-media { display: block; width: 100%; border-bottom: 1px solid var(--line); background: var(--hover); }
+audio.file-media { height: 44px; background: none; padding: 6px 8px 0; border-bottom: 0; }
+.file-row { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 12px; min-width: 0; }
+.file-icon { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--hover); color: var(--dim); flex: none; }
+.file-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.file-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
+.file-size { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.file-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; margin-inline-end: 4px; }
+.icon-btn.sm { width: 28px; height: 28px; }
+.icon-btn.sm:hover { background: var(--hover); color: var(--text); }
+.file-caption { padding: 0 14px 12px; color: var(--dim); font-size: 13.5px; line-height: 1.5; }
+.prose img[data-file] { display: block; max-width: min(100%, 520px); max-height: 420px; border-radius: 10px; border: 1px solid var(--line); margin: 6px 0; cursor: zoom-in; background: var(--hover); }
+.prose a.file-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--raised); color: var(--text); text-decoration: none; font-weight: 550; font-size: 13.5px; cursor: pointer; }
+.prose a.file-chip::before { content: ""; width: 12px; height: 14px; border: 1.5px solid currentColor; border-radius: 2px 5px 2px 2px; opacity: .55; flex: none; }
+.prose a.file-chip:hover { background: var(--hover); }
+.prose a.file-chip.missing { opacity: .55; text-decoration: line-through; }
+.prose a.file-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .spin, .actions.stop .ring { animation: spin 1.6s linear infinite !important; }

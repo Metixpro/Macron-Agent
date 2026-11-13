@@ -639,3 +639,7 @@ Some terminals (most mobile SSH apps, Konsole, GNOME Terminal) put right-to-left
 - On Windows the agent runs commands with PowerShell (PowerShell 7 when installed), stops whole process trees, finds a real Python, and its approval rules know risky Windows commands.
 - `apply_patch` also takes hunks without line numbers and files with Windows line endings, and works without git.
 - Releases ship Windows builds for x64, x86 (32-bit) and ARM64, as zips and as plain exe files (Macron-Desktop-…exe, Macron-Terminal-…exe); `install.ps1` picks the right one.
+
+### 1.13.1: files in the chat
+
+Macron can hand you a file of any kind in the desktop app and the terminal workspace, as it does in Telegram: `send_file`, or a `![caption](file)` line in its answer. In the app it is a card with the name, type and size, a preview for pictures (SVG too), a player for audio and video, and Open, Show in folder and Save; on a server, Save downloads it through the SSH connection. Pictures and file links inside an answer open the same way, names with spaces included. In the terminal the file is a link you can click (Ctrl+click in Windows Terminal) with its full path.

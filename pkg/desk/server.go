@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -126,6 +128,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/new", s.newAPI)
 	mux.HandleFunc("POST /api/projects/{id}/compact", s.compactAPI)
 	mux.HandleFunc("POST /api/projects/{id}/answer", s.answerAPI)
+	mux.HandleFunc("GET /api/projects/{id}/file", s.fileAPI)
+	mux.HandleFunc("POST /api/projects/{id}/reveal", s.revealAPI)
 	mux.HandleFunc("GET /api/models", s.modelsAPI)
 	mux.HandleFunc("POST /api/model", s.setModelAPI)
 	mux.HandleFunc("GET /api/providers", s.providersAPI)
@@ -795,4 +799,76 @@ func (h *hub) publish(ev map[string]any) {
 		default:
 		}
 	}
+}
+
+var inlineTypes = []string{"image/png", "image/svg+xml", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/avif", "application/pdf", "text/plain", "audio/", "video/"}
+
+func (s *Server) projectFile(w http.ResponseWriter, r *http.Request, name string) (string, fs.FileInfo, bool) {
+	p := s.withProject(w, r)
+	if p == nil {
+		return "", nil, false
+	}
+	sess, err := p.session()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return "", nil, false
+	}
+	abs, info, err := sess.FilePath(name)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, fmt.Errorf("%s is not there any more", name))
+		return "", nil, false
+	}
+	return abs, info, true
+}
+
+func (s *Server) fileAPI(w http.ResponseWriter, r *http.Request) {
+	abs, info, ok := s.projectFile(w, r, r.URL.Query().Get("name"))
+	if !ok {
+		return
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	defer f.Close()
+	kind := fileType(abs)
+	inline := false
+	for _, t := range inlineTypes {
+		if kind != "" && strings.HasPrefix(kind, t) {
+			inline = true
+		}
+	}
+	if kind == "" || !inline {
+		kind = "application/octet-stream"
+	}
+	how := "attachment"
+	if inline && r.URL.Query().Get("download") == "" {
+		how = "inline"
+	}
+	w.Header().Set("Content-Type", kind)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(how, map[string]string{"filename": info.Name()}))
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'")
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
+}
+
+func (s *Server) revealAPI(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name   string `json:"name"`
+		Folder bool   `json:"folder"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	abs, _, ok := s.projectFile(w, r, in.Name)
+	if !ok {
+		return
+	}
+	if err := reveal(abs, in.Folder); err != nil {
+		writeErr(w, http.StatusInternalServerError, fmt.Errorf("could not open it: %w", err))
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }

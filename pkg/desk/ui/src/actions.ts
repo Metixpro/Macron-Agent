@@ -1,4 +1,4 @@
-import { ApiError, server, setBase } from "./api";
+import { ApiError, fileURL, server, setBase } from "./api";
 import { local } from "./format";
 import { getState, setState } from "./store";
 import type { Dialog, Theme } from "./store";
@@ -342,4 +342,30 @@ export async function removeServer(id: string) {
     fail(e);
   }
   await loadServers();
+}
+
+export function onServer(): boolean {
+  const s = getState();
+  return s.servers.some((x) => x.id === s.machine);
+}
+
+export function saveFile(name: string, base?: string) {
+  const a = document.createElement("a");
+  a.href = fileURL(getState().current, name, true);
+  a.download = base || name.split(/[\\/]/).pop() || "file";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+export async function openFile(name: string, folder = false) {
+  if (onServer()) {
+    saveFile(name);
+    return;
+  }
+  try {
+    await server.reveal(getState().current, name, folder);
+  } catch (e) {
+    fail(e);
+  }
 }

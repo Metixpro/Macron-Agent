@@ -41,7 +41,7 @@ It installs without admin rights into `%LOCALAPPDATA%\Programs\Macron`, checks t
 
 ### The desktop app
 
-On Windows open it from the Start menu; on Linux and macOS run `macron desktop`. It opens its own window (WebView2 on Windows, Edge when WebView2 is missing) with everything the terminal has: live answers, each job's steps with long runs folded into one line, the checklist and sub-agents while they work, approval for risky commands, Build and Plan, model choice, and one folder per project with its own conversation. Persian text and tables read right to left.
+On Windows open it from the Start menu; on Linux and macOS run `macron desktop`. It opens its own window (WebView2 on Windows, Edge when WebView2 is missing) with everything the terminal has: live answers, each job's steps with long runs folded into one line, the checklist and sub-agents while they work, files Macron sends you (any kind: pictures and videos with a preview, the rest to open, show in their folder or save), approval for risky commands, Build and Plan, model choice, and one folder per project with its own conversation. Persian text and tables read right to left.
 
 The first time, connect a model from the app itself (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Ollama or any compatible service); the connection is tested before it is saved. `Ctrl+K` searches every action, theme and folder.
 

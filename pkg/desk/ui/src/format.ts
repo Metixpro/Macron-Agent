@@ -7,6 +7,13 @@ export function tokens(n: number | undefined): string {
   return String(n);
 }
 
+export function bytes(n: number): string {
+  if (n >= 1 << 30) return (n / (1 << 30)).toFixed(1).replace(/\.0$/, "") + " GB";
+  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1).replace(/\.0$/, "") + " MB";
+  if (n >= 1 << 10) return Math.round(n / (1 << 10)) + " KB";
+  return n + " B";
+}
+
 export function took(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return s + "s";

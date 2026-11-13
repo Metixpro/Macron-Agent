@@ -421,6 +421,12 @@ Telegram formatting:
 `)
 	case ChannelAPI:
 		sb.WriteString("- Files in the workspace are returned to the caller through the file API. Mention the file names in your answer.\n")
+	case ChannelCLI:
+		if has("send_file") {
+			sb.WriteString("- To hand the user a file of any kind (picture, PDF, document, sheet, audio, video, archive), call send_file or put ![short caption](filename) on its own line in your answer: it shows in the chat as a card they open or save, and pictures show inline. Hand over what they asked for or will clearly want, once, after checking it; not drafts or files you only needed for the work. Don't paste file contents.\n")
+		} else {
+			sb.WriteString("- Files are stored in the session workspace folder. Mention the file names in your answer.\n")
+		}
 	default:
 		sb.WriteString("- Files are stored in the session workspace folder. Mention the file names in your answer.\n")
 	}
@@ -769,7 +775,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	if (req.FocusTools || len(shelf.hide(toolDefs)) > a.toolLimit()) && req.depth == 0 {
 		f := focusPicked(toolDefs, focusText(req), req.FocusPick)
 		if req.EfficientTools {
-			core := map[string]bool{"bash_execute": true, "shell_jobs": true, "read_file": true, "write_file": true, "apply_patch": true, "search_code": true, ToolSearch: true}
+			core := map[string]bool{"bash_execute": true, "shell_jobs": true, "read_file": true, "write_file": true, "apply_patch": true, "search_code": true, "send_file": true, ToolSearch: true}
 			f = nil
 			for _, d := range toolDefs {
 				if core[d.Function.Name] {

@@ -3,6 +3,8 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -342,7 +344,36 @@ func toolBody(name, args, result string, failed bool, width int) []string {
 	return body
 }
 
+var sentFileRe = regexp.MustCompile(`(?m)^(.+) \(([^()]+)\) is in the chat now.*\n\[file: (.+)\]$`)
+
+func fileLink(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
+func sentFileBlock(args, result string, width int) (string, bool) {
+	m := sentFileRe.FindStringSubmatch(result)
+	if m == nil {
+		return "", false
+	}
+	base := filepath.Base(m[3])
+	line := stAccent.Render("↓") + " " + "\x1b]8;;" + fileLink(m[3]) + "\x1b\\" + stBold.Render(clip(base, max(width-20, 12))) + "\x1b]8;;\x1b\\" + stDim.Render(" · "+m[2])
+	if caption := strArg(toolArgs(args), "caption"); caption != "" {
+		line += "\n  " + clip(oneLine(caption), width-4)
+	}
+	line += "\n  " + stDim.Render(clip(m[3], width-4))
+	return line, true
+}
+
 func toolBlock(name, args, result string, width int) string {
+	if name == "send_file" {
+		if s, ok := sentFileBlock(args, result, width); ok {
+			return s
+		}
+	}
 	failed := agent.StepFailed(name, args, result)
 	mark := stOK.Render(bullet)
 	if failed {

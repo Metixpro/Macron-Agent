@@ -401,7 +401,7 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		Extensions:      t.bot.agentExtensions(),
 		IdleTimeout:     t.bot.idleTimeout(),
 		SkillNudgeEvery: learnNudgeEvery,
-		Tools:           t.bot.factTools(nil),
+		Tools:           append(t.bot.factTools(nil), t.sendFileTool()),
 		Owner:           true,
 		OwnerNote:       t.bot.ownerNote(true, tierConf{}),
 		FocusTools:      true,

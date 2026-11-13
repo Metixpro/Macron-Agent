@@ -1,18 +1,48 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { follow, openDialog, toast } from "../actions";
-import { bidi, clock, copyText, prettyArgs, shortPath } from "../format";
+import { follow, onServer, openDialog, openFile, saveFile, toast } from "../actions";
+import { fileURL } from "../api";
+import { bidi, bytes, clock, copyText, prettyArgs, shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
 import { Icon } from "../icons";
 import { useStore } from "../store";
-import type { Block, PlanItem } from "../types";
+import type { Block, FileRef, PlanItem } from "../types";
+
+function wireFiles(root: HTMLElement, project: string) {
+  root.querySelectorAll<HTMLImageElement>("img[data-file]").forEach((img) => {
+    const name = img.dataset.file || "";
+    img.src = fileURL(project, name);
+    img.loading = "lazy";
+    img.title = name;
+    img.onerror = () => {
+      const chip = document.createElement("a");
+      chip.className = "file-chip missing";
+      chip.dataset.file = name;
+      chip.textContent = img.alt || name;
+      img.replaceWith(chip);
+    };
+  });
+  root.querySelectorAll<HTMLAnchorElement>("a[data-file]").forEach((a) => {
+    a.href = fileURL(project, a.dataset.file || "", true);
+    a.title = a.dataset.file || "";
+  });
+}
 
 export function Prose({ html, streaming }: { html: string; streaming?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  const project = useStore((s) => s.current);
   useLayoutEffect(() => {
-    if (ref.current) bidi(ref.current);
-  }, [html]);
+    if (!ref.current) return;
+    bidi(ref.current);
+    wireFiles(ref.current, project);
+  }, [html, project]);
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
+    const file = (e.target as HTMLElement).closest<HTMLElement>("[data-file]");
+    if (file) {
+      e.preventDefault();
+      openFile(file.dataset.file || "");
+      return;
+    }
     const btn = (e.target as HTMLElement).closest<HTMLElement>(".copy");
     if (!btn) return;
     const pre = btn.closest(".code")?.querySelector("pre");
@@ -132,6 +162,72 @@ function Actions({ b }: { b: Block }) {
   );
 }
 
+function fileKind(f: FileRef): { icon: "image" | "film" | "music" | "archive" | "code" | "file"; label: string } {
+  const t = f.type || "";
+  const ext = (f.base.split(".").pop() || "").toLowerCase();
+  if (t.startsWith("image/")) return { icon: "image", label: ext.toUpperCase() + " image" };
+  if (t.startsWith("video/")) return { icon: "film", label: ext.toUpperCase() + " video" };
+  if (t.startsWith("audio/")) return { icon: "music", label: ext.toUpperCase() + " audio" };
+  if (["zip", "rar", "7z", "tar", "gz", "tgz", "xz", "bz2"].includes(ext)) return { icon: "archive", label: ext.toUpperCase() + " archive" };
+  if (["py", "js", "ts", "go", "rs", "java", "c", "cpp", "cs", "rb", "php", "sh", "ps1", "json", "yaml", "yml", "html", "css", "sql"].includes(ext))
+    return { icon: "code", label: ext.toUpperCase() + " file" };
+  return { icon: "file", label: ext ? ext.toUpperCase() + " file" : "File" };
+}
+
+function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
+  const project = useStore((s) => s.current);
+  const remote = useStore((s) => s.servers.some((x) => x.id === s.machine));
+  const [broken, setBroken] = useState(false);
+  const kind = fileKind(f);
+  const src = fileURL(project, f.name);
+  const media = !broken && kind.icon;
+  return (
+    <div className={"file-card" + (fresh ? " enter" : "")}>
+      {media === "image" && (
+        <button type="button" className="file-preview" title={remote ? "Save" : "Open"} onClick={() => (onServer() ? saveFile(f.name, f.base) : openFile(f.name))}>
+          <img src={src} alt={f.caption || f.base} loading="lazy" onError={() => setBroken(true)} />
+        </button>
+      )}
+      {media === "film" && <video className="file-media" src={src} controls preload="metadata" onError={() => setBroken(true)} />}
+      {media === "music" && <audio className="file-media" src={src} controls preload="metadata" onError={() => setBroken(true)} />}
+      <div className="file-row">
+        <span className="file-icon">
+          <Icon name={kind.icon} size={18} />
+        </span>
+        <span className="file-meta">
+          <span className="file-name" dir="auto" title={f.name}>
+            {f.base}
+          </span>
+          <span className="file-size">
+            {kind.label} · {bytes(f.size)}
+          </span>
+        </span>
+        <span className="file-actions">
+          {!remote && (
+            <button type="button" className="btn sm" onClick={() => openFile(f.name)}>
+              <Icon name="open" size={14} />
+              Open
+            </button>
+          )}
+          {!remote && (
+            <button type="button" className="icon-btn sm" title="Show in folder" aria-label="Show in folder" onClick={() => openFile(f.name, true)}>
+              <Icon name="folder" size={15} />
+            </button>
+          )}
+          <button type="button" className="icon-btn sm" title="Save a copy" aria-label="Save a copy" onClick={() => saveFile(f.name, f.base)}>
+            <Icon name="save" size={15} />
+          </button>
+        </span>
+      </div>
+      {f.caption && (
+        <div className="file-caption" dir="auto">
+          {f.caption}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const BlockView = memo(function BlockView({ b, fresh }: { b: Block; fresh: boolean }) {
   const enter = fresh ? " enter" : "";
   switch (b.kind) {
@@ -159,6 +255,8 @@ const BlockView = memo(function BlockView({ b, fresh }: { b: Block; fresh: boole
       }
       return <div className={"block" + enter}>{items.length > 0 && <PlanList items={items} />}</div>;
     }
+    case "file":
+      return b.file ? <FileCard f={b.file} fresh={fresh} /> : null;
     case "divider":
       return (
         <div className={"divider" + enter}>

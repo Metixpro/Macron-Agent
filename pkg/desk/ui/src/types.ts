@@ -1,4 +1,12 @@
-export type BlockKind = "user" | "assistant" | "tool" | "note" | "error" | "plan" | "divider";
+export type BlockKind = "user" | "assistant" | "tool" | "note" | "error" | "plan" | "divider" | "file";
+
+export interface FileRef {
+  name: string;
+  base: string;
+  size: number;
+  type?: string;
+  caption?: string;
+}
 
 export interface Block {
   kind: BlockKind;
@@ -11,6 +19,7 @@ export interface Block {
   summary?: string;
   output?: string;
   failed?: boolean;
+  file?: FileRef;
   at: number;
 }
 
