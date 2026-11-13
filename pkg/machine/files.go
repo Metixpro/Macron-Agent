@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"github.com/Metixpro/macron-agent/pkg/diskfree"
 )
 
 type FileEntry struct {
@@ -328,9 +328,9 @@ func (s *Machine) Recent(sessionID string, n int) []FileEntry {
 }
 
 func (s *Machine) FreeSpace() int64 {
-	var st unix.Statfs_t
-	if err := unix.Statfs(s.BaseDir, &st); err != nil {
+	_, free, ok := diskfree.Space(s.BaseDir)
+	if !ok || free > math.MaxInt64 {
 		return math.MaxInt64
 	}
-	return int64(st.Bavail) * int64(st.Bsize)
+	return int64(free)
 }

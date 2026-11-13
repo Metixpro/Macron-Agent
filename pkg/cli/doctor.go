@@ -10,11 +10,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/diskfree"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/moa"
 	"github.com/Metixpro/macron-agent/pkg/store"
@@ -169,11 +169,8 @@ func doctor(io *IO, args []string) int {
 		r.line(ok, "the agent runs commands as "+who+", with that user's full rights", "")
 	}
 	checkToolDependencies(r)
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(home, &st); err == nil {
-		if free := uint64(st.Bavail) * uint64(st.Bsize); free < 1<<30 {
-			r.line(warn, "less than 1 GB of disk space is free", "files and downloads need room")
-		}
+	if _, free, ok := diskfree.Space(home); ok && free < 1<<30 {
+		r.line(warn, "less than 1 GB of disk space is free", "files and downloads need room")
 	}
 
 	if st := telegramState(); token != "" && st.running {

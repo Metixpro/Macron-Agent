@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/diskfree"
 	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/Metixpro/macron-agent/pkg/tools"
-	"golang.org/x/sys/unix"
 )
 
 const settingDLCookies = "dl_cookies"
@@ -237,7 +237,7 @@ var (
 )
 
 func ytDlpTarget(d tools.DownloaderInfo) string {
-	if len(d.YtDlp) == 1 && unix.Access(filepath.Dir(d.YtDlp[0]), unix.W_OK) == nil {
+	if len(d.YtDlp) == 1 && diskfree.Writable(filepath.Dir(d.YtDlp[0])) {
 		return d.YtDlp[0]
 	}
 	return ytDlpBinary

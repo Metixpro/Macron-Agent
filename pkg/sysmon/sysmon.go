@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"github.com/Metixpro/macron-agent/pkg/diskfree"
 )
 
 const (
@@ -185,9 +185,8 @@ func (s *Sampler) Sample() Snapshot {
 	sample.Uptime = parseUptime(s.read("uptime"))
 	cur.rx, cur.tx = parseNet(s.read("net/dev"))
 	for _, p := range s.opt.Disks {
-		var st unix.Statfs_t
-		if unix.Statfs(p, &st) == nil {
-			sample.Disks = append(sample.Disks, Disk{Path: p, Total: st.Blocks * uint64(st.Bsize), Free: st.Bavail * uint64(st.Bsize)})
+		if total, free, ok := diskfree.Space(p); ok {
+			sample.Disks = append(sample.Disks, Disk{Path: p, Total: total, Free: free})
 		}
 	}
 	svc, usec := s.service()

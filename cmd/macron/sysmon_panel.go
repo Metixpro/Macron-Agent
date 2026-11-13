@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/diskfree"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/sysmon"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
@@ -50,10 +50,7 @@ func (b *Bot) sampler() *sysmon.Sampler {
 
 func (b *Bot) startSysmon(ctx context.Context) { go b.sampler().Run(ctx) }
 
-func sameDevice(a, c string) bool {
-	var x, y syscall.Stat_t
-	return syscall.Stat(a, &x) == nil && syscall.Stat(c, &y) == nil && x.Dev == y.Dev
-}
+func sameDevice(a, c string) bool { return diskfree.SameDevice(a, c) }
 
 func (b *Bot) sysLimits() sysmon.Limits {
 	if !b.st.SettingBool(store.SettingSysAlerts, true) {
