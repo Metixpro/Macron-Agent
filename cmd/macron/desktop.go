@@ -25,6 +25,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/providers"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/tools"
+	"github.com/Metixpro/macron-agent/pkg/tui"
 )
 
 const (
@@ -162,6 +163,50 @@ func (h *deskHost) ConnectModel(ctx context.Context, name, endpoint, key, model 
 	}
 	return h.w.prov.Reload(ctx)
 }
+
+func (h *deskHost) Tuning() desk.Tuning {
+	t := h.any().Tuning()
+	support := map[int]string{0: "maybe", 1: "yes", 2: "no"}[t.EffortSupport]
+	limit := 2.0
+	if t.API == llm.APIAnthropic {
+		limit = 1
+	}
+	return desk.Tuning{Model: t.Model, Effort: t.Effort, EffortParam: t.EffortParam, EffortValue: t.EffortValue, EffortSupport: support,
+		Window: t.Window, AutoWindow: t.AutoWindow, Temperature: t.Temperature, TempLimit: limit}
+}
+
+func deskPlugin(p tui.Plugin) desk.Plugin {
+	tools := p.Tools
+	if tools == nil {
+		tools = []string{}
+	}
+	return desk.Plugin{Key: p.Key, Name: p.Name, Kind: p.Kind, Source: p.Source, Target: p.Target, Enabled: p.Enabled, Status: p.Status,
+		Error: p.Error, Removable: p.Removable, Tools: tools}
+}
+
+func (h *deskHost) Plugins() []desk.Plugin {
+	var out []desk.Plugin
+	for _, p := range h.any().Plugins() {
+		out = append(out, deskPlugin(p))
+	}
+	return out
+}
+
+func (h *deskHost) AddMCP(name, target string, args []string, env map[string]string) (desk.Plugin, error) {
+	p, err := h.any().AddMCP(name, target, args, env)
+	return deskPlugin(p), err
+}
+
+func (h *deskHost) SetPluginEnabled(key string, on bool) (desk.Plugin, error) {
+	p, err := h.any().SetPluginEnabled(key, on)
+	return deskPlugin(p), err
+}
+
+func (h *deskHost) RemovePlugin(key string) error { return h.any().RemovePlugin(key) }
+
+func (h *deskHost) SetEffort(level string) error      { return h.any().SetEffort(level) }
+func (h *deskHost) SetContextWindow(tokens int) error { return h.any().SetContextWindow(tokens) }
+func (h *deskHost) SetTemperature(v *float64) error   { return h.any().SetTemperature(v) }
 
 func (h *deskHost) ListModels(ctx context.Context, endpoint, key string) ([]string, error) {
 	p := store.Provider{Name: "probe", Enabled: true, APIKey: key, Model: "probe"}

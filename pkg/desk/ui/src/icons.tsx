@@ -29,6 +29,8 @@ const paths = {
   terminal: "M5 7l5 5-5 5M12.5 17H19",
   key: "M14.5 9.5a3.5 3.5 0 1 0-1.2 2.6L20 18.8V21h-2.5v-1.5H16V18h-1.5l-1.2-1.2",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M5.5 11h13v9.5h-13z",
+  gauge: "M5 18a8 8 0 1 1 14 0M12 14l3.5-4.5",
+  plug: "M9 3v5M15 3v5M6.5 8h11v3a5.5 5.5 0 0 1-11 0zM12 16.5V21",
 } as const;
 
 export type IconName = keyof typeof paths;

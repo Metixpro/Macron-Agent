@@ -60,6 +60,57 @@ export async function loadState() {
     if (!ids.includes(current)) current = st.default || ids[0] || "";
     return { info: st.info, mode: st.mode, projects, defaultId: st.default, home: st.home || "", current };
   });
+  loadTuning();
+}
+
+export async function loadTuning() {
+  if (!getState().info.model) {
+    setState({ tuning: null });
+    return;
+  }
+  try {
+    setState({ tuning: await server.tuning() });
+  } catch {
+    setState({ tuning: null });
+  }
+}
+
+const effortNames: Record<string, string> = { "": "Auto", low: "Low", medium: "Medium", high: "High", ultracode: "Ultracode" };
+
+export function effortName(level: string): string {
+  return effortNames[level] || level;
+}
+
+export function windowName(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 ? 1 : 0) + "M";
+  return Math.round(n / 1000) + "k";
+}
+
+export const effortLevels = ["", "low", "medium", "high", "ultracode"];
+
+export const effortAbout: Record<string, string> = {
+  "": "The model's own default",
+  low: "Fast and cheap: chat and quick questions",
+  medium: "Balanced: most everyday work",
+  high: "Deep: analysis, code and multi-step work",
+  ultracode: "The model's maximum for big code and hard problems",
+};
+
+export function effortNote(t: { effortSupport: string; effortValue: string; effortParam: string }): string {
+  if (t.effortSupport === "no") return "This model takes no effort setting; it runs at its default.";
+  if (!t.effortValue) return "Nothing extra is sent; the model decides.";
+  const sent = `Sends ${t.effortParam} = ${t.effortValue}.`;
+  return t.effortSupport === "maybe" ? sent + " If the model refuses it, Macron steps down by itself." : sent;
+}
+
+export async function setTuning(field: "effort" | "window" | "temperature", value: string | number | null, done?: string) {
+  try {
+    const t = await server.setTuning(field, value);
+    setState({ tuning: t });
+    if (done) toast(done);
+  } catch (e) {
+    fail(e);
+  }
 }
 
 let refreshTimer = 0;

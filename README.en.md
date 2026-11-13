@@ -47,6 +47,8 @@ The first time, connect a model from the app itself (OpenAI, Anthropic, Gemini, 
 
 On Windows, Macron runs its commands with PowerShell (PowerShell 7 when it is installed), and its approval rules know Windows' risky commands too.
 
+The app's settings also hold the model's effort, context window and temperature, and an effort button sits next to the model name under the message box. MCP servers and plugins are added, turned on or off there too; their tools reach Macron in the app, the terminal and Telegram.
+
 **Working on a server:** open the menu at the top of the sidebar, choose "Add a server…" and give `user@server`. The app starts the Macron installed there over SSH and talks to it through that encrypted connection; no port is opened to the internet. The first time it shows the server's key fingerprint, keeps it in `~/.ssh/known_hosts`, and refuses the connection if it ever changes. SSH keys come from ssh-agent or `~/.ssh`; a password is kept for the session only. Macron inside WSL connects from the same menu. The server only needs Macron installed and up to date (`macron update`).
 
 ### In the terminal
@@ -69,6 +71,9 @@ An interactive terminal interface opens: answers stream in rendered Markdown, ev
 | `Tab` · `Shift+Tab` | switch Build / Plan; Plan exposes only read-only tools |
 | `/connect` · `/connections` | connect a model or service · inspect setup without exposing secrets |
 | `/model` · `/approvals` · `/yolo` | switch the model · how commands are approved · no prompts for 30 minutes |
+| `/effort` · `/context` · `/temperature` | how hard the model thinks (auto to ultracode) · context window · temperature, for the active provider |
+| `/settings` | model, effort, context, temperature, approvals and looks in one list |
+| `/mcp` | MCP servers and plugins: list, add (`/mcp add github npx -y …`), turn on or off, remove |
 | `/new` · `/compact` · `/status` | fresh conversation · summarize the history · status |
 | `/init` | write `MACRON.md` for the project |
 | `@path` | point Macron at a project file; `Tab` completes the path |

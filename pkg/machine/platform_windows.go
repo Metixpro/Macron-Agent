@@ -144,6 +144,11 @@ func prepare(cmd *exec.Cmd, console bool) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: flags}
 }
 
+func Hide(cmd *exec.Cmd) *exec.Cmd {
+	prepare(cmd, false)
+	return cmd
+}
+
 func groupAttr(cmd *exec.Cmd) {
 	prepare(cmd, true)
 }

@@ -24,6 +24,11 @@ var commands = []command{
 	{"/compact", "", "summarize the conversation to free context"},
 	{"/provider", "", "switch the active provider"},
 	{"/model", "[name]", "show or switch the model"},
+	{"/effort", "[auto|low|medium|high|ultracode]", "how hard the model thinks before answering"},
+	{"/context", "[auto|128k|1m]", "the model's context window"},
+	{"/temperature", "[auto|0-2]", "exact or varied answers"},
+	{"/settings", "", "model, effort, context, approvals and more in one list"},
+	{"/mcp", "[add|on|off|remove]", "MCP servers and plugins"},
 	{"/approvals", "[smart|manual|off]", "how risky commands are approved"},
 	{"/yolo", "", "run commands without asking for 30 minutes (again: off)"},
 	{"/status", "", "model, context, tokens, folder, Telegram"},
@@ -83,6 +88,7 @@ func helpText() string {
 		{"enter", "send"},
 		{"ctrl+p", "search commands"},
 		{"ctrl+k · ctrl+o", "models · connections"},
+		{"/settings", "effort, context window, temperature and more"},
 		{"tab · shift+tab", "switch Build / Plan"},
 		{"ctrl+j · alt+enter · \\ enter", "new line"},
 		{"@ path", "point Macron at a file (tab completes)"},
@@ -90,7 +96,7 @@ func helpText() string {
 		{"esc", "interrupt Macron, or clear the input"},
 		{"↑ ↓", "earlier messages"},
 		{"ctrl+c twice · ctrl+d", "exit"},
-		{"pgup · pgdown", "scroll conversation"},
+		{"mouse wheel · pgup · pgdown", "scroll conversation (ctrl+↑ ctrl+↓ line by line)"},
 		{"ctrl+home · ctrl+end", "start of history · follow latest"},
 		{"ctrl+l", "clear the screen"},
 		{"shift + drag", "select text with the mouse (or /copy)"},
@@ -125,6 +131,7 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			if m.opt.Setup == nil {
 				return m, m.say("Run macron setup to connect a model")
 			}
+			m.con.pause()
 			return m, tea.ExecProcess(m.opt.Setup(), func(err error) tea.Msg { return execDoneMsg{err: err, setup: true} })
 		}
 		return m, m.startTurn("Connect the " + arg + " service. Discover connections with tool_search first, inspect its current status and describe its settings. Use existing settings; ask only for missing credentials. Save provided values with connections configure, then run a read-only test. Do not send a message or claim success before verification.")
@@ -197,6 +204,16 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			cur, list, err := e.Models(ctx)
 			return modelsMsg{current: cur, list: list, err: err}
 		})
+	case "/mcp", "/plugins":
+		return m.mcpCommand(arg)
+	case "/effort":
+		return m.effortCommand(arg)
+	case "/context":
+		return m.contextCommand(arg)
+	case "/temperature", "/temp":
+		return m.temperatureCommand(arg)
+	case "/settings":
+		return m.settingsCommand()
 	case "/approvals":
 		if arg == "" {
 			modes := []string{"smart", "manual", "off"}
@@ -312,6 +329,7 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			m.print(stDim.Render("Run «macron telegram» in a shell to connect the bot"))
 			return m, nil
 		}
+		m.con.pause()
 		return m, tea.ExecProcess(m.opt.Telegram(), func(err error) tea.Msg { return execDoneMsg{err: err} })
 	default:
 		m.print(stFail.Render(bullet) + " Unknown command " + name + stDim.Render(" · /help lists them; start with // to send a message that begins with /"))

@@ -130,6 +130,31 @@ export interface Listing {
   sep: string;
 }
 
+export interface Plugin {
+  key: string;
+  name: string;
+  kind: string;
+  source: string;
+  target: string;
+  enabled: boolean;
+  status: string;
+  error?: string;
+  removable: boolean;
+  tools: string[];
+}
+
+export interface Tuning {
+  model: string;
+  effort: string;
+  effortParam: string;
+  effortValue: string;
+  effortSupport: "yes" | "no" | "maybe";
+  window: number;
+  autoWindow: number;
+  temperature: number | null;
+  tempLimit: number;
+}
+
 export interface ServerView {
   id: string;
   name: string;

@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/idna"
 
 	"github.com/Metixpro/macron-agent/pkg/guard"
+	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
@@ -561,7 +562,7 @@ func whoisText(ctx context.Context, dom string) string {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	out, _ := exec.CommandContext(ctx, "whois", "--", dom).Output()
+	out, _ := machine.Hide(exec.CommandContext(ctx, "whois", "--", dom)).Output()
 	if len(out) > 256<<10 {
 		out = out[:256<<10]
 	}

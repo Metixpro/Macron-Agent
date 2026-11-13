@@ -132,6 +132,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/provider", s.setProviderAPI)
 	mux.HandleFunc("POST /api/providers/connect", s.connectModelAPI)
 	mux.HandleFunc("POST /api/providers/models", s.listModelsAPI)
+	mux.HandleFunc("GET /api/plugins", s.pluginsAPI)
+	mux.HandleFunc("POST /api/plugins", s.addPluginAPI)
+	mux.HandleFunc("POST /api/plugins/{key}/enable", s.enablePluginAPI)
+	mux.HandleFunc("DELETE /api/plugins/{key}", s.removePluginAPI)
+	mux.HandleFunc("GET /api/tuning", s.tuningAPI)
+	mux.HandleFunc("POST /api/tuning", s.setTuningAPI)
 	mux.HandleFunc("POST /api/mode", s.modeAPI)
 	mux.HandleFunc("POST /api/approvals", s.approvalsAPI)
 	mux.HandleFunc("POST /api/yolo", s.yoloAPI)
@@ -230,6 +236,105 @@ func explain(err error) (string, string) {
 		hint = h
 	}
 	return title, hint
+}
+
+func (s *Server) pluginsAPI(w http.ResponseWriter, r *http.Request) {
+	list := s.host.Plugins()
+	if list == nil {
+		list = []Plugin{}
+	}
+	writeJSON(w, map[string]any{"plugins": list})
+}
+
+func (s *Server) addPluginAPI(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name   string            `json:"name"`
+		Target string            `json:"target"`
+		Args   []string          `json:"args"`
+		Env    map[string]string `json:"env"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Target) == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("a name and a command or address are needed"))
+		return
+	}
+	p, err := s.host.AddMCP(in.Name, strings.TrimSpace(in.Target), in.Args, in.Env)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, p)
+}
+
+func (s *Server) enablePluginAPI(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		On bool `json:"on"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	p, err := s.host.SetPluginEnabled(r.PathValue("key"), in.On)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, p)
+}
+
+func (s *Server) removePluginAPI(w http.ResponseWriter, r *http.Request) {
+	if err := s.host.RemovePlugin(r.PathValue("key")); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) tuningAPI(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.host.Tuning())
+}
+
+func (s *Server) setTuningAPI(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Field string          `json:"field"`
+		Value json.RawMessage `json:"value"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	var err error
+	switch in.Field {
+	case "effort":
+		var v string
+		if err = json.Unmarshal(in.Value, &v); err == nil {
+			if v == "auto" {
+				v = ""
+			}
+			err = s.host.SetEffort(v)
+		}
+	case "window":
+		var v int
+		if err = json.Unmarshal(in.Value, &v); err == nil {
+			err = s.host.SetContextWindow(v)
+		}
+	case "temperature":
+		var v *float64
+		if err = json.Unmarshal(in.Value, &v); err == nil {
+			err = s.host.SetTemperature(v)
+		}
+	default:
+		err = errors.New("unknown setting")
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	s.hub.publish(map[string]any{"type": "info"})
+	writeJSON(w, s.host.Tuning())
 }
 
 type modelRequest struct {

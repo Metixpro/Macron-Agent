@@ -8,6 +8,12 @@ import {
   connectServer,
   disconnectServer,
   removeServer,
+  effortAbout,
+  effortLevels,
+  effortName,
+  effortNote,
+  setTuning,
+  windowName,
   chooseModel,
   closeDialog,
   compact,
@@ -28,7 +34,7 @@ import { Icon } from "../icons";
 import type { IconName } from "../icons";
 import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
-import type { Ask, Connection, Listing, ProviderChoice } from "../types";
+import type { Ask, Connection, Listing, Plugin, ProviderChoice } from "../types";
 
 function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; children: ReactNode }) {
   return (
@@ -73,6 +79,12 @@ export function Dialogs() {
           <Settings />
         </Modal>
       );
+    case "mcp-add":
+      return (
+        <Modal kind="form" dismiss>
+          <McpAdd />
+        </Modal>
+      );
     case "model-connect":
       return (
         <Modal kind="form" dismiss>
@@ -92,6 +104,118 @@ export function Dialogs() {
         </Modal>
       );
   }
+}
+
+function splitArgs(s: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quote = "";
+  let has = false;
+  for (const ch of s) {
+    if (quote) {
+      if (ch === quote) quote = "";
+      else cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      has = true;
+    } else if (/\s/.test(ch)) {
+      if (has || cur) out.push(cur);
+      cur = "";
+      has = false;
+    } else cur += ch;
+  }
+  if (has || cur) out.push(cur);
+  return out;
+}
+
+export function pluginStatus(p: Plugin): string {
+  if (!p.enabled) return "Off";
+  if (p.error) return p.error;
+  if (p.status === "connecting") return "Connecting…";
+  if (p.status === "ready") return p.tools.length === 1 ? "1 tool" : `${p.tools.length} tools`;
+  return p.status;
+}
+
+function McpAdd() {
+  const [name, setName] = useState("");
+  const [target, setTarget] = useState("");
+  const [vars, setVars] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const remote = /^https?:\/\//i.test(target.trim());
+
+  const submit = async () => {
+    setError("");
+    const env: Record<string, string> = {};
+    for (const line of vars.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      const i = remote && t.includes(":") && !t.includes("=") ? t.indexOf(":") : t.indexOf("=");
+      if (i <= 0) {
+        setError(`“${t}” is not KEY=value`);
+        return;
+      }
+      env[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+    }
+    const parts = remote ? [target.trim()] : splitArgs(target.trim());
+    setBusy(true);
+    try {
+      const p = await server.addPlugin({ name: name.trim(), target: parts[0], args: parts.slice(1), env });
+      if (p.error || (p.enabled && p.status !== "ready")) {
+        setError(`${p.name} was added, but it is not ready: ${pluginStatus(p)}`);
+        return;
+      }
+      setState({ dialog: null });
+      toast(`${p.name}: ${pluginStatus(p)}`);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <h3>Add an MCP server</h3>
+      <div className="sub">Its tools reach Macron here, in the terminal and in Telegram. Local servers run on this machine; remote ones are reached by their address.</div>
+      <label className="field">
+        <span>Name</span>
+        <input autoFocus spellCheck={false} placeholder="e.g. github" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>Command or address</span>
+        <input spellCheck={false} dir="ltr" placeholder="npx -y @modelcontextprotocol/server-github  or  https://example.com/mcp" value={target} onChange={(e) => setTarget(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>{remote ? "Headers (one per line)" : "Environment variables (one per line)"}</span>
+        <textarea
+          spellCheck={false}
+          dir="ltr"
+          rows={3}
+          placeholder={remote ? "Authorization: Bearer …" : "GITHUB_PERSONAL_ACCESS_TOKEN=…"}
+          value={vars}
+          onChange={(e) => setVars(e.target.value)}
+        />
+      </label>
+      {error && <div className="form-error">{error}</div>}
+      <div className="bar">
+        <span />
+        <div className="left">
+          <button type="button" className="btn" onClick={closeDialog}>
+            {error && !busy ? "Close" : "Cancel"}
+          </button>
+          <button type="submit" className="btn primary" disabled={busy || !name.trim() || !target.trim()}>
+            {busy ? "Connecting…" : "Add and connect"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
 }
 
 const PRESETS = [
@@ -468,6 +592,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
   const theme = useStore((s) => s.theme);
   const running = useStore((s) => s.live.running);
   const info = useStore((s) => s.info);
+  const tuning = useStore((s) => s.tuning);
   const mod = useMod();
   const [q, setQ] = useState("");
   const [models, setModels] = useState<string[] | null>(null);
@@ -510,11 +635,17 @@ function Palette({ mode }: { mode: "root" | "models" }) {
         : { id: "model", group: "Actions", label: "Connect a model…", icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
       { id: "connect", group: "Actions", label: "Connect another provider…", icon: "plus", run: () => openDialog({ kind: "model-connect" }) },
       { id: "folder", group: "Actions", label: "Open folder…", icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
+      { id: "mcp", group: "Actions", label: "Add an MCP server…", icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
       { id: "compact", group: "Actions", label: "Compact the conversation", hint: "Summarise to free room", icon: "layers", run: () => compact() },
       { id: "settings", group: "Actions", label: "Settings", icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
     ];
     if (running) list.unshift({ id: "stop", group: "Actions", label: "Stop the current job", icon: "square", keys: ["Esc"], run: () => stop() });
     for (const [t, label, icon] of themes) list.push({ id: "t:" + t, group: "Theme", label, icon, on: theme === t, run: () => setTheme(t) });
+    if (tuning && tuning.model) {
+      for (const l of effortLevels) {
+        list.push({ id: "e:" + (l || "auto"), group: "Effort", label: effortName(l), hint: effortAbout[l], icon: "gauge", on: tuning.effort === l, run: () => setTuning("effort", l || "auto", "Effort: " + effortName(l)) });
+      }
+    }
     for (const p of projects) {
       list.push({
         id: "p:" + p.id,
@@ -527,7 +658,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       });
     }
     return list;
-  }, [mode, models, active, q, mod, appMode, info.model, running, theme, projects, defaultId, current, home]);
+  }, [mode, models, active, q, mod, appMode, info.model, running, theme, projects, defaultId, current, home, tuning]);
 
   const shown = useMemo(() => {
     const f = q.trim().toLowerCase();
@@ -538,7 +669,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
   const { sel, setSel, listRef, move } = useList(shown.length);
 
   const pick = (e: Entry) => {
-    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect";
+    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect" || e.id === "mcp";
     if (!opensDialog) closeDialog();
     e.run();
   };
@@ -789,9 +920,39 @@ function Settings() {
   const info = useStore((s) => s.info);
   const theme = useStore((s) => s.theme);
   const servers = useStore((s) => s.servers);
+  const tuning = useStore((s) => s.tuning);
   const mod = useMod();
   const [providers, setProviders] = useState<ProviderChoice[] | null>(null);
   const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [plugins, setPlugins] = useState<Plugin[] | null>(null);
+  const dialog = useStore((s) => s.dialog);
+  const loadPlugins = () =>
+    server
+      .plugins()
+      .then((r) => setPlugins(r.plugins || []))
+      .catch(() => setPlugins([]));
+  useEffect(() => {
+    if (dialog?.kind === "settings") loadPlugins();
+  }, [dialog?.kind]);
+  const togglePlugin = async (p: Plugin) => {
+    setPlugins((list) => (list || []).map((x) => (x.key === p.key ? { ...x, enabled: !p.enabled, status: p.enabled ? "off" : "connecting" } : x)));
+    try {
+      const next = await server.enablePlugin(p.key, !p.enabled);
+      toast(`${next.name}: ${pluginStatus(next)}`);
+    } catch (e) {
+      fail(e);
+    }
+    loadPlugins();
+  };
+  const dropPlugin = async (p: Plugin) => {
+    try {
+      await server.removePlugin(p.key);
+      toast("Removed " + p.name);
+    } catch (e) {
+      fail(e);
+    }
+    loadPlugins();
+  };
 
   useEffect(() => {
     server.providers().then((r) => setProviders(r.providers || [])).catch(() => setProviders([]));
@@ -883,6 +1044,79 @@ function Settings() {
             <Icon name="plus" size={14} />
             <span className="grow">
               <span className="name">Connect a model…</span>
+            </span>
+          </button>
+        </div>
+        {tuning && tuning.model && (
+          <>
+            <Section title="Effort" help={effortNote(tuning)}>
+              <Choice
+                value={tuning.effort || "auto"}
+                options={effortLevels.map((l) => [l || "auto", l === "ultracode" ? "Ultra" : effortName(l)] as [string, string])}
+                onPick={(v) => setTuning("effort", v)}
+              />
+            </Section>
+            <Section
+              title="Context window"
+              help={tuning.window ? "Set by you. A window larger than the model really has makes requests fail." : `Worked out from the model's name: ${windowName(tuning.autoWindow)} tokens.`}
+            >
+              <Choice
+                value={String(tuning.window)}
+                options={[
+                  ["0", "Auto"],
+                  ...(["128000", "200000", "400000", "1000000"].includes(String(tuning.window)) || !tuning.window ? [] : [[String(tuning.window), windowName(tuning.window)] as [string, string]]),
+                  ["128000", "128k"],
+                  ["200000", "200k"],
+                  ["400000", "400k"],
+                  ["1000000", "1M"],
+                ]}
+                onPick={(v) => setTuning("window", Number(v))}
+              />
+            </Section>
+            <Section title="Temperature" help="Lower answers are exact and repeatable, higher ones are more varied.">
+              <Choice
+                value={tuning.temperature === null ? "auto" : String(tuning.temperature)}
+                options={[
+                  ["auto", "Auto"],
+                  ["0", "0"],
+                  ["0.2", "0.2"],
+                  ["0.5", "0.5"],
+                  ["0.7", "0.7"],
+                  ["1", "1"],
+                  ...(tuning.tempLimit >= 2 ? [["1.5", "1.5"] as [string, string]] : []),
+                ]}
+                onPick={(v) => setTuning("temperature", v === "auto" ? null : Number(v))}
+              />
+            </Section>
+          </>
+        )}
+        <div className="set-group">MCP servers and plugins</div>
+        <div className="set-list">
+          {plugins === null && <div className="empty-row">Loading…</div>}
+          {plugins && !plugins.length && <div className="empty-row">None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.</div>}
+          {(plugins || []).map((p) => (
+            <div key={p.key} className="set-row static">
+              <span className={"state" + (p.enabled && p.status === "ready" && !p.error ? " ok" : p.enabled && p.error ? " bad" : "")} />
+              <span className="grow">
+                <span className="name">{p.name}</span>
+                <span className={"meta" + (p.error ? " bad-text" : "")} title={p.target}>
+                  {(p.kind === "mcp" ? "MCP" : "Plugin") + " · " + pluginStatus(p)}
+                </span>
+              </span>
+              <button type="button" role="switch" aria-checked={p.enabled} title={p.enabled ? "Turn off" : "Turn on"} className={"switch" + (p.enabled ? " on" : "")} onClick={() => togglePlugin(p)}>
+                <span />
+              </button>
+              {p.removable && (
+                <button type="button" className="icon-btn" title="Remove" onClick={() => dropPlugin(p)}>
+                  <Icon name="x" size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button" className="set-row" onClick={() => openDialog({ kind: "mcp-add" })}>
+            <Icon name="plus" size={14} />
+            <span className="grow">
+              <span className="name">Add an MCP server…</span>
             </span>
           </button>
         </div>

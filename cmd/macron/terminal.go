@@ -57,6 +57,7 @@ type terminal struct {
 	bot     *Bot
 	gate    *cmdgate.Gate
 	mem     *memory.Manager
+	pm      *plugins.Manager
 	window  func() int
 	uid     int64
 	session string
@@ -149,7 +150,7 @@ func setupWorkspace(gateDir string) (*workspace, error) {
 }
 
 func (w *workspace) open(dir string) (*terminal, error) {
-	t := &terminal{st: w.st, prov: w.prov, app: w.app, bot: w.bot, window: w.window, dir: dir, shown: shortDir(dir), gate: w.gate, mem: w.mem}
+	t := &terminal{st: w.st, prov: w.prov, app: w.app, bot: w.bot, window: w.window, dir: dir, shown: shortDir(dir), gate: w.gate, mem: w.mem, pm: w.pm}
 	sum := sha256.Sum256([]byte(dir))
 	t.session = "term-" + hex.EncodeToString(sum[:6])
 	t.uid = -int64(binary.BigEndian.Uint64(sum[8:16])>>2) - 1
@@ -242,7 +243,7 @@ func shortDir(dir string) string {
 func gitBranch(dir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := machine.Hide(exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")).Output()
 	if err != nil {
 		return ""
 	}
@@ -252,7 +253,7 @@ func gitBranch(dir string) string {
 func excludeWork(dir string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-path", "info/exclude").Output()
+	out, err := machine.Hide(exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-path", "info/exclude")).Output()
 	if err != nil {
 		return
 	}
@@ -614,7 +615,7 @@ var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": tru
 func (t *terminal) Files() []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if out, err := exec.CommandContext(ctx, "git", "-C", t.dir, "ls-files", "--cached", "--others", "--exclude-standard").Output(); err == nil {
+	if out, err := machine.Hide(exec.CommandContext(ctx, "git", "-C", t.dir, "ls-files", "--cached", "--others", "--exclude-standard")).Output(); err == nil {
 		var files []string
 		for _, f := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if f != "" {

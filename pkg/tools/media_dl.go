@@ -81,7 +81,7 @@ func (r *Registry) detectDownloader() *DownloaderInfo {
 	run := func(args ...string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		out, _ := exec.CommandContext(ctx, args[0], args[1:]...).CombinedOutput()
+		out, _ := machine.Hide(exec.CommandContext(ctx, args[0], args[1:]...)).CombinedOutput()
 		return string(out)
 	}
 	if p := find("yt-dlp"); p != "" {

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { compact, composer, draftFor, newChat, openDialog, saveDraft, send, setMode, stop } from "../actions";
+import { compact, composer, draftFor, effortAbout, effortLevels, effortName, effortNote, newChat, openDialog, saveDraft, send, setMode, setTuning, stop } from "../actions";
 import { tokens, took } from "../format";
 import { Icon } from "../icons";
 import { useStore } from "../store";
@@ -77,6 +77,76 @@ function ModeSwitch() {
           {m === "plan" ? "Plan" : "Build"}
         </button>
       ))}
+    </div>
+  );
+}
+
+function Gauge({ level }: { level: number }) {
+  return (
+    <span className="gauge" aria-hidden="true">
+      {[1, 2, 3, 4].map((i) => (
+        <span key={i} className={i <= level ? "on" : ""} style={{ height: 3 + i * 2 }} />
+      ))}
+    </span>
+  );
+}
+
+function EffortMenu() {
+  const t = useStore((s) => s.tuning);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", away);
+    window.addEventListener("keydown", esc, true);
+    return () => {
+      window.removeEventListener("mousedown", away);
+      window.removeEventListener("keydown", esc, true);
+    };
+  }, [open]);
+  if (!t || !t.model) return null;
+  const level = effortLevels.indexOf(t.effort);
+  return (
+    <div className="effort" ref={ref}>
+      <button type="button" className={"effort-btn" + (t.effort ? " set" : "")} title={"Effort: " + effortNote(t)} onClick={() => setOpen(!open)} aria-expanded={open}>
+        <Gauge level={level} />
+        <span>{effortName(t.effort)}</span>
+      </button>
+      {open && (
+        <div className="effort-menu" role="menu">
+          <div className="em-head">How hard the model thinks</div>
+          {effortLevels.map((l, i) => (
+            <button
+              key={l || "auto"}
+              type="button"
+              role="menuitemradio"
+              aria-checked={l === t.effort}
+              className={"em-row" + (l === t.effort ? " on" : "")}
+              onClick={() => {
+                setOpen(false);
+                if (l !== t.effort) setTuning("effort", l || "auto", "Effort: " + effortName(l));
+              }}
+            >
+              <Gauge level={i} />
+              <span className="grow">
+                <span className="name">{effortName(l)}</span>
+                <span className="meta">{effortAbout[l]}</span>
+              </span>
+              {l === t.effort && <Icon name="check" size={14} />}
+            </button>
+          ))}
+          <div className="em-foot">{effortNote(t)}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -207,6 +277,7 @@ export function Composer() {
         <div className="toolbar">
           <ModeSwitch />
           <ModelButton />
+          <EffortMenu />
           <span className="grow" />
           {queued > 0 && <span className="queued">{queued} waiting</span>}
           <Meter />

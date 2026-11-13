@@ -184,6 +184,7 @@ type model struct {
 	log       *transcript
 	history   *viewport.Model
 	follow    bool
+	con       *console
 	toolCount int
 	e         Engine
 	opt       Options
@@ -276,8 +277,12 @@ func Run(e Engine, opt Options) error {
 	br := &bridge{}
 	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1, theme: theme, rtlChosen: rtlChosen}
 	m.ctxWindow = m.info.ContextWindow
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	con := newConsole()
+	m.con = con
+	p := tea.NewProgram(m, append([]tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}, con.options()...)...)
 	br.p = p
+	con.attach(p)
+	defer con.close()
 	_, err := p.Run()
 	return err
 }
@@ -451,7 +456,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.setup && m.info.Telegram != "" {
 			m.print(stDim.Render("Telegram: ") + m.info.Telegram)
 		}
-		return m, nil
+		return m, tea.EnableMouseCellMotion
 	case clearNotice:
 		if msg.at.Equal(m.noticeAt) {
 			m.notice = ""

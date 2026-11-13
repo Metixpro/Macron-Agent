@@ -47,6 +47,8 @@ func PowerShell() string {
 
 func prepare(*exec.Cmd, bool) {}
 
+func Hide(cmd *exec.Cmd) *exec.Cmd { return cmd }
+
 func groupAttr(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }

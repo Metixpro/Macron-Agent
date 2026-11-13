@@ -95,7 +95,7 @@ func (r *Registry) checkpoint(ctx context.Context, sessionID string, paths []str
 	}
 	checkpointCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(checkpointCtx, "tar", args...)
+	cmd := machine.Hide(exec.CommandContext(checkpointCtx, "tar", args...))
 	cmd.Dir = ws
 
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "LANG=C.UTF-8"}

@@ -20,6 +20,31 @@ type Info struct {
 	Services      int    `json:"services"`
 }
 
+type Tuning struct {
+	Model         string   `json:"model"`
+	Effort        string   `json:"effort"`
+	EffortParam   string   `json:"effortParam"`
+	EffortValue   string   `json:"effortValue"`
+	EffortSupport string   `json:"effortSupport"`
+	Window        int      `json:"window"`
+	AutoWindow    int      `json:"autoWindow"`
+	Temperature   *float64 `json:"temperature"`
+	TempLimit     float64  `json:"tempLimit"`
+}
+
+type Plugin struct {
+	Key       string   `json:"key"`
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Source    string   `json:"source"`
+	Target    string   `json:"target"`
+	Enabled   bool     `json:"enabled"`
+	Status    string   `json:"status"`
+	Error     string   `json:"error,omitempty"`
+	Removable bool     `json:"removable"`
+	Tools     []string `json:"tools"`
+}
+
 type ProviderChoice struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
@@ -59,5 +84,13 @@ type Host interface {
 	Servers() []ServerSpec
 	SaveServers(specs []ServerSpec) error
 	ConnectModel(ctx context.Context, name, endpoint, key, model string) error
+	Tuning() Tuning
+	Plugins() []Plugin
+	AddMCP(name, target string, args []string, env map[string]string) (Plugin, error)
+	SetPluginEnabled(key string, on bool) (Plugin, error)
+	RemovePlugin(key string) error
+	SetEffort(level string) error
+	SetContextWindow(tokens int) error
+	SetTemperature(t *float64) error
 	ListModels(ctx context.Context, endpoint, key string) ([]string, error)
 }
