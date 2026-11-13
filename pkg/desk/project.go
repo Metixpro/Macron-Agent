@@ -185,11 +185,30 @@ func (p *project) summary() Summary {
 	}
 	for i := len(p.blocks) - 1; i >= 0; i-- {
 		if b := p.blocks[i]; b.Kind == "user" || b.Kind == "assistant" {
-			s.Preview = clipRunes(strings.Join(strings.Fields(b.Text), " "), previewRunes)
+			s.Preview = clipRunes(plainText(b.Text), previewRunes)
 			break
 		}
 	}
 	return s
+}
+
+var markdownMarks = strings.NewReplacer("**", "", "__", "", "`", "", "~~", "", "|", " ", "#", "", "> ", "", "- [ ] ", "", "- [x] ", "")
+
+func plainText(s string) string {
+	var keep []string
+	fence := false
+	for _, line := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "```") {
+			fence = !fence
+			continue
+		}
+		if fence || strings.Trim(t, "-|: ") == "" {
+			continue
+		}
+		keep = append(keep, t)
+	}
+	return strings.Join(strings.Fields(markdownMarks.Replace(strings.Join(keep, " "))), " ")
 }
 
 func clipRunes(s string, n int) string {

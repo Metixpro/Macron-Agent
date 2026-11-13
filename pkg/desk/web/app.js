@@ -61,6 +61,32 @@ function el(tag, cls, text) {
   return n;
 }
 
+const ICONS = {
+  check: "M5 12.5l4.5 4.5L19 7",
+  x: "M6 6l12 12M18 6L6 18",
+  chevron: "M9 6l6 6-6 6",
+  arrow: "M5 12h14M13 6l6 6-6 6",
+  down: "M12 5v13M6 12l6 6 6-6",
+  up: "M12 19V6M6 11l6-6 6 6",
+  copy: "M9 9h10v10H9zM5 15V5h10",
+  folder: "M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z",
+  home: "M4 11l8-6.5 8 6.5M6 9.5V19h12V9.5",
+  alert: "M12 9v4M12 16.5v.01M10.3 4.2L2.8 17.5A2 2 0 0 0 4.5 20.5h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z",
+  drive: "M3 13h18M5 13l2-7h10l2 7v5H5zM8 16h.01",
+};
+
+function icon(name, cls) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "i" + (cls ? " " + cls : ""));
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", ICONS[name]);
+  svg.append(path);
+  return svg;
+}
+
 function add(parent, ...kids) {
   for (const k of kids) if (k) parent.append(k);
   return parent;
@@ -141,6 +167,13 @@ function project() {
   return S.projects.find((p) => p.id === S.current);
 }
 
+function shortPath(path) {
+  if (!path) return "";
+  const h = S.home;
+  if (h && (path === h || path.startsWith(h + "/") || path.startsWith(h + "\\"))) return "~" + path.slice(h.length);
+  return path;
+}
+
 function displayName(p) {
   if (!p) return "Macron";
   return p.id === S.defaultId ? "Home" : p.name;
@@ -155,7 +188,8 @@ function toBottom(force) {
   if (force || S.stick) ui.feed.scrollTop = ui.feed.scrollHeight;
 }
 
-const jump = el("button", "jump", "↓");
+const jump = el("button", "jump");
+jump.append(icon("down", "sm"));
 jump.type = "button";
 jump.title = "Jump to the latest";
 jump.addEventListener("click", () => {
@@ -169,13 +203,27 @@ ui.feed.addEventListener("scroll", () => {
   jump.classList.toggle("on", !S.stick);
 });
 
+const RTL = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/;
+const STRONG = /[A-Za-z\u00c0-\u024f\u0370-\u03ff\u0400-\u04ff\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/;
+
+function textDir(text) {
+  const m = STRONG.exec(text || "");
+  return m && RTL.test(m[0]) ? "rtl" : "ltr";
+}
+
 function bidi(root) {
-  root.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th").forEach((n) => n.setAttribute("dir", "auto"));
+  root.querySelectorAll("table").forEach((t) => {
+    if (t.parentElement.classList.contains("table")) return;
+    const w = el("div", "table");
+    t.replaceWith(w);
+    w.append(t);
+  });
+  root.setAttribute("dir", textDir(root.textContent));
+  root.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, .table, td, th").forEach((n) => n.setAttribute("dir", textDir(n.textContent)));
 }
 
 function proseEl(html) {
   const d = el("div", "prose");
-  d.setAttribute("dir", "auto");
   d.innerHTML = html || "";
   bidi(d);
   return d;
@@ -194,16 +242,18 @@ function copyText(text) {
   return Promise.resolve();
 }
 
-function planEl(items, live) {
-  const box = el("div", "plan" + (live ? " live-plan" : ""));
+function planEl(items) {
+  const box = el("div", "plan");
   const done = items.filter((i) => i.status === "done").length;
   const head = el("div", "ph");
-  add(head, el("span", "", "Plan"), el("span", "", done + " / " + items.length));
+  add(head, el("span", "", "Plan"), el("span", "", done + " of " + items.length));
   box.append(head);
   for (const it of items) {
     const st = it.status === "done" ? "done" : it.status === "in_progress" ? "now" : "";
     const row = el("div", "it " + st);
-    add(row, el("span", "bx", st === "done" ? "✓" : ""), el("span", "tx", it.text));
+    const bx = el("span", "bx");
+    if (st === "done") bx.append(icon("check", "xs"));
+    add(row, bx, el("span", "tx", it.text));
     row.querySelector(".tx").setAttribute("dir", "auto");
     box.append(row);
   }
@@ -213,14 +263,21 @@ function planEl(items, live) {
 function toolEl(b) {
   const d = el("details", "tool" + (b.failed ? " fail" : ""));
   const s = el("summary");
-  add(s, el("span", "st", b.failed ? "✕" : "✓"), el("span", "lb", b.label || b.name), el("span", "ar", b.arg || ""), el("span", "chev", "›"));
+  const st = el("span", "st");
+  st.append(icon(b.failed ? "x" : "check", "sm"));
+  const chev = el("span", "chev");
+  chev.append(icon("chevron", "xs"));
+  add(s, st, el("span", "lb", b.label || b.name), el("span", "ar", b.arg || ""), chev);
   d.append(s);
   if (b.summary && b.summary !== b.label) d.append(el("div", "sum", b.summary));
   d.addEventListener("toggle", () => {
     if (!d.open || d.dataset.filled) return;
     d.dataset.filled = "1";
-    if (b.args && b.args !== "{}") d.append(el("div", "args", prettyArgs(b.args)));
-    d.append(el("pre", "out", b.output && b.output.trim() ? b.output : "(no output)"));
+    const box = el("div", "detail");
+    const args = b.args && b.args !== "{}" ? prettyArgs(b.args) : "";
+    if (args && args.trim() !== (b.arg || "").trim()) box.append(el("div", "args", args));
+    box.append(el("pre", "out", b.output && b.output.trim() ? b.output : "(no output)"));
+    d.append(box);
   });
   return d;
 }
@@ -252,20 +309,21 @@ function blockEl(b) {
       const body = el("div", "body");
       body.append(proseEl(b.html));
       const acts = el("div", "msg-actions");
-      const c = el("button", "act", "Copy");
+      const c = el("button", "act");
       c.type = "button";
+      add(c, icon("copy", "sm"), el("span", "", "Copy"));
       c.addEventListener("click", () => copyText(b.text || "").then(() => toast("Copied")));
       acts.append(c);
       if (b.at) acts.append(el("span", "when", new Date(b.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })));
       body.append(acts);
-      add(m, el("div", "avatar", "M"), body);
+      m.append(body);
       return m;
     }
     case "tool":
       return toolEl(b);
     case "plan": {
       try {
-        return planEl(JSON.parse(b.text) || [], false);
+        return planEl(JSON.parse(b.text) || []);
       } catch {
         return null;
       }
@@ -300,17 +358,19 @@ const SUGGEST = [
 function emptyEl() {
   const p = project();
   const e = el("div", "empty");
-  add(e, el("div", "big", "M"), el("h2", "", p && p.id !== S.defaultId ? displayName(p) : "What should we do?"));
-  e.append(el("p", "", p && p.id !== S.defaultId ? "Macron works inside " + p.path : "Ask anything. Open a folder on the left to work on a project."));
+  e.append(el("h2", "", p && p.id !== S.defaultId ? displayName(p) : "What are we working on?"));
+  e.append(el("p", "", p && p.id !== S.defaultId ? "Macron works inside " + shortPath(p.path) : "Ask anything. Open a folder on the left to work on a project."));
   const g = el("div", "sugg");
   for (const [t, d, prompt] of SUGGEST) {
     const b = el("button");
     b.type = "button";
-    add(b, el("b", "", t), el("span", "", d));
+    const txt = el("div");
+    add(txt, el("b", "", t), el("span", "", d));
+    add(b, txt, icon("arrow", "sm"));
     b.addEventListener("click", () => {
       ui.input.value = prompt;
       grow();
-      ui.input.focus();
+      ui.input.focus({ preventScroll: true });
       ui.input.setSelectionRange(prompt.length, prompt.length);
     });
     g.append(b);
@@ -326,7 +386,7 @@ function streamEl() {
   const m = el("div", "msg assistant streaming");
   const body = el("div", "body");
   body.append(proseEl(""));
-  add(m, el("div", "avatar", "M"), body);
+  m.append(body);
   streamNode = m;
   return m;
 }
@@ -377,8 +437,10 @@ function renderLive() {
   ui.queued.textContent = L.queued && L.queued.length ? L.queued.length + " queued" : "";
   if (!L.running) return;
   const card = el("div", "live-card");
-  if (L.plan && L.plan.length) card.append(planEl(L.plan, true));
+  if (L.plan && L.plan.length) card.append(planEl(L.plan));
+  const hasSubs = L.subs && L.subs.length;
   for (const t of L.tools || []) {
+    if (hasSubs && t.name === "delegate_task") continue;
     const row = el("div", "live-row");
     const tm = el("span", "tm", fmtTook(Date.now() - t.started));
     tm.dataset.since = t.started;
@@ -389,20 +451,24 @@ function renderLive() {
   if (L.subs && L.subs.length) {
     const subs = el("div", "live-subs");
     for (const s of L.subs) {
-      const c = el("span", "chip" + (s.failed ? " failed" : s.done ? " done" : ""));
-      add(c, el("span", "s"), el("span", "", s.title), s.step && !s.done ? el("span", "st", s.step) : null);
-      c.title = s.steps + " steps";
-      subs.append(c);
+      const row = el("div", "agent");
+      let mark;
+      if (s.done) {
+        mark = el("span", s.failed ? "bad" : "ok");
+        mark.append(icon(s.failed ? "x" : "check", "sm"));
+      } else mark = el("span", "spin");
+      add(row, mark, el("span", "lb", s.title), el("span", "st", s.done ? "" : s.step || "starting"), el("span", "tm", s.steps ? s.steps + (s.steps === 1 ? " step" : " steps") : ""));
+      subs.append(row);
     }
     card.append(subs);
   }
   if (!(L.tools && L.tools.length) && !L.html) {
     const row = el("div", "thinking");
-    const dots = el("span", "dots");
-    add(dots, el("span"), el("span"), el("span"));
     const tm = el("span", "tm", fmtTook(Date.now() - (L.started || Date.now())));
     tm.dataset.since = L.started || Date.now();
-    add(row, dots, el("span", "", S.mode === "plan" ? "Planning…" : "Working…"), tm);
+    const word = el("span");
+    word.append(el("span", "word", S.mode === "plan" ? "Planning" : "Working"));
+    add(row, el("span", "spin"), word, tm);
     card.append(row);
     if (L.thought) {
       const th = el("div", "thought", L.thought);
@@ -430,11 +496,12 @@ function renderUsage() {
 function renderHeader() {
   const p = project();
   ui.pname.textContent = displayName(p);
-  ui.ppath.textContent = p ? p.path : "";
+  ui.ppath.textContent = p ? "\u200e" + shortPath(p.path) + "\u200e" : "";
+  ui.ppath.title = p ? p.path : "";
   document.title = (S.unseen ? "● " : "") + (p && p.id !== S.defaultId ? displayName(p) + " — Macron" : "Macron");
   ui.mode.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.mode === S.mode));
   ui.box.classList.toggle("plan", S.mode === "plan");
-  ui.input.placeholder = S.mode === "plan" ? "Describe what you want — Macron plans first and changes nothing" : "Ask Macron anything… build, fix, research, automate";
+  ui.input.placeholder = S.mode === "plan" ? "Describe what you want; Macron plans first and changes nothing" : "Ask Macron to build, fix, research or automate something";
   const i = S.info;
   ui.modelName.textContent = i.model || "No model";
   ui.modelBtn.title = i.provider ? i.provider + (i.effort ? " · " + i.effort : "") : "Pick a model";
@@ -449,7 +516,7 @@ function renderProjects() {
     b.title = p.path;
     const badge = el("span", "badge" + (p.asking ? " ask" : p.running ? " run" : ""));
     add(b, el("span", "pn", displayName(p)), badge);
-    const pv = el("span", "pv", p.preview || (p.id === S.defaultId ? "General chat" : p.path));
+    const pv = el("span", "pv", p.preview || (p.id === S.defaultId ? "General chat" : shortPath(p.path)));
     pv.setAttribute("dir", "auto");
     b.append(pv);
     if (p.updated && !p.running && !p.asking) badge.replaceWith(el("span", "ago", ago(p.updated)));
@@ -458,7 +525,8 @@ function renderProjects() {
       ui.side.classList.remove("open");
     });
     if (p.id !== S.defaultId) {
-      const x = el("span", "x", "×");
+      const x = el("span", "x");
+      x.append(icon("x", "sm"));
       x.title = "Remove from the list (files stay)";
       x.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -476,6 +544,7 @@ async function loadState() {
   S.mode = st.mode || "build";
   S.projects = st.projects || [];
   S.defaultId = st.default || "";
+  S.home = st.home || "";
   if (!S.projects.find((p) => p.id === S.current)) S.current = store.get("project", "");
   if (!S.projects.find((p) => p.id === S.current)) S.current = S.defaultId || (S.projects[0] && S.projects[0].id) || "";
   renderProjects();
@@ -610,7 +679,7 @@ async function newChat() {
   try {
     await api("POST", "/api/projects/" + S.current + "/new");
     toast("New conversation");
-    ui.input.focus();
+    ui.input.focus({ preventScroll: true });
   } catch (e) {
     fail(e);
   }
@@ -717,7 +786,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     setMode(S.mode === "plan" ? "build" : "plan");
   } else if (!S.dialog && !mod && !e.altKey && e.key.length === 1 && document.activeElement === document.body) {
-    ui.input.focus();
+    ui.input.focus({ preventScroll: true });
   }
 });
 
@@ -745,16 +814,18 @@ function closeDialog() {
   ui.overlay.classList.remove("on");
   ui.overlay.replaceChildren();
   S.dialog = null;
-  ui.input.focus();
+  ui.input.focus({ preventScroll: true });
 }
 
 ui.overlay.addEventListener("mousedown", (e) => {
   if (e.target === ui.overlay && !S.askOpen) closeDialog();
 });
 
-function btn(text, cls, fn) {
-  const b = el("button", "btn " + (cls || ""), text);
+function btn(text, cls, fn, ic) {
+  const b = el("button", "btn " + (cls || ""));
   b.type = "button";
+  if (ic) b.append(icon(ic, "sm"));
+  b.append(text);
   b.addEventListener("click", fn);
   return b;
 }
@@ -775,12 +846,12 @@ function showAsk(a) {
     }
   };
   openDialog("ask", (d) => {
-    add(d, el("div", "warn-ico", "!"), el("h3", "", a.title || "Allow this?"));
+    d.append(el("h3", "", a.title || "Allow this?"));
     d.append(el("div", "sub", "Macron wants to run this in " + displayName(project()) + "."));
     d.append(el("pre", "", a.command));
     for (const f of a.findings || []) {
       const r = el("div", "finding");
-      add(r, el("span", "", "⚠"), el("span", "", f));
+      add(r, icon("alert", "sm"), el("span", "", f));
       d.append(r);
     }
     if (a.guardian) d.append(el("div", "guardian", a.guardian));
@@ -859,12 +930,21 @@ async function modelPicker() {
     shown.forEach((m, i) => {
       const b = el("button", "item" + (i === sel ? " sel" : ""));
       b.type = "button";
-      add(b, el("span", "", m), m === current ? el("span", "tick", "✓") : !models.includes(m) ? el("span", "meta", "use this name") : null);
+      let tick = null;
+      if (m === current) {
+        tick = el("span", "tick");
+        tick.append(icon("check", "sm"));
+      } else if (!models.includes(m)) tick = el("span", "meta", "use this name");
+      add(b, el("span", "nm", m), tick);
       b.addEventListener("click", () => pick(m));
       list.append(b);
     });
     const s = list.querySelector(".sel");
-    if (s) s.scrollIntoView({ block: "nearest" });
+    if (s) {
+      const top = s.offsetTop - list.offsetTop;
+      if (top < list.scrollTop) list.scrollTop = top;
+      else if (top + s.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + s.offsetHeight - list.clientHeight;
+    }
     return shown;
   };
   let shown = draw();
@@ -893,7 +973,7 @@ async function folderPicker(start) {
     q.placeholder = "Paste a path, or browse below";
     q.setAttribute("spellcheck", "false");
     q.setAttribute("dir", "ltr");
-    add(d, q, el("div", "roots"), el("div", "crumbs"), el("div", "list"));
+    add(d, q, el("div", "roots"), el("div", "list"));
     const row = el("div", "row");
     add(row, btn("Cancel", "", closeDialog), btn("Open this folder", "primary", () => choose()));
     d.append(row);
@@ -921,20 +1001,25 @@ async function folderPicker(start) {
       const r = await api("GET", "/api/fs?path=" + encodeURIComponent(path || ""));
       if (S.dialog !== d) return;
       cur = r;
-      d.querySelector("input").value = r.path;
-      d.querySelector(".crumbs").textContent = r.path;
+      const q = d.querySelector("input");
+      q.value = r.path;
+      q.scrollLeft = q.scrollWidth;
       const roots = d.querySelector(".roots");
       roots.replaceChildren();
-      if (r.home) roots.append(btn("Home", "", () => go(r.home)));
-      if (r.parent) roots.append(btn("↑ Up", "", () => go(r.parent)));
-      for (const root of r.roots || []) if (root !== "/" || r.path !== "/") roots.append(btn(root, "", () => go(root)));
+      if (r.home) roots.append(btn("Home", "", () => go(r.home), "home"));
+      if (r.parent) roots.append(btn("Up", "", () => go(r.parent), "up"));
+      for (const root of r.roots || []) if (root !== r.path) roots.append(btn(root, "", () => go(root), "drive"));
       const list = d.querySelector(".list");
       list.replaceChildren();
       if (!(r.dirs || []).length) list.append(el("div", "meta", "No folders inside"));
       for (const name of r.dirs || []) {
         const b = el("button", "item");
         b.type = "button";
-        add(b, el("span", "", "📁  " + name), el("span", "meta", "›"));
+        const nm = el("span", "nm");
+        add(nm, icon("folder", "sm"), el("span", "", name));
+        const ch = el("span", "meta");
+        ch.append(icon("chevron", "xs"));
+        add(b, nm, ch);
         b.addEventListener("click", () => go(r.path.replace(/[\\/]+$/, "") + r.sep + name));
         b.addEventListener("dblclick", () => {
           cur = { path: r.path.replace(/[\\/]+$/, "") + r.sep + name };
@@ -1031,7 +1116,9 @@ async function settings() {
       .then((r) => {
         for (const c of r.connections || []) {
           const row = el("div", "conn");
-          add(row, el("span", "", c.name + (c.capability ? " — " + c.capability : "")), el("span", c.ready ? "ok" : "no", c.ready ? "connected" : "not set"));
+          const name = el("span", "cn");
+          add(name, el("b", "", c.name), c.capability ? el("small", "", c.capability) : null);
+          add(row, name, el("span", c.ready ? "ok" : "no", c.ready ? "connected" : "not set"));
           cn.append(row);
         }
       })
@@ -1189,4 +1276,4 @@ S.drafts = store.get("drafts", {});
 S.stick = true;
 grow();
 connect();
-ui.input.focus();
+ui.input.focus({ preventScroll: true });

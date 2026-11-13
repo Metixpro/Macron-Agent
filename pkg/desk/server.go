@@ -241,6 +241,7 @@ func (s *Server) state(w http.ResponseWriter, r *http.Request) {
 	st := s.info()
 	st["projects"] = s.summaries()
 	st["default"] = projectID(filepath.Clean(s.host.DefaultProject()))
+	st["home"], _ = os.UserHomeDir()
 	writeJSON(w, st)
 }
 
