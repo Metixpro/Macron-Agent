@@ -23,14 +23,16 @@ import (
 )
 
 type Info struct {
-	Version   string
-	Model     string
-	Dir       string
-	Branch    string
-	Approvals string
-	Yolo      bool
-	Telegram  string
-	Resumed   int
+	Mode, Provider                                  string
+	Connections, Services, ToolCount, ContextWindow int
+	Version                                         string
+	Model                                           string
+	Dir                                             string
+	Branch                                          string
+	Approvals                                       string
+	Yolo                                            bool
+	Telegram                                        string
+	Resumed                                         int
 }
 
 type Engine interface {
@@ -46,7 +48,10 @@ type Engine interface {
 }
 
 type Options struct {
-	Telegram func() *exec.Cmd
+	Setup       func() *exec.Cmd
+	Connections func() string
+	Services    []string
+	Telegram    func() *exec.Cmd
 }
 
 type (
@@ -85,7 +90,10 @@ type (
 		list    []string
 		err     error
 	}
-	execDoneMsg struct{ err error }
+	execDoneMsg struct {
+		err   error
+		setup bool
+	}
 	clearNotice struct{ at time.Time }
 )
 
@@ -221,11 +229,13 @@ func (b *bridge) send(msg tea.Msg) {
 }
 
 type model struct {
-	e    Engine
-	opt  Options
-	br   *bridge
-	info Info
-	md   *markdown
+	home      bool
+	toolCount int
+	e         Engine
+	opt       Options
+	br        *bridge
+	info      Info
+	md        *markdown
 
 	width, height int
 
@@ -258,14 +268,13 @@ type model struct {
 	notice      string
 	noticeAt    time.Time
 	interrupted bool
-	shown       bool
 	quitting    bool
 }
 
 func Run(e Engine, opt Options) error {
 	md := &markdown{style: markdownStyle()}
 	ta := textarea.New()
-	ta.Placeholder = "Ask Macron to do anything · / for commands"
+	ta.Placeholder = "Ask anything… build, fix, connect, explore"
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.MaxHeight = 0
@@ -286,7 +295,8 @@ func Run(e Engine, opt Options) error {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: []string{"✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳"}, FPS: time.Second / 8}), spinner.WithStyle(stAccent))
 
 	br := &bridge{out: &printer{wake: make(chan struct{}, 1)}}
-	m := model{e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1}
+	m := model{home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1}
+	m.ctxWindow = m.info.ContextWindow
 	p := tea.NewProgram(m)
 	br.p, br.out.p = p, p
 	done := make(chan struct{})
@@ -304,6 +314,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m *model) print(s string) {
+	m.home = false
 	if m.width > 0 {
 		s = ansi.Wrap(s, m.width-1, "")
 	}
@@ -314,14 +325,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		if !m.shown {
-			m.shown = true
-			m.br.out.push(banner(m.info, m.width))
-		}
-		m.input.SetWidth(max(m.width-4, 10))
+		m.input.SetWidth(max(m.contentWidth()-5, 6))
 		m.fitInput()
 		m.dirty = m.stream != ""
 		return m, nil
+	case commandMsg:
+		return m.command(msg.text)
 	case tea.KeyMsg:
 		return m.key(msg)
 	case spinner.TickMsg:
@@ -345,6 +354,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tools = append(m.tools, &liveTool{name: msg.name, args: msg.args, at: time.Now()})
 		return m, nil
 	case toolEndMsg:
+		m.toolCount++
 		if msg.name == agent.ToolPlan {
 			return m, nil
 		}
@@ -431,6 +441,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}}
 		return m, nil
 	case execDoneMsg:
+		if msg.setup && msg.err == nil {
+			msg.err = m.reloadModel()
+		}
 		m.info = m.e.Info()
 		if msg.err != nil {
 			m.print(stFail.Render(bullet) + " " + errText(msg.err))
@@ -516,6 +529,14 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.pickKey(msg)
 	}
 	switch msg.String() {
+	case "ctrl+p":
+		return m.openCommands()
+	case "ctrl+k":
+		return m.command("/model")
+	case "ctrl+o":
+		return m.command("/connections")
+	case "shift+tab":
+		return m.toggleMode()
 	case "ctrl+c":
 		switch {
 		case m.input.Value() != "":
@@ -556,7 +577,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sugg = nil
 			return m, nil
 		}
-		return m, nil
+		return m.toggleMode()
 	case "up", "down":
 		if len(m.sugg) > 0 {
 			if msg.String() == "up" {
@@ -675,6 +696,9 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) startTurn(text string) tea.Cmd {
+	if m.info.Model == "" {
+		return m.say("Connect a model with /connect model first")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.ask = nil
 	ctx = cmdgate.WithAsker(ctx, m.asker())
@@ -843,7 +867,9 @@ func (m model) pickKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.pick = nil
 		if len(items) > 0 {
-			m.busy = "Switching"
+			if p.title == "Model" || p.title == "Approvals" {
+				m.busy = "Switching"
+			}
 			return m, tea.Batch(p.pick(items[p.sel]), m.spin.Tick)
 		}
 	case "backspace":
@@ -876,29 +902,10 @@ func (m model) View() string {
 	if m.width == 0 || m.quitting {
 		return ""
 	}
-	parts := []string{""}
-	if m.running || m.busy != "" {
-		if live := strings.TrimPrefix(m.liveView(), "\n"); live != "" {
-			parts = append(parts, live)
-		}
+	if m.home && !m.running && m.busy == "" {
+		return m.homeView()
 	}
-	for _, q := range m.queue.list() {
-		parts = append(parts, stDim.Render(clip("  ⧗ "+oneLine(q), m.width-1)))
-	}
-	switch {
-	case m.ask != nil:
-		parts = append(parts, m.askView())
-	case m.pick != nil:
-		parts = append(parts, m.pickView())
-	default:
-		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colFaint).Padding(0, 1).Width(max(m.width-2, 10))
-		parts = append(parts, box.Render(m.input.View()))
-		if len(m.sugg) > 0 {
-			parts = append(parts, m.suggView())
-		}
-	}
-	parts = append(parts, m.footer())
-	return strings.Join(parts, "\n")
+	return m.workspaceView()
 }
 
 func (m model) liveView() string {
@@ -952,7 +959,7 @@ func (m model) liveView() string {
 
 func (m model) askView() string {
 	q := m.ask.q
-	w := max(m.width-2, 20)
+	w := max(m.contentWidth()-2, 12)
 	var b strings.Builder
 	b.WriteString(stWarn.Bold(true).Render("Run this command?") + "\n\n")
 	for _, l := range strings.Split(strings.TrimSpace(clean(q.Command)), "\n") {
@@ -984,7 +991,7 @@ func (m model) askView() string {
 
 func (m model) pickView() string {
 	p := m.pick
-	w := max(m.width-2, 20)
+	w := max(m.contentWidth()-2, 12)
 	items := p.visible()
 	var b strings.Builder
 	b.WriteString(stBold.Render(p.title))
@@ -994,7 +1001,7 @@ func (m model) pickView() string {
 		b.WriteString(stDim.Render("  type to filter · enter to choose · esc to cancel"))
 	}
 	b.WriteString("\n")
-	const shown = 10
+	shown := max(2, min(10, m.height-13))
 	from := 0
 	if p.sel >= shown {
 		from = p.sel - shown + 1
@@ -1038,60 +1045,32 @@ func (m model) suggView() string {
 }
 
 func (m model) footer() string {
+	w := m.contentWidth()
 	if m.notice != "" {
-		return stDim.Render("  " + m.notice)
+		return stDim.Render(clip(m.notice, w))
 	}
-	var left []string
-	model := m.info.Model
-	if model == "" {
-		model = "no model"
-	}
-	left = append(left, model)
-	if m.ctxWindow > 0 && m.ctxUsed*100 >= m.ctxWindow {
-		left = append(left, fmt.Sprintf("%d%% context", min(100, m.ctxUsed*100/m.ctxWindow)))
+	var parts []string
+	if m.ctxWindow > 0 {
+		percent := min(100, m.ctxUsed*100/m.ctxWindow)
+		parts = append(parts, fmt.Sprintf("context %d%%", percent))
 	}
 	if m.tokIn+m.tokOut > 0 {
-		left = append(left, "↑"+short(m.tokIn)+" ↓"+short(m.tokOut))
+		parts = append(parts, "↑"+short(m.tokIn)+" ↓"+short(m.tokOut))
 	}
-	appr := "approvals " + orDefault(m.info.Approvals, "smart")
+	if m.toolCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d tools", m.toolCount))
+	}
 	if m.info.Yolo {
-		appr = stWarn.Render("yolo: commands run without asking")
+		parts = append(parts, stWarn.Render("yolo"))
+	} else {
+		parts = append(parts, orDefault(m.info.Approvals, "smart"))
 	}
-	left = append(left, appr)
-	l := "  " + strings.Join(left, " · ")
-	branch := ""
-	if m.info.Branch != "" {
-		branch = " (" + m.info.Branch + ")"
+	line := clip(strings.Join(parts, " · "), w)
+	hint := "enter send  ctrl+j newline  ctrl+p commands  tab mode"
+	if m.running {
+		hint = "esc interrupt · type to steer · ctrl+p commands"
 	}
-	room := m.width - ansi.StringWidth(l) - ansi.StringWidth(branch) - 4
-	if room < 12 {
-		return stDim.Render(clip(l, m.width-1))
-	}
-	dir := tailClip(m.info.Dir, room) + branch
-	space := m.width - ansi.StringWidth(l) - ansi.StringWidth(dir) - 2
-	return stDim.Render(l + strings.Repeat(" ", space) + dir)
-}
-
-func banner(info Info, width int) string {
-	w := min(max(width-2, 30), 70)
-	var rows []string
-	rows = append(rows, stTitle.Render("✻ Macron Agent")+" "+stDim.Render(info.Version), "")
-	row := func(k, v string) { rows = append(rows, stDim.Render(fmt.Sprintf("%-10s", k))+v) }
-	row("model", orDefault(info.Model, stWarn.Render("none")))
-	dir := tailClip(info.Dir, w-14)
-	if info.Branch != "" {
-		dir += stDim.Render(" (" + info.Branch + ")")
-	}
-	row("folder", dir)
-	if info.Telegram != "" {
-		row("telegram", info.Telegram)
-	}
-	rows = append(rows, "", stDim.Render("/help for commands · esc interrupts · ctrl+c twice exits"))
-	out := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colAccent).Padding(0, 1).Width(w).Render(strings.Join(rows, "\n"))
-	if info.Resumed > 0 {
-		out += "\n" + stDim.Render(fmt.Sprintf("  ↺ continuing this folder's conversation (%s) · /new starts fresh", plural(info.Resumed, "earlier message")))
-	}
-	return out
+	return stDim.Render(line) + "\n" + stFaint.Render(clip(hint, w)) + "\n" + m.homeFooter(w)
 }
 
 func userBlock(text string, width int) string {

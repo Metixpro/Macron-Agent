@@ -14,6 +14,9 @@ type command struct {
 }
 
 var commands = []command{
+	{"/connect", "[service]", "connect a model or service"},
+	{"/connections", "", "service capabilities and setup status"},
+	{"/mode", "[build|plan]", "build with tools or inspect and plan"},
 	{"/help", "", "commands and keys"},
 	{"/new", "", "start a new conversation in this folder"},
 	{"/clear", "", "clear the screen and start a new conversation"},
@@ -63,6 +66,9 @@ func helpText() string {
 	b.WriteString("\n\n" + stBold.Render("Keys"))
 	for _, k := range [][2]string{
 		{"enter", "send"},
+		{"ctrl+p", "search commands"},
+		{"ctrl+k · ctrl+o", "models · connections"},
+		{"tab · shift+tab", "switch Build / Plan"},
 		{"ctrl+j · alt+enter · \\ enter", "new line"},
 		{"esc", "interrupt Macron, or clear the input"},
 		{"↑ ↓", "earlier messages"},
@@ -88,6 +94,39 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 	}
 	e := m.e
 	switch name {
+	case "/connect":
+		if !idle() {
+			return m, m.say("Finish or stop the current request first")
+		}
+		if arg == "" {
+			return m.connectPicker()
+		}
+		if arg == "model" {
+			if m.opt.Setup == nil {
+				return m, m.say("Run macron setup to connect a model")
+			}
+			return m, tea.ExecProcess(m.opt.Setup(), func(err error) tea.Msg { return execDoneMsg{err: err, setup: true} })
+		}
+		return m, m.startTurn("Connect the " + arg + " service. Discover connections with tool_search first, inspect its current status and describe its settings. Use existing settings; ask only for missing credentials. Save provided values with connections configure, then run a read-only test. Do not send a message or claim success before verification.")
+	case "/connections":
+		if m.opt.Connections != nil {
+			m.print(stBold.Render("Service connections") + "\n\n" + m.opt.Connections() + "\n\n" + stDim.Render("/connect SERVICE to configure · configured does not mean verified"))
+		} else {
+			m.print("Use /connect to configure services")
+		}
+	case "/mode":
+		if arg == "" {
+			return m.toggleMode()
+		}
+		if !idle() {
+			return m, m.say("Finish or stop the current request first")
+		}
+		if e, ok := m.e.(interface{ SetMode(string) error }); ok {
+			if err := e.SetMode(arg); err != nil {
+				return m, m.say(errText(err))
+			}
+			m.info = m.e.Info()
+		}
 	case "/help", "/?":
 		m.print(helpText())
 	case "/exit", "/quit", "/q":
@@ -104,10 +143,10 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			m.print(stFail.Render(bullet) + " " + errText(err))
 			return m, nil
 		}
-		m.tokIn, m.tokOut, m.ctxUsed, m.lastPlan = 0, 0, 0, ""
+		m.tokIn, m.tokOut, m.ctxUsed, m.toolCount, m.lastPlan = 0, 0, 0, 0, ""
 		m.info = e.Info()
 		if name == "/clear" {
-			m.print(banner(m.info, m.width))
+			m.home = true
 			return m, tea.ClearScreen
 		}
 		m.print(stOK.Render(bullet) + " New conversation: earlier messages in this folder are forgotten")

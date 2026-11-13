@@ -8,10 +8,10 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -26,7 +26,7 @@ const (
 
 func firstEnv(keys ...string) string {
 	for _, k := range keys {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		if v := strings.TrimSpace(config.ToolEnvValue(k)); v != "" {
 			return v
 		}
 	}

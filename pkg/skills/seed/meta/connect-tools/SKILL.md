@@ -1,13 +1,13 @@
 ---
 name: connect-tools
 description: "Use when the owner asks to connect an MCP server, add a plugin, or teach you a new skill."
-version: 1.0.0
+version: 1.1.0
 category: meta
 ---
 
 # Connect MCP servers, plugins and skills
 
-There are no panels for these: the owner asks in the chat, and you do it.
+The owner asks in the chat, and you do it. For built-in Gmail/email, messengers, storage and task-board accounts, discover `connections` through `tool_search` and follow the service-connections skill. Inspect existing fields before asking for credentials; save and read-only test before reporting success.
 
 ## MCP servers (the `plugins` tool)
 - A program that speaks MCP over stdio: `plugins` action `add_mcp` with `id`, `command`, `args` and `env` (tokens and keys go in `env`). Typical: `command: npx`, `args: ["-y", "@modelcontextprotocol/server-filesystem", "/home"]`, or `command: uvx`, `args: ["mcp-server-git"]`. Check that `npx`/`uvx`/`node` exist first and install them if not.

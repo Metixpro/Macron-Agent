@@ -5,14 +5,38 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
-	"os"
+	"net/url"
 	"strings"
 	"time"
 )
 
 const ToolIranMessenger = "iran_messenger"
+
+func messengerEndpoint(platform, token, method string) (string, error) {
+	base := map[string]string{"bale": "https://tapi.bale.ai", "rubika": "https://botapi.rubika.ir", "telegram": "https://api.telegram.org", "eitaa": "https://eitaayar.ir"}[platform]
+	if base == "" {
+		return "", fmt.Errorf("unsupported messenger")
+	}
+	if platform != "eitaa" {
+		if configured := config.ToolEnvValue("MACRON_" + strings.ToUpper(platform) + "_API"); configured != "" {
+			base = strings.TrimRight(configured, "/")
+		}
+	}
+	u, err := url.Parse(base)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("messenger API base must be an http(s) URL without credentials, query or fragment")
+	}
+	prefix := "/bot"
+	if platform == "rubika" {
+		prefix = "/v3/"
+	} else if platform == "eitaa" {
+		prefix = "/api/"
+	}
+	return base + prefix + url.PathEscape(token) + "/" + method, nil
+}
 
 func (r *Registry) SendIranMessenger(ctx context.Context, messenger, token, chatID, text string) (string, error) {
 	messenger = strings.ToLower(strings.TrimSpace(messenger))
@@ -26,11 +50,8 @@ func (r *Registry) SendIranMessenger(ctx context.Context, messenger, token, chat
 		client = http.DefaultClient
 	}
 
-	type route struct{ env, url string }
-	routes := map[string]route{
-		"bale":   {"BALE_BOT_TOKEN", "https://tapi.bale.ai/bot%s/sendMessage"},
-		"eitaa":  {"EITAA_BOT_TOKEN", "https://eitaayar.ir/api/%s/sendMessage"},
-		"rubika": {"RUBIKA_BOT_TOKEN", "https://botapi.rubika.ir/v3/%s/sendMessage"},
+	routes := map[string]string{
+		"bale": "BALE_BOT_TOKEN", "eitaa": "EITAA_BOT_TOKEN", "rubika": "RUBIKA_BOT_TOKEN",
 	}
 	if messenger == "eita" {
 		messenger = "eitaa"
@@ -40,16 +61,20 @@ func (r *Registry) SendIranMessenger(ctx context.Context, messenger, token, chat
 		return "", fmt.Errorf("unknown messenger %q: bale, eitaa or rubika", messenger)
 	}
 	if token == "" {
-		token = os.Getenv(rt.env)
+		token = config.ToolEnvValue(rt)
 	}
 	if token == "" {
-		return "", fmt.Errorf("%s is not set: macron config set %s <the bot token> and restart", rt.env, rt.env)
+		return "", fmt.Errorf("%s is not set: configure it through connections or macron config set %s <the bot token>", rt, rt)
 	}
 	if strings.TrimSpace(chatID) == "" {
 		return "", fmt.Errorf("chat_id is required")
 	}
 	payload, _ := json.Marshal(map[string]any{"chat_id": chatID, "text": text})
-	out, err := sendHTTPJSON(ctx, client, fmt.Sprintf(rt.url, token), payload, token)
+	endpoint, err := messengerEndpoint(messenger, token, "sendMessage")
+	if err != nil {
+		return "", err
+	}
+	out, err := sendHTTPJSON(ctx, client, endpoint, payload, token)
 	if err != nil {
 		return "", err
 	}

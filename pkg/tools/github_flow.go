@@ -6,14 +6,22 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
 const ToolGitHubWorkflow = "github_workflow"
 
+func (r *Registry) githubToken() string {
+	if token, set := config.ToolEnvLookup("GITHUB_TOKEN"); set {
+		return strings.TrimSpace(token)
+	}
+	return r.GitHubToken
+}
 func (r *Registry) ExecuteGitHubWorkflow(ctx context.Context, _, action, repo, title, body, base, head string, number int) (string, error) {
-	token := r.GitHubToken
+	token := r.githubToken()
 	if token == "" {
-		return "", fmt.Errorf("GITHUB_TOKEN is not set: macron config set GITHUB_TOKEN <a token with repo access> and restart")
+		return "", fmt.Errorf("GITHUB_TOKEN is not set: configure GitHub through connections or macron config set GITHUB_TOKEN <a token with repo access>")
 	}
 	repo = strings.Trim(strings.TrimSpace(repo), "/")
 	if strings.Count(repo, "/") != 1 {

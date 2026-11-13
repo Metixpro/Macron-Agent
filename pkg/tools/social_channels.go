@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -31,7 +31,7 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 	case "discord":
 		u := webhookURL
 		if u == "" {
-			u = os.Getenv("DISCORD_WEBHOOK_URL")
+			u = config.ToolEnvValue("DISCORD_WEBHOOK_URL")
 		}
 		if u == "" {
 			return "", fmt.Errorf("DISCORD_WEBHOOK_URL is not set: macron config set DISCORD_WEBHOOK_URL <the webhook URL>")
@@ -44,7 +44,7 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 	case "slack":
 		u := webhookURL
 		if u == "" {
-			u = os.Getenv("SLACK_WEBHOOK_URL")
+			u = config.ToolEnvValue("SLACK_WEBHOOK_URL")
 		}
 		if u != "" {
 			payload, _ := json.Marshal(map[string]any{
@@ -53,7 +53,7 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 			return sendHTTPPost(ctx, client, u, payload, nil)
 		}
 		if token == "" {
-			token = os.Getenv("SLACK_BOT_TOKEN")
+			token = config.ToolEnvValue("SLACK_BOT_TOKEN")
 		}
 		if token == "" {
 			return "", fmt.Errorf("Slack is not set up: macron config set SLACK_WEBHOOK_URL <webhook>, or SLACK_BOT_TOKEN for chat.postMessage with a channel")
@@ -70,9 +70,9 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 
 	case "whatsapp":
 		if token == "" {
-			token = os.Getenv("WHATSAPP_TOKEN")
+			token = config.ToolEnvValue("WHATSAPP_TOKEN")
 		}
-		phoneID := os.Getenv("WHATSAPP_PHONE_ID")
+		phoneID := config.ToolEnvValue("WHATSAPP_PHONE_ID")
 		if token == "" || phoneID == "" {
 			return "", fmt.Errorf("whatsapp requires WHATSAPP_TOKEN and WHATSAPP_PHONE_ID")
 		}

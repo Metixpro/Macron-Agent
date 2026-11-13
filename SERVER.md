@@ -92,7 +92,7 @@ Unknown tool names return exit status 2. This controls the model's tool surface;
 shell access still carries the account's privileges and is not a sandbox.
 
 The default CLI now starts with six general shell/file tools and a compact
-on-demand catalog. `more_tools` exposes the remaining allowed schemas when needed;
+on-demand catalog. `tool_search` loads the requested tools on demand; `more_tools` exposes the remaining allowed schemas when needed;
 `--all-tools` restores immediate broad advertisement. Explicit `--tools` keeps
 its exact selection. Tool discovery preserves the system prefix; adding schemas
 can still change provider cache behavior. Existing SOUL.md files are preserved;
@@ -568,3 +568,15 @@ Every message used to carry all of Macron's tools (about 90, some 20,000 tokens 
 - tools loaded in a chat stay loaded for its next messages (up to 30), and they go after the core, so the provider's prompt cache keeps working.
 
 A greeting now sends about 10,700 tokens instead of about 20,000, and the model picks from fewer tools.
+
+
+### 1.11.0: conversational connections and terminal workspace
+
+- New terminal welcome screen, responsive composer, model/mode status, command palette (`Ctrl+P`) and service picker (`/connect`). First launch can open without a configured provider; `/connect model` runs setup and reloads the provider without leaving the session.
+- Build/Plan switching with Tab or Shift+Tab. Plan filters tool definitions and rejects unavailable calls: no shell, file writes, service configuration or outbound messages.
+- Owner-only `connections` discovers, describes, configures and read-only tests 15 integrations. Service tools read updated private settings on their next call. Secret values are hidden in tool events; saving credentials never implies verified authentication. Native listeners still need their run command or restart.
+- Native private text chat and tool execution in Bale and Rubika, with separate owner IDs, memory, workspaces and approval replies. Eitaayar remains outbound-only. See [the setup guide](docs/messengers-email.md).
+- Gmail OAuth search/read/send with refresh and retry; SMTP STARTTLS/implicit TLS, cancellation, valid MIME and header checks. Messenger responses must explicitly confirm success.
+- Fixed tool-group metadata indexing and retained `tool_search` in focused/efficient mode. Tools remain loaded on demand rather than advertising every schema.
+
+Validation used the live `qwen-3-8-27b` model for tool discovery, conversational connection setup and messenger tool execution. Service authentication and delivery paths were exercised against controlled API/SMTP fixtures; no real email or messenger recipient was used.

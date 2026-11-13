@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -61,10 +61,10 @@ func apiCall(ctx context.Context, client *http.Client, method, rawURL string, he
 }
 
 func needEnv(name, what string) (string, error) {
-	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+	if v := strings.TrimSpace(config.ToolEnvValue(name)); v != "" {
 		return v, nil
 	}
-	return "", fmt.Errorf("%s is not set: macron config set %s <%s> and restart", name, name, what)
+	return "", fmt.Errorf("%s is not set: configure it through connections or macron config set %s <%s>", name, name, what)
 }
 
 func (r *Registry) ManageTaskBoard(ctx context.Context, platform, action, _, containerID, _, title, desc string) (string, error) {
@@ -81,7 +81,7 @@ func (r *Registry) ManageTaskBoard(ctx context.Context, platform, action, _, con
 			return "", err
 		}
 		if containerID == "" {
-			containerID = os.Getenv("NOTION_DATABASE_ID")
+			containerID = config.ToolEnvValue("NOTION_DATABASE_ID")
 		}
 		if containerID == "" {
 			return "", fmt.Errorf("container_id (the Notion database id) is required, or set NOTION_DATABASE_ID")

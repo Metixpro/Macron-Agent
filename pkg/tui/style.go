@@ -12,7 +12,9 @@ import (
 )
 
 var (
-	colAccent = lipgloss.AdaptiveColor{Light: "#5B4FE0", Dark: "#A59EFF"}
+	colPanel  = lipgloss.AdaptiveColor{Light: "#F3F1EB", Dark: "#191B20"}
+	colText   = lipgloss.AdaptiveColor{Light: "#24272D", Dark: "#E6E4DF"}
+	colAccent = lipgloss.AdaptiveColor{Light: "#945529", Dark: "#E2AD77"}
 	colOK     = lipgloss.AdaptiveColor{Light: "#1A7F37", Dark: "#3FB950"}
 	colFail   = lipgloss.AdaptiveColor{Light: "#CF222E", Dark: "#F85149"}
 	colWarn   = lipgloss.AdaptiveColor{Light: "#9A6700", Dark: "#D29922"}
@@ -50,10 +52,10 @@ func markdownStyle() string {
 }
 
 func markdownStyles(name string) gansi.StyleConfig {
-	c, accent := styles.DarkStyleConfig, "#A59EFF"
+	c, accent := styles.DarkStyleConfig, "#E2AD77"
 	switch name {
 	case "light":
-		c, accent = styles.LightStyleConfig, "#5B4FE0"
+		c, accent = styles.LightStyleConfig, "#945529"
 	case "notty":
 		return styles.NoTTYStyleConfig
 	}

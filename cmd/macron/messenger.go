@@ -102,6 +102,7 @@ func runMessenger(platform string, args []string) error {
 	bot := &Bot{app: a, st: st, prov: prov, jobCtx: ctx, brain: br}
 	a.Registry.Gate, a.Registry.CheckpointDir = bot.newCommandGate(), config.HomePath("checkpoints")
 	a.Registry.SetSkillWriter(func(session string) bool { return strings.HasPrefix(session, platform+"-") })
+	a.Registry.SetConnectionAdmin(func(session string) bool { return strings.HasPrefix(session, platform+"-") })
 	pm := &plugins.Manager{Dir: cfg.PluginsDir, MCPFile: cfg.MCPConfig, Machine: a.Machine, HTTP: pluginHTTP(cfg.UseEnvProxy), States: pluginStates{st}, Version: app.Version, IsAdmin: func(session string) bool { return strings.HasPrefix(session, platform+"-") }, Reserved: a.Registry.Builtin}
 	pm.Reload(ctx)
 	defer pm.Close()

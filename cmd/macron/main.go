@@ -193,6 +193,7 @@ func runBot(args []string) {
 	a.Agent.Redact = bot.redact
 
 	a.Registry.SetSkillWriter(bot.sessionAdmin)
+	a.Registry.SetConnectionAdmin(bot.sessionAdmin)
 
 	bot.plugins = &plugins.Manager{Dir: cfg.PluginsDir, MCPFile: cfg.MCPConfig, Machine: a.Machine,
 		HTTP:   pluginHTTP(cfg.UseEnvProxy),

@@ -30,16 +30,18 @@ const MaxToolOutput = 15000
 type ToolHandler func(ctx context.Context, sessionID string, args map[string]any) (string, error)
 
 type Options struct {
-	HTTP        *http.Client
-	GitHubToken string
-	PiperModel  string
-	Skills      *skills.Store
-	SkillWrite  func(sessionID string) bool
+	ConnectionAdmin func(string) bool
+	HTTP            *http.Client
+	GitHubToken     string
+	PiperModel      string
+	Skills          *skills.Store
+	SkillWrite      func(sessionID string) bool
 }
 
 type Registry struct {
-	Gate          *cmdgate.Gate
-	CheckpointDir string
+	connectionAdmin func(string) bool
+	Gate            *cmdgate.Gate
+	CheckpointDir   string
 
 	Machine     *machine.Machine
 	Search      *search.Engine
@@ -73,21 +75,23 @@ func NewRegistry(sb *machine.Machine, se *search.Engine, client llm.ChatClient, 
 		opts.HTTP = netclient.NewClient(netclient.Options{})
 	}
 	r := &Registry{
-		Machine:     sb,
-		Search:      se,
-		LLM:         client,
-		HTTP:        opts.HTTP,
-		GitHubToken: opts.GitHubToken,
-		tools:       make(map[string]llm.Tool),
-		handler:     make(map[string]ToolHandler),
-		docs:        newDocCache(),
-		piper:       piperVoice{model: opts.PiperModel},
-		skills:      opts.Skills,
-		skillWrite:  opts.SkillWrite,
+		connectionAdmin: opts.ConnectionAdmin,
+		Machine:         sb,
+		Search:          se,
+		LLM:             client,
+		HTTP:            opts.HTTP,
+		GitHubToken:     opts.GitHubToken,
+		tools:           make(map[string]llm.Tool),
+		handler:         make(map[string]ToolHandler),
+		docs:            newDocCache(),
+		piper:           piperVoice{model: opts.PiperModel},
+		skills:          opts.Skills,
+		skillWrite:      opts.SkillWrite,
 	}
 	r.registerCoreTools()
 	r.registerMediaTools()
 	r.registerInfoTools()
+	r.registerConnections()
 	r.registerDocumentTools()
 	r.registerDataTools()
 	r.registerDownloadTools()
@@ -210,6 +214,8 @@ func tail(s string, n int) string {
 
 func (r *Registry) Usable(name, sessionID string) bool {
 	switch name {
+	case ToolConnections:
+		return r.ConnectionAllowed(sessionID)
 	case ToolSaveSkill:
 		return r.SkillWritable(sessionID)
 	}

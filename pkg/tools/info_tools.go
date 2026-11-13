@@ -657,8 +657,8 @@ func (r *Registry) githubGet(ctx context.Context, apiPath, accept string) ([]byt
 	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", "Macron-Agent")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if r.GitHubToken != "" {
-		req.Header.Set("Authorization", "Bearer "+r.GitHubToken)
+	if token := r.githubToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := r.HTTP.Do(req)
 	if err != nil {

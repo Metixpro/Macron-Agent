@@ -21,7 +21,7 @@ var toolTitles = map[string]string{
 	"ocr_image": "OCR", "translate_document": "Translate", "generate_diagram": "Diagram", "generate_image": "Image",
 	"media_summary": "Summarize", "cloud_storage": "Cloud", "tsetmc_stock": "Bourse", "price_alert": "Price Alert", "page_watch": "Watch",
 	"academic_search": "Papers", "fact_check": "Fact Check", "create_dashboard": "Dashboard", "openapi_call": "API",
-	"statistics_forecast": "Stats", "github_workflow": "GitHub", "live_preview": "Preview", "email_client": "Email",
+	"statistics_forecast": "Stats", "github_workflow": "GitHub", "live_preview": "Preview", "email_client": "Email", "connections": "Connections",
 	"calendar_client": "Calendar", "iran_messenger": "Message", "external_messenger": "Message", "task_board": "Tasks",
 	"generate_briefing": "Briefing", "rag_search": "Search Docs", "crawl_site": "Crawl", "deep_research": "Research",
 	"currency_gold_price": "Prices", "crypto_currency_price": "Crypto",

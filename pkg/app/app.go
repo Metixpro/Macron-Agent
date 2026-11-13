@@ -17,7 +17,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-const Version = "1.10.0"
+const Version = "1.11.0"
 
 type App struct {
 	Config   *config.Config
@@ -62,7 +62,7 @@ func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, cli
 	reg := tools.NewRegistry(sb, engine, client, tools.Options{
 		HTTP: toolsHTTP, GitHubToken: cfg.GitHubToken,
 		PiperModel: cfg.PiperModel,
-		Skills:     sk, SkillWrite: skillWrite,
+		Skills:     sk, SkillWrite: skillWrite, ConnectionAdmin: func(string) bool { return channel == agent.ChannelCLI },
 	})
 	if opts.Skills == nil {
 		opts.Skills = sk

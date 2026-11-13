@@ -6,10 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -90,7 +90,7 @@ func (r *Registry) Gmail(ctx context.Context, action, to, subject, body, query, 
 			if readErr != nil {
 				return fmt.Errorf("reading Gmail response: %w", readErr)
 			}
-			if resp.StatusCode == 401 && !refreshed && os.Getenv("MACRON_GMAIL_REFRESH_TOKEN") != "" {
+			if resp.StatusCode == 401 && !refreshed && config.ToolEnvValue("MACRON_GMAIL_REFRESH_TOKEN") != "" {
 				refreshed = true
 				token, err = r.gmailToken(ctx, true)
 				if err != nil {
@@ -109,6 +109,17 @@ func (r *Registry) Gmail(ctx context.Context, action, to, subject, body, query, 
 		return fmt.Errorf("Gmail authentication failed")
 	}
 	switch action {
+	case "profile":
+		var profile struct {
+			Email string `json:"emailAddress"`
+		}
+		if err := call(http.MethodGet, "profile", nil, &profile); err != nil {
+			return "", err
+		}
+		if profile.Email == "" {
+			return "", fmt.Errorf("Gmail did not confirm an authenticated account")
+		}
+		return "Gmail authenticated read-only request succeeded; no email sent", nil
 	case "send", "":
 		from := firstEnv("MACRON_GMAIL_FROM", "MACRON_SMTP_USER")
 		if from == "" {

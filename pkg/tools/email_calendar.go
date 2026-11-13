@@ -5,12 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/config"
 	"mime"
 	"mime/quotedprintable"
 	"net"
 	"net/mail"
 	"net/smtp"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -48,11 +48,11 @@ func emailMessage(from, to, subject, body string) ([]byte, string, []string, err
 
 func SendEmail(ctx context.Context, host string, port int, user, pass, from, to, subject, body string) error {
 	if host == "" {
-		host = os.Getenv("MACRON_SMTP_HOST")
+		host = config.ToolEnvValue("MACRON_SMTP_HOST")
 	}
 	if port <= 0 {
 		port = 587
-		if value := os.Getenv("MACRON_SMTP_PORT"); value != "" {
+		if value := config.ToolEnvValue("MACRON_SMTP_PORT"); value != "" {
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 1 || n > 65535 {
 				return fmt.Errorf("MACRON_SMTP_PORT must be between 1 and 65535")
@@ -61,10 +61,10 @@ func SendEmail(ctx context.Context, host string, port int, user, pass, from, to,
 		}
 	}
 	if user == "" {
-		user = os.Getenv("MACRON_SMTP_USER")
+		user = config.ToolEnvValue("MACRON_SMTP_USER")
 	}
 	if pass == "" {
-		pass = os.Getenv("MACRON_SMTP_PASS")
+		pass = config.ToolEnvValue("MACRON_SMTP_PASS")
 	}
 	if from == "" {
 		from = firstEnv("MACRON_SMTP_FROM")
@@ -79,13 +79,38 @@ func SendEmail(ctx context.Context, host string, port int, user, pass, from, to,
 	if err != nil {
 		return err
 	}
+	return smtpSession(ctx, host, port, user, pass, func(client *smtp.Client) error {
+		if err := client.Mail(sender); err != nil {
+			return fmt.Errorf("SMTP MAIL FROM: %w", err)
+		}
+		for _, recipient := range recipients {
+			if err := client.Rcpt(recipient); err != nil {
+				return fmt.Errorf("SMTP RCPT TO: %w", err)
+			}
+		}
+		w, err := client.Data()
+		if err != nil {
+			return fmt.Errorf("SMTP DATA: %w", err)
+		}
+		if _, err = w.Write(msg); err != nil {
+			return err
+		}
+		if err = w.Close(); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func smtpSession(ctx context.Context, host string, port int, user, pass string, run func(*smtp.Client) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	dialer := &net.Dialer{Timeout: 15 * time.Second}
 	var conn net.Conn
+	var err error
 	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-	if port == 465 || os.Getenv("MACRON_SMTP_TLS") == "implicit" {
+	if port == 465 || config.ToolEnvValue("MACRON_SMTP_TLS") == "implicit" {
 		conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsConfig}).DialContext(ctx, "tcp", addr)
 	} else {
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
@@ -117,22 +142,7 @@ func SendEmail(ctx context.Context, host string, port int, user, pass, from, to,
 				return fmt.Errorf("SMTP authentication: %w", err)
 			}
 		}
-		if err := client.Mail(sender); err != nil {
-			return fmt.Errorf("SMTP MAIL FROM: %w", err)
-		}
-		for _, recipient := range recipients {
-			if err := client.Rcpt(recipient); err != nil {
-				return fmt.Errorf("SMTP RCPT TO: %w", err)
-			}
-		}
-		w, err := client.Data()
-		if err != nil {
-			return fmt.Errorf("SMTP DATA: %w", err)
-		}
-		if _, err = w.Write(msg); err != nil {
-			return err
-		}
-		if err = w.Close(); err != nil {
+		if err := run(client); err != nil {
 			return err
 		}
 		_ = client.Quit()
@@ -148,6 +158,22 @@ func SendEmail(ctx context.Context, host string, port int, user, pass, from, to,
 		}
 	}
 	return err
+}
+
+func TestSMTP(ctx context.Context) error {
+	host, user, pass := firstEnv("MACRON_SMTP_HOST"), firstEnv("MACRON_SMTP_USER"), firstEnv("MACRON_SMTP_PASS")
+	if host == "" || user == "" || pass == "" {
+		return fmt.Errorf("configure SMTP host, user and password first")
+	}
+	port := 587
+	if raw := firstEnv("MACRON_SMTP_PORT"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("invalid SMTP port")
+		}
+		port = n
+	}
+	return smtpSession(ctx, host, port, user, pass, func(*smtp.Client) error { return nil })
 }
 
 func GenerateICalendar(title, description, location string, start, end time.Time) string {

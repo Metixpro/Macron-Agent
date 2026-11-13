@@ -31,6 +31,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/providers"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
+	"github.com/Metixpro/macron-agent/pkg/tools"
 	"github.com/Metixpro/macron-agent/pkg/tui"
 )
 
@@ -48,6 +49,8 @@ func interactiveTerminal() bool {
 }
 
 type terminal struct {
+	mode    string
+	modeMu  sync.RWMutex
 	st      *store.Store
 	prov    *providers.Manager
 	app     *app.App
@@ -108,12 +111,6 @@ func runTerminal() int {
 	if err != nil {
 		return fail("providers: %v", err)
 	}
-	if !prov.Configured() && strings.TrimSpace(os.Getenv(config.EnvAPIURL)) == "" {
-		if cli.FirstRun(cli.Std()) != 0 {
-			return 1
-		}
-		_ = config.LoadDefaultDotEnv()
-	}
 	cfg := &config.Config{OptionalAPIURL: true}
 	fs := flag.NewFlagSet("macron", flag.ContinueOnError)
 	cfg.Bind(fs)
@@ -123,9 +120,6 @@ func runTerminal() int {
 	seedProvider(ctx, st, cfg)
 	if err := prov.Reload(ctx); err != nil {
 		return fail("providers: %v", err)
-	}
-	if !prov.Configured() {
-		return fail("no model is set up yet: run «macron setup»")
 	}
 	window := contextWindow(st, prov, cfg.ContextWindow)
 	br, err := brain.Open(config.Home(), agent.DefaultSoul)
@@ -162,7 +156,14 @@ func runTerminal() int {
 	if mc, err := t.mem.Load(ctx, t.uid); err == nil {
 		t.resumed = mc.Messages
 	}
-	err = tui.Run(t, tui.Options{Telegram: func() *exec.Cmd {
+	services := []string{}
+	for _, spec := range tools.ConnectionSpecs() {
+		services = append(services, spec.ID)
+	}
+	err = tui.Run(t, tui.Options{Services: services, Connections: tools.ConnectionsStatus, Setup: func() *exec.Cmd {
+		bin, _ := os.Executable()
+		return exec.Command(bin, "setup", "--no-telegram", "--no-service")
+	}, Telegram: func() *exec.Cmd {
 		bin, err := os.Executable()
 		if err != nil {
 			bin = os.Args[0]
@@ -251,9 +252,16 @@ func excludeWork(dir string) {
 
 func (t *terminal) Info() tui.Info {
 	i := tui.Info{Version: app.Version, Dir: t.shown, Branch: gitBranch(t.dir), Approvals: t.bot.gateMode(), Resumed: t.resumed,
-		Telegram: cli.TelegramSummary()}
+		Telegram: cli.TelegramSummary(), Mode: t.Mode(), ContextWindow: t.window(), ToolCount: len(t.app.Registry.GetTools())}
+	for _, spec := range tools.ConnectionSpecs() {
+		i.Services++
+		if tools.ConnectionReady(spec) {
+			i.Connections++
+		}
+	}
 	if p, ok := t.prov.Active(); ok {
 		i.Model = p.Model
+		i.Provider = p.Name
 	}
 	i.Yolo, _ = t.gate.Yolo()
 	return i
@@ -306,6 +314,13 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 	l.OnText = func(s string) { shownText(streamSafe(scrubFileNotes(s))) }
 	var taken []string
 	var takenMu sync.Mutex
+	mode := t.Mode()
+	about := t.about(ctx)
+	var filter func(string) bool
+	if mode == "plan" {
+		filter = planToolAllowed
+		about += "\nPlan mode: inspect with read-only tools and explain the plan. Do not execute shell commands, change files, configure services, or send messages."
+	}
 	res, err := t.app.Agent.Do(ctx, agent.Request{
 		SessionID:        t.session,
 		Input:            llm.Message{Role: "user", Content: text},
@@ -316,7 +331,8 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		ContextWindow:    window,
 		ContextCarry:     carry,
 		ContextCompacted: compacted,
-		About:            t.about(ctx),
+		About:            about,
+		ToolFilter:       filter,
 		MaxSteps:         t.app.Config.MaxSteps,
 		Listener:         l,
 		ToolYield:        yield,
@@ -506,6 +522,7 @@ func (t *terminal) Status(ctx context.Context) string {
 		dir += " (" + br + ")"
 	}
 	row("folder", dir)
+	row("mode", t.Mode())
 	for _, name := range projectNotes {
 		if _, err := os.Stat(filepath.Join(t.dir, name)); err == nil {
 			row("notes", name)
@@ -523,4 +540,53 @@ func (t *terminal) Status(ctx context.Context) string {
 	row("telegram", cli.TelegramSummary())
 	row("home", config.Home())
 	return b.String()
+}
+
+func (t *terminal) Mode() string {
+	t.modeMu.RLock()
+	defer t.modeMu.RUnlock()
+	if t.mode == "plan" {
+		return "plan"
+	}
+	return "build"
+}
+func (t *terminal) SetMode(mode string) error {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode != "plan" && mode != "build" {
+		return fmt.Errorf("mode must be build or plan")
+	}
+	t.modeMu.Lock()
+	t.mode = mode
+	t.modeMu.Unlock()
+	return nil
+}
+func planToolAllowed(name string) bool {
+	switch name {
+	case "read_file", "list_files", "search_code", "find_files", "project_tree", "code_outline", "web_search", "web_fetch", "document_reader", "view_image", "search_past_chats", "recall_history", "update_plan":
+		return true
+	}
+	return false
+}
+func (t *terminal) ReloadModel(ctx context.Context) error {
+	endpoint, key, model := config.ToolEnvValue(config.EnvAPIURL), config.ToolEnvValue(config.EnvAPIKey), config.ToolEnvValue(config.EnvModel)
+	if endpoint == "" || model == "" {
+		return fmt.Errorf("configure a model endpoint and name first")
+	}
+	base, api := llm.CleanBaseURL(endpoint)
+	id := t.prov.ActiveID()
+	if id == 0 {
+		if _, err := t.st.AddProvider(ctx, store.Provider{Name: "default", BaseURL: base, API: api, APIKey: key, Model: model, Enabled: true, Priority: 10, Vision: true}); err != nil {
+			return err
+		}
+	} else {
+		p, err := t.st.Provider(ctx, id)
+		if err != nil {
+			return err
+		}
+		p.BaseURL, p.API, p.APIKey, p.Model = base, api, key, model
+		if err := t.st.UpdateProvider(ctx, *p); err != nil {
+			return err
+		}
+	}
+	return t.prov.Reload(ctx)
 }

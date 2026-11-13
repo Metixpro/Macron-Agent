@@ -5,7 +5,29 @@ agent's tools, and send plain text answers. They use the model providers already
 configured in Macron. Tool discovery stays enabled; the entire tool catalog is
 not sent for every message.
 
-Set these in `config.env`, then restart the messenger process:
+## Configure from chat
+
+Ask Macron to connect or inspect a service, or use `/connect` in the terminal.
+The owner-only `connections` tool is discovered through `tool_search`; full
+service schemas do not have to be advertised in every request. `list` and
+`describe` show capabilities and which fields are present without printing their
+values. `configure` writes only that service's allowlisted settings to the private
+`config.env` with mode 0600. Empty values clear settings.
+
+Service tools read the saved values on their next call, with these file values
+taking precedence over the startup environment. `test` performs a read-only
+authentication probe (SMTP login, Gmail profile, messenger getMe, etc.). Saving a
+token is not a successful probe. Webhook delivery and Eitaayar delivery remain
+unverified when checking them would require sending a message. Native bot
+listeners need a process restart after changing listener settings.
+
+Supported services: Gmail, SMTP, Bale, Rubika, Eitaa, Telegram, Slack, Discord,
+WhatsApp, S3, WebDAV, Notion, Trello, Todoist and GitHub. For other services,
+Macron can inspect its MCP/plugin connections and load their tools on demand.
+
+## Native messenger chat
+
+Set these in `config.env`, or provide them to Macron in chat, then restart the messenger process:
 
 ```
 BALE_BOT_TOKEN=your-bale-bot-token
@@ -25,7 +47,7 @@ Run `macron bale run --check` or `macron rubika run --check` to check startup.
 For the existing background service, set `MACRON_MESSENGER=bale` or
 `MACRON_MESSENGER=rubika`; its normal `telegram run` entry point dispatches to
 that messenger after reading `config.env`. Use separate Macron profiles when
-running multiple services concurrently. The terminal UI is unchanged.
+running multiple services concurrently. The terminal UI continues to use its own project conversations.
 
 Inside the chat:
 

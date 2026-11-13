@@ -854,6 +854,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		catalog = focused
 	}
 
+	if known[tools.ToolConnections] {
+		full += "\n" + tools.ConnectionsGuide + "\n"
+	}
 	full += toolCatalog(catalog, false) + shelf.note()
 	leak := newLeakGuard(a.leakKnown(known), full, a.soulText())
 	if owner {
@@ -1721,7 +1724,7 @@ func (a *Agent) runTool(ctx context.Context, sessionID string, tc llm.ToolCall, 
 	l *EventListener) (llm.Message, []string, bool, bool) {
 	name, args := tc.Function.Name, tc.Function.Arguments
 	if l.OnToolStart != nil {
-		l.OnToolStart(name, args)
+		l.OnToolStart(name, tools.VisibleToolArgs(name, args))
 	}
 	start := time.Now()
 	var (
@@ -1764,7 +1767,7 @@ func (a *Agent) runTool(ctx context.Context, sessionID string, tc llm.ToolCall, 
 	}
 	result = textutil.HeadTail(result, tools.MaxToolOutput)
 	if l.OnToolEnd != nil {
-		l.OnToolEnd(name, args, result, time.Since(start))
+		l.OnToolEnd(name, tools.VisibleToolArgs(name, args), result, time.Since(start))
 	}
 	return llm.Message{Role: "tool", ToolCallID: tc.ID, Name: name, Content: result}, images, end, problem != ""
 }

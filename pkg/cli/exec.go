@@ -91,7 +91,7 @@ func execTask(term *IO, args []string) int {
 	defer m.StopShell(session)
 	client := llm.NewClient(endpoint, value(keyAPIKey), model)
 	client.API = llm.DetectAPI(endpoint)
-	reg := tools.NewRegistry(m, search.NewEngine(nil), client, tools.Options{Skills: sk, SkillWrite: func(string) bool { return true }})
+	reg := tools.NewRegistry(m, search.NewEngine(nil), client, tools.Options{Skills: sk, SkillWrite: func(string) bool { return true }, ConnectionAdmin: func(string) bool { return true }})
 	dbPath := value(config.EnvDB)
 	if dbPath == "" {
 		dbPath = config.HomePath(config.FileDB)

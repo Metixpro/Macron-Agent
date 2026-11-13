@@ -45,12 +45,17 @@ An interactive terminal interface opens: answers stream in rendered Markdown, ev
 |---|---|
 | `Enter` · `Ctrl+J` | send · new line |
 | `Esc` | interrupt |
+| `Ctrl+P` | search commands |
+| `Tab` · `Shift+Tab` | switch Build / Plan; Plan exposes only read-only tools |
+| `/connect` · `/connections` | connect a model or service · inspect setup without exposing secrets |
 | `/model` · `/approvals` · `/yolo` | switch the model · how commands are approved · no prompts for 30 minutes |
 | `/new` · `/compact` · `/status` | fresh conversation · summarize the history · status |
 | `/init` | write `MACRON.md` for the project |
 | `/telegram` | connect and manage the Telegram bot |
 
-If no model is set up yet, the first `macron` asks for one.
+The welcome screen shows the active model and mode and adapts to narrow terminals. Use `/connect model` to configure a provider. Ask in chat to connect Bale, inspect Gmail or configure another service: Macron discovers the connection tool, checks existing settings and asks only for what is missing. Saving credentials and verifying authentication are separate; connection checks do not send messages.
+
+See [Messenger chat and email](docs/messengers-email.md) for Bale/Rubika tool execution, the Eitaayar limitation and Gmail setup.
 
 ### In Telegram
 
