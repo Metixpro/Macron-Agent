@@ -59,7 +59,7 @@ An interactive terminal interface opens: answers stream in rendered Markdown, ev
 | `/theme` | colors for a dark or a light terminal (`dark` · `light` · `auto`) |
 | `/telegram` | connect and manage the Telegram bot |
 
-The conversation keeps its composer and colored status bar at the bottom while history scrolls separately. Persian/Arabic text is shaped and reordered for display; logical input sent to the model is preserved. Set `MACRON_TUI_RTL=logical` for terminals that already render BiDi themselves.
+The conversation keeps its composer and colored status bar at the bottom while history scrolls separately. Persian/Arabic text is shaped and reordered for display; logical input sent to the model is preserved. If Persian shows reversed (terminals that order right-to-left text themselves, such as most mobile SSH apps, Konsole and GNOME Terminal), type `/rtl`; the choice is remembered.
 
 The welcome screen shows the active model and mode and adapts to narrow terminals. Use `/connect model` to configure a provider. Ask in chat to connect Bale, inspect Gmail or configure another service: Macron discovers the connection tool, checks existing settings and asks only for what is missing. Saving credentials and verifying authentication are separate; connection checks do not send messages.
 

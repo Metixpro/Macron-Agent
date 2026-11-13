@@ -227,6 +227,7 @@ type model struct {
 	quitting    bool
 	lastAnswer  string
 	theme       string
+	rtlChosen   bool
 	suggKind    string
 	files       []string
 	filesAt     time.Time
@@ -239,6 +240,12 @@ func Run(e Engine, opt Options) error {
 	if t, ok := e.(interface{ Theme() string }); ok {
 		saved = t.Theme()
 	}
+	savedRTL := ""
+	if r, ok := e.(interface{ RTL() string }); ok {
+		savedRTL = r.RTL()
+	}
+	rtlMode, rtlChosen := resolveRTL(savedRTL)
+	rtlLogical = rtlMode == "logical"
 	detectedDark = lipgloss.HasDarkBackground()
 	theme := resolveTheme(saved)
 	applyTheme(theme)
@@ -267,7 +274,7 @@ func Run(e Engine, opt Options) error {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: []string{"✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳"}, FPS: time.Second / 8}), spinner.WithStyle(stAccent))
 
 	br := &bridge{}
-	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1, theme: theme}
+	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1, theme: theme, rtlChosen: rtlChosen}
 	m.ctxWindow = m.info.ContextWindow
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	br.p = p

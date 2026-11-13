@@ -9,8 +9,30 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+var (
+	rtlLogical bool
+	rtlSeen    bool
+)
+
+func resolveRTL(saved string) (string, bool) {
+	for _, v := range []string{os.Getenv("MACRON_TUI_RTL"), saved} {
+		switch v = strings.ToLower(strings.TrimSpace(v)); v {
+		case "logical", "visual":
+			return v, true
+		}
+	}
+	if os.Getenv("KONSOLE_VERSION") != "" || os.Getenv("VTE_VERSION") != "" || strings.Contains(strings.ToLower(os.Getenv("TERM_PROGRAM")), "mlterm") {
+		return "logical", false
+	}
+	return "visual", false
+}
+
 func terminalText(text string) string {
-	if os.Getenv("MACRON_TUI_RTL") == "logical" || !strings.ContainsFunc(text, func(r rune) bool { return unicode.Is(unicode.Arabic, r) || unicode.Is(unicode.Hebrew, r) }) {
+	if !strings.ContainsFunc(text, func(r rune) bool { return unicode.Is(unicode.Arabic, r) || unicode.Is(unicode.Hebrew, r) }) {
+		return text
+	}
+	rtlSeen = true
+	if rtlLogical {
 		return text
 	}
 	lines := strings.Split(text, "\n")

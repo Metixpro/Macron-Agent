@@ -626,3 +626,7 @@ The installer prints the Macron logo, a plan, numbered steps with a progress bar
 - The service runs Telegram and every messenger that has a token and owner IDs (Bale, Rubika) side by side. Before, `MACRON_MESSENGER=bale` (which the connections tool told the model to set) replaced Telegram with Bale, so connecting Bale switched the Telegram bot off. The variable now only matters when no Telegram bot is configured.
 - A messenger that is down (Bale answering 503) no longer stops the service: it is tried again with growing pauses (5 s up to 5 minutes), and a messenger that stops is started again the same way, while Telegram keeps working.
 - Processes an earlier run left behind (a shell supervisor, a proxy) are stopped when the service starts, and new service units use `KillMode=mixed`, so they do not pile up and hold memory.
+
+### 1.12.2: Persian in terminals that order it themselves
+
+Some terminals (most mobile SSH apps, Konsole, GNOME Terminal) put right-to-left text in order themselves; Macron's own reordering then reversed Persian a second time. `/rtl` switches between `visual` (Macron orders it, for terminals that do not) and `logical` (the terminal does), and the choice is remembered. Until a choice is made, the status line says «Persian reversed? /rtl» once Persian text is on screen. Konsole and GNOME Terminal on the same machine get `logical` by themselves; `MACRON_TUI_RTL` still overrides both.

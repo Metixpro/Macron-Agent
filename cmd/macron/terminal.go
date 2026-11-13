@@ -617,7 +617,21 @@ func (t *terminal) Shell(ctx context.Context, command string) string {
 	return out
 }
 
-const settingTUITheme = "tui_theme"
+const (
+	settingTUITheme = "tui_theme"
+	settingTUIRTL   = "tui_rtl"
+)
+
+func (t *terminal) RTL() string {
+	v, _ := t.st.Setting(settingTUIRTL)
+	return v
+}
+
+func (t *terminal) SetRTL(mode string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return t.st.SetSetting(ctx, settingTUIRTL, mode)
+}
 
 func (t *terminal) Theme() string {
 	v, _ := t.st.Setting(settingTUITheme)

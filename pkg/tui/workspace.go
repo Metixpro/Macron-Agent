@@ -288,6 +288,9 @@ func (m model) activityView() string {
 			label = stWarn.Render("YOLO ") + label
 		}
 	}
+	if !m.running && m.busy == "" && rtlSeen && !m.rtlChosen && m.notice == "" {
+		label += stWarn.Render(" · Persian reversed? /rtl")
+	}
 	if m.notice != "" {
 		label = stWarn.Render(clip(m.notice, w-20))
 	}

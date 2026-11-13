@@ -30,6 +30,7 @@ var commands = []command{
 	{"/copy", "", "copy Macron's last answer to the clipboard"},
 	{"/export", "", "save this conversation as a Markdown file here"},
 	{"/theme", "[dark|light|auto]", "colors for a dark or a light terminal"},
+	{"/rtl", "[visual|logical]", "Persian looks reversed? switch who draws right-to-left text"},
 	{"/init", "", "write MACRON.md: what Macron should know about this project"},
 	{"/telegram", "", "connect or manage the Telegram bot"},
 	{"/exit", "", "quit"},
@@ -246,6 +247,30 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.say("Saved the conversation to " + name)
+	case "/rtl":
+		mode := strings.ToLower(arg)
+		switch mode {
+		case "":
+			mode = "logical"
+			if rtlLogical {
+				mode = "visual"
+			}
+		case "visual", "logical":
+		default:
+			return m, m.say("Use /rtl visual or /rtl logical")
+		}
+		if r, ok := e.(interface{ SetRTL(string) error }); ok {
+			if err := r.SetRTL(mode); err != nil {
+				return m, m.say(errText(err))
+			}
+		}
+		rtlLogical, m.rtlChosen = mode == "logical", true
+		m.log.invalidate()
+		m.streamView = ""
+		if mode == "logical" {
+			return m, m.say("RTL: logical · the terminal draws Persian itself · /rtl again to switch back")
+		}
+		return m, m.say("RTL: visual · Macron reorders Persian for the terminal · /rtl again to switch back")
 	case "/theme":
 		theme := strings.ToLower(arg)
 		switch theme {
