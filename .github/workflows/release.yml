@@ -27,4 +27,7 @@ jobs:
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/SHA256SUMS --title "Macron Agent $TAG" --generate-notes --target "$GITHUB_SHA"
+        run: |
+          v="${TAG#v}"
+          notes="Windows: Macron-Desktop-$v-x64.exe for 64-bit, Macron-Desktop-$v-x86.exe for 32-bit, Macron-Desktop-$v-arm64.exe for ARM. Macron-Terminal-*.exe is the terminal app. The zips hold both, and install.ps1 installs them with shortcuts and updates."
+          gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/*.exe dist/SHA256SUMS --title "Macron Agent $TAG" --notes "$notes" --generate-notes --target "$GITHUB_SHA"

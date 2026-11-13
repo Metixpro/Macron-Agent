@@ -28,7 +28,7 @@ func resolveRTL(saved string) (string, bool) {
 }
 
 func terminalText(text string) string {
-	if !strings.ContainsFunc(text, func(r rune) bool { return unicode.Is(unicode.Arabic, r) || unicode.Is(unicode.Hebrew, r) }) {
+	if !strings.ContainsFunc(text, isRTL) {
 		return text
 	}
 	rtlSeen = true
@@ -36,12 +36,68 @@ func terminalText(text string) string {
 		return text
 	}
 	lines := strings.Split(text, "\n")
+	prev := false
 	for i, line := range lines {
-		lines[i] = visualLine(line)
+		plain := ansi.Strip(line)
+		d := lineDirection(plain)
+		force := d.rtl > 0 && !codeLike(plain) && (d.rtlWords > d.ltrWords && d.rtlWords >= 2 || prev)
+		lines[i] = visualLine(line, force)
+		prev = d.rtl > 0 && (force || d.firstRTL)
 	}
 	return strings.Join(lines, "\n")
 }
-func visualLine(line string) string {
+
+func isRTL(r rune) bool { return unicode.Is(unicode.Arabic, r) || unicode.Is(unicode.Hebrew, r) }
+
+type direction struct {
+	rtl, rtlWords, ltrWords int
+	firstRTL                bool
+}
+
+func lineDirection(s string) direction {
+	var d direction
+	seen := false
+	for _, word := range strings.Fields(s) {
+		r, l := 0, 0
+		for _, c := range word {
+			switch {
+			case !unicode.IsLetter(c):
+				continue
+			case isRTL(c):
+				r++
+			default:
+				l++
+			}
+			if !seen {
+				seen, d.firstRTL = true, isRTL(c)
+			}
+		}
+		d.rtl += r
+		switch {
+		case r > 0 && l == 0:
+			d.rtlWords++
+		case l > 0 && r == 0:
+			d.ltrWords++
+		}
+	}
+	return d
+}
+
+func codeLike(s string) bool {
+	if strings.ContainsAny(s, "{}[]=;\"`") {
+		return true
+	}
+	prev := ' '
+	for _, r := range s {
+		if r == '(' && unicode.IsLetter(prev) && !isRTL(prev) {
+			return true
+		}
+		prev = r
+	}
+	return false
+}
+
+func visualLine(line string, rtlBase bool) string {
 	var runes []rune
 	var styles []string
 	var links []string
@@ -88,7 +144,10 @@ func visualLine(line string) string {
 	}
 	if from < to {
 		base := fribidi.ParType(fribidi.ON)
-		visual, _ := fribidi.LogicalToVisual(fribidi.ShapeMirroring|fribidi.ShapeArabPres, runes[from:to], &base)
+		if rtlBase {
+			base = fribidi.RTL
+		}
+		visual, _ := fribidi.LogicalToVisual(fribidi.ShapeMirroring|fribidi.ReorderNSM|fribidi.ShapeArabPres, runes[from:to], &base)
 		for i, r := range visual.Str {
 			order, shown = append(order, from+visual.VisualToLogical[i]), append(shown, r)
 		}
@@ -100,7 +159,7 @@ func visualLine(line string) string {
 	current := ""
 	currentLink := ""
 	for i, r := range shown {
-		if r == 0xfeff || r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069 {
+		if r == 0xfeff || r >= 0x200b && r <= 0x200f || r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069 {
 			continue
 		}
 		at := min(max(order[i], 0), len(runes)-1)

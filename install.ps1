@@ -42,6 +42,7 @@ if ($env:MACRON_UNINSTALL -eq '1') {
 
 $arch = 'amd64'
 if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { $arch = 'arm64' }
+elseif ($env:PROCESSOR_ARCHITECTURE -eq 'x86' -and -not $env:PROCESSOR_ARCHITEW6432) { $arch = '386' }
 
 Step 'Finding the latest release'
 $release = Invoke-RestMethod -UseBasicParsing -Headers @{ 'User-Agent' = 'macron-installer' } -Uri "https://api.github.com/repos/$Repo/releases/latest"
