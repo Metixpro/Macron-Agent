@@ -23,11 +23,47 @@ type IO struct {
 	Interactive bool
 }
 
+type painter struct {
+	w io.Writer
+	r *strings.Replacer
+}
+
+func (p painter) Write(b []byte) (int, error) {
+	if _, err := io.WriteString(p.w, p.r.Replace(string(b))); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+var (
+	cAccent, cBold, cDim, cGreen, cRed, cYellow, cReset string
+)
+
+func colorful(f *os.File) bool {
+	return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" && term.IsTerminal(int(f.Fd()))
+}
+
+func paintOutput(w *os.File) io.Writer {
+	if !colorful(w) {
+		return w
+	}
+	cAccent, cBold, cDim, cGreen, cRed, cYellow, cReset = "\x1b[38;5;111m", "\x1b[1m", "\x1b[2m", "\x1b[32m", "\x1b[31m", "\x1b[33m", "\x1b[0m"
+	switch os.Getenv("COLORTERM") {
+	case "truecolor", "24bit":
+		cAccent, cGreen, cRed, cYellow = "\x1b[38;2;120;170;255m", "\x1b[38;2;63;185;80m", "\x1b[38;2;248;81;73m", "\x1b[38;2;210;153;34m"
+	}
+	return painter{w: w, r: strings.NewReplacer(
+		"✓ ", cGreen+"✓"+cReset+" ", "✅ ", cGreen+"✓"+cReset+" ",
+		"✗ ", cRed+"✗"+cReset+" ", "❌ ", cRed+"✗"+cReset+" ",
+		"⚠️ ", cYellow+"!"+cReset+" ", "↷ ", cDim+"↷ ", "✻ ", cAccent+"◆"+cReset+" ",
+	)}
+}
+
 func Std() *IO {
-	io := &IO{In: bufio.NewReader(os.Stdin), Out: os.Stdout, Err: os.Stderr,
+	io := &IO{In: bufio.NewReader(os.Stdin), Out: paintOutput(os.Stdout), Err: paintOutput(os.Stderr),
 		Interactive: term.IsTerminal(int(os.Stdin.Fd()))}
 	io.Secret = func(prompt string) (string, error) {
-		fmt.Fprint(io.Out, prompt)
+		fmt.Fprint(io.Out, question(strings.TrimRight(prompt, ": "))+" ")
 		if io.Interactive {
 			b, err := term.ReadPassword(int(os.Stdin.Fd()))
 			fmt.Fprintln(io.Out)
@@ -42,11 +78,16 @@ func Std() *IO {
 func (io *IO) printf(format string, a ...any) { fmt.Fprintf(io.Out, format, a...) }
 func (io *IO) println(a ...any)               { fmt.Fprintln(io.Out, a...) }
 
-func (io *IO) ask(question, def string) string {
+func question(q string) string {
+	lead := len(q) - len(strings.TrimLeft(q, " "))
+	return q[:lead] + cAccent + "? " + cReset + cBold + strings.TrimSpace(q) + cReset
+}
+
+func (io *IO) ask(q, def string) string {
 	if def != "" {
-		io.printf("%s [%s]: ", question, def)
+		io.printf("%s %s[%s]%s ", question(q), cDim, def, cReset)
 	} else {
-		io.printf("%s: ", question)
+		io.printf("%s ", question(q))
 	}
 	s, _ := io.In.ReadString('\n')
 	if s = strings.TrimSpace(s); s != "" {
@@ -55,12 +96,12 @@ func (io *IO) ask(question, def string) string {
 	return def
 }
 
-func (io *IO) yes(question string, def bool) bool {
+func (io *IO) yes(q string, def bool) bool {
 	d := "Y/n"
 	if !def {
 		d = "y/N"
 	}
-	io.printf("%s [%s]: ", question, d)
+	io.printf("%s %s[%s]%s ", question(q), cDim, d, cReset)
 	s, _ := io.In.ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "y", "yes", "بله", "آره":

@@ -80,7 +80,7 @@ func setup(io *IO, args []string) int {
 		io.printf("❌ Cannot read provider settings: %v\n", err)
 		return 1
 	}
-	io.printf("\n✻ Macron Agent setup · home folder: %s\n\n", config.Home())
+	io.printf("\n✻ %sMacron Agent setup%s  %shome folder %s%s\n\n", cBold, cReset, cDim, config.Home(), cReset)
 	if code := setupModel(ctx, io, env, interactive, *apiURL, *apiKey, *model, *skipTest, true); code != 0 {
 		return code
 	}
@@ -108,7 +108,9 @@ func setup(io *IO, args []string) int {
 			return connectTelegram(io, "", "", true, *noService)
 		}
 	}
-	io.println("\nStart: run «macron» in any project folder.")
+	if os.Getenv("MACRON_INSTALLER") == "" {
+		io.println("\nStart: run «macron» in any project folder.")
+	}
 	return 0
 }
 
@@ -160,12 +162,12 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 	key := firstNonEmpty(flagKey, getEnv(env, keyAPIKey))
 	model := firstNonEmpty(flagModel, getEnv(env, keyModel))
 	if url == "" && interactive {
-		io.println("The model. Which service will Macron think with?")
+		io.printf("%s %sthe model Macron thinks with%s\n", question("Which service?"), cDim, cReset)
 		for i, p := range presets {
-			io.printf("       %d) %s\n", i+1, p.name)
+			io.printf("       %s%d%s  %s\n", cAccent, i+1, cReset, p.name)
 		}
 		if later {
-			io.printf("       %d) Later\n", len(presets)+1)
+			io.printf("       %s%d%s  %sLater%s\n", cAccent, len(presets)+1, cReset, cDim, cReset)
 		}
 		n, _ := strconv.Atoi(io.ask("     Choose", "1"))
 		switch {

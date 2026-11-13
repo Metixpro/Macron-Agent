@@ -31,14 +31,47 @@ USAGE
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
-say() { printf '%s\n' "$*"; }
-ok() { printf '%s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
-warn() { printf '%s!%s %s\n' "$YELLOW" "$RESET" "$*" >&2; }
-die() { printf '%s×%s %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
-phase() { printf '\n%s[%s/6]%s %s\n' "$CYAN" "$1" "$RESET" "$2"; }
+say() { printf '  %s\n' "$*"; }
+ok() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
+warn() { printf '  %s!%s %s\n' "$YELLOW" "$RESET" "$*" >&2; }
+die() { printf '\n  %s✗%s %s%s%s\n\n' "$RED" "$RESET" "$BOLD" "$*" "$RESET" >&2; exit 1; }
+seconds() {
+ local s="$1"
+ if [ "$s" -lt 60 ]; then printf '%ss' "$s"; else printf '%sm %02ss' "$((s / 60))" "$((s % 60))"; fi
+}
+doing() { CURRENT="$*"; }
+banner() {
+ local rows=(
+  '█   █  ███   ████ ████   ███  █   █'
+  '██ ██ █   █ █     █   █ █   █ ██  █'
+  '█ █ █ █████ █     ████  █   █ █ █ █'
+  '█   █ █   █ █     █ █   █   █ █  ██'
+  '█   █ █   █  ████ █  ██  ███  █   █'
+ ) i
+ printf '\n'
+ for i in 0 1 2 3 4; do
+  if [ "$i" -lt 3 ]; then printf '  %s%s%s\n' "$BOLD" "${rows[$i]}" "$RESET"; else printf '  %s%s%s%s\n' "$BOLD" "$ACCENT" "${rows[$i]}" "$RESET"; fi
+ done
+ printf '\n  %sYour machine. Your agent.%s   %sinstaller · %s/%s%s\n' "$BOLD" "$RESET" "$DIM" "$OS" "$ARCH" "$RESET"
+}
+phase() {
+ local i bar=''
+ for i in 1 2 3 4 5 6; do if [ "$i" -le "$1" ]; then bar="$bar▰"; else bar="$bar▱"; fi; done
+ printf '\n  %s◆%s %s%s%s  %s%s  step %s of 6%s\n' "$ACCENT" "$RESET" "$BOLD" "$2" "$RESET" "$ACCENT" "$bar" "$1" "$RESET"
+}
+panel() {
+ local title="$1"; shift
+ printf '  %s╭─%s %s%s%s\n' "$DIM" "$RESET" "$BOLD" "$title" "$RESET"
+ while [ $# -gt 1 ]; do
+  printf '  %s│%s  %s%-8s%s %s\n' "$DIM" "$RESET" "$DIM" "$1" "$RESET" "$2"
+  shift 2
+ done
+ printf '  %s╰─%s\n' "$DIM" "$RESET"
+}
 ask() {
- local reply=""
- printf '%s [%s]: ' "$1" "$2" >/dev/tty
+ local reply="" shown="$2"
+ case "$2" in Y) shown='Y/n' ;; N) shown='y/N' ;; esac
+ printf '  %s?%s %s%s%s %s[%s]%s ' "$ACCENT" "$RESET" "$BOLD" "$1" "$RESET" "$DIM" "$shown" "$RESET" >/dev/tty
  IFS= read -r reply </dev/tty || reply=""
  ANSWER="${reply:-$2}"
 }
@@ -50,20 +83,27 @@ cleanup() {
 }
 
 run_logged() {
+ local label="${CURRENT:-Working}" started=$SECONDS
+ CURRENT=''
  "$@" >>"$LOG" 2>&1 &
  INSTALL_JOB=$!
  if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ]; then
-  local marks='|/-\' index=0
+  local marks='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' index=0
   while kill -0 "$INSTALL_JOB" 2>/dev/null; do
-   printf '\r  %s %s' "${marks:index%4:1}" "Working…"
-   index=$((index+1)); sleep 0.15
+   printf '\r\033[K  %s%s%s %s %s%s%s' "$ACCENT" "${marks:index%10:1}" "$RESET" "$label" "$DIM" "$(seconds $((SECONDS - started)))" "$RESET"
+   index=$((index+1)); sleep 0.1
   done
-  printf '\r%*s\r' 24 ''
+  printf '\r\033[K'
  fi
- if wait "$INSTALL_JOB"; then INSTALL_JOB=""; return 0; fi
+ if wait "$INSTALL_JOB"; then
+  INSTALL_JOB=""
+  [ "$label" = Working ] || printf '  %s✓%s %s %s%s%s\n' "$GREEN" "$RESET" "$label" "$DIM" "$(seconds $((SECONDS - started)))" "$RESET"
+  return 0
+ fi
  INSTALL_JOB=""
- tail -n 12 "$LOG" >&2 || true
- warn "Details: $LOG"
+ printf '  %s✗%s %s\n' "$RED" "$RESET" "$label" >&2
+ tail -n 12 "$LOG" | sed 's/^/    /' >&2 || true
+ warn "Full log: $LOG"
  return 1
 }
 
@@ -110,8 +150,12 @@ install_path() {
  quoted="'${PREFIX//\'/\'\\\'\'}'"
  local path_line="export PATH=$quoted:\"\$PATH\""
  if ! grep -Fxq "$path_line" "$rc" 2>/dev/null; then
-  printf '\n# >>> macron PATH >>>\n%s\n# <<< macron PATH <<<\n' "$path_line" >>"$rc"
+  if ! printf '\n# >>> macron PATH >>>\n%s\n# <<< macron PATH <<<\n' "$path_line" 2>/dev/null >>"$rc"; then
+   warn "Could not write $rc; add $PREFIX to your PATH yourself"
+   return
+  fi
   ok "PATH configured in $rc"
+  PATH_RC="$rc"
  fi
 }
 
@@ -128,7 +172,7 @@ bootstrap_uv() {
  esac
  if [ "$OS" = linux ] && have ldd && ldd --version 2>&1 | grep -qi musl; then triple="${triple%-gnu}-musl"; fi
  archive="uv-$triple.tar.gz"
- say '  Preparing a private Python installer…'
+ say 'Preparing a private Python installer…'
  fetch "https://github.com/astral-sh/uv/releases/download/0.13.5/$archive" "$TMP/$archive" || die "could not download uv"
  case "$triple" in
   x86_64-unknown-linux-gnu) expected=f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f ;;
@@ -153,11 +197,14 @@ prepare_python() {
  export UV_PYTHON_INSTALL_DIR="$HOME_DIR/python" UV_CACHE_DIR="$HOME_DIR/cache/uv" PIP_CACHE_DIR="$HOME_DIR/cache/pip"
  if [ -z "$PY" ]; then
   bootstrap_uv
+  doing 'Private Python 3.12'
   run_logged "$UV" python install 3.12 || die "could not provision private Python 3.12"
   PY="$("$UV" python find --managed-python 3.12)"
  fi
+ doing 'Python environment'
  if ! run_logged "$PY" -m venv "$HOME_DIR/venv"; then
   bootstrap_uv
+  doing 'Python environment (with uv)'
   run_logged "$UV" venv --seed --python "$PY" "$HOME_DIR/venv" || die "could not create the private Python environment"
  fi
  PY="$HOME_DIR/venv/bin/python"
@@ -166,14 +213,20 @@ prepare_python() {
 install_system_packages() {
  local pkgs='python3 python3-pip python3-venv git curl ffmpeg jq unzip poppler-utils openssh-client sshpass rsync'
  if [ "$INSTALL_SCOPE" = user ]; then
-  say '  User scope · system packages will not be changed.'
+  say 'User scope · system packages are left as they are'
  elif have apt-get; then
+  doing 'Package lists'
   run_logged apt-get update -qq || die 'could not refresh system packages'
+  doing 'Python, Git, FFmpeg, Poppler and SSH tools'
   run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgs || die 'system packages did not install'
+  doing 'GitHub CLI'
   run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gh || warn 'GitHub CLI is unavailable'
-  run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq p7zip-full || run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq 7zip || warn '7-Zip is unavailable (password, .7z and .rar archives)'
+  doing '7-Zip'
+  run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq p7zip-full || { doing '7-Zip'; run_logged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq 7zip; } || warn '7-Zip is unavailable (password, .7z and .rar archives)'
  elif have dnf; then
+  doing 'Python, Git, FFmpeg, Poppler and SSH tools'
   run_logged dnf install -y -q python3 python3-pip git curl ffmpeg jq unzip poppler-utils openssh-clients sshpass rsync gh || die 'system packages did not install'
+  doing '7-Zip'
   run_logged dnf install -y -q p7zip p7zip-plugins || warn '7-Zip is unavailable (password, .7z and .rar archives)'
  elif have brew; then
   warn 'Use user scope with Homebrew; root does not own Homebrew packages.'
@@ -188,19 +241,23 @@ install_python_packages() {
  if [ ! -f "$req" ] && [ -n "$RELEASE_DIR" ] && [ -f "$RELEASE_DIR/requirements-tools.lock" ]; then req="$RELEASE_DIR/requirements-tools.lock"; fi
  if [ ! -f "$req" ]; then req="$TMP/requirements-tools.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-${RELEASE_TAG:-main}}/requirements-tools.lock" "$req" || die 'could not download the Python lockfile'; fi
  prepare_python
+ doing 'Python tools (documents, media, data, web)'
  run_logged "$PY" -m pip install --disable-pip-version-check --require-hashes -r "$req" || die 'Python tools did not install; rerun to finish'
  if [ "$BROWSER_AGENT" = 1 ]; then
   local agent_req="$SCRIPT_DIR/requirements-browser-agent.lock"
   [ -z "$SOURCE_DIR" ] || agent_req="$SOURCE_DIR/requirements-browser-agent.lock"
   if [ ! -f "$agent_req" ] && [ -n "$RELEASE_DIR" ] && [ -f "$RELEASE_DIR/requirements-browser-agent.lock" ]; then agent_req="$RELEASE_DIR/requirements-browser-agent.lock"; fi
   if [ ! -f "$agent_req" ]; then agent_req="$TMP/requirements-browser-agent.lock"; fetch "https://raw.githubusercontent.com/$REPO/${VERSION:-${RELEASE_TAG:-main}}/requirements-browser-agent.lock" "$agent_req" || die 'could not download browser requirements'; fi
+  doing 'Browser-agent environment'
   run_logged "$PY" -m venv "$HOME_DIR/browser-agent" || die 'could not create browser-agent environment'
+  doing 'Browser-agent packages'
   run_logged "$HOME_DIR/browser-agent/bin/python" -m pip install --disable-pip-version-check --require-hashes -r "$agent_req" || die 'browser-agent dependencies did not install'
  fi
  if [ "$BROWSER" = 1 ]; then
+  doing 'Private Chromium'
   run_logged env PLAYWRIGHT_BROWSERS_PATH="$HOME_DIR/browsers" "$PY" -m playwright install chromium || die 'Chromium did not install'
  fi
- ok "Python tools · $HOME_DIR/venv"
+ ok "Python tools ready ${DIM}$HOME_DIR/venv${RESET}"
 }
 
 report_dependencies() {
@@ -219,9 +276,11 @@ choose_scope() {
  if [ -z "$INSTALL_SCOPE" ]; then
   if [ "$(id -u)" = 0 ]; then INSTALL_SCOPE=system; else INSTALL_SCOPE=user; fi
   if [ "$INTERACTIVE" = 1 ]; then
-   printf '\n  1  User     · current account, private Python environment\n  2  System   · system binary and service, root/sudo required\n'
+   printf '\n  %s?%s %sWhere should Macron be installed?%s\n' "$ACCENT" "$RESET" "$BOLD" "$RESET"
+   printf '    %s1%s  User     %scurrent account · private Python · no sudo%s\n' "$ACCENT" "$RESET" "$DIM" "$RESET"
+   printf '    %s2%s  System   %s/usr/local/bin and a system service · needs root%s\n' "$ACCENT" "$RESET" "$DIM" "$RESET"
    local default=1; [ "$(id -u)" != 0 ] || default=2
-   ask 'Installation' "$default"
+   ask 'Choose' "$default"
    case "$ANSWER" in 1|user) INSTALL_SCOPE=user ;; 2|system) INSTALL_SCOPE=system ;; *) die 'choose 1 or 2' ;; esac
   fi
  fi
@@ -238,7 +297,7 @@ main() {
  HOME_DIR="${MACRON_HOME:-}" SCRIPT_DIR=''
  if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; fi
  FROM_SOURCE=0 BROWSER_AGENT=0 BROWSER=0 TOOLS=1 SERVICE=1 ASSUME_YES=0 SETUP=1 UNINSTALL=0 KEEP_DATA=0 INTERACTIVE=0
- GREEN='' YELLOW='' RED='' CYAN='' RESET='' TMP='' STAGE='' INSTALL_JOB=''
+ GREEN='' YELLOW='' RED='' CYAN='' RESET='' ACCENT='' BOLD='' DIM='' TMP='' STAGE='' INSTALL_JOB='' CURRENT='' PATH_RC=''
  local original=("$@")
  while [ $# -gt 0 ]; do
   case "$1" in
@@ -263,27 +322,30 @@ main() {
   esac
   shift
  done
- if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR:-}" ]; then GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RED=$'\033[31m'; CYAN=$'\033[36m'; RESET=$'\033[0m'; fi
+ if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR:-}" ]; then
+  GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RED=$'\033[31m'; CYAN=$'\033[36m'; RESET=$'\033[0m'; BOLD=$'\033[1m'; DIM=$'\033[2m'
+  ACCENT=$'\033[38;5;111m'
+  case "${COLORTERM:-}" in truecolor|24bit) ACCENT=$'\033[38;2;120;170;255m'; GREEN=$'\033[38;2;63;185;80m'; YELLOW=$'\033[38;2;210;153;34m'; RED=$'\033[38;2;248;81;73m' ;; esac
+ fi
  if [ "$ASSUME_YES" = 0 ] && [ -r /dev/tty ] && { : </dev/tty; } 2>/dev/null; then INTERACTIVE=1; fi
- printf '\n%s┌────────────────────────────────────────────┐\n' "$CYAN"
- printf '│ %-42s │\n' 'M A C R O N  A G E N T' 'Your machine. Your agent.'
- printf '└────────────────────────────────────────────┘%s\n' "$RESET"
  OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ case "$(uname -m)" in x86_64|amd64) ARCH=amd64 ;; aarch64|arm64) ARCH=arm64 ;; *) ARCH="$(uname -m)" ;; esac
+ [ -n "${MACRON_INSTALL_CHILD:-}" ] || banner
  case "$OS" in linux|darwin) ;; *) die 'Linux and macOS are supported; use WSL2 on Windows' ;; esac
- case "$(uname -m)" in x86_64|amd64) ARCH=amd64 ;; aarch64|arm64) ARCH=arm64 ;; *) die 'unsupported CPU architecture' ;; esac
+ case "$ARCH" in amd64|arm64) ;; *) die "unsupported CPU architecture: $ARCH" ;; esac
  choose_scope
  if [ "$INSTALL_SCOPE" = system ] && [ "$(id -u)" != 0 ]; then
   have sudo || die 'system scope needs root/sudo; choose --scope user for a private installation'
   local bootstrap_dir bootstrap
   bootstrap_dir="$(mktemp -d)"; bootstrap="$bootstrap_dir/install.sh"
   printf '#!/usr/bin/env bash\nset -Eeuo pipefail\n' >"$bootstrap"
-  declare -f usage have say ok warn die phase ask cleanup run_logged validate_home write_record install_path bootstrap_uv python_ok prepare_python install_system_packages install_python_packages report_dependencies start_service choose_scope fetch sha256_of build_from_source fetch_release_asset download_release main >>"$bootstrap"
+  declare -f usage have say ok warn die seconds doing banner phase panel ask cleanup run_logged validate_home write_record install_path bootstrap_uv python_ok prepare_python install_system_packages install_python_packages report_dependencies start_service choose_scope fetch sha256_of build_from_source fetch_release_asset download_release main >>"$bootstrap"
   printf '\nmain "$@"\n' >>"$bootstrap"
   chmod 0600 "$bootstrap"
   local code=0
   local sudo_args=(-H)
   [ "$ASSUME_YES" = 0 ] || sudo_args=(-n -H)
-  sudo "${sudo_args[@]}" bash "$bootstrap" "${original[@]}" --scope system --home "$HOME_DIR" || code=$?
+  sudo "${sudo_args[@]}" env MACRON_INSTALL_CHILD=1 bash "$bootstrap" "${original[@]}" --scope system --home "$HOME_DIR" || code=$?
   rm -rf -- "$bootstrap_dir"
   return "$code"
  fi
@@ -296,9 +358,14 @@ main() {
  fi
  [ "$TOOLS" = 1 ] || { [ "$BROWSER" = 0 ] || die '--browser needs Python tools; remove --no-tools'; }
  validate_home
- phase 1 'Installation plan'
- printf '  Account  %s\n  Scope    %s\n  Program  %s\n  Data     %s\n' "$(id -un)" "$INSTALL_SCOPE" "$TARGET" "$HOME_DIR"
- if [ "$INTERACTIVE" = 1 ]; then ask 'Continue?' Y; case "$ANSWER" in Y|y|yes|YES) ;; *) say 'Cancelled.'; return ;; esac; fi
+ INSTALL_STARTED=$SECONDS
+ phase 1 'Plan'
+ local what='Python tools, system packages'
+ [ "$TOOLS" = 1 ] || what='program only (--no-tools)'
+ [ "$INSTALL_SCOPE" = system ] || [ "$TOOLS" = 0 ] || what='Python tools (private, no sudo)'
+ [ "$BROWSER" = 0 ] || what="$what, Chromium"
+ panel 'Macron Agent will be installed' Account "$(id -un)" Scope "$INSTALL_SCOPE" Program "$TARGET" Data "$HOME_DIR" Extras "$what"
+ if [ "$INTERACTIVE" = 1 ]; then ask 'Continue?' Y; case "$ANSWER" in Y|y|yes|YES) ;; *) say 'Cancelled; nothing was changed.'; return ;; esac; fi
  TMP="$(mktemp -d)"; trap cleanup EXIT; trap 'exit 130' INT TERM
  mkdir -p "$HOME_DIR"; chmod 0700 "$HOME_DIR"
  printf 'macron-home-v1\n' >"$HOME_DIR/.macron-home"
@@ -319,34 +386,39 @@ main() {
  mv -f "$STAGE/macron" "$TARGET"
  new_version="$("$TARGET" version | awk '{print $NF}')"
  write_record; install_path
- if [ -n "$old_version" ] && [ "$old_version" != "$new_version" ]; then ok "updated $old_version → $new_version"; else ok "macron $new_version installed"; fi
- phase 3 'System dependencies'
- if [ "$TOOLS" = 1 ]; then install_system_packages; else say '  Skipped (--no-tools)'; fi
- phase 4 'Private Python tools'
- if [ "$TOOLS" = 1 ]; then install_python_packages; report_dependencies; else say '  Skipped (--no-tools)'; fi
+ if [ -n "$old_version" ] && [ "$old_version" != "$new_version" ]; then ok "Updated ${BOLD}$old_version → $new_version${RESET}"; else ok "Macron ${BOLD}$new_version${RESET} is in place ${DIM}$TARGET${RESET}"; fi
+ phase 3 'System packages'
+ if [ "$TOOLS" = 1 ]; then install_system_packages; else say 'Skipped (--no-tools)'; fi
+ phase 4 'Python tools'
+ if [ "$TOOLS" = 1 ]; then install_python_packages; report_dependencies; else say 'Skipped (--no-tools)'; fi
  phase 5 'Model'
- if [ -f "$HOME_DIR/config.env" ]; then ok "your settings in $HOME_DIR are kept"
- elif [ "$SETUP" = 1 ] && [ "$INTERACTIVE" = 1 ]; then "$TARGET" setup --no-telegram </dev/tty || warn 'Choose it later: macron setup'
- else say '  Later: macron asks for it the first time it runs (or: macron setup)'; fi
+ if [ -f "$HOME_DIR/config.env" ]; then ok "Your settings in $HOME_DIR are kept"
+ elif [ "$SETUP" = 1 ] && [ "$INTERACTIVE" = 1 ]; then MACRON_INSTALLER=1 "$TARGET" setup --no-telegram </dev/tty || warn 'Choose it later: macron setup'
+ else say 'Later: Macron asks for it the first time it runs (or: macron setup)'; fi
  phase 6 'Telegram'
  local telegram=0
  if [ -f "$HOME_DIR/config.env" ] && grep -q '^TELEGRAM_BOT_TOKEN=..*' "$HOME_DIR/config.env"; then
   telegram=1
-  if [ "$SERVICE" = 1 ]; then start_service; else say '  Connected; start it with: macron telegram start'; fi
+  if [ "$SERVICE" = 1 ]; then start_service; else say 'Connected; start it with: macron telegram start'; fi
  elif [ "$SETUP" = 1 ] && [ "$INTERACTIVE" = 1 ]; then
-  ask 'Connect a Telegram bot too, to reach Macron from your phone? y/N' N
+  ask 'Connect a Telegram bot too, to reach Macron from your phone?' N
   case "$ANSWER" in
    y|Y|yes|YES)
     if [ "$SERVICE" = 1 ]; then "$TARGET" telegram setup </dev/tty && telegram=1; else "$TARGET" telegram setup --no-service </dev/tty && telegram=1; fi ;;
-   *) say '  Later: macron telegram' ;;
+   *) say "Later: $([ -n "$PATH_RC" ] && echo macron || echo "$TARGET") telegram" ;;
   esac
- else say '  Later: macron telegram'; fi
+ else say 'Later: macron telegram'; fi
  local run="$TARGET"
- if [ "$(command -v macron 2>/dev/null || true)" = "$TARGET" ]; then run=macron; fi
- printf '\n%s✓ Macron Agent %s installed%s\n  Program  %s\n  Data     %s\n  Log      %s\n' "$GREEN" "$new_version" "$RESET" "$TARGET" "$HOME_DIR" "$LOG"
- printf '\nStart: open a project folder and run %q\n' "$run"
- if [ "$telegram" = 0 ]; then printf 'Phone: %q telegram\n' "$run"; fi
- printf 'Remove this installation: %q uninstall\n' "$TARGET"
+ if [ "$(command -v macron 2>/dev/null || true)" = "$TARGET" ] || [ -n "$PATH_RC" ]; then run=macron; fi
+ printf '\n  %s%s✓ Macron Agent %s is ready%s  %sin %s%s\n\n' "$GREEN" "$BOLD" "$new_version" "$RESET" "$DIM" "$(seconds $((SECONDS - INSTALL_STARTED)))" "$RESET"
+ panel 'Installed' Program "$TARGET" Data "$HOME_DIR" Log "$LOG"
+ printf '\n  %sNext%s\n' "$BOLD" "$RESET"
+ printf '  %s›%s %-30s %sopen the terminal workspace in a project%s\n' "$ACCENT" "$RESET" "cd your-project && $run" "$DIM" "$RESET"
+ if [ "$telegram" = 0 ]; then printf '  %s›%s %-30s %sreach Macron from your phone%s\n' "$ACCENT" "$RESET" "$run telegram" "$DIM" "$RESET"; fi
+ printf '  %s›%s %-30s %scheck everything works%s\n' "$ACCENT" "$RESET" "$run doctor" "$DIM" "$RESET"
+ printf '  %s›%s %-30s %sremove it again%s\n' "$ACCENT" "$RESET" "$run uninstall" "$DIM" "$RESET"
+ if [ -n "$PATH_RC" ]; then printf '\n  %sOpen a new terminal first (or run: source %s) so «macron» is found.%s\n' "$DIM" "$PATH_RC" "$RESET"; fi
+ printf '\n'
 }
 
 fetch() {
@@ -412,7 +484,7 @@ download_release() {
 	local ver="${tag#v}" name base
 	name="macron-$ver-$OS-$ARCH.tar.gz"
 	base="https://github.com/$REPO/releases/download/$tag"
-	say "Downloading Macron Agent $ver for $OS/$ARCH…"
+	say "Downloading Macron Agent ${BOLD}$ver${RESET} for $OS/$ARCH…"
 	fetch_release_asset "$base/$name" "$name" "$TMP/$name" "$api" "$tag" || return 1
 	fetch_release_asset "$base/SHA256SUMS" "SHA256SUMS" "$TMP/SHA256SUMS" "$api" "$tag" || return 1
 	local want got
@@ -422,7 +494,7 @@ download_release() {
 	tar -xzf "$TMP/$name" -C "$TMP"
 	cp "$TMP/macron-$ver-$OS-$ARCH/macron" "$TMP/macron"
 	RELEASE_DIR="$TMP/macron-$ver-$OS-$ARCH"
-	ok "checked the SHA-256 sum"
+	ok "Download verified (SHA-256)"
 }
 
 

@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
+	"path"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -66,6 +68,8 @@ type (
 		summarized    bool
 	}
 	escalateMsg struct{ why string }
+	thoughtMsg  struct{ text string }
+	shellMsg    struct{ command, out string }
 	subMsg      struct {
 		id                  int
 		title, step         string
@@ -104,10 +108,10 @@ type liveTool struct {
 }
 
 type liveSub struct {
-	id          int
-	title, last string
-	steps       int
-	done        bool
+	id           int
+	title, last  string
+	steps        int
+	done, failed bool
 }
 
 type askState struct {
@@ -119,6 +123,7 @@ type askState struct {
 type picker struct {
 	title   string
 	items   []string
+	about   map[string]string
 	current string
 	filter  string
 	sel     int
@@ -164,6 +169,8 @@ func (q *queue) list() []string {
 	return append([]string(nil), q.items...)
 }
 
+var detectedDark = true
+
 type bridge struct{ p *tea.Program }
 
 func (b *bridge) send(msg tea.Msg) {
@@ -198,10 +205,12 @@ type model struct {
 	started     time.Time
 	stream      string
 	streamView  string
+	streamAt    time.Time
 	dirty       bool
 	tools       []*liveTool
 	subs        []*liveSub
 	lastPlan    string
+	plan        []agent.PlanItem
 	queue       *queue
 	ctxUsed     int
 	ctxWindow   int
@@ -216,12 +225,26 @@ type model struct {
 	noticeAt    time.Time
 	interrupted bool
 	quitting    bool
+	lastAnswer  string
+	theme       string
+	suggKind    string
+	files       []string
+	filesAt     time.Time
+	notes       []string
+	thought     string
 }
 
 func Run(e Engine, opt Options) error {
+	saved := ""
+	if t, ok := e.(interface{ Theme() string }); ok {
+		saved = t.Theme()
+	}
+	detectedDark = lipgloss.HasDarkBackground()
+	theme := resolveTheme(saved)
+	applyTheme(theme)
 	md := &markdown{style: markdownStyle()}
 	ta := textarea.New()
-	ta.Placeholder = "Ask anything… build, fix, connect, explore"
+	ta.Placeholder = placeholderIdle
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.MaxHeight = 0
@@ -244,7 +267,7 @@ func Run(e Engine, opt Options) error {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: []string{"✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳"}, FPS: time.Second / 8}), spinner.WithStyle(stAccent))
 
 	br := &bridge{}
-	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1}
+	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1, theme: theme}
 	m.ctxWindow = m.info.ContextWindow
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	br.p = p
@@ -264,6 +287,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.input.SetWidth(max(m.contentWidth()-5, 6))
 		m.md.width = 0
+		m.streamView = ""
 		m.fitInput()
 		m.dirty = m.stream != ""
 		return m, nil
@@ -300,11 +324,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case textMsg:
 		m.stream, m.dirty = cleanStream(msg.s), true
+		if m.streamView == "" || time.Since(m.streamAt) > 120*time.Millisecond {
+			m.streamView, m.dirty, m.streamAt = m.renderStream(), false, time.Now()
+		}
 		return m, nil
 	case toolStartMsg:
 		if msg.name == agent.ToolPlan {
 			return m, nil
 		}
+		m.thought = ""
 		m.flushStream()
 		m.tools = append(m.tools, &liveTool{name: msg.name, args: msg.args, at: time.Now()})
 		return m, nil
@@ -327,12 +355,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case planMsg:
-		block := planBlock(msg.items, m.width)
-		if len(msg.items) > 0 && block != m.lastPlan {
-			m.flushStream()
-			m.lastPlan = block
-			m.print(block)
-		}
+		m.plan = msg.items
 		return m, nil
 	case ctxMsg:
 		m.ctxUsed, m.ctxWindow = msg.used, msg.window
@@ -349,6 +372,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case escalateMsg:
 		m.print(stDim.Render("↑ " + oneLine(msg.why)))
+		return m, nil
+	case thoughtMsg:
+		m.thought = lastSentence(msg.text)
+		return m, nil
+	case shellMsg:
+		m.busy, m.cancel = "", nil
+		raw, _ := json.Marshal(map[string]string{"command": msg.command})
+		m.addBlock(transcriptBlock{kind: "tool", name: "bash_execute", args: string(raw), text: msg.out})
+		note := msg.out
+		if r := []rune(note); len(r) > 4000 {
+			note = string(r[:1500]) + "\n…\n" + string(r[len(r)-2400:])
+		}
+		m.notes = append(m.notes, note)
 		return m, nil
 	case subMsg:
 		m.sub(msg)
@@ -368,7 +404,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.busy = ""
 		switch {
 		case msg.err != nil:
-			m.print(stFail.Render(bullet) + " " + errText(msg.err))
+			m.print(errorBlock(msg.err, m.contentWidth()))
 		case msg.text != "":
 			m.print(msg.text)
 		}
@@ -378,7 +414,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case modelsMsg:
 		m.busy = ""
 		if msg.err != nil {
-			m.print(stFail.Render(bullet) + " " + errText(msg.err))
+			m.print(errorBlock(msg.err, m.contentWidth()))
 			return m, nil
 		}
 		if len(msg.list) == 0 {
@@ -466,7 +502,7 @@ func (m *model) sub(msg subMsg) {
 		s.last = msg.step
 	}
 	if msg.done {
-		s.done = true
+		s.done, s.failed = true, msg.failed
 	}
 }
 
@@ -541,7 +577,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sugg = nil
 			m.input.Reset()
 			m.fitInput()
-		case m.running:
+		case m.running, m.busy != "" && m.cancel != nil:
 			m.interrupt()
 		case m.input.Value() != "":
 			m.input.Reset()
@@ -555,8 +591,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "tab":
 		if len(m.sugg) > 0 {
-			m.input.SetValue(m.sugg[m.suggAt].name + " ")
-			m.sugg = nil
+			m.complete()
 			return m, nil
 		}
 		return m.toggleMode()
@@ -574,6 +609,10 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "enter":
+		if len(m.sugg) > 0 && m.suggKind == "file" {
+			m.complete()
+			return m, nil
+		}
 		if len(m.sugg) > 0 {
 			c := m.sugg[m.suggAt]
 			m.sugg = nil
@@ -683,6 +722,9 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 		return m.command(text)
 	}
 	text = strings.TrimPrefix(text, "/")
+	if command, ok := strings.CutPrefix(text, "!"); ok && strings.TrimSpace(command) != "" {
+		return m.shell(strings.TrimSpace(command))
+	}
 	if m.running {
 		m.queue.add(text)
 		return m, nil
@@ -701,8 +743,14 @@ func (m *model) startTurn(text string) tea.Cmd {
 	m.ask = nil
 	ctx = cmdgate.WithAsker(ctx, m.asker())
 	m.running, m.cancel, m.started, m.interrupted = true, cancel, time.Now(), false
-	m.stream, m.streamView, m.tools, m.subs = "", "", nil, nil
+	m.stream, m.streamView, m.tools, m.subs, m.plan = "", "", nil, nil, nil
+	m.input.Placeholder = placeholderBusy
 	m.addBlock(transcriptBlock{kind: "user", text: text})
+	if len(m.notes) > 0 {
+		text = "[Output of commands I ran myself in this terminal:]\n" + strings.Join(m.notes, "\n\n") + "\n\n" + text
+		m.notes = nil
+	}
+	m.thought = ""
 	e, l, q, br := m.e, m.listener(), m.queue, m.br
 	inbox := func() []string {
 		items := q.take()
@@ -755,6 +803,7 @@ func (m *model) listener() *agent.EventListener {
 			send(compactMsg{before: before, after: after, summarized: summarized})
 		},
 		OnEscalate: func(why string) { send(escalateMsg{why: why}) },
+		OnThought:  func(text string) { send(thoughtMsg{text: text}) },
 	}
 	l.SubAgent = func(title, _ string) *agent.EventListener {
 		id := int(subs.Add(1))
@@ -773,12 +822,22 @@ func (m *model) listener() *agent.EventListener {
 
 func (m model) done(msg doneMsg) (tea.Model, tea.Cmd) {
 	m.running, m.cancel = false, nil
+	m.input.Placeholder = placeholderIdle
 	if m.ask != nil {
 		m.ask.reply <- cmdgate.Deny
 		m.ask = nil
 	}
+	if partial := strings.TrimSpace(m.stream); partial != "" && (m.interrupted || errors.Is(msg.err, context.Canceled)) {
+		m.addBlock(transcriptBlock{kind: "assistant", text: partial})
+	}
 	m.stream, m.streamView, m.dirty = "", "", false
-	m.tools, m.subs = nil, nil
+	if len(m.plan) > 0 {
+		if block := planBlock(m.plan, m.contentWidth()); block != m.lastPlan {
+			m.lastPlan = block
+			m.print(block)
+		}
+	}
+	m.tools, m.subs, m.plan = nil, nil, nil
 	res, err := msg.res, msg.err
 	if res != nil {
 		m.tokIn += res.Usage.PromptTokens
@@ -795,12 +854,16 @@ func (m model) done(msg doneMsg) (tea.Model, tea.Cmd) {
 		if answer != "" {
 			m.addBlock(transcriptBlock{kind: "assistant", text: answer})
 		}
-		m.print(stFail.Render(bullet) + " " + errText(err))
+		m.print(errorBlock(err, m.contentWidth()))
 	case answer != "":
 		m.addBlock(transcriptBlock{kind: "assistant", text: answer})
+		m.lastAnswer = answer
 	}
 	if msg.took >= 20*time.Second && !m.interrupted {
 		m.print(stDim.Render("✻ Worked for " + since(msg.took)))
+	}
+	if msg.took >= 30*time.Second {
+		notify("Macron finished")
 	}
 	m.info = m.e.Info()
 	m.ctxWindow = m.info.ContextWindow
@@ -843,6 +906,10 @@ func (m model) askKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return answer(cmdgate.Always)
 	case "4", "n", "esc":
 		return answer(cmdgate.Deny)
+	case "v":
+		m.print(stWarn.Render("⚠ ") + stBold.Render("The command waiting for your answer:") + "\n" + stDim.Render(clean(m.ask.q.Command)))
+		m.follow = true
+		return m, m.say("The whole command is in the conversation above (pgup to read it)")
 	case "ctrl+c":
 		m.interrupt()
 	}
@@ -887,14 +954,20 @@ func (p *picker) visible() []string {
 	if p.filter == "" {
 		return p.items
 	}
-	f := strings.ToLower(p.filter)
-	var out []string
+	f := strings.ToLower(strings.TrimPrefix(p.filter, "/"))
+	var first, second, third []string
 	for _, it := range p.items {
-		if strings.Contains(strings.ToLower(it), f) {
-			out = append(out, it)
+		name := strings.ToLower(strings.TrimPrefix(it, "/"))
+		switch {
+		case strings.HasPrefix(name, f):
+			first = append(first, it)
+		case strings.Contains(name, f):
+			second = append(second, it)
+		case strings.Contains(strings.ToLower(p.about[it]), f):
+			third = append(third, it)
 		}
 	}
-	return out
+	return append(append(first, second...), third...)
 }
 
 func (m model) View() string {
@@ -911,9 +984,25 @@ func (m model) askView() string {
 	q := m.ask.q
 	w := max(m.contentWidth()-2, 12)
 	var b strings.Builder
-	b.WriteString(stWarn.Bold(true).Render("Run this command?") + "\n\n")
-	for _, l := range strings.Split(strings.TrimSpace(clean(q.Command)), "\n") {
-		b.WriteString("  " + clip(l, w-6) + "\n")
+	lines := strings.Split(strings.TrimSpace(clean(q.Command)), "\n")
+	title := "Run this command?"
+	if strings.HasPrefix(strings.TrimSpace(lines[0]), "[") {
+		title = "Allow this action?"
+	}
+	b.WriteString(stWarn.Bold(true).Render("⚠ "+title) + "\n\n")
+	room := max(4, m.height-15-len(q.Findings))
+	if len(lines) > room {
+		tail := min(2, room/3)
+		head := room - tail - 1
+		hidden := len(lines) - head - tail
+		lines = append(append(append([]string(nil), lines[:head]...), fmt.Sprintf("\x00… %d more lines (v shows all) …", hidden)), lines[len(lines)-tail:]...)
+	}
+	for _, l := range lines {
+		if strings.HasPrefix(l, "\x00") {
+			b.WriteString("  " + stDim.Render(strings.TrimPrefix(l, "\x00")) + "\n")
+			continue
+		}
+		b.WriteString("  " + stBold.Render(clip(l, w-6)) + "\n")
 	}
 	if len(q.Findings) > 0 {
 		b.WriteString("\n")
@@ -925,17 +1014,15 @@ func (m model) askView() string {
 		b.WriteString(stDim.Render(clip("  guardian: "+oneLine(g), w-4)) + "\n")
 	}
 	b.WriteString("\n")
-	opts := []string{"Yes", "Yes, and don't ask again for this command in this session", "Always allow this command", "No, tell Macron what to do instead (esc)"}
+	opts := []string{"Yes", "Yes, and don't ask again for this in this session", "Always allow this", "No, tell Macron what to do instead"}
 	for i, o := range opts {
 		line := fmt.Sprintf("  %d. %s", i+1, o)
 		if i == m.ask.sel {
-			line = stAccent.Render(fmt.Sprintf("❯ %d. %s", i+1, o))
+			line = stAccent.Bold(true).Render(fmt.Sprintf("❯ %d. %s", i+1, o))
 		}
-		b.WriteString(clip(line, w-4))
-		if i < len(opts)-1 {
-			b.WriteString("\n")
-		}
+		b.WriteString(clip(line, w-4) + "\n")
 	}
+	b.WriteString(stFaint.Render(clip("↑↓ choose · enter confirm · 1-4 · esc no", w-4)))
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colWarn).Padding(0, 1).Width(w).Render(b.String())
 }
 
@@ -946,98 +1033,102 @@ func (m model) pickView() string {
 	var b strings.Builder
 	b.WriteString(clip(stBold.Render(p.title), w-4))
 	if p.filter != "" {
-		b.WriteString("\n" + stDim.Render(clip("filter: "+p.filter, w-4)))
-	} else {
-		b.WriteString("\n" + stDim.Render(clip("type to filter · enter choose · esc back", w-4)))
+		b.WriteString("  " + stAccent.Render(clip(p.filter, w-10)) + stAccent.Render("▏"))
 	}
-	b.WriteString("\n")
-	shown := max(1, min(7, m.height-11))
+	b.WriteString("\n" + stDim.Render(clip("type to filter · ↑↓ move · enter choose · esc back", w-4)) + "\n")
+	shown := max(1, min(8, m.height-11))
 	from := 0
 	if p.sel >= shown {
 		from = p.sel - shown + 1
 	}
+	nameWidth := 0
+	for _, name := range items {
+		nameWidth = max(nameWidth, ansi.StringWidth(name))
+	}
+	nameWidth = min(nameWidth, max(10, (w-8)/2))
 	for i := from; i < len(items) && i < from+shown; i++ {
 		name := items[i]
-		mark := "  "
+		label := clip(name, nameWidth)
 		if name == p.current {
-			mark = stOK.Render("✓ ")
+			label += stOK.Render(" ✓")
 		}
-		line := mark + name
+		pad := strings.Repeat(" ", max(1, nameWidth+3-ansi.StringWidth(ansi.Strip(label))))
+		desc := ""
+		if d := p.about[name]; d != "" && w > 40 {
+			desc = stDim.Render(clip(d, max(4, w-nameWidth-12)))
+		}
+		line := "  " + label + pad + desc
 		if i == p.sel {
-			line = stAccent.Render("❯ ") + stAccent.Render(name)
+			line = stAccent.Render("❯ ") + stAccent.Bold(true).Render(clip(name, nameWidth))
 			if name == p.current {
 				line += stOK.Render(" ✓")
 			}
-		} else {
-			line = "  " + line
+			line += pad + desc
 		}
 		b.WriteString("\n" + clip(line, w-4))
 	}
 	if len(items) == 0 {
 		b.WriteString("\n" + stDim.Render("  nothing matches"))
 	} else if len(items) > shown {
-		b.WriteString("\n" + stDim.Render(fmt.Sprintf("  %d of %d", p.sel+1, len(items))))
+		b.WriteString("\n" + stFaint.Render(fmt.Sprintf("  %d of %d", p.sel+1, len(items))))
 	}
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colAccent).Padding(0, 1).Width(w).Render(b.String())
 }
 
 func (m model) suggView() string {
 	w := m.contentWidth()
-	shown := max(1, min(5, m.height/4))
+	shown := max(1, min(6, m.height/4))
 	from := max(0, m.suggAt-shown+1)
+	panel := lipgloss.NewStyle().Background(colPanel)
 	var lines []string
 	for i := from; i < len(m.sugg) && i < from+shown; i++ {
 		c := m.sugg[i]
-		name := fmt.Sprintf("%-14s", c.name)
-		desc := clip(c.about, max(0, w-19))
 		mark := "  "
-		if i == m.suggAt {
-			mark = "› "
-			name = stAccent.Background(colPanel).Render(name)
-		}
-		if w < 44 {
-			desc = ""
-			name = c.name
+		var line string
+		if m.suggKind == "file" {
+			dir, base := path.Split(c.name)
+			name := stBold.Background(colPanel).Render(base)
 			if i == m.suggAt {
-				name = stAccent.Background(colPanel).Render(name)
+				mark, name = "› ", stAccent.Background(colPanel).Bold(true).Render(base)
 			}
+			line = mark + name + stDim.Background(colPanel).Render(clip("  "+dir, max(0, w-6-ansi.StringWidth(base))))
+		} else {
+			name := fmt.Sprintf("%-14s", c.name)
+			desc := clip(c.about, max(0, w-19))
+			if i == m.suggAt {
+				mark, name = "› ", stAccent.Background(colPanel).Render(name)
+			}
+			if w < 44 {
+				desc = ""
+			}
+			line = mark + name + stDim.Background(colPanel).Render(desc)
 		}
-		lines = append(lines, clip(mark+name+stDim.Background(colPanel).Render(desc), w-2))
+		lines = append(lines, clip(line, w-2))
 	}
-	lines = append(lines, stFaint.Background(colPanel).Render(fmt.Sprintf("  %d/%d · ↑↓ select · tab complete", m.suggAt+1, len(m.sugg))))
-	return lipgloss.NewStyle().Background(colPanel).Padding(0, 1).Width(w).Render(strings.Join(lines, "\n"))
-}
-func (m model) footer() string {
-	w := m.contentWidth()
-	left := "ctrl+p commands · pgup history"
-	if w < 48 {
-		left = "ctrl+p commands · tab mode"
+	what := "tab complete"
+	if m.suggKind == "file" {
+		if len(m.sugg) == 0 {
+			lines = append(lines, stDim.Background(colPanel).Render("  no file matches"))
+		}
+		what = "tab or enter inserts the path"
 	}
-	var stats []string
-	if m.ctxWindow > 0 {
-		stats = append(stats, fmt.Sprintf("%d%% context", min(100, m.ctxUsed*100/m.ctxWindow)))
-	}
-	if m.toolCount > 0 {
-		stats = append(stats, fmt.Sprintf("%d tools", m.toolCount))
-	}
-	if w >= 70 && len(stats) > 0 {
-		right := strings.Join(stats, " · ")
-		left += strings.Repeat(" ", max(1, w-ansi.StringWidth(left)-ansi.StringWidth(right))) + right
-	}
-	return stFaint.Render(clip(left, w)) + "\n" + m.homeFooter(w)
+	lines = append(lines, stFaint.Background(colPanel).Render(fmt.Sprintf("  %d/%d · ↑↓ select · %s · esc close", min(m.suggAt+1, len(m.sugg)), len(m.sugg), what)))
+	return panel.Padding(0, 1).Width(w).Render(keepBg(strings.Join(lines, "\n"), colPanel))
 }
 
 func userBlock(text string, width int) string {
 	lines := strings.Split(strings.TrimSpace(clean(text)), "\n")
+	var out []string
 	for i, l := range lines {
-		l = wrap(l, max(width-4, 10))
-		mark := "  "
-		if i == 0 {
-			mark = stAccent.Render("❯ ")
+		for j, part := range strings.Split(wrap(l, max(width-6, 10)), "\n") {
+			mark := "  "
+			if i == 0 && j == 0 {
+				mark = stAccent.Background(colPanel).Bold(true).Render("❯ ")
+			}
+			out = append(out, mark+lipgloss.NewStyle().Foreground(colText).Background(colPanel).Render(part))
 		}
-		lines[i] = mark + strings.ReplaceAll(l, "\n", "\n  ")
 	}
-	return stUser.Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Background(colPanel).Padding(0, 1).Width(width).Render(keepBg(strings.Join(out, "\n"), colPanel))
 }
 
 func cleanStream(s string) string {
@@ -1077,11 +1168,14 @@ func since(d time.Duration) string {
 }
 
 func short(n int) string {
+	trim := func(s string) string { return strings.Replace(s, ".0", "", 1) }
 	switch {
 	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+		return trim(fmt.Sprintf("%.1fM", float64(n)/1e6))
+	case n >= 100_000:
+		return fmt.Sprintf("%dk", (n+500)/1000)
 	case n >= 1000:
-		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+		return trim(fmt.Sprintf("%.1fk", float64(n)/1e3))
 	}
 	return fmt.Sprint(n)
 }

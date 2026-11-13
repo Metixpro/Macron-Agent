@@ -8,7 +8,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-type transcriptBlock struct{ kind, text, name, args string }
+type transcriptBlock struct {
+	kind, text, name, args string
+	shown                  string
+	shownWidth             int
+}
 type transcript struct {
 	blocks                          []transcriptBlock
 	width, version, renderedVersion int
@@ -22,26 +26,38 @@ func (t *transcript) add(b transcriptBlock) {
 	}
 	t.version++
 }
+
+func (t *transcript) invalidate() {
+	for i := range t.blocks {
+		t.blocks[i].shownWidth = 0
+	}
+	t.version++
+}
+
 func (t *transcript) render(md *markdown, width int) string {
 	if t.width == width && t.renderedVersion == t.version {
 		return t.cached
 	}
-	var blocks []string
-	for _, b := range t.blocks {
-		var s string
-		switch b.kind {
-		case "user":
-			s = userBlock(b.text, width)
-		case "assistant":
-			s = withBullet(md.render(b.text, width), "●")
-		case "tool":
-			s = toolBlock(b.name, b.args, b.text, width)
-		default:
-			s = ansi.Wrap(b.text, width, "")
+	parts := make([]string, len(t.blocks))
+	for i := range t.blocks {
+		b := &t.blocks[i]
+		if b.shownWidth != width {
+			var s string
+			switch b.kind {
+			case "user":
+				s = userBlock(b.text, width)
+			case "assistant":
+				s = withBullet(md.render(b.text, width), "●")
+			case "tool":
+				s = toolBlock(b.name, b.args, b.text, width)
+			default:
+				s = ansi.Wrap(b.text, width, "")
+			}
+			b.shown, b.shownWidth = terminalText(s), width
 		}
-		blocks = append(blocks, terminalText(s))
+		parts[i] = b.shown
 	}
-	t.cached = strings.Join(blocks, "\n\n")
+	t.cached = strings.Join(parts, "\n\n")
 	t.width = width
 	t.renderedVersion = t.version
 	return t.cached
@@ -65,7 +81,11 @@ func (m model) historyView(height int) string {
 	m.history.Height = max(height, 1)
 	text := m.log.render(m.md, w)
 	if m.running && strings.TrimSpace(m.stream) != "" {
-		text += "\n\n" + terminalText(m.renderStream())
+		live := m.streamView
+		if live == "" {
+			live = m.renderStream()
+		}
+		text += "\n\n" + terminalText(live)
 	}
 	m.history.SetContent(text)
 	if m.follow {

@@ -58,16 +58,31 @@ func visualLine(line string) string {
 	if len(runes) == 0 {
 		return ""
 	}
-	base := fribidi.ParType(fribidi.LTR)
-	visual, _ := fribidi.LogicalToVisual(fribidi.ShapeMirroring|fribidi.ShapeArabPres, runes, &base)
+	from, to := chromeEdges(runes)
+	order := make([]int, 0, len(runes))
+	shown := make([]rune, 0, len(runes))
+	for i := 0; i < from; i++ {
+		order, shown = append(order, i), append(shown, runes[i])
+	}
+	if from < to {
+		base := fribidi.ParType(fribidi.ON)
+		visual, _ := fribidi.LogicalToVisual(fribidi.ShapeMirroring|fribidi.ShapeArabPres, runes[from:to], &base)
+		for i, r := range visual.Str {
+			order, shown = append(order, from+visual.VisualToLogical[i]), append(shown, r)
+		}
+	}
+	for i := to; i < len(runes); i++ {
+		order, shown = append(order, i), append(shown, runes[i])
+	}
 	var out strings.Builder
 	current := ""
 	currentLink := ""
-	for i, r := range visual.Str {
+	for i, r := range shown {
 		if r == 0xfeff || r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069 {
 			continue
 		}
-		nextLink := links[visual.VisualToLogical[i]]
+		at := min(max(order[i], 0), len(runes)-1)
+		nextLink := links[at]
 		if currentLink != nextLink {
 			if currentLink != "" {
 				out.WriteString("\x1b]8;;\x1b\\")
@@ -75,7 +90,7 @@ func visualLine(line string) string {
 			out.WriteString(nextLink)
 			currentLink = nextLink
 		}
-		next := styles[visual.VisualToLogical[i]]
+		next := styles[at]
 		if current != next {
 			out.WriteString("\x1b[0m")
 			out.WriteString(next)
@@ -90,4 +105,28 @@ func visualLine(line string) string {
 		out.WriteString("\x1b[0m")
 	}
 	return out.String()
+}
+
+const leadChrome = " \t●❯›•⎿┃│◼☐☒✓✗✻>*-"
+const tailChrome = " \t│┃╮╯╰╭"
+
+func chromeEdges(runes []rune) (int, int) {
+	from := 0
+	for from < len(runes) && strings.ContainsRune(leadChrome, runes[from]) {
+		from++
+	}
+	if from < len(runes) && unicode.IsDigit(runes[from]) {
+		j := from
+		for j < len(runes) && unicode.IsDigit(runes[j]) {
+			j++
+		}
+		if j+1 < len(runes) && (runes[j] == '.' || runes[j] == ')') && runes[j+1] == ' ' {
+			from = j + 2
+		}
+	}
+	to := len(runes)
+	for to > from && strings.ContainsRune(tailChrome, runes[to-1]) {
+		to--
+	}
+	return from, to
 }

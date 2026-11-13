@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type command struct {
@@ -26,6 +27,9 @@ var commands = []command{
 	{"/approvals", "[smart|manual|off]", "how risky commands are approved"},
 	{"/yolo", "", "run commands without asking for 30 minutes (again: off)"},
 	{"/status", "", "model, context, tokens, folder, Telegram"},
+	{"/copy", "", "copy Macron's last answer to the clipboard"},
+	{"/export", "", "save this conversation as a Markdown file here"},
+	{"/theme", "[dark|light|auto]", "colors for a dark or a light terminal"},
 	{"/init", "", "write MACRON.md: what Macron should know about this project"},
 	{"/telegram", "", "connect or manage the Telegram bot"},
 	{"/exit", "", "quit"},
@@ -35,6 +39,15 @@ const initPrompt = `Study this project (its layout, how it is built, tested and 
 
 func (m *model) suggest() {
 	v := m.input.Value()
+	if token := lastToken(v); strings.HasPrefix(token, "@") {
+		m.suggKind = "file"
+		m.sugg = m.fileSuggestions(strings.TrimPrefix(token, "@"))
+		if m.suggAt >= len(m.sugg) {
+			m.suggAt = 0
+		}
+		return
+	}
+	m.suggKind = "cmd"
 	if !strings.HasPrefix(v, "/") || strings.ContainsAny(v, " \n") {
 		m.sugg = nil
 		return
@@ -71,12 +84,15 @@ func helpText() string {
 		{"ctrl+k · ctrl+o", "models · connections"},
 		{"tab · shift+tab", "switch Build / Plan"},
 		{"ctrl+j · alt+enter · \\ enter", "new line"},
+		{"@ path", "point Macron at a file (tab completes)"},
+		{"! command", "run a shell command yourself; Macron sees the output"},
 		{"esc", "interrupt Macron, or clear the input"},
 		{"↑ ↓", "earlier messages"},
 		{"ctrl+c twice · ctrl+d", "exit"},
 		{"pgup · pgdown", "scroll conversation"},
 		{"ctrl+home · ctrl+end", "start of history · follow latest"},
 		{"ctrl+l", "clear the screen"},
+		{"shift + drag", "select text with the mouse (or /copy)"},
 	} {
 		fmt.Fprintf(&b, "\n  %-30s %s", k[0], stDim.Render(k[1]))
 	}
@@ -217,6 +233,47 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 		}
 	case "/status":
 		m.print(e.Status(context.Background()) + m.usage())
+	case "/copy":
+		if m.lastAnswer == "" {
+			return m, m.say("Nothing to copy yet")
+		}
+		copyToClipboard(m.lastAnswer)
+		return m, m.say(fmt.Sprintf("Copied the last answer (%s) · if your terminal blocks it, shift+drag to select", plural(countLines(m.lastAnswer), "line")))
+	case "/export":
+		name, err := m.export()
+		if err != nil {
+			m.print(errorBlock(err, m.contentWidth()))
+			return m, nil
+		}
+		return m, m.say("Saved the conversation to " + name)
+	case "/theme":
+		theme := strings.ToLower(arg)
+		switch theme {
+		case "", "auto", "dark", "light":
+		default:
+			return m, m.say("Use /theme dark, /theme light or /theme auto")
+		}
+		if theme == "" {
+			theme = "dark"
+			if m.theme == "dark" || m.theme == "" && lipgloss.HasDarkBackground() {
+				theme = "light"
+			}
+		}
+		if t, ok := e.(interface{ SetTheme(string) error }); ok {
+			if err := t.SetTheme(theme); err != nil {
+				return m, m.say(errText(err))
+			}
+		}
+		m.theme = theme
+		if theme == "auto" {
+			m.theme = ""
+			lipgloss.SetHasDarkBackground(detectedDark)
+		} else {
+			applyTheme(theme)
+		}
+		m.md = &markdown{style: markdownStyle()}
+		m.log.invalidate()
+		return m, m.say("Theme: " + theme)
 	case "/init":
 		if !idle() {
 			return m, m.say("Wait until Macron finishes, or press esc")

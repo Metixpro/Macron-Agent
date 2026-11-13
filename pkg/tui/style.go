@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -12,7 +13,6 @@ import (
 )
 
 var (
-	colCanvas = lipgloss.AdaptiveColor{Light: "#FAFAF7", Dark: "#0B0D10"}
 	colPlan   = lipgloss.AdaptiveColor{Light: "#7545A8", Dark: "#BEA0FF"}
 	colPanel  = lipgloss.AdaptiveColor{Light: "#F3F1EB", Dark: "#191B20"}
 	colText   = lipgloss.AdaptiveColor{Light: "#24272D", Dark: "#E6E4DF"}
@@ -34,7 +34,6 @@ var (
 	stFaint  = lipgloss.NewStyle().Foreground(colFaint)
 	stAdd    = lipgloss.NewStyle().Foreground(colAdd)
 	stDel    = lipgloss.NewStyle().Foreground(colDel)
-	stUser   = lipgloss.NewStyle().Foreground(colDim)
 	stTitle  = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 )
 
@@ -42,6 +41,31 @@ const (
 	bullet = "●"
 	elbow  = "⎿"
 )
+
+func resolveTheme(saved string) string {
+	for _, v := range []string{os.Getenv("MACRON_THEME"), saved} {
+		switch v = strings.ToLower(strings.TrimSpace(v)); v {
+		case "dark", "light":
+			return v
+		}
+	}
+	if v := os.Getenv("COLORFGBG"); v != "" {
+		parts := strings.Split(v, ";")
+		if n, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
+			if n == 7 || n >= 9 && n <= 15 {
+				return "light"
+			}
+			return "dark"
+		}
+	}
+	return ""
+}
+
+func applyTheme(theme string) {
+	if theme != "" {
+		lipgloss.SetHasDarkBackground(theme != "light")
+	}
+}
 
 func markdownStyle() string {
 	if os.Getenv("NO_COLOR") != "" {
@@ -146,6 +170,16 @@ func dropMargin(s string, n int) (string, bool) {
 	}
 	b.WriteString(s[i:])
 	return b.String(), n == 0
+}
+
+func keepBg(s string, bg lipgloss.TerminalColor) string {
+	probe := lipgloss.NewStyle().Background(bg).Render(" ")
+	i := strings.Index(probe, " ")
+	if i <= 0 {
+		return s
+	}
+	seq := probe[:i]
+	return strings.NewReplacer("\x1b[0m", "\x1b[0m"+seq, "\x1b[m", "\x1b[m"+seq).Replace(s)
 }
 
 func wrap(text string, width int) string {

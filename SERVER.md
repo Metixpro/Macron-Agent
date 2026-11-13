@@ -606,3 +606,17 @@ Use `macron --check-online` to explicitly verify the configured messenger.
 append `--check-online` for API authentication. Normal bot startup still checks
 its API connection. An HTML HTTP 503 is now reported as service unavailability,
 rather than an invalid JSON response.
+
+### 1.12.0: a better terminal workspace and installer
+
+The terminal workspace (`macron`):
+
+- While Macron works, a live panel above the input shows the plan (2/5, the current step), each sub-agent with its latest step, and the last output line of a running command; the status line shows what it is doing and for how long. The plan goes into the conversation once, when the job ends, instead of on every change.
+- `@path` points Macron at a project file, with completion; `!command` runs a shell command yourself and hands its output to Macron with your next message.
+- `/copy` puts the last answer on the clipboard (OSC 52), `/export` saves the conversation as Markdown, `/theme dark|light|auto` sets the colors and is remembered.
+- Errors say what happened and what to do («The model is unavailable right now (503) · try again, or switch with /model»).
+- Persian lines keep their punctuation and emoji on the right side; your own messages stand out on a panel; the command palette lines up and ranks names first.
+- After Esc the half-written answer stays in the conversation; a long approval shows the start and the end of the command (v shows all of it); a long job ends with a terminal notification.
+- The conversation is no longer redrawn from scratch for every new block (about 470 ms → 3 ms with 800 blocks), and the screen uses the terminal's own background.
+
+The installer prints the Macron logo, a plan, numbered steps with a progress bar, a spinner that says what it is installing and for how long, and a summary with the next steps. The `macron setup` and `macron telegram` wizards use the same colors. Without a terminal (`--yes`, pipes) the output stays plain.

@@ -53,6 +53,10 @@ An interactive terminal interface opens: answers stream in rendered Markdown, ev
 | `/model` · `/approvals` · `/yolo` | switch the model · how commands are approved · no prompts for 30 minutes |
 | `/new` · `/compact` · `/status` | fresh conversation · summarize the history · status |
 | `/init` | write `MACRON.md` for the project |
+| `@path` | point Macron at a project file; `Tab` completes the path |
+| `!command` | run a shell command yourself; Macron sees its output with your next message |
+| `/copy` · `/export` | copy the last answer to the clipboard · save the conversation as Markdown |
+| `/theme` | colors for a dark or a light terminal (`dark` · `light` · `auto`) |
 | `/telegram` | connect and manage the Telegram bot |
 
 The conversation keeps its composer and colored status bar at the bottom while history scrolls separately. Persian/Arabic text is shaped and reordered for display; logical input sent to the model is preserved. Set `MACRON_TUI_RTL=logical` for terminals that already render BiDi themselves.

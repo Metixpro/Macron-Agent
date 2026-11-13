@@ -563,6 +563,76 @@ func (t *terminal) Status(ctx context.Context) string {
 	return b.String()
 }
 
+var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, ".venv": true, "venv": true, "__pycache__": true,
+	"dist": true, "build": true, "target": true, ".next": true, ".cache": true, ".idea": true, ".macron": true}
+
+func (t *terminal) Files() []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, "git", "-C", t.dir, "ls-files", "--cached", "--others", "--exclude-standard").Output(); err == nil {
+		var files []string
+		for _, f := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if f != "" {
+				files = append(files, f)
+			}
+			if len(files) == 5000 {
+				break
+			}
+		}
+		return files
+	}
+	var files []string
+	_ = filepath.WalkDir(t.dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if len(files) >= 5000 {
+			return filepath.SkipAll
+		}
+		if d.IsDir() {
+			if path != t.dir && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if rel, err := filepath.Rel(t.dir, path); err == nil {
+			files = append(files, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	return files
+}
+
+func (t *terminal) Shell(ctx context.Context, command string) string {
+	res := t.app.Machine.Run(ctx, t.session, machine.RunOptions{Shell: command, Timeout: 10 * time.Minute, InSession: true, MergeOutput: true})
+	out := "$ " + command + "\n" + strings.TrimRight(res.Stdout, "\n")
+	switch {
+	case res.ExitCode == 124 && res.Error != "":
+		out += "\n[timed out: " + res.Error + "]"
+	case res.ExitCode == -1 && res.Error != "":
+		out += "\n[could not run: " + res.Error + "]"
+	default:
+		out += fmt.Sprintf("\n[exit %d · %s]", res.ExitCode, res.Duration)
+	}
+	return out
+}
+
+const settingTUITheme = "tui_theme"
+
+func (t *terminal) Theme() string {
+	v, _ := t.st.Setting(settingTUITheme)
+	return v
+}
+
+func (t *terminal) SetTheme(theme string) error {
+	if theme == "auto" {
+		theme = ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return t.st.SetSetting(ctx, settingTUITheme, theme)
+}
+
 func (t *terminal) Mode() string {
 	t.modeMu.RLock()
 	defer t.modeMu.RUnlock()
