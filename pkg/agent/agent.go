@@ -760,7 +760,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		toolDefs = append(toolDefs, search.Def)
 	}
 
-	firstTools := map[string]bool{ToolMoreTools: true, ToolPlan: true}
+	firstTools := map[string]bool{ToolMoreTools: true, ToolPlan: true, ToolSearch: true}
 	for _, t := range focusPicked(toolDefs, focusText(req), req.FocusPick) {
 		firstTools[t.Function.Name] = true
 	}
@@ -768,7 +768,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	if (req.FocusTools || len(shelf.hide(toolDefs)) > a.toolLimit()) && req.depth == 0 {
 		f := focusPicked(toolDefs, focusText(req), req.FocusPick)
 		if req.EfficientTools {
-			core := map[string]bool{"bash_execute": true, "shell_jobs": true, "read_file": true, "write_file": true, "apply_patch": true, "search_code": true}
+			core := map[string]bool{"bash_execute": true, "shell_jobs": true, "read_file": true, "write_file": true, "apply_patch": true, "search_code": true, ToolSearch: true}
 			f = nil
 			for _, d := range toolDefs {
 				if core[d.Function.Name] {
