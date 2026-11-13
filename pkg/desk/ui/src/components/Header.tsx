@@ -12,7 +12,7 @@ export function Header() {
   const mod = useMod();
   return (
     <header className="top">
-      <button type="button" className="icon-btn menu" title="Workspaces" onClick={() => setState((s) => ({ sideOpen: !s.sideOpen }))}>
+      <button type="button" className="icon-btn side-toggle" title="Workspaces" onClick={() => setState((s) => ({ sideOpen: !s.sideOpen }))}>
         <Icon name="menu" />
       </button>
       <div className="title">

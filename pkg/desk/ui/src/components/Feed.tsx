@@ -78,7 +78,7 @@ const ToolRow = memo(function ToolRow({ b }: { b: Block }) {
   );
 });
 
-function Steps({ items, fresh }: { items: Block[]; fresh: boolean }) {
+function Steps({ items, fresh, live }: { items: Block[]; fresh: boolean; live: boolean }) {
   const [open, setOpen] = useState(false);
   if (items.length <= 3) {
     return (
@@ -91,25 +91,28 @@ function Steps({ items, fresh }: { items: Block[]; fresh: boolean }) {
   }
   const failed = items.filter((b) => b.failed).length;
   const last = items[items.length - 1];
+  const tail = !open && live ? 3 : 0;
+  const shown = open ? items : items.slice(items.length - tail);
+  const from = items.length - shown.length;
   return (
-    <div className={"steps grouped" + (open ? " open" : "") + (fresh ? " enter" : "")}>
+    <div className={"steps grouped" + (open ? " open" : "") + (tail ? " live" : "") + (fresh ? " enter" : "")}>
       <button type="button" className="tool-row head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="st">
           <Icon name="steps" size={13} />
         </span>
-        <span className="lb">{items.length} steps</span>
+        <span className="lb">{tail ? items.length - tail + " earlier steps" : items.length + " steps"}</span>
         <span className="ar">
-          {failed > 0 && <em>{failed} failed · </em>}
-          {open ? "" : (last.label || last.name) + " " + (last.arg || "")}
+          {failed > 0 && <em>{failed} failed{open || tail ? "" : " · "}</em>}
+          {open || tail ? "" : (last.label || last.name) + " " + (last.arg || "")}
         </span>
         <span className="chev">
           <Icon name="right" size={12} />
         </span>
       </button>
-      {open && (
+      {shown.length > 0 && (
         <div className="steps-body">
-          {items.map((b, i) => (
-            <ToolRow key={i + ":" + b.at} b={b} />
+          {shown.map((b, i) => (
+            <ToolRow key={from + i + ":" + b.at} b={b} />
           ))}
         </div>
       )}
@@ -301,9 +304,9 @@ export function Feed() {
           {empty ? (
             <Intro />
           ) : (
-            items.map((it) =>
+            items.map((it, n) =>
               it.kind === "steps" ? (
-                <Steps key={"s" + it.i + ":" + it.items[0].at} items={it.items} fresh={it.i >= fresh} />
+                <Steps key={"s" + it.i + ":" + it.items[0].at} items={it.items} fresh={it.i >= fresh} live={running && n === items.length - 1} />
               ) : (
                 <BlockView key={it.i + ":" + it.b.at} b={it.b} fresh={it.i >= fresh} />
               ),

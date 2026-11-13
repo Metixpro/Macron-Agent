@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -15,7 +16,7 @@ var toolTitles = map[string]string{
 	"apply_patch": "Patch", "search_code": "Search", "find_files": "Find", "project_tree": "Tree", "code_outline": "Outline",
 	"web_search": "Web Search", "web_fetch": "Fetch", "view_image": "View", "list_files": "List", "read_skill": "Skill",
 	"list_skills": "Skills", "shell_jobs": "Jobs", "document_reader": "Read", "pdf_tool": "PDF", "query_data": "Query",
-	"remember": "Remember", "forget": "Forget", "more_tools": "Tools", "tool_search": "Tools", "save_skill": "Save Skill",
+	"remember": "Remember", "forget": "Forget", "more_tools": "Load tools", "tool_search": "Find tools", "save_skill": "Save Skill",
 	agent.ToolDelegate: "Task", "search_past_chats": "Recall", "download": "Download", "http_request": "HTTP",
 	"python_kernel": "Python", "database_query": "SQL", "deploy_service": "Deploy", "office_document": "Office", "document_diff": "Diff",
 	"ocr_image": "OCR", "translate_document": "Translate", "generate_diagram": "Diagram", "generate_image": "Image",
@@ -63,6 +64,9 @@ func ToolHeading(name, args string) (string, string) {
 	title := toolTitles[name]
 	if title == "" {
 		title = name
+		if server, tool, ok := strings.Cut(name, "__"); ok && server != "" && tool != "" {
+			title = server + " · " + tool
+		}
 	}
 	a := toolArgs(args)
 	arg := ""
@@ -71,6 +75,9 @@ func ToolHeading(name, args string) (string, string) {
 			arg = v
 			break
 		}
+	}
+	if name == "apply_patch" && arg == "" {
+		arg = patchTargets(strArg(a, "patch"))
 	}
 	if arg != "" {
 		first, rest, multi := strings.Cut(arg, "\n")
@@ -84,6 +91,25 @@ func ToolHeading(name, args string) (string, string) {
 		}
 	}
 	return title, arg
+}
+
+func patchTargets(patch string) string {
+	var names []string
+	for _, l := range strings.Split(patch, "\n") {
+		f, ok := strings.CutPrefix(strings.TrimRight(l, "\r"), "+++ ")
+		if !ok {
+			continue
+		}
+		f, _, _ = strings.Cut(strings.TrimSpace(f), "\t")
+		if f == "/dev/null" {
+			continue
+		}
+		f = strings.TrimPrefix(f, "b/")
+		if !slices.Contains(names, f) {
+			names = append(names, f)
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func toolTitle(name, args string, width int) string {

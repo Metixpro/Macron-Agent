@@ -44,12 +44,35 @@ export function modKey(platform: string): string {
   return platform === "darwin" ? "⌘" : "Ctrl";
 }
 
-const RTL = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
-const STRONG = /[A-Za-zÀ-ɏͰ-ϿЀ-ӿ֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+const RTL = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+const RTL_ALL = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/g;
+const STRONG = /[A-Za-zÀ-ɏͰ-ϿЀ-ӿ֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+const STRONG_ALL = /[A-Za-zÀ-ɏͰ-ϿЀ-ӿ֐-ࣿיִ-﷿ﹰ-ﻼ]/g;
 
-export function textDir(text: string | null | undefined): "rtl" | "ltr" {
-  const m = STRONG.exec(text || "");
-  return m && RTL.test(m[0]) ? "rtl" : "ltr";
+function prose(n: HTMLElement): string {
+  const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT, {
+    acceptNode: (t) => (t.parentElement?.closest("code, pre, kbd") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  let out = "";
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) out += t.nodeValue || "";
+  return out;
+}
+
+function firstDir(text: string): "rtl" | "ltr" | "" {
+  const m = STRONG.exec(text);
+  return m ? (RTL.test(m[0]) ? "rtl" : "ltr") : "";
+}
+
+function mostDir(text: string): "rtl" | "ltr" | "" {
+  const all = (text.match(STRONG_ALL) || []).length;
+  if (!all) return "";
+  const rtl = (text.match(RTL_ALL) || []).length;
+  return rtl * 2 >= all - rtl ? "rtl" : "ltr";
+}
+
+function setDir(n: HTMLElement, dir: "rtl" | "ltr" | "") {
+  if (dir) n.setAttribute("dir", dir);
+  else n.removeAttribute("dir");
 }
 
 export function bidi(root: HTMLElement) {
@@ -60,10 +83,13 @@ export function bidi(root: HTMLElement) {
     t.replaceWith(wrap);
     wrap.append(t);
   });
-  root.setAttribute("dir", textDir(root.textContent));
-  root
-    .querySelectorAll<HTMLElement>("p, li, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, .table, td, th")
-    .forEach((n) => n.setAttribute("dir", textDir(n.textContent)));
+  root.setAttribute("dir", firstDir(prose(root)) || "ltr");
+  root.querySelectorAll<HTMLElement>("ul, ol, .table").forEach((n) => setDir(n, mostDir(prose(n))));
+  root.querySelectorAll<HTMLElement>("li").forEach((n) => n.removeAttribute("dir"));
+  root.querySelectorAll<HTMLElement>("p, h1, h2, h3, h4, h5, h6, blockquote, td, th").forEach((n) => {
+    if (n.tagName === "P" && n.closest("li")) n.removeAttribute("dir");
+    else setDir(n, firstDir(prose(n)));
+  });
 }
 
 export function copyText(text: string): Promise<void> {

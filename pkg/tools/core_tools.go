@@ -92,9 +92,9 @@ func (r *Registry) registerCoreTools() {
 			"filename":   prop("string", ""),
 			"start_line": prop("integer", ""),
 			"end_line":   prop("integer", ""),
-			"files":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "More files at once"},
+			"files":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Several files at once (instead of or besides filename)"},
 		},
-		[]string{"filename"}, r.readFile)
+		nil, r.readFile)
 
 	r.add("list_files", "List files and directories in the workspace.", nil, nil, r.listFiles)
 
@@ -722,7 +722,7 @@ func (r *Registry) readFile(ctx context.Context, sessionID string, args map[stri
 		return r.readMany(ctx, sessionID, name, list), nil
 	}
 	if name == "" {
-		return "error: filename is required", nil
+		return "error: give filename (or files for several)", nil
 	}
 	if refused := r.gateRead(ctx, sessionID, "read_file", name); refused != "" {
 		return refused, nil

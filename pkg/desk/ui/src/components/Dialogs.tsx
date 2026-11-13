@@ -583,6 +583,8 @@ function useList(count: number) {
   return { sel, setSel, listRef, move };
 }
 
+let modelCache: { key: string; models: string[] } | null = null;
+
 function Palette({ mode }: { mode: "root" | "models" }) {
   const projects = useStore((s) => s.projects);
   const current = useStore((s) => s.current);
@@ -595,27 +597,38 @@ function Palette({ mode }: { mode: "root" | "models" }) {
   const tuning = useStore((s) => s.tuning);
   const mod = useMod();
   const [q, setQ] = useState("");
-  const [models, setModels] = useState<string[] | null>(null);
+  const cacheKey = info.provider + "|" + info.model;
+  const [models, setModels] = useState<string[] | null>(() => (modelCache && modelCache.key === cacheKey ? modelCache.models : null));
   const [active, setActive] = useState(info.model);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (mode !== "models") return;
+    let live = true;
     server
       .models()
       .then((r) => {
-        setModels(r.models || []);
+        const list = r.models || [];
+        modelCache = { key: cacheKey, models: list };
+        if (!live) return;
+        setModels(list);
         if (r.current) setActive(r.current);
       })
       .catch((e) => {
-        setModels([]);
+        if (!live) return;
+        setModels((m) => m || []);
         setError(errorText(e));
       });
-  }, [mode]);
+    return () => {
+      live = false;
+    };
+  }, [mode, cacheKey]);
 
   const entries = useMemo<Entry[]>(() => {
     if (mode === "models") {
-      const list = (models || []).map<Entry>((m) => ({ id: "m:" + m, group: "Models", label: m, icon: "chip", on: m === active, run: () => chooseModel(m) }));
+      const all = models || [];
+      const ordered = all.includes(active) ? [active, ...all.filter((m) => m !== active)] : all;
+      const list = ordered.map<Entry>((m) => ({ id: "m:" + m, group: "Models", label: m, icon: "chip", on: m === active, run: () => chooseModel(m) }));
       const typed = q.trim();
       if (typed && !(models || []).includes(typed)) list.push({ id: "custom", group: "Models", label: `Use “${typed}”`, icon: "chip", run: () => chooseModel(typed) });
       return list;

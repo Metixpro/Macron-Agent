@@ -63,8 +63,14 @@ func (r *Registry) applyPatch(ctx context.Context, sessionID string, args map[st
 	res := r.Machine.Run(ctx, sessionID, machine.RunOptions{Args: final, Env: env, Timeout: 60 * time.Second, MergeOutput: true})
 	out := terminalTranscript("git apply "+path.Base(name), res, false)
 	if res.ExitCode != 0 {
-		return out + "\nNothing was changed (a patch applies whole or not at all). Read the files again and make the context lines match, " +
-			"or use " + ToolEditFile + ".", nil
+		done, err := r.textPatch(sessionID, dir, patch, strip)
+		if err != nil {
+			return out + "\nMatching the hunks as text failed too: " + err.Error() +
+				"\nNothing was changed (a patch applies whole or not at all). Read the files again and make the context lines match, " +
+				"or use " + ToolEditFile + ".", nil
+		}
+		files = done
+		out = "Applied by matching the hunks as text, since git apply could not place them as written."
 	}
 	var notes []string
 	for _, f := range files {
