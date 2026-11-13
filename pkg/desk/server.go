@@ -37,12 +37,15 @@ type Server struct {
 	projects map[string]*project
 	mode     string
 	addr     string
+	remotes  *remotes
 }
 
 func New(host Host) *Server {
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
 	s := &Server{host: host, token: hex.EncodeToString(b), hub: newHub(), projects: map[string]*project{}, mode: "build"}
+	s.remotes = &remotes{srv: s}
+	s.remotes.load()
 	paths := host.Projects()
 	if d := host.DefaultProject(); d != "" {
 		paths = append([]string{d}, paths...)
@@ -132,6 +135,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/yolo", s.yoloAPI)
 	mux.HandleFunc("GET /api/connections", s.connectionsAPI)
 	mux.HandleFunc("GET /api/fs", s.fsAPI)
+	mux.HandleFunc("GET /api/servers", s.serversAPI)
+	mux.HandleFunc("POST /api/servers", s.addServerAPI)
+	mux.HandleFunc("DELETE /api/servers/{id}", s.removeServerAPI)
+	mux.HandleFunc("POST /api/servers/{id}/connect", s.connectServerAPI)
+	mux.HandleFunc("POST /api/servers/{id}/disconnect", s.disconnectServerAPI)
+	mux.HandleFunc("/remote/{id}/api/{rest...}", s.remoteProxy)
 	return s.guard(mux)
 }
 

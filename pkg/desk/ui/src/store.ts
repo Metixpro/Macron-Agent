@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { local } from "./format";
-import type { Ask, Block, Info, Live, Mode, Summary } from "./types";
+import type { Ask, Block, Info, Live, Mode, ServerView, Summary } from "./types";
 
 export type Theme = "system" | "dark" | "light";
 
@@ -9,10 +9,15 @@ export type Dialog =
   | { kind: "palette"; mode: "root" | "models" }
   | { kind: "folder" }
   | { kind: "settings" }
+  | { kind: "server-add" }
+  | { kind: "server-auth"; id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; message?: string }
   | null;
 
 export interface State {
   online: boolean | null;
+  machine: string;
+  servers: ServerView[];
+  wsl: boolean;
   info: Info;
   mode: Mode;
   projects: Summary[];
@@ -46,6 +51,9 @@ const emptyInfo: Info = {
 
 let state: State = {
   online: null,
+  machine: "",
+  servers: [],
+  wsl: false,
   info: emptyInfo,
   mode: "build",
   projects: [],

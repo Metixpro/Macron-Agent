@@ -1,4 +1,4 @@
-import { ApiError, server } from "./api";
+import { ApiError, server, setBase } from "./api";
 import { local } from "./format";
 import { getState, setState } from "./store";
 import type { Dialog, Theme } from "./store";
@@ -11,6 +11,12 @@ export const composer = {
 
 export const follow = { on: true };
 
+export const stream = {
+  reconnect: () => {},
+};
+
+const scoped = (id: string) => (getState().machine || "local") + ":" + id;
+
 let toastTimer = 0;
 
 export function toast(text: string, ms = 2600) {
@@ -19,9 +25,11 @@ export function toast(text: string, ms = 2600) {
   toastTimer = window.setTimeout(() => setState({ toast: null }), ms);
 }
 
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 export function errorText(err: unknown): string {
-  if (err instanceof ApiError) return err.hint ? `${err.message} · ${err.hint}` : err.message;
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof ApiError) return capital(err.hint ? `${err.message} · ${err.hint}` : err.message);
+  return capital(err instanceof Error ? err.message : String(err));
 }
 
 export function fail(err: unknown) {
@@ -32,12 +40,12 @@ const drafts: Record<string, string> = local.get("drafts", {});
 let draftTimer = 0;
 
 export function draftFor(id: string): string {
-  return drafts[id] || "";
+  return drafts[scoped(id)] || "";
 }
 
 export function saveDraft(id: string, text: string) {
   if (!id) return;
-  drafts[id] = text;
+  drafts[scoped(id)] = text;
   window.clearTimeout(draftTimer);
   draftTimer = window.setTimeout(() => local.set("drafts", drafts), 400);
 }
@@ -48,7 +56,7 @@ export async function loadState() {
   setState((s) => {
     const ids = projects.map((p) => p.id);
     let current = s.current;
-    if (!ids.includes(current)) current = local.get("project", "");
+    if (!ids.includes(current)) current = local.get("project:" + (s.machine || "local"), "");
     if (!ids.includes(current)) current = st.default || ids[0] || "";
     return { info: st.info, mode: st.mode, projects, defaultId: st.default, home: st.home || "", current };
   });
@@ -69,7 +77,7 @@ export async function openProject(id: string) {
   const n = ++opening;
   follow.on = true;
   setState({ current: id, sideOpen: false });
-  local.set("project", id);
+  local.set("project:" + (getState().machine || "local"), id);
   const snap = await server.project(id);
   if (n !== opening) return;
   const blocks = snap.blocks || [];
@@ -201,4 +209,86 @@ export function setTheme(theme: Theme) {
 export function applyTheme(theme: Theme) {
   const dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+
+export async function loadServers() {
+  try {
+    const r = await server.servers();
+    setState({ servers: r.servers || [], wsl: r.wsl });
+  } catch {
+    return;
+  }
+}
+
+function serverName(id: string): string {
+  return getState().servers.find((x) => x.id === id)?.name || "the server";
+}
+
+export async function connectServer(id: string, secrets: { password?: string; passphrase?: string; trust?: string } = {}): Promise<boolean> {
+  const name = serverName(id);
+  setState((s) => ({ servers: s.servers.map((x) => (x.id === id ? { ...x, state: "connecting", error: "" } : x)) }));
+  toast(`Connecting to ${name}…`, 120000);
+  try {
+    const r = await server.connectServer(id, secrets);
+    await loadServers();
+    if (r.need) {
+      setState({ toast: null });
+      openDialog({ kind: "server-auth", id, need: r.need, fingerprint: r.fingerprint, message: r.message });
+      return false;
+    }
+    toast(`Connected to ${name}`);
+    return true;
+  } catch (e) {
+    await loadServers();
+    fail(e);
+    return false;
+  }
+}
+
+export async function switchMachine(id: string) {
+  const s = getState();
+  if (id === s.machine) {
+    setState({ sideOpen: false });
+    return;
+  }
+  if (id) {
+    const srv = s.servers.find((x) => x.id === id);
+    if (!srv) return;
+    if (srv.state !== "ready" && !(await connectServer(id))) return;
+  }
+  setBase(id ? "/remote/" + encodeURIComponent(id) : "");
+  setState({ machine: id, projects: [], blocks: [], fresh: 0, current: "", live: { running: false }, dialog: null, online: null, sideOpen: false, lastTook: 0 });
+  stream.reconnect();
+}
+
+export async function authServer(id: string, secrets: { password?: string; passphrase?: string; trust?: string }) {
+  setState({ dialog: null });
+  if (await connectServer(id, secrets)) await switchMachine(id);
+}
+
+export async function addServer(spec: { kind: "ssh" | "wsl"; name?: string; host?: string; user?: string; port?: number; key?: string }) {
+  const v = await server.addServer(spec);
+  await loadServers();
+  setState({ dialog: null });
+  await switchMachine(v.id);
+}
+
+export async function disconnectServer(id: string) {
+  if (getState().machine === id) await switchMachine("");
+  try {
+    await server.disconnectServer(id);
+  } catch (e) {
+    fail(e);
+  }
+  await loadServers();
+}
+
+export async function removeServer(id: string) {
+  if (getState().machine === id) await switchMachine("");
+  try {
+    await server.removeServer(id);
+  } catch (e) {
+    fail(e);
+  }
+  await loadServers();
 }

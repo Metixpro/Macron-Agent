@@ -56,4 +56,6 @@ type Host interface {
 	SaveProjects(paths []string) error
 	DataDir() string
 	DefaultProject() string
+	Servers() []ServerSpec
+	SaveServers(specs []ServerSpec) error
 }

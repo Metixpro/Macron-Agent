@@ -130,6 +130,26 @@ export interface Listing {
   sep: string;
 }
 
+export interface ServerView {
+  id: string;
+  name: string;
+  kind: "ssh" | "wsl";
+  host?: string;
+  user?: string;
+  port?: number;
+  key?: string;
+  state: "off" | "connecting" | "ready" | "failed";
+  error?: string;
+  version?: string;
+}
+
+export interface ConnectResult {
+  server: ServerView;
+  need?: "trust" | "password" | "passphrase";
+  fingerprint?: string;
+  message?: string;
+}
+
 export interface ServerEvent {
   type: string;
   project?: string;

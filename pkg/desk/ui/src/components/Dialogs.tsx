@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import {
   addFolder,
+  addServer,
   answer,
+  authServer,
+  connectServer,
+  disconnectServer,
+  removeServer,
   chooseModel,
   closeDialog,
   compact,
@@ -68,7 +73,178 @@ export function Dialogs() {
           <Settings />
         </Modal>
       );
+    case "server-add":
+      return (
+        <Modal kind="form" dismiss>
+          <ServerAdd />
+        </Modal>
+      );
+    case "server-auth":
+      return (
+        <Modal kind="form" dismiss>
+          <ServerAuth key={d.id + d.need} id={d.id} need={d.need} fingerprint={d.fingerprint} />
+        </Modal>
+      );
   }
+}
+
+const addressRe = /^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:@\s]+)(?::(\d{1,5}))?$/;
+
+function ServerAdd() {
+  const wsl = useStore((s) => s.wsl);
+  const [kind, setKind] = useState<"ssh" | "wsl">("ssh");
+  const [address, setAddress] = useState("");
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    setError("");
+    let host = address.trim();
+    let user = "";
+    let port = 0;
+    if (kind === "ssh") {
+      const m = addressRe.exec(host);
+      if (!m) {
+        setError("Write it like root@203.0.113.7 or me@example.com:2222");
+        return;
+      }
+      user = m[1] || "";
+      host = m[2].replace(/^\[|\]$/g, "");
+      port = m[3] ? Number(m[3]) : 0;
+    }
+    setBusy(true);
+    try {
+      await addServer({ kind, name: name.trim(), host, user, port, key: key.trim() });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <h3>Add a server</h3>
+      <div className="sub">
+        Macron has to be installed there. The app starts it over SSH and talks to it through the encrypted connection; no port is opened to the internet.
+      </div>
+      {wsl && (
+        <div className="field">
+          <Choice
+            value={kind}
+            options={[
+              ["ssh", "Server over SSH"],
+              ["wsl", "WSL on this PC"],
+            ]}
+            onPick={setKind}
+          />
+        </div>
+      )}
+      {kind === "ssh" ? (
+        <label className="field">
+          <span>Address</span>
+          <input autoFocus spellCheck={false} dir="ltr" placeholder="root@203.0.113.7 or me@example.com:2222" value={address} onChange={(e) => setAddress(e.target.value)} />
+        </label>
+      ) : (
+        <label className="field">
+          <span>Linux distribution</span>
+          <input autoFocus spellCheck={false} dir="ltr" placeholder="The default one" value={address} onChange={(e) => setAddress(e.target.value)} />
+        </label>
+      )}
+      <label className="field">
+        <span>Name</span>
+        <input spellCheck={false} dir="auto" placeholder={kind === "ssh" ? "e.g. Production VPS" : "WSL"} value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      {kind === "ssh" &&
+        (more ? (
+          <label className="field">
+            <span>Private key file</span>
+            <input spellCheck={false} dir="ltr" placeholder="Default: your SSH agent, then ~/.ssh/id_ed25519, id_ecdsa, id_rsa" value={key} onChange={(e) => setKey(e.target.value)} />
+          </label>
+        ) : (
+          <button type="button" className="link-btn" onClick={() => setMore(true)}>
+            Use a specific key file
+          </button>
+        ))}
+      {error && <div className="form-error">{error}</div>}
+      <div className="bar">
+        <span />
+        <div className="left">
+          <button type="button" className="btn" onClick={closeDialog}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary" disabled={busy || (kind === "ssh" && !address.trim())}>
+            {busy ? "Connecting…" : "Add and connect"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function ServerAuth({ id, need, fingerprint }: { id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string }) {
+  const srv = useStore((s) => s.servers.find((x) => x.id === id));
+  const [value, setValue] = useState("");
+  const where = srv ? (srv.user ? srv.user + "@" : "") + (srv.host || "") : "the server";
+  const submit = () => {
+    if (need === "trust") return authServer(id, { trust: fingerprint });
+    if (!value) return;
+    return authServer(id, need === "password" ? { password: value } : { passphrase: value });
+  };
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      {need === "trust" ? (
+        <>
+          <h3>Is this the right server?</h3>
+          <div className="sub">
+            This is the first connection to <b dir="ltr">{srv?.host}</b>. Its key fingerprint is:
+          </div>
+          <pre className="command">{fingerprint}</pre>
+          <div className="hint">
+            Compare it with what <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> prints on the server, or with your hosting panel. Macron remembers it in
+            ~/.ssh/known_hosts and warns you if it ever changes.
+          </div>
+        </>
+      ) : (
+        <>
+          <h3>{need === "password" ? "Password for " + where : "Unlock your SSH key"}</h3>
+          <div className="sub">
+            {need === "password"
+              ? "Used for this session only and never saved. An SSH key spares you this step."
+              : "Your private key is protected with a passphrase. It stays in memory for this session only."}
+          </div>
+          <label className="field">
+            <span>{need === "password" ? "Password" : "Passphrase"}</span>
+            <input autoFocus type="password" value={value} onChange={(e) => setValue(e.target.value)} />
+          </label>
+        </>
+      )}
+      <div className="bar">
+        <span />
+        <div className="left">
+          <button type="button" className="btn" onClick={closeDialog}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary" disabled={need !== "trust" && !value}>
+            {need === "trust" ? "Trust and connect" : "Connect"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
 }
 
 function AskDialog({ ask }: { ask: Ask }) {
@@ -480,6 +656,7 @@ function Section({ title, help, children }: { title: string; help?: string; chil
 function Settings() {
   const info = useStore((s) => s.info);
   const theme = useStore((s) => s.theme);
+  const servers = useStore((s) => s.servers);
   const mod = useMod();
   const [providers, setProviders] = useState<ProviderChoice[] | null>(null);
   const [connections, setConnections] = useState<Connection[] | null>(null);
@@ -570,6 +747,40 @@ function Settings() {
               {!p.enabled && <span className="meta">disabled</span>}
             </button>
           ))}
+        </div>
+        <div className="set-group">Servers</div>
+        <div className="set-list">
+          {!servers.length && <div className="empty-row">No servers yet. Add one to let Macron work on a VPS or in WSL.</div>}
+          {servers.map((s) => (
+            <div key={s.id} className="set-row static">
+              <span className={"state" + (s.state === "ready" ? " ok" : s.state === "failed" ? " bad" : "")} />
+              <span className="grow">
+                <span className="name">{s.name}</span>
+                <span className="meta">
+                  {s.state === "failed" && s.error ? s.error : s.kind === "wsl" ? "WSL" + (s.host ? " · " + s.host : "") : (s.user ? s.user + "@" : "") + s.host}
+                  {s.version ? " · Macron " + s.version : ""}
+                </span>
+              </span>
+              {s.state === "ready" ? (
+                <button type="button" className="btn ghost" onClick={() => disconnectServer(s.id)}>
+                  Disconnect
+                </button>
+              ) : (
+                <button type="button" className="btn ghost" disabled={s.state === "connecting"} onClick={() => connectServer(s.id)}>
+                  Connect
+                </button>
+              )}
+              <button type="button" className="icon-btn" title="Remove" onClick={() => removeServer(s.id)}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+          ))}
+          <button type="button" className="set-row" onClick={() => openDialog({ kind: "server-add" })}>
+            <Icon name="plus" size={14} />
+            <span className="grow">
+              <span className="name">Add a server…</span>
+            </span>
+          </button>
         </div>
         <div className="set-group">Connections</div>
         <div className="set-list">

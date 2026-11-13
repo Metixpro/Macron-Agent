@@ -56,12 +56,36 @@ function useShortcuts() {
   }, []);
 }
 
+declare global {
+  interface Window {
+    macronOpen?: (url: string) => Promise<void>;
+    macronTitle?: (title: string) => Promise<void>;
+  }
+}
+
+function useNative() {
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as Element | null)?.closest?.("a[href]");
+      const href = a?.getAttribute("href") || "";
+      if (!a || !window.macronOpen || !/^(https?:|mailto:)/i.test(href)) return;
+      e.preventDefault();
+      window.macronOpen(href).catch(() => undefined);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
+}
+
 function useTitle() {
   const name = useProjectName();
   const unseen = useStore((s) => s.unseen);
+  const remote = useStore((s) => s.servers.find((x) => x.id === s.machine)?.name || "");
   useEffect(() => {
-    document.title = (unseen ? "● " : "") + (name && name !== "Home" ? name + " · Macron" : "Macron");
-  }, [name, unseen]);
+    const parts = [name && name !== "Home" ? name : "", remote, "Macron"].filter(Boolean);
+    document.title = (unseen ? "● " : "") + parts.join(" · ");
+    window.macronTitle?.(document.title).catch(() => undefined);
+  }, [name, unseen, remote]);
   useEffect(() => {
     const seen = () => setState({ unseen: false });
     window.addEventListener("focus", seen);
@@ -95,6 +119,7 @@ export function App() {
   useEffect(() => connect(), []);
   useShortcuts();
   useTitle();
+  useNative();
 
   return (
     <div className={"app" + (sideOpen ? " side-open" : "")}>

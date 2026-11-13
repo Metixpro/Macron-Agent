@@ -10,3 +10,10 @@ Macron's complete source and build files are available from the release tag at
 https://github.com/Metixpro/Macron-Agent. To rebuild or relink with a modified
 library, check out that tag, run `go mod download`, use `go mod edit -replace`
 to point at your library source, then run `make build` or `make release`.
+
+# Desktop app dependencies
+
+The Windows window uses github.com/jchv/go-webview2 (MIT) and github.com/jchv/go-winloader (ISC),
+which embed Microsoft's WebView2Loader.dll from the WebView2 SDK (BSD 3-Clause). The interface is
+built with React and React DOM (MIT); their bundled notices are in pkg/desk/web/app.js.LEGAL.txt.
+The license texts are included here.

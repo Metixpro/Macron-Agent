@@ -1,10 +1,90 @@
-import { memo } from "react";
-import { openDialog, openProject, removeProject } from "../actions";
+import { memo, useEffect, useRef, useState } from "react";
+import { loadServers, openDialog, openProject, removeProject, switchMachine } from "../actions";
 import { ago, shortPath } from "../format";
 import { useMod } from "../hooks";
 import { Icon } from "../icons";
 import { useStore } from "../store";
-import type { Summary } from "../types";
+import type { ServerView, Summary } from "../types";
+
+function serverLine(s: ServerView): string {
+  if (s.state === "failed" && s.error) return s.error;
+  if (s.state === "connecting") return "Connecting…";
+  if (s.kind === "wsl") return "WSL" + (s.host ? " · " + s.host : "");
+  return (s.user ? s.user + "@" : "") + (s.host || "") + (s.port && s.port !== 22 ? ":" + s.port : "");
+}
+
+function MachineMenu() {
+  const machine = useStore((s) => s.machine);
+  const servers = useStore((s) => s.servers);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    loadServers();
+    const away = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("mousedown", away);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", away);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const cur = servers.find((x) => x.id === machine);
+  const pick = (id: string) => {
+    setOpen(false);
+    switchMachine(id);
+  };
+  return (
+    <div className="machine" ref={ref}>
+      <button type="button" className={"machine-btn" + (open ? " open" : "")} onClick={() => setOpen(!open)} aria-expanded={open}>
+        <Icon name={cur ? (cur.kind === "wsl" ? "terminal" : "server") : "monitor"} size={15} />
+        <span className="mname">{cur ? cur.name : "This PC"}</span>
+        {cur && <span className={"sdot " + cur.state} />}
+        <Icon name="down" size={12} />
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          <button type="button" role="menuitem" className={"mrow" + (machine === "" ? " on" : "")} onClick={() => pick("")}>
+            <Icon name="monitor" size={15} />
+            <span className="grow">
+              <span className="name">This PC</span>
+              <span className="meta">Work on this computer</span>
+            </span>
+            {machine === "" && <Icon name="check" size={14} />}
+          </button>
+          {servers.map((s) => (
+            <button key={s.id} type="button" role="menuitem" className={"mrow" + (machine === s.id ? " on" : "")} onClick={() => pick(s.id)}>
+              <Icon name={s.kind === "wsl" ? "terminal" : "server"} size={15} />
+              <span className="grow">
+                <span className="name">{s.name}</span>
+                <span className={"meta" + (s.state === "failed" ? " bad" : "")}>{serverLine(s)}</span>
+              </span>
+              {machine === s.id ? <Icon name="check" size={14} /> : <span className={"sdot " + s.state} />}
+            </button>
+          ))}
+          <div className="msep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="mrow add"
+            onClick={() => {
+              setOpen(false);
+              openDialog({ kind: "server-add" });
+            }}
+          >
+            <Icon name="plus" size={15} />
+            <span className="grow">
+              <span className="name">Add a server…</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const Row = memo(function Row({ p, on, isHome, home }: { p: Summary; on: boolean; isHome: boolean; home: string }) {
   const preview = p.preview || (isHome ? "General conversations" : shortPath(p.path, home));
@@ -43,6 +123,7 @@ export function Sidebar() {
   return (
     <aside className="side">
       <div className="brand">Macron</div>
+      <MachineMenu />
       <button type="button" className="nav" onClick={() => openDialog({ kind: "folder" })}>
         <Icon name="plus" />
         <span>Open folder</span>

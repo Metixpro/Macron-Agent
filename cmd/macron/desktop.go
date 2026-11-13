@@ -6,10 +6,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -25,7 +26,9 @@ import (
 
 const (
 	settingDeskProjects = "desk_projects"
+	settingDeskServers  = "desk_servers"
 	desktopLog          = "desktop.log"
+	desktopLock         = "desktop.json"
 )
 
 type deskHost struct {
@@ -128,6 +131,23 @@ func (h *deskHost) SaveProjects(paths []string) error {
 	return h.w.st.SetSetting(ctx, settingDeskProjects, string(raw))
 }
 
+func (h *deskHost) Servers() []desk.ServerSpec {
+	raw, _ := h.w.st.Setting(settingDeskServers)
+	var out []desk.ServerSpec
+	_ = json.Unmarshal([]byte(raw), &out)
+	return out
+}
+
+func (h *deskHost) SaveServers(specs []desk.ServerSpec) error {
+	raw, err := json.Marshal(specs)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return h.w.st.SetSetting(ctx, settingDeskServers, string(raw))
+}
+
 func (h *deskHost) DataDir() string        { return config.Home() }
 func (h *deskHost) DefaultProject() string { return h.home }
 
@@ -139,38 +159,112 @@ func defaultDeskFolder() string {
 	return filepath.Join(home, "Macron")
 }
 
+var launch string
+
+func deskFail(format string, a ...any) int {
+	msg := fmt.Sprintf(format, a...)
+	if launch == "desktop" {
+		alert("Macron", msg)
+		return 1
+	}
+	return fail("%s", msg)
+}
+
+type deskLock struct {
+	URL string `json:"url"`
+	PID int    `json:"pid"`
+}
+
+func lockPath() string { return config.HomePath(desktopLock) }
+
+func runningDesktop() (string, bool) {
+	raw, err := os.ReadFile(lockPath())
+	if err != nil {
+		return "", false
+	}
+	var l deskLock
+	if json.Unmarshal(raw, &l) != nil || l.URL == "" {
+		return "", false
+	}
+	u, err := url.Parse(l.URL)
+	if err != nil || u.Hostname() != "127.0.0.1" {
+		return "", false
+	}
+	req, err := http.NewRequest(http.MethodGet, u.Scheme+"://"+u.Host+"/api/state", nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set("Authorization", "Bearer "+u.Query().Get("t"))
+	client := &http.Client{Timeout: 3 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	res.Body.Close()
+	return l.URL, res.StatusCode == http.StatusOK
+}
+
+func writeLock(address string) {
+	raw, _ := json.Marshal(deskLock{URL: address, PID: os.Getpid()})
+	_ = os.WriteFile(lockPath(), raw, 0o600)
+}
+
+func removeLock(address string) {
+	raw, err := os.ReadFile(lockPath())
+	if err != nil {
+		return
+	}
+	var l deskLock
+	if json.Unmarshal(raw, &l) == nil && l.URL == address {
+		_ = os.Remove(lockPath())
+	}
+}
+
 func runDesktop(args []string) int {
 	fs := flag.NewFlagSet("desktop", flag.ContinueOnError)
 	addr := fs.String("addr", "127.0.0.1:0", "where the desktop engine listens (keep it on 127.0.0.1)")
 	noOpen := fs.Bool("no-open", false, "do not open a window or a browser")
 	serve := fs.Bool("serve", false, "run only the engine (for a server the desktop app connects to)")
+	asJSON := fs.Bool("json", false, "with --serve: print the address and token as JSON and stop when stdin closes")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	_ = config.LoadDefaultDotEnv()
 	if err := os.MkdirAll(config.Home(), 0o700); err != nil {
-		return fail("%v", err)
+		return deskFail("%v", err)
 	}
 	if f, err := os.OpenFile(config.HomePath(desktopLog), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
 		defer f.Close()
 		log.SetOutput(f)
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if !*serve && !*noOpen {
+		if address, ok := runningDesktop(); ok {
+			if !showWindow(ctx, address) {
+				if err := openAppBrowser(address); err != nil {
+					return deskFail("Macron is already running at %s", address)
+				}
+			}
+			return 0
+		}
+	}
 	folder := defaultDeskFolder()
 	if err := os.MkdirAll(folder, 0o755); err != nil {
-		return fail("%v", err)
+		return deskFail("%v", err)
 	}
 	userHome, _ := os.UserHomeDir()
 	w, err := setupWorkspace(userHome)
 	if err != nil {
-		return fail("%v", err)
+		return deskFail("%v", err)
 	}
 	defer w.close()
 	host := &deskHost{w: w, sessions: map[string]*terminal{}, home: folder}
 	srv := desk.New(host)
 	srv.Notify = desktopNotify
-	ln, url, err := srv.Listen(*addr)
+	ln, address, err := srv.Listen(*addr)
 	if err != nil {
-		return fail("%v", err)
+		return deskFail("%v", err)
 	}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -178,46 +272,36 @@ func runDesktop(args []string) int {
 			log.Printf("desktop server: %v", err)
 		}
 	}()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if *serve {
-		fmt.Printf("Macron engine on %s (token %s)\n", ln.Addr(), srv.Token())
-	} else {
-		fmt.Println("Macron desktop:", url)
-	}
-	if !*noOpen && !*serve {
-		if err := openWindow(ctx, url); err != nil {
-			fmt.Fprintln(os.Stderr, "open it in your browser:", url)
-		} else if windowOwnsLife {
+	switch {
+	case *serve && *asJSON:
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"addr": ln.Addr().String(), "token": srv.Token(), "version": app.Version})
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
 			stop()
+		}()
+	case *serve:
+		fmt.Printf("Macron engine on %s (token %s)\n", ln.Addr(), srv.Token())
+	default:
+		writeLock(address)
+		defer removeLock(address)
+		fmt.Println("Macron desktop:", address)
+		if !*noOpen {
+			if showWindow(ctx, address) {
+				stop()
+			} else if err := openAppBrowser(address); err != nil {
+				fmt.Fprintln(os.Stderr, "open it in your browser:", address)
+			}
 		}
 	}
 	<-ctx.Done()
+	srv.Close()
 	sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = hs.Shutdown(sctx)
-	h := host
-	h.mu.Lock()
-	for _, t := range h.sessions {
+	host.mu.Lock()
+	for _, t := range host.sessions {
 		w.app.Machine.StopShell(t.session)
 	}
-	h.mu.Unlock()
+	host.mu.Unlock()
 	return 0
 }
-
-var windowOwnsLife = false
-
-func openWindow(_ context.Context, url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	return cmd.Start()
-}
-
-func desktopNotify(title, body string) {}

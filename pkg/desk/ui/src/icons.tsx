@@ -25,6 +25,10 @@ const paths = {
   code: "M8 7l-5 5 5 5M16 7l5 5-5 5",
   square: "M7 7h10v10H7z",
   steps: "M5 6h.01M5 12h.01M5 18h.01M9 6h10M9 12h10M9 18h10",
+  server: "M4 4.5h16v6H4zM4 13.5h16v6H4zM8 7.5h.01M8 16.5h.01",
+  terminal: "M5 7l5 5-5 5M12.5 17H19",
+  key: "M14.5 9.5a3.5 3.5 0 1 0-1.2 2.6L20 18.8V21h-2.5v-1.5H16V18h-1.5l-1.2-1.2",
+  lock: "M7 11V8a5 5 0 0 1 10 0v3M5.5 11h13v9.5h-13z",
 } as const;
 
 export type IconName = keyof typeof paths;

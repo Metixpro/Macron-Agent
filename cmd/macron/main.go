@@ -31,6 +31,8 @@ func main() {
 	config.ActivateToolEnv()
 	args := os.Args[1:]
 	switch {
+	case launch == "desktop" && len(args) == 0:
+		os.Exit(runDesktop(nil))
 	case len(args) > 0 && (args[0] == "bale" || args[0] == "rubika" || args[0] == "eitaa"):
 		if len(args) < 2 || args[1] != "run" {
 			fmt.Fprintf(os.Stderr, "usage: macron %s run [flags]\n", args[0])

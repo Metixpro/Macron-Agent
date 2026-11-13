@@ -8,6 +8,7 @@ export function Header() {
   const name = useProjectName();
   const path = useStore((s) => s.projects.find((p) => p.id === s.current)?.path || "");
   const home = useStore((s) => s.home);
+  const remote = useStore((s) => s.servers.find((x) => x.id === s.machine)?.name || "");
   const mod = useMod();
   return (
     <header className="top">
@@ -16,6 +17,12 @@ export function Header() {
       </button>
       <div className="title">
         <h1>{name}</h1>
+        {remote && (
+          <span className="on-server" title="Macron works on this server">
+            <Icon name="server" size={12} />
+            {remote}
+          </span>
+        )}
         <span className="path" title={path}>
           {"‎" + shortPath(path, home) + "‎"}
         </span>

@@ -1,4 +1,14 @@
-import type { Connection, Info, Listing, Mode, ProviderChoice, Snapshot, StateResponse, Summary } from "./types";
+import type { ConnectResult, Connection, Info, Listing, Mode, ProviderChoice, ServerView, Snapshot, StateResponse, Summary } from "./types";
+
+let base = "";
+
+export function setBase(b: string) {
+  base = b;
+}
+
+export function apiBase(): string {
+  return base;
+}
 
 export class ApiError extends Error {
   hint: string;
@@ -29,25 +39,32 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 type InfoResponse = { info: Info; mode: Mode };
 type Ok = { ok: boolean };
 
-const p = (id: string) => `/api/projects/${encodeURIComponent(id)}`;
+const p = (id: string) => `${base}/api/projects/${encodeURIComponent(id)}`;
+const r = (path: string) => base + path;
 
 export const server = {
-  state: () => call<StateResponse>("GET", "/api/state"),
+  state: () => call<StateResponse>("GET", r("/api/state")),
   project: (id: string) => call<Snapshot>("GET", p(id)),
   send: (id: string, text: string) => call<Ok>("POST", p(id) + "/send", { text }),
   stop: (id: string) => call<Ok>("POST", p(id) + "/stop"),
   newChat: (id: string) => call<Ok>("POST", p(id) + "/new"),
   compact: (id: string) => call<{ text: string }>("POST", p(id) + "/compact"),
   answer: (id: string, ask: string, choice: string) => call<Ok>("POST", p(id) + "/answer", { id: ask, choice }),
-  addProject: (path: string) => call<Summary>("POST", "/api/projects", { path }),
+  addProject: (path: string) => call<Summary>("POST", r("/api/projects"), { path }),
   removeProject: (id: string) => call<Ok>("DELETE", p(id)),
-  models: () => call<{ current: string; models: string[] | null }>("GET", "/api/models"),
-  setModel: (name: string) => call<InfoResponse>("POST", "/api/model", { name }),
-  providers: () => call<{ providers: ProviderChoice[] | null }>("GET", "/api/providers"),
-  setProvider: (id: number) => call<InfoResponse>("POST", "/api/provider", { id }),
-  setMode: (mode: Mode) => call<InfoResponse>("POST", "/api/mode", { mode }),
-  setApprovals: (mode: string) => call<InfoResponse>("POST", "/api/approvals", { mode }),
-  setYolo: (on: boolean) => call<InfoResponse>("POST", "/api/yolo", { on }),
-  connections: () => call<{ connections: Connection[] | null }>("GET", "/api/connections"),
-  fs: (path: string) => call<Listing>("GET", "/api/fs?path=" + encodeURIComponent(path)),
+  models: () => call<{ current: string; models: string[] | null }>("GET", r("/api/models")),
+  setModel: (name: string) => call<InfoResponse>("POST", r("/api/model"), { name }),
+  providers: () => call<{ providers: ProviderChoice[] | null }>("GET", r("/api/providers")),
+  setProvider: (id: number) => call<InfoResponse>("POST", r("/api/provider"), { id }),
+  setMode: (mode: Mode) => call<InfoResponse>("POST", r("/api/mode"), { mode }),
+  setApprovals: (mode: string) => call<InfoResponse>("POST", r("/api/approvals"), { mode }),
+  setYolo: (on: boolean) => call<InfoResponse>("POST", r("/api/yolo"), { on }),
+  connections: () => call<{ connections: Connection[] | null }>("GET", r("/api/connections")),
+  fs: (path: string) => call<Listing>("GET", r("/api/fs?path=") + encodeURIComponent(path)),
+  servers: () => call<{ servers: ServerView[] | null; wsl: boolean }>("GET", "/api/servers"),
+  addServer: (spec: Partial<ServerView>) => call<ServerView>("POST", "/api/servers", spec),
+  removeServer: (id: string) => call<Ok>("DELETE", "/api/servers/" + encodeURIComponent(id)),
+  connectServer: (id: string, secrets: { password?: string; passphrase?: string; trust?: string }) =>
+    call<ConnectResult>("POST", "/api/servers/" + encodeURIComponent(id) + "/connect", secrets),
+  disconnectServer: (id: string) => call<Ok>("POST", "/api/servers/" + encodeURIComponent(id) + "/disconnect"),
 };

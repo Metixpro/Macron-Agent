@@ -1,4 +1,5 @@
-import { composer, fail, loadState, openProject, refreshState, toast } from "./actions";
+import { apiBase } from "./api";
+import { composer, fail, loadServers, loadState, openProject, refreshState, stream, switchMachine, toast } from "./actions";
 import { projectName } from "./format";
 import { getState, patchLive, setState } from "./store";
 import type { Ask, Block, LiveSub, LiveTool, PlanItem, ServerEvent, Usage } from "./types";
@@ -7,15 +8,23 @@ let source: EventSource | null = null;
 let seq = 0;
 
 export function connect() {
-  if (source) return;
-  source = new EventSource("/api/events");
-  source.addEventListener("open", () => {
+  source?.close();
+  const es = new EventSource(apiBase() + "/api/events");
+  source = es;
+  es.addEventListener("open", () => {
+    if (source !== es) return;
     seq = 0;
     setState({ online: true });
     resync();
+    if (!getState().machine) loadServers();
   });
-  source.addEventListener("error", () => setState({ online: false }));
-  source.addEventListener("message", (m) => {
+  es.addEventListener("error", () => {
+    if (source !== es) return;
+    setState({ online: false });
+    if (es.readyState === EventSource.CLOSED) lost(es);
+  });
+  es.addEventListener("message", (m) => {
+    if (source !== es) return;
     let ev: ServerEvent;
     try {
       ev = JSON.parse(m.data);
@@ -24,6 +33,24 @@ export function connect() {
     }
     onEvent(ev);
   });
+}
+
+stream.reconnect = connect;
+
+async function lost(es: EventSource) {
+  const machine = getState().machine;
+  if (machine) {
+    await loadServers();
+    const srv = getState().servers.find((x) => x.id === machine);
+    if (!srv || srv.state !== "ready") {
+      toast(`Lost the connection to ${srv?.name || "the server"}`, 6000);
+      await switchMachine("");
+      return;
+    }
+  }
+  window.setTimeout(() => {
+    if (source === es) connect();
+  }, 2000);
 }
 
 async function resync() {
@@ -46,6 +73,7 @@ function onEvent(ev: ServerEvent) {
   }
   seq = ev.seq || seq;
   if (ev.type === "projects" || ev.type === "info") return refreshState();
+  if (ev.type === "servers") return void loadServers();
   if (!ev.project) return;
   const s = getState();
   if (ev.project === s.current) onProjectEvent(ev);
