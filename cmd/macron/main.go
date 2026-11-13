@@ -45,6 +45,8 @@ func main() {
 		os.Exit(runTerminal())
 	case len(args) > 1 && (args[0] == "telegram" || args[0] == "tg") && args[1] == "run":
 		args = args[2:]
+	case len(args) > 0 && args[0] == "desktop":
+		os.Exit(runDesktop(args[1:]))
 	case len(args) > 0 && runCommand(args):
 		return
 	}

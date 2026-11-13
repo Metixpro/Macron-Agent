@@ -13,7 +13,7 @@ import (
 
 var statusRe = regexp.MustCompile(`status (\d{3})`)
 
-func explainError(err error) (string, string) {
+func ExplainError(err error) (string, string) {
 	s := strings.ToLower(err.Error())
 	code := 0
 	if m := statusRe.FindStringSubmatch(s); m != nil {
@@ -59,7 +59,7 @@ func firstLine(s string) string {
 }
 
 func errorBlock(err error, width int) string {
-	title, hint := explainError(err)
+	title, hint := ExplainError(err)
 	indent := func(text string, st func(...string) string) string {
 		return "  " + strings.ReplaceAll(st(wrap(text, max(width-4, 10))), "\n", "\n  ")
 	}

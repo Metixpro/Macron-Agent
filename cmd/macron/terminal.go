@@ -71,6 +71,110 @@ func fail(format string, a ...any) int {
 	return 1
 }
 
+type workspace struct {
+	st     *store.Store
+	prov   *providers.Manager
+	app    *app.App
+	bot    *Bot
+	gate   *cmdgate.Gate
+	mem    *memory.Manager
+	window func() int
+	pm     *plugins.Manager
+	stop   context.CancelFunc
+}
+
+func setupWorkspace(gateDir string) (*workspace, error) {
+	secretKey, err := config.SecretKey()
+	if err != nil {
+		return nil, err
+	}
+	loc, err := config.Location()
+	if err != nil {
+		return nil, err
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	w := &workspace{stop: stop}
+	st, err := store.Open(ctx, envOrDefault(config.EnvDB, config.HomePath(config.FileDB)), store.Options{Location: loc, SecretKey: secretKey})
+	if err != nil {
+		stop()
+		return nil, fmt.Errorf("the database: %w", err)
+	}
+	w.st = st
+	usage := func(provider string, u llm.Usage, failed bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = st.RecordStat(ctx, store.StatProvider, provider, failed, u.PromptTokens, u.CompletionTokens)
+	}
+	prov, err := providers.New(ctx, st, llm.NewHTTPClient(), usage)
+	if err != nil {
+		w.close()
+		return nil, fmt.Errorf("providers: %w", err)
+	}
+	w.prov = prov
+	cfg := &config.Config{OptionalAPIURL: true}
+	fs := flag.NewFlagSet("macron", flag.ContinueOnError)
+	cfg.Bind(fs)
+	if _, err := cfg.Validate(fs); err != nil {
+		w.close()
+		return nil, err
+	}
+	seedProvider(ctx, st, cfg)
+	if err := prov.Reload(ctx); err != nil {
+		w.close()
+		return nil, fmt.Errorf("providers: %w", err)
+	}
+	w.window = contextWindow(st, prov, cfg.ContextWindow)
+	br, err := brain.Open(config.Home(), agent.DefaultSoul)
+	if err != nil {
+		w.close()
+		return nil, fmt.Errorf("the home folder %s: %w", config.Home(), err)
+	}
+	a, err := app.NewWith(ctx, cfg, agent.ChannelCLI, prov, agent.Options{Location: loc, Soul: br.Soul, ContextWindow: w.window})
+	if err != nil {
+		w.close()
+		return nil, err
+	}
+	w.app = a
+	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))
+	w.bot = &Bot{app: a, st: st, prov: prov, loc: loc, jobCtx: ctx, started: time.Now(), personal: true, brain: br, envWindow: cfg.ContextWindow}
+	w.gate = w.bot.commandGate(gateDir)
+	a.Registry.Gate, a.Registry.CheckpointDir = w.gate, config.HomePath("checkpoints")
+	a.Agent.Teachings = w.bot.teachings
+	w.pm = &plugins.Manager{Dir: cfg.PluginsDir, MCPFile: cfg.MCPConfig, Machine: a.Machine, HTTP: pluginHTTP(cfg.UseEnvProxy),
+		States: pluginStates{st}, Version: app.Version, IsAdmin: func(string) bool { return true }, Reserved: a.Registry.Builtin}
+	w.pm.Reload(ctx)
+	a.Registry.SetPlugins(w.pm)
+	w.mem = memory.New(st, prov, func() int { return historyBudget(st, w.window()) })
+	return w, nil
+}
+
+func (w *workspace) open(dir string) (*terminal, error) {
+	t := &terminal{st: w.st, prov: w.prov, app: w.app, bot: w.bot, window: w.window, dir: dir, shown: shortDir(dir), gate: w.gate, mem: w.mem}
+	sum := sha256.Sum256([]byte(dir))
+	t.session = "term-" + hex.EncodeToString(sum[:6])
+	t.uid = -int64(binary.BigEndian.Uint64(sum[8:16])>>2) - 1
+	if _, err := w.app.Machine.Bind(t.session, dir); err != nil {
+		return nil, err
+	}
+	excludeWork(dir)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if mc, err := t.mem.Load(ctx, t.uid); err == nil {
+		t.resumed = mc.Messages
+	}
+	return t, nil
+}
+
+func (w *workspace) close() {
+	if w.pm != nil {
+		w.pm.Close()
+	}
+	if w.st != nil {
+		w.st.Close()
+	}
+	w.stop()
+}
+
 func runTerminal() int {
 	_ = config.LoadDefaultDotEnv()
 	if err := os.MkdirAll(config.Home(), 0o700); err != nil {
@@ -87,75 +191,16 @@ func runTerminal() int {
 	if dir, err = filepath.EvalSymlinks(dir); err != nil {
 		return fail("%v", err)
 	}
-	secretKey, err := config.SecretKey()
+	w, err := setupWorkspace(dir)
 	if err != nil {
 		return fail("%v", err)
 	}
-	loc, err := config.Location()
+	defer w.close()
+	t, err := w.open(dir)
 	if err != nil {
 		return fail("%v", err)
 	}
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
-	st, err := store.Open(ctx, envOrDefault(config.EnvDB, config.HomePath(config.FileDB)), store.Options{Location: loc, SecretKey: secretKey})
-	if err != nil {
-		return fail("the database: %v", err)
-	}
-	defer st.Close()
-	usage := func(provider string, u llm.Usage, failed bool) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = st.RecordStat(ctx, store.StatProvider, provider, failed, u.PromptTokens, u.CompletionTokens)
-	}
-	prov, err := providers.New(ctx, st, llm.NewHTTPClient(), usage)
-	if err != nil {
-		return fail("providers: %v", err)
-	}
-	cfg := &config.Config{OptionalAPIURL: true}
-	fs := flag.NewFlagSet("macron", flag.ContinueOnError)
-	cfg.Bind(fs)
-	if _, err := cfg.Validate(fs); err != nil {
-		return fail("%v", err)
-	}
-	seedProvider(ctx, st, cfg)
-	if err := prov.Reload(ctx); err != nil {
-		return fail("providers: %v", err)
-	}
-	window := contextWindow(st, prov, cfg.ContextWindow)
-	br, err := brain.Open(config.Home(), agent.DefaultSoul)
-	if err != nil {
-		return fail("the home folder %s: %v", config.Home(), err)
-	}
-	a, err := app.NewWith(ctx, cfg, agent.ChannelCLI, prov, agent.Options{Location: loc, Soul: br.Soul, ContextWindow: window})
-	if err != nil {
-		return fail("%v", err)
-	}
-	a.Search.Treg.SetTokenSource(tregToken(st, cfg.TregToken))
-	b := &Bot{app: a, st: st, prov: prov, loc: loc, jobCtx: ctx, started: time.Now(), personal: true, brain: br, envWindow: cfg.ContextWindow}
-
-	t := &terminal{st: st, prov: prov, app: a, bot: b, window: window, dir: dir, shown: shortDir(dir)}
-	sum := sha256.Sum256([]byte(dir))
-	t.session = "term-" + hex.EncodeToString(sum[:6])
-	t.uid = -int64(binary.BigEndian.Uint64(sum[8:16])>>2) - 1
-	if _, err := a.Machine.Bind(t.session, dir); err != nil {
-		return fail("%v", err)
-	}
-	defer a.Machine.StopShell(t.session)
-	excludeWork(dir)
-
-	t.gate = b.commandGate(dir)
-	a.Registry.Gate, a.Registry.CheckpointDir = t.gate, config.HomePath("checkpoints")
-	a.Agent.Teachings = b.teachings
-	pm := &plugins.Manager{Dir: cfg.PluginsDir, MCPFile: cfg.MCPConfig, Machine: a.Machine, HTTP: pluginHTTP(cfg.UseEnvProxy),
-		States: pluginStates{st}, Version: app.Version, IsAdmin: func(string) bool { return true }, Reserved: a.Registry.Builtin}
-	pm.Reload(ctx)
-	a.Registry.SetPlugins(pm)
-	defer pm.Close()
-
-	t.mem = memory.New(st, prov, func() int { return historyBudget(st, window()) })
-	if mc, err := t.mem.Load(ctx, t.uid); err == nil {
-		t.resumed = mc.Messages
-	}
+	defer w.app.Machine.StopShell(t.session)
 	services := []string{}
 	for _, spec := range tools.ConnectionSpecs() {
 		services = append(services, spec.ID)

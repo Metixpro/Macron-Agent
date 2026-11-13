@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macron</title>
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/code.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="mark">M</span><span class="word">macron</span></div>
+    <button class="add-folder" id="addFolder" type="button"><span>＋</span> Open a folder</button>
+    <div class="side-label">Workspaces</div>
+    <nav class="projects" id="projects"></nav>
+    <div class="side-foot">
+      <button class="side-btn" id="openSettings" type="button"><span class="ico">⚙</span> Settings</button>
+      <div class="engine" id="engine"><span class="dot"></span><span class="engine-text">Connecting…</span></div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="top">
+      <button class="icon-btn menu" id="toggleSide" type="button" title="Workspaces">☰</button>
+      <div class="title">
+        <h1 id="pname">Macron</h1>
+        <span id="ppath" class="path"></span>
+      </div>
+      <div class="controls">
+        <div class="seg" id="mode">
+          <button type="button" data-mode="build">Build</button>
+          <button type="button" data-mode="plan">Plan</button>
+        </div>
+        <button class="model-btn" id="modelBtn" type="button"><span class="model-name" id="modelName">…</span><span class="caret">▾</span></button>
+        <button class="icon-btn" id="newChat" type="button" title="New conversation (Ctrl+N)">✎</button>
+      </div>
+    </header>
+    <section class="feed" id="feed"><div class="feed-inner" id="feedInner"></div></section>
+    <div class="live" id="live"></div>
+    <footer class="composer">
+      <div class="box" id="box">
+        <textarea id="input" rows="1" dir="auto" placeholder="Ask Macron anything… build, fix, research, automate"></textarea>
+        <div class="box-actions">
+          <span class="queued" id="queued"></span>
+          <button class="stop" id="stop" type="button" title="Stop (Esc)">■</button>
+          <button class="send" id="send" type="button" title="Send (Enter)">↑</button>
+        </div>
+      </div>
+      <div class="hints" id="hints"><span>Enter to send · Shift+Enter for a new line</span><span id="usage"></span></div>
+    </footer>
+  </main>
+</div>
+<div class="overlay" id="overlay"></div>
+<div class="toast" id="toast"></div>
+<script type="module" src="/assets/app.js"></script>
+</body>
+</html>

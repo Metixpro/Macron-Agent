@@ -59,7 +59,7 @@ func strArg(a map[string]any, k string) string {
 	return ""
 }
 
-func toolTitle(name, args string, width int) string {
+func ToolHeading(name, args string) (string, string) {
 	title := toolTitles[name]
 	if title == "" {
 		title = name
@@ -83,6 +83,11 @@ func toolTitle(name, args string, width int) string {
 			arg = "\"" + arg + "\""
 		}
 	}
+	return title, arg
+}
+
+func toolTitle(name, args string, width int) string {
+	title, arg := ToolHeading(name, args)
 	head := stBold.Render(title)
 	if arg != "" {
 		head += stDim.Render("(") + clip(arg, max(width-len(title)-6, 12)) + stDim.Render(")")
