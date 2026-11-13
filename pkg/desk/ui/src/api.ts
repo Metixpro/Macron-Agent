@@ -61,6 +61,8 @@ export const server = {
   setYolo: (on: boolean) => call<InfoResponse>("POST", r("/api/yolo"), { on }),
   connections: () => call<{ connections: Connection[] | null }>("GET", r("/api/connections")),
   fs: (path: string) => call<Listing>("GET", r("/api/fs?path=") + encodeURIComponent(path)),
+  connectModel: (m: { name: string; url: string; key: string; model: string }) => call<InfoResponse>("POST", r("/api/providers/connect"), m),
+  listModels: (url: string, key: string) => call<{ models: string[] | null }>("POST", r("/api/providers/models"), { url, key }),
   servers: () => call<{ servers: ServerView[] | null; wsl: boolean }>("GET", "/api/servers"),
   addServer: (spec: Partial<ServerView>) => call<ServerView>("POST", "/api/servers", spec),
   removeServer: (id: string) => call<Ok>("DELETE", "/api/servers/" + encodeURIComponent(id)),

@@ -85,8 +85,13 @@ function ModelButton() {
   const model = useStore((s) => s.info.model);
   const provider = useStore((s) => s.info.provider);
   return (
-    <button type="button" className="model" title={provider ? `${provider} · change the model` : "Pick a model"} onClick={() => openDialog({ kind: "palette", mode: "models" })}>
-      <span>{model || "No model"}</span>
+    <button
+      type="button"
+      className={"model" + (model ? "" : " missing")}
+      title={provider ? `${provider} · change the model` : "Connect a model"}
+      onClick={() => openDialog(model ? { kind: "palette", mode: "models" } : { kind: "model-connect" })}
+    >
+      <span>{model || "Connect a model"}</span>
       <Icon name="down" size={12} />
     </button>
   );

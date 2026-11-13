@@ -10,6 +10,7 @@ export type Dialog =
   | { kind: "folder" }
   | { kind: "settings" }
   | { kind: "server-add" }
+  | { kind: "model-connect" }
   | { kind: "server-auth"; id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; message?: string }
   | null;
 

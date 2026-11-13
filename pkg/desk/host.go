@@ -58,4 +58,6 @@ type Host interface {
 	DefaultProject() string
 	Servers() []ServerSpec
 	SaveServers(specs []ServerSpec) error
+	ConnectModel(ctx context.Context, name, endpoint, key, model string) error
+	ListModels(ctx context.Context, endpoint, key string) ([]string, error)
 }

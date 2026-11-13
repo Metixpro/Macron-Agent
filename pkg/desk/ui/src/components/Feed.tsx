@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { follow, toast } from "../actions";
+import { follow, openDialog, toast } from "../actions";
 import { bidi, clock, copyText, prettyArgs, shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
 import { Icon } from "../icons";
@@ -212,6 +212,7 @@ function Intro() {
   const isHome = useStore((s) => s.current === s.defaultId);
   const path = useStore((s) => shortPath(s.projects.find((p) => p.id === s.current)?.path || "", s.home));
   const mod = useMod();
+  const noModel = useStore((s) => s.online === true && !s.info.model);
   const keys: [string, string[]][] = [
     ["Command palette", [mod, "K"]],
     ["New conversation", [mod, "N"]],
@@ -223,6 +224,17 @@ function Intro() {
     <div className="intro">
       <div className="intro-name">{name}</div>
       <div className="intro-path">{"‎" + path}</div>
+      {noModel && (
+        <div className="setup-card">
+          <div>
+            <div className="setup-title">Connect a model to start</div>
+            <div className="setup-text">Macron needs a language model: OpenAI, Anthropic, Gemini, OpenRouter, a local Ollama, or any compatible provider.</div>
+          </div>
+          <button type="button" className="btn primary" onClick={() => openDialog({ kind: "model-connect" })}>
+            Connect a model
+          </button>
+        </div>
+      )}
       <p>
         {isHome
           ? "Conversations that don't belong to a project live here. Open a folder to give Macron a project to work in."

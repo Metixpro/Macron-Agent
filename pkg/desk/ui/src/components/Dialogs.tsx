@@ -73,6 +73,12 @@ export function Dialogs() {
           <Settings />
         </Modal>
       );
+    case "model-connect":
+      return (
+        <Modal kind="form" dismiss>
+          <ModelConnect />
+        </Modal>
+      );
     case "server-add":
       return (
         <Modal kind="form" dismiss>
@@ -86,6 +92,129 @@ export function Dialogs() {
         </Modal>
       );
   }
+}
+
+const PRESETS = [
+  { id: "openai", label: "OpenAI", url: "https://api.openai.com/v1", key: true },
+  { id: "anthropic", label: "Anthropic", url: "https://api.anthropic.com/v1/messages", key: true },
+  { id: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/api/v1", key: true },
+  { id: "gemini", label: "Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", key: true },
+  { id: "deepseek", label: "DeepSeek", url: "https://api.deepseek.com/v1", key: true },
+  { id: "ollama", label: "Ollama", url: "http://localhost:11434/v1", key: false },
+  { id: "custom", label: "Other", url: "", key: true },
+] as const;
+
+function ModelConnect() {
+  const [preset, setPreset] = useState<(typeof PRESETS)[number]["id"]>("openai");
+  const p = PRESETS.find((x) => x.id === preset) || PRESETS[0];
+  const [url, setUrl] = useState<string>(p.url);
+  const [key, setKey] = useState("");
+  const [model, setModel] = useState("");
+  const [models, setModels] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const pick = (id: (typeof PRESETS)[number]["id"]) => {
+    const next = PRESETS.find((x) => x.id === id) || PRESETS[0];
+    setPreset(id);
+    setUrl(next.url);
+    setModels(null);
+    setError("");
+  };
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const r = await server.listModels(url, key);
+      setModels((r.models || []).slice().sort());
+      if (!(r.models || []).length) setError("The provider did not list any models; type the model's name.");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await server.connectModel({ name: preset === "custom" ? "custom" : preset, url: url.trim(), key: key.trim(), model: model.trim() });
+      setState({ info: r.info, dialog: null });
+      toast("Connected: " + model.trim());
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const shown = (models || []).filter((m) => m.toLowerCase().includes(model.trim().toLowerCase())).slice(0, 200);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <h3>Connect a model</h3>
+      <div className="sub">Macron thinks with a language model from a provider you choose. Your key stays on this machine.</div>
+      <div className="presets">
+        {PRESETS.map((x) => (
+          <button key={x.id} type="button" className={"preset" + (x.id === preset ? " on" : "")} onClick={() => pick(x.id)}>
+            {x.label}
+          </button>
+        ))}
+      </div>
+      <label className="field">
+        <span>Address</span>
+        <input spellCheck={false} dir="ltr" placeholder="https://…/v1" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </label>
+      {p.key && (
+        <label className="field">
+          <span>API key</span>
+          <input autoFocus type="password" spellCheck={false} dir="ltr" value={key} onChange={(e) => setKey(e.target.value)} />
+        </label>
+      )}
+      <label className="field">
+        <span className="field-head">
+          Model
+          <button type="button" className="link-btn inline" disabled={loading || !url.trim()} onClick={load}>
+            {loading ? "Loading…" : models ? "Reload the list" : "Show the provider's models"}
+          </button>
+        </span>
+        <input spellCheck={false} dir="ltr" placeholder="The model's exact name" value={model} onChange={(e) => setModel(e.target.value)} />
+      </label>
+      {models && shown.length > 0 && (
+        <div className="model-list">
+          {shown.map((m) => (
+            <button key={m} type="button" className={"entry" + (m === model ? " sel" : "")} onClick={() => setModel(m)}>
+              <span className="label">{m}</span>
+              {m === model && (
+                <span className="end">
+                  <Icon name="check" size={14} />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <div className="form-error">{error}</div>}
+      <div className="bar">
+        <span />
+        <div className="left">
+          <button type="button" className="btn" onClick={closeDialog}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary" disabled={busy || !url.trim() || !model.trim()}>
+            {busy ? "Testing…" : "Test and connect"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
 }
 
 const addressRe = /^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:@\s]+)(?::(\d{1,5}))?$/;
@@ -376,7 +505,10 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       appMode === "plan"
         ? { id: "mode", group: "Actions", label: "Switch to Build mode", hint: "Let Macron make changes", icon: "code", keys: [mod, "Shift", "P"], run: () => toggleMode() }
         : { id: "mode", group: "Actions", label: "Switch to Plan mode", hint: "Plan first, change nothing", icon: "map", keys: [mod, "Shift", "P"], run: () => toggleMode() },
-      { id: "model", group: "Actions", label: "Change model…", hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) },
+      info.model
+        ? { id: "model", group: "Actions", label: "Change model…", hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) }
+        : { id: "model", group: "Actions", label: "Connect a model…", icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
+      { id: "connect", group: "Actions", label: "Connect another provider…", icon: "plus", run: () => openDialog({ kind: "model-connect" }) },
       { id: "folder", group: "Actions", label: "Open folder…", icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
       { id: "compact", group: "Actions", label: "Compact the conversation", hint: "Summarise to free room", icon: "layers", run: () => compact() },
       { id: "settings", group: "Actions", label: "Settings", icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
@@ -406,7 +538,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
   const { sel, setSel, listRef, move } = useList(shown.length);
 
   const pick = (e: Entry) => {
-    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings";
+    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect";
     if (!opensDialog) closeDialog();
     e.run();
   };
@@ -730,7 +862,7 @@ function Settings() {
         <div className="set-group">Model</div>
         <div className="set-list">
           {providers === null && <div className="empty-row">Loading…</div>}
-          {providers && !providers.length && <div className="empty-row">No provider yet. Run «macron setup» in a terminal to connect one.</div>}
+          {providers && !providers.length && <div className="empty-row">No model connected yet.</div>}
           {(providers || []).map((p) => (
             <button
               key={p.id}
@@ -747,6 +879,12 @@ function Settings() {
               {!p.enabled && <span className="meta">disabled</span>}
             </button>
           ))}
+          <button type="button" className="set-row" onClick={() => openDialog({ kind: "model-connect" })}>
+            <Icon name="plus" size={14} />
+            <span className="grow">
+              <span className="name">Connect a model…</span>
+            </span>
+          </button>
         </div>
         <div className="set-group">Servers</div>
         <div className="set-list">

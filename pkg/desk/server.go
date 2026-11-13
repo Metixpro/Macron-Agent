@@ -130,6 +130,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/model", s.setModelAPI)
 	mux.HandleFunc("GET /api/providers", s.providersAPI)
 	mux.HandleFunc("POST /api/provider", s.setProviderAPI)
+	mux.HandleFunc("POST /api/providers/connect", s.connectModelAPI)
+	mux.HandleFunc("POST /api/providers/models", s.listModelsAPI)
 	mux.HandleFunc("POST /api/mode", s.modeAPI)
 	mux.HandleFunc("POST /api/approvals", s.approvalsAPI)
 	mux.HandleFunc("POST /api/yolo", s.yoloAPI)
@@ -212,7 +214,70 @@ func readJSON(r *http.Request, v any) error {
 	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20)).Decode(v)
 }
 
-func explain(err error) (string, string) { return tui.ExplainError(err) }
+var deskHints = map[string]string{
+	"Connect one with /connect model":                                  "Connect one in Settings, or press Ctrl+K and choose Connect a model",
+	"Check the key with /connect model, or switch with /provider":      "Check the API key: Settings, then Connect a model",
+	"Wait a moment and try again, or switch with /provider":            "Wait a moment and try again, or switch provider in Settings",
+	"Free room with /compact, or start fresh with /new":                "Free room with /compact, or start a new conversation",
+	"Pick another one with /model":                                     "Pick another one from the model menu under the message box",
+	"Try again in a moment, or switch with /model or /provider":        "Try again in a moment, or pick another model",
+	"Check the network, or the provider's address with /connect model": "Check the network, or the provider's address: Settings, then Connect a model",
+}
+
+func explain(err error) (string, string) {
+	title, hint := tui.ExplainError(err)
+	if h, ok := deskHints[hint]; ok {
+		hint = h
+	}
+	return title, hint
+}
+
+type modelRequest struct {
+	Name  string `json:"name"`
+	URL   string `json:"url"`
+	Key   string `json:"key"`
+	Model string `json:"model"`
+}
+
+func (s *Server) connectModelAPI(w http.ResponseWriter, r *http.Request) {
+	var in modelRequest
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	in.URL, in.Model, in.Name = strings.TrimSpace(in.URL), strings.TrimSpace(in.Model), strings.TrimSpace(in.Name)
+	if in.URL == "" || in.Model == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("the provider's address and a model are needed"))
+		return
+	}
+	if in.Name == "" {
+		in.Name = "default"
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	if err := s.host.ConnectModel(ctx, in.Name, in.URL, strings.TrimSpace(in.Key), in.Model); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	s.hub.publish(map[string]any{"type": "info"})
+	writeJSON(w, s.info())
+}
+
+func (s *Server) listModelsAPI(w http.ResponseWriter, r *http.Request) {
+	var in modelRequest
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	list, err := s.host.ListModels(ctx, strings.TrimSpace(in.URL), strings.TrimSpace(in.Key))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]any{"models": list})
+}
 
 func (s *Server) info() map[string]any {
 	i := s.host.Info()

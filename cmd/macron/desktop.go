@@ -21,6 +21,9 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/desk"
+	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/providers"
+	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
@@ -146,6 +149,24 @@ func (h *deskHost) SaveServers(specs []desk.ServerSpec) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return h.w.st.SetSetting(ctx, settingDeskServers, string(raw))
+}
+
+func (h *deskHost) ConnectModel(ctx context.Context, name, endpoint, key, model string) error {
+	p := store.Provider{Name: name, Enabled: true, Vision: true, APIKey: key, Model: model}
+	p.BaseURL, p.API = llm.CleanBaseURL(endpoint)
+	if _, err := h.w.prov.Test(ctx, p); err != nil {
+		return fmt.Errorf("the model did not answer: %w", err)
+	}
+	if _, err := providers.Configure(ctx, h.w.st, name, endpoint, key, model); err != nil {
+		return err
+	}
+	return h.w.prov.Reload(ctx)
+}
+
+func (h *deskHost) ListModels(ctx context.Context, endpoint, key string) ([]string, error) {
+	p := store.Provider{Name: "probe", Enabled: true, APIKey: key, Model: "probe"}
+	p.BaseURL, p.API = llm.CleanBaseURL(endpoint)
+	return h.w.prov.Models(ctx, p)
 }
 
 func (h *deskHost) DataDir() string        { return config.Home() }
