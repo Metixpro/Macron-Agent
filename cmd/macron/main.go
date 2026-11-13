@@ -52,6 +52,12 @@ func main() {
 }
 
 func runBot(args []string) {
+	if startupCheck(args) {
+		if err := runStartupCheck(args); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	_ = config.LoadDefaultDotEnv()
 	if platform := strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_MESSENGER"))); platform != "" && platform != "telegram" {
 		if err := runMessenger(platform, args); err != nil {
@@ -66,7 +72,7 @@ func runBot(args []string) {
 	ownersFlag := flag.String("owners", os.Getenv(config.EnvOwners), "comma separated Telegram ids of the owners: the only people the agent answers (env "+config.EnvOwners+")")
 	rate := flag.Int("rate-limit", 0, "max requests per minute per user (0 = no limit, the default: only the owner can write)")
 	maxJobs := flag.Int("max-concurrent", 64, "max requests processed at the same time")
-	check := flag.Bool("check", false, "check that the bot starts here (settings, database, Telegram), print «ok VERSION» and exit (the updater's trial run)")
+	check := flag.Bool("check", false, "validate local startup and print ok VERSION (use --check-online to test the messenger)")
 	_ = flag.CommandLine.Parse(args)
 
 	flag.Visit(func(f *flag.Flag) {

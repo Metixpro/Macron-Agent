@@ -60,6 +60,9 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 		return fmt.Errorf("%s request failed: %s", c.Platform, strings.ReplaceAll(err.Error(), c.Token, "<token>"))
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("%s refused %s (HTTP %d): %s", c.Platform, method, resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
 	var reply struct {
 		OK          *bool           `json:"ok"`
 		Status      string          `json:"status"`

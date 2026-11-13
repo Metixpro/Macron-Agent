@@ -34,7 +34,8 @@ func runMessenger(platform string, args []string) error {
 	cfg.Bind(fs)
 	upper := strings.ToUpper(platform)
 	ownersRaw := fs.String("owners", os.Getenv("MACRON_"+upper+"_OWNERS"), "comma-separated owner IDs in this messenger (not Telegram IDs)")
-	check := fs.Bool("check", false, "check the messenger token and model configuration, then exit")
+	check := fs.Bool("check", false, "validate local messenger and model configuration without network calls")
+	online := fs.Bool("check-online", false, "also verify the messenger token with its API")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -61,9 +62,6 @@ func runMessenger(platform string, args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := client.Check(ctx); err != nil {
-		return err
-	}
 	secret, err := config.SecretKey()
 	if err != nil {
 		return err
@@ -85,8 +83,15 @@ func runMessenger(platform string, args []string) error {
 	if !prov.Configured() {
 		return fmt.Errorf("no model provider configured; set MACRON_API_URL, MACRON_API_KEY and MACRON_MODEL, or configure a provider first")
 	}
-	if *check {
-		fmt.Printf("ok %s %s\n", app.Version, platform)
+	if *check && !*online {
+		fmt.Printf("ok %s %s local\n", app.Version, platform)
+		return nil
+	}
+	if err := client.Check(ctx); err != nil {
+		return err
+	}
+	if *online {
+		fmt.Printf("ok %s %s online\n", app.Version, platform)
 		return nil
 	}
 	br, err := brain.Open(config.Home(), agent.DefaultSoul)

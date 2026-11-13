@@ -43,7 +43,7 @@ for each platform. Multiple owners can be separated with commas.
 A trusted relay can be configured with `MACRON_BALE_API` or
 `MACRON_RUBIKA_API` (the server root, before `/botTOKEN` or `/v3/TOKEN`).
 
-Run `macron bale run --check` or `macron rubika run --check` to check startup.
+Run `macron bale run --check` or `macron rubika run --check` to validate local startup without network calls. Use `--check-online` to verify the token with the messenger API.
 For the existing background service, set `MACRON_MESSENGER=bale` or
 `MACRON_MESSENGER=rubika`; its normal `telegram run` entry point dispatches to
 that messenger after reading `config.env`. Use separate Macron profiles when

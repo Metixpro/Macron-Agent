@@ -131,7 +131,7 @@ macron doctor
 
 `macron telegram` checks the token with Telegram, finds your id from a message
 you send the bot, saves both in `config.env`, makes a trial run
-(`macron telegram run --check`) and keeps the bot running: as a systemd unit
+(`macron telegram run --check`; use `--check-online` to verify its API connection) and keeps the bot running: as a systemd unit
 (`ExecStart=… telegram run`) or a launchd agent, or, where systemd is not running
 (containers, WSL without systemd), as a background process recorded in
 `telegram.pid` with its log in `macron.log`; that one is started again after a
@@ -590,3 +590,19 @@ Validation used the live `qwen-3-8-27b` model for tool discovery, conversational
 - Setup updates the saved provider, not just config.env. Telegram and terminal requests refresh shared provider selection and credentials. CLI `exec` uses saved providers too; `--provider NAME` selects one explicitly. Exported model/API settings retain the explicit CLI override path.
 - Telegram provider settings now validate and report write failures; API URL and name can be edited. Model buttons use the displayed snapshot rather than fetching a reordered list when clicked. Connection probes update health; corrected connection settings reset stale cooldowns while preserving learned API capabilities for unchanged clients.
 - OpenAI-compatible, Responses and Anthropic settings were exercised with controlled HTTP fixtures, including streaming, vision, temperature, effort, active selection, disabled providers, key rotation and encrypted persistence. Telegram panel actions and mobile terminal interactions were exercised through their real handlers and PTYs.
+
+
+### 1.11.2: update validation survives messenger outages
+
+`macron --check` now validates local configuration, home and database without
+contacting a messenger or model API. It also works for CLI-only profiles. The
+updater in older releases already runs this command in the downloaded binary,
+so installing this release does not require a working Bale/Rubika/Telegram API.
+Invalid local settings or a corrupt database still fail validation, and failed
+validation leaves the installed binary untouched.
+
+Use `macron --check-online` to explicitly verify the configured messenger.
+`macron bale run --check` and `macron rubika run --check` are local checks;
+append `--check-online` for API authentication. Normal bot startup still checks
+its API connection. An HTML HTTP 503 is now reported as service unavailability,
+rather than an invalid JSON response.

@@ -87,6 +87,8 @@ Usage:
   macron config ACTION    list | get KEY | set KEY VALUE | unset KEY | path
   macron uninstall [--yes]  remove this installation, service and all its data
   macron backup [FILE]    save the home folder (database and notes) as one archive
+  macron --check          validate local startup (no external API calls)
+  macron --check-online   also test the configured messenger connection
   macron version
 
 Everything the agent is lives in one folder: %s
