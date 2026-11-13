@@ -25,6 +25,7 @@ import (
 const statsQueryTime = 15 * time.Second
 
 type adminInput struct {
+	models   []string
 	kind     string
 	target   int64
 	draft    store.Provider

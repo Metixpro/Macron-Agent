@@ -26,7 +26,10 @@ const (
 type entry struct {
 	p      store.Provider
 	client *llm.Client
+	*providerHealth
+}
 
+type providerHealth struct {
 	mu        sync.Mutex
 	streak    int
 	coolUntil time.Time
@@ -124,6 +127,9 @@ func New(ctx context.Context, st *store.Store, httpClient *http.Client, onUsage 
 }
 
 func (m *Manager) Reload(ctx context.Context) error {
+	if err := m.store.RefreshProviderSettings(ctx); err != nil {
+		return err
+	}
 	list, err := m.store.Providers(ctx)
 	if err != nil {
 		return err
@@ -141,11 +147,10 @@ func (m *Manager) Reload(ctx context.Context) error {
 		c.MaxRetries = 1
 		withTemperature(c, p)
 		c.Effort, c.NoStream = p.Effort, p.NoStream
-		e := &entry{p: p, client: c}
-		if prev, ok := old[p.ID]; ok {
-			prev.mu.Lock()
-			e.streak, e.coolUntil = prev.streak, prev.coolUntil
-			prev.mu.Unlock()
+		e := &entry{p: p, client: c, providerHealth: &providerHealth{}}
+		if prev, ok := old[p.ID]; ok && sameConnection(prev.p, p) {
+			e.client = prev.client
+			e.providerHealth = prev.providerHealth
 		}
 		entries = append(entries, e)
 	}
@@ -303,6 +308,9 @@ func cooldownFor(err error) time.Duration {
 }
 
 func (m *Manager) Complete(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	if err := m.Reload(ctx); err != nil {
+		return nil, fmt.Errorf("reload providers: %w", err)
+	}
 	cands := m.candidates(ctx)
 	if len(cands) == 0 {
 		return nil, ErrNoProvider
@@ -322,6 +330,7 @@ func (m *Manager) Complete(ctx context.Context, req llm.Request) (*llm.Response,
 
 		start := m.now()
 		resp, err := e.client.Complete(ctx, req)
+		err = privateError(err, e.p.APIKey)
 		took := m.now().Sub(start)
 		if err == nil {
 			e.record(true, m.now())
@@ -493,7 +502,9 @@ type TestResult struct {
 }
 
 func (m *Manager) Test(ctx context.Context, p store.Provider) (*TestResult, error) {
-	if err := ValidateBaseURL(p.BaseURL); err != nil {
+	var err error
+	p, err = Normalize(p)
+	if err != nil {
 		return nil, err
 	}
 	c := llm.NewClient(p.BaseURL, p.APIKey, p.Model)
@@ -507,6 +518,23 @@ func (m *Manager) Test(ctx context.Context, p store.Provider) (*TestResult, erro
 		Messages:  []llm.Message{{Role: "user", Content: "Reply with exactly one word: pong"}},
 		MaxTokens: 20,
 	})
+	err = privateError(err, p.APIKey)
+	if p.ID > 0 {
+		message := ""
+		if err != nil {
+			message = err.Error()
+		}
+		_ = m.store.RecordProviderResult(ctx, p.ID, err == nil, time.Since(start), message)
+		if err == nil {
+			m.mu.RLock()
+			for _, e := range m.entries {
+				if e.p.ID == p.ID && sameConnection(e.p, p) {
+					e.reset()
+				}
+			}
+			m.mu.RUnlock()
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -514,14 +542,17 @@ func (m *Manager) Test(ctx context.Context, p store.Provider) (*TestResult, erro
 }
 
 func (m *Manager) Models(ctx context.Context, p store.Provider) ([]string, error) {
-	if err := ValidateBaseURL(p.BaseURL); err != nil {
+	var err error
+	p, err = normalizeEndpoint(p)
+	if err != nil {
 		return nil, err
 	}
 	c := llm.NewClient(p.BaseURL, p.APIKey, p.Model)
 	c.HTTPClient, c.API = m.http, API(p)
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return c.Models(ctx)
+	models, err := c.Models(ctx)
+	return models, privateError(err, p.APIKey)
 }
 
 func withTemperature(c *llm.Client, p store.Provider) {
@@ -539,7 +570,7 @@ func API(p store.Provider) string {
 
 func ValidateBaseURL(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return errors.New("the address must look like https://host/v1")
 	}
 	return nil

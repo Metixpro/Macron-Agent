@@ -12,9 +12,11 @@ import (
 )
 
 var (
+	colCanvas = lipgloss.AdaptiveColor{Light: "#FAFAF7", Dark: "#0B0D10"}
+	colPlan   = lipgloss.AdaptiveColor{Light: "#7545A8", Dark: "#BEA0FF"}
 	colPanel  = lipgloss.AdaptiveColor{Light: "#F3F1EB", Dark: "#191B20"}
 	colText   = lipgloss.AdaptiveColor{Light: "#24272D", Dark: "#E6E4DF"}
-	colAccent = lipgloss.AdaptiveColor{Light: "#945529", Dark: "#E2AD77"}
+	colAccent = lipgloss.AdaptiveColor{Light: "#3165B5", Dark: "#78AAFF"}
 	colOK     = lipgloss.AdaptiveColor{Light: "#1A7F37", Dark: "#3FB950"}
 	colFail   = lipgloss.AdaptiveColor{Light: "#CF222E", Dark: "#F85149"}
 	colWarn   = lipgloss.AdaptiveColor{Light: "#9A6700", Dark: "#D29922"}

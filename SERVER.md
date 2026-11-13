@@ -580,3 +580,13 @@ A greeting now sends about 10,700 tokens instead of about 20,000, and the model 
 - Fixed tool-group metadata indexing and retained `tool_search` in focused/efficient mode. Tools remain loaded on demand rather than advertising every schema.
 
 Validation used the live `qwen-3-8-27b` model for tool discovery, conversational connection setup and messenger tool execution. Service authentication and delivery paths were exercised against controlled API/SMTP fixtures; no real email or messenger recipient was used.
+
+
+### 1.11.1: stable terminal layout and provider settings
+
+- A full-screen terminal with a pinned composer, colored activity line and scrollable history. Slash suggestions show at most five rows; the command picker is also height-bounded. PageUp/PageDown browse history; Ctrl+End follows new output. Resize and mobile keyboard changes reflow the conversation.
+- Persian/Arabic display uses Unicode BiDi ordering and contextual forms without altering logical input, stored conversations or tool arguments. Set `MACRON_TUI_RTL=logical` for a terminal with its own BiDi rendering. Plain text copied from a visually reordered terminal may reflect the displayed glyph order; use logical mode when copying mixed RTL code.
+- `/provider` selects a saved provider. `/connect model` loads the active provider's actual settings, offers edits and applies changes without restarting the TUI. `macron setup --provider NAME` creates or edits a named provider. Blank secret input keeps the existing key; `-` clears it. Changing hosts without providing a key does not forward the old host's credential.
+- Setup updates the saved provider, not just config.env. Telegram and terminal requests refresh shared provider selection and credentials. CLI `exec` uses saved providers too; `--provider NAME` selects one explicitly. Exported model/API settings retain the explicit CLI override path.
+- Telegram provider settings now validate and report write failures; API URL and name can be edited. Model buttons use the displayed snapshot rather than fetching a reordered list when clicked. Connection probes update health; corrected connection settings reset stale cooldowns while preserving learned API capabilities for unchanged clients.
+- OpenAI-compatible, Responses and Anthropic settings were exercised with controlled HTTP fixtures, including streaming, vision, temperature, effort, active selection, disabled providers, key rotation and encrypted persistence. Telegram panel actions and mobile terminal interactions were exercised through their real handlers and PTYs.

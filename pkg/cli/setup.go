@@ -5,6 +5,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/Metixpro/macron-agent/pkg/providers"
+	"github.com/Metixpro/macron-agent/pkg/store"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -54,6 +57,7 @@ func setup(io *IO, args []string) int {
 	owner := fs.String("owner", "", "your Telegram numeric id, for the bot (comma separated for several owners)")
 	apiURL := fs.String("api-url", "", "the model API address")
 	apiKey := fs.String("api-key", "", "the model API key (prefer the prompt: a flag shows in the process list)")
+	providerName := fs.String("provider", "", "create or update this named model provider (default: the active provider)")
 	model := fs.String("model", "", "the model name")
 	tz := fs.String("timezone", "", "your time zone, e.g. Asia/Tehran")
 	yes := fs.Bool("yes", false, "ask nothing: use the flags and what config.env has already")
@@ -72,6 +76,10 @@ func setup(io *IO, args []string) int {
 		io.printf("❌ cannot read %s: %v\n", envPath, err)
 		return 1
 	}
+	if err := loadSetupProvider(ctx, env, *providerName); err != nil {
+		io.printf("❌ Cannot read provider settings: %v\n", err)
+		return 1
+	}
 	io.printf("\n✻ Macron Agent setup · home folder: %s\n\n", config.Home())
 	if code := setupModel(ctx, io, env, interactive, *apiURL, *apiKey, *model, *skipTest, true); code != 0 {
 		return code
@@ -82,6 +90,12 @@ func setup(io *IO, args []string) int {
 	if err := env.Save(); err != nil {
 		io.printf("❌ cannot save %s: %v\n", envPath, err)
 		return 1
+	}
+	if getEnv(env, keyAPIURL) != "" {
+		if err := saveSetupProvider(ctx, env, *providerName); err != nil {
+			io.printf("❌ Config saved, but the provider could not be updated: %v\n", err)
+			return 1
+		}
 	}
 	io.printf("✅ Saved %s (only you can read it).\n", envPath)
 
@@ -168,24 +182,56 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 			io.println("❌ choose a number from the list")
 			return 1
 		}
-		if !strings.Contains(url, "127.0.0.1") && !strings.Contains(url, "localhost") && key == "" {
-			k, err := io.Secret("     API key (hidden): ")
+	}
+	if interactive && url != "" {
+		if flagURL == "" && getEnv(env, keyAPIURL) != "" {
+			url = io.ask("     API address", url)
+		}
+		before, _ := neturl.Parse(getEnv(env, keyAPIURL))
+		after, _ := neturl.Parse(url)
+		if flagKey == "" && before != nil && after != nil && before.Host != after.Host {
+			key = ""
+		}
+		if flagKey == "" {
+			prompt := "     API key (hidden; blank = no key): "
+			if key != "" {
+				prompt = "     API key (hidden; blank = keep, - = clear): "
+			}
+			k, err := io.Secret(prompt)
 			if err != nil {
 				return 1
 			}
-			key = k
+			if k == "-" {
+				key = ""
+			} else if k != "" {
+				key = k
+			}
 		}
+	}
+	if !interactive && flagKey == "" {
+		before, _ := neturl.Parse(getEnv(env, keyAPIURL))
+		after, _ := neturl.Parse(url)
+		if before != nil && after != nil && before.Host != after.Host {
+			key = ""
+		}
+	}
+	if key == "-" {
+		key = ""
 	}
 	if url == "" {
 		io.println("The model: none given yet; Macron asks for it the first time you run «macron».")
 		return 0
 	}
 	base, api := llm.CleanBaseURL(url)
+	if err := providers.ValidateBaseURL(base); err != nil {
+		io.printf("❌ %v\n", err)
+		return 1
+	}
 	c := llm.NewClient(base, key, model)
 	if api != "" {
 		c.API = api
 	}
-	if model == "" && interactive {
+	if interactive && flagModel == "" {
 		lctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 		models, err := c.Models(lctx)
 		cancel()
@@ -199,7 +245,7 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 				io.printf("       - %s\n", m)
 			}
 		}
-		model = io.ask("     Model name", "")
+		model = io.ask("     Model name", model)
 	}
 	if model == "" {
 		io.println("❌ no model name: pass --model")
@@ -220,9 +266,7 @@ func setupModel(ctx context.Context, io *IO, env *envFile, interactive bool, fla
 		}
 	}
 	env.Set(keyAPIURL, url)
-	if key != "" {
-		env.Set(keyAPIKey, key)
-	}
+	env.Set(keyAPIKey, key)
 	env.Set(keyModel, model)
 	return 0
 }
@@ -326,3 +370,80 @@ func systemZone() string {
 }
 
 var errNoService = errors.New("services are supported with systemd (Linux) and launchd (macOS)")
+
+func saveSetupProvider(ctx context.Context, env *envFile, name string) error {
+	key, err := config.SecretKey()
+	if err != nil {
+		return err
+	}
+	path := config.ToolEnvValue(config.EnvDB)
+	if path == "" {
+		path = config.HomePath(config.FileDB)
+	}
+	st, err := store.Open(ctx, path, store.Options{SecretKey: key})
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	_, err = providers.Configure(ctx, st, name, getEnv(env, keyAPIURL), getEnv(env, keyAPIKey), getEnv(env, keyModel))
+	return err
+}
+
+func loadSetupProvider(ctx context.Context, env *envFile, name string) error {
+	path := config.ToolEnvValue(config.EnvDB)
+	if path == "" {
+		path = config.HomePath(config.FileDB)
+	}
+	if !fileExists(path) {
+		return nil
+	}
+	key, err := config.SecretKey()
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(ctx, path, store.Options{SecretKey: key})
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	list, err := st.Providers(ctx)
+	if err != nil {
+		return err
+	}
+	active, _ := st.Setting(store.SettingActiveProvider)
+	var selected *store.Provider
+	for _, p := range list {
+		p := p
+		if name != "" && p.Name == name || name == "" && fmt.Sprint(p.ID) == active {
+			selected = &p
+			break
+		}
+	}
+	if selected == nil && name == "" {
+		for _, p := range list {
+			p := p
+			if p.Enabled {
+				selected = &p
+				break
+			}
+		}
+	}
+	if selected == nil {
+		return nil
+	}
+	p := *selected
+	endpoint := strings.TrimRight(p.BaseURL, "/")
+	switch providers.API(p) {
+	case llm.APIResponses:
+		endpoint += "/responses"
+	case llm.APIAnthropic:
+		if !strings.HasSuffix(endpoint, "/v1") {
+			endpoint += "/v1"
+		}
+		endpoint += "/messages"
+	}
+	env.Set(keyAPIURL, endpoint)
+	env.Set(keyAPIKey, p.APIKey)
+	env.Set(keyModel, p.Model)
+	return nil
+}

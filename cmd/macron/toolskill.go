@@ -47,11 +47,13 @@ func (b *Bot) toolSkill(id int64) toolSkill {
 	return s
 }
 
-func (b *Bot) saveToolSkill(ctx context.Context, id int64, s toolSkill) {
+func (b *Bot) saveToolSkill(ctx context.Context, id int64, s toolSkill) error {
 	raw, _ := json.Marshal(s)
 	if err := b.st.SetSetting(ctx, fmt.Sprint(settingToolSkill, id), string(raw)); err != nil {
 		log.Printf("tool skill of provider %d: %v", id, err)
+		return err
 	}
+	return nil
 }
 
 func (b *Bot) focusTools(ctx context.Context) bool {

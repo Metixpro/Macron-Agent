@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -28,6 +27,7 @@ func execTask(term *IO, args []string) int {
 	fs := flag.NewFlagSet("exec", flag.ContinueOnError)
 	fs.SetOutput(term.Err)
 	timeout := fs.Duration("timeout", 10*time.Minute, "overall task deadline")
+	providerName := fs.String("provider", "", "use this saved provider name or ID")
 	allTools := fs.Bool("all-tools", false, "advertise every available tool immediately instead of automatic discovery")
 	selected := fs.String("tools", "", "comma-separated tool names (default: all available tools)")
 	steps := fs.Int("max-steps", 30, "maximum tool rounds")
@@ -53,12 +53,17 @@ func execTask(term *IO, args []string) int {
 		v, _ := env.Get(key)
 		return v
 	}
-	endpoint, model := value(keyAPIURL), value(keyModel)
-	u, err := url.Parse(endpoint)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || model == "" {
-		fmt.Fprintln(term.Err, "configure MACRON_API_URL and MACRON_MODEL in config.env or the environment first (Ollama/local endpoints are supported)")
+	dbPath := value(config.EnvDB)
+	if dbPath == "" {
+		dbPath = config.HomePath(config.FileDB)
+	}
+	client, closeProvider, window, err := execProvider(context.Background(), dbPath, *providerName, value)
+	if err != nil {
+		fmt.Fprintln(term.Err, err)
 		return 1
 	}
+	defer closeProvider()
+
 	b, err := brain.Open(config.Home(), agent.DefaultSoul)
 	if err != nil {
 		fmt.Fprintln(term.Err, err)
@@ -89,13 +94,7 @@ func execTask(term *IO, args []string) int {
 	}
 	session := "exec-" + hex.EncodeToString(nonce[:])
 	defer m.StopShell(session)
-	client := llm.NewClient(endpoint, value(keyAPIKey), model)
-	client.API = llm.DetectAPI(endpoint)
 	reg := tools.NewRegistry(m, search.NewEngine(nil), client, tools.Options{Skills: sk, SkillWrite: func(string) bool { return true }, ConnectionAdmin: func(string) bool { return true }})
-	dbPath := value(config.EnvDB)
-	if dbPath == "" {
-		dbPath = config.HomePath(config.FileDB)
-	}
 	gate, closeGate := execGate(term, client, dbPath, m.BaseDir, *yolo || os.Getenv("MACRON_YOLO") == "1")
 	defer closeGate()
 	reg.Gate, reg.CheckpointDir = gate, config.HomePath("checkpoints")
@@ -112,7 +111,7 @@ func execTask(term *IO, args []string) int {
 		}
 		filter = func(name string) bool { return allowed[name] }
 	}
-	a := agent.NewAgent(client, reg, agent.Options{Channel: agent.ChannelCLI, Soul: b.Soul, Skills: sk, MaxSteps: *steps})
+	a := agent.NewAgent(client, reg, agent.Options{Channel: agent.ChannelCLI, Soul: b.Soul, Skills: sk, MaxSteps: *steps, ContextWindow: func() int { return window }})
 	root, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithTimeout(root, *timeout)

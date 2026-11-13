@@ -77,11 +77,18 @@ func (s *Store) AddProvider(ctx context.Context, p Provider) (int64, error) {
 }
 
 func (s *Store) UpdateProvider(ctx context.Context, p Provider) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE providers SET name = ?, base_url = ?, api_key = ?, model = ?, priority = ?, enabled = ?, vision = ?,
+	res, err := s.db.ExecContext(ctx, `UPDATE providers SET name = ?, base_url = ?, api_key = ?, model = ?, priority = ?, enabled = ?, vision = ?,
 		api = ?, context_window = ?, temperature = ?, effort = ?, no_stream = ? WHERE id = ?`, truncate(p.Name, 64), p.BaseURL, s.seal(p.APIKey),
 		p.Model, p.Priority, p.Enabled, p.Vision, p.API, p.ContextWindow, p.Temperature, truncate(p.Effort, 16), p.NoStream, p.ID)
 	if isDuplicate(err) {
 		return ErrDuplicate
+	}
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err == nil && n == 0 {
+		return ErrNotFound
 	}
 	return err
 }
@@ -126,4 +133,33 @@ func (s *Store) RecordProviderResult(ctx context.Context, id int64, ok bool, lat
 	_, err := s.db.ExecContext(ctx, `UPDATE providers SET requests = requests + 1, failures = failures + 1, last_error = ?, last_error_at = ?
 		WHERE id = ?`, truncate(errMsg, 500), s.Now(), id)
 	return err
+}
+
+func (s *Store) RefreshProviderSettings(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.QueryContext(ctx, `SELECT k,v FROM settings WHERE k IN (?,?)`, SettingActiveProvider, SettingFailover)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	values := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return err
+		}
+		values[k] = v
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, key := range []string{SettingActiveProvider, SettingFailover} {
+		if v, ok := values[key]; ok {
+			s.settings[key] = v
+		} else {
+			delete(s.settings, key)
+		}
+	}
+	return nil
 }

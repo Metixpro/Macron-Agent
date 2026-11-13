@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -84,7 +85,7 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		}
 		b.reply(m, l.f("✅ وصل شد! جواب مدل: «%s» در %s", esc(shortText(res.Reply, 60)), res.Latency.Round(time.Millisecond)))
 		done(b.viewProvider(ctx, l, id))
-	case "pv_model_edit", "pv_key_edit", "pv_window", "pv_temp":
+	case "pv_model_edit", "pv_key_edit", "pv_window", "pv_temp", "pv_url_edit", "pv_name_edit":
 		p, err := b.st.Provider(ctx, in.target)
 		if err != nil {
 			done(b.viewProviders(ctx, l))
@@ -114,11 +115,17 @@ func (b *Bot) handleSectionInput(ctx context.Context, m *telegram.Message, in *a
 		} else if in.kind == "pv_key_edit" {
 			_ = b.api.DeleteMessage(ctx, m.Chat.ID, m.MessageID)
 			p.APIKey = map[bool]string{true: "", false: text}[text == "-"]
+		} else if in.kind == "pv_url_edit" {
+			p.BaseURL, p.API = llm.CleanBaseURL(text)
+		} else if in.kind == "pv_name_edit" {
+			p.Name = text
 		} else {
 			p.Model = text
 		}
-		_ = b.st.UpdateProvider(ctx, *p)
-		_ = b.prov.Reload(ctx)
+		if err := b.updateProvider(ctx, *p); err != nil {
+			b.reply(m, l.t("ذخیره نشد: ")+esc(err.Error()))
+			return true
+		}
 		done(b.viewProvider(ctx, l, p.ID))
 
 	case "em_add":
@@ -226,6 +233,10 @@ func (b *Bot) nextPriority(ctx context.Context) int {
 }
 
 func (b *Bot) saveProvider(ctx context.Context, l lang, p store.Provider) (int64, error) {
+	p, err := providers.Normalize(p)
+	if err != nil {
+		return 0, err
+	}
 	id, err := b.st.AddProvider(ctx, p)
 	if errors.Is(err, store.ErrDuplicate) {
 		return 0, errors.New(l.t("پروایدری با این اسم از قبل هست"))
@@ -234,9 +245,22 @@ func (b *Bot) saveProvider(ctx context.Context, l lang, p store.Provider) (int64
 		return 0, err
 	}
 	if !b.prov.Configured() {
-		_ = b.st.SetSetting(ctx, store.SettingActiveProvider, strconv.FormatInt(id, 10))
+		if err := b.st.SetSetting(ctx, store.SettingActiveProvider, strconv.FormatInt(id, 10)); err != nil {
+			return 0, err
+		}
 	}
 	return id, b.prov.Reload(ctx)
+}
+
+func (b *Bot) updateProvider(ctx context.Context, p store.Provider) error {
+	normalized, err := providers.Normalize(p)
+	if err != nil {
+		return err
+	}
+	if err = b.st.UpdateProvider(ctx, normalized); err != nil {
+		return err
+	}
+	return b.prov.Reload(ctx)
 }
 
 func (b *Bot) viewProviders(ctx context.Context, l lang) panelView {
@@ -387,6 +411,7 @@ func (b *Bot) viewProvider(ctx context.Context, l lang, id int64) panelView {
 		row(b.button(l.t("🧪 تست اتصال"), pid("test"), telegram.StylePrimary), b.button(l.t("🖼 تصویر"), pid("vision"), "")),
 		row(b.button(l.t("🔌 نوع API"), pid("api"), ""), b.button(l.t("📋 انتخاب مدل"), pid("models"), "")),
 		row(b.button(l.t("✏️ مدل"), pid("model"), ""), b.button(l.t("🔑 کلید"), pid("key"), "")),
+		row(b.button(l.t("🌐 آدرس API"), pid("url"), ""), b.button(l.t("✏️ نام"), pid("name"), "")),
 		row(b.button(l.t("🪟 پنجره context"), pid("window"), "")),
 		row(b.button(l.t("🌡 Temperature"), pid("temp"), ""), b.button(l.t("⚡ Effort")+" "+effortOf(p.Effort).icon, pid("eff"), "")),
 		row(b.button(l.t("🧰 ابزارها برای این مدل"), pid("tools"), ""), b.button(l.f("🌊 استریم: %s", onOff(l, !p.NoStream)), pid("stream"), "")),
@@ -434,25 +459,55 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 		show(b.viewProviders(ctx, l))
 		return
 	}
+	save := func() bool {
+		if err := b.updateProvider(ctx, *p); err != nil {
+			answer(l.t("ذخیره نشد: ")+err.Error(), true)
+			return false
+		}
+		return true
+	}
 	switch action {
+	case "url", "name":
+		answer("", false)
+		prompt := l.t("🌐 آدرس API جدید را بفرست:")
+		if action == "name" {
+			prompt = l.t("✏️ نام جدید پروایدر را بفرست:")
+		}
+		ask(&adminInput{kind: "pv_" + action + "_edit", target: id}, prompt)
+		return
 	case "activate":
-		_ = b.st.SetSetting(ctx, store.SettingActiveProvider, strconv.FormatInt(id, 10))
-		answer(l.t("⭐ از الان همه درخواست‌ها می‌رن روی ")+p.Name, false)
+		if !p.Enabled {
+			answer(l.t("اول پروایدر را روشن کن"), true)
+			return
+		}
+		if err := b.st.SetSetting(ctx, store.SettingActiveProvider, strconv.FormatInt(id, 10)); err != nil {
+			answer(err.Error(), true)
+			return
+		}
+		answer(l.t("⭐ پروایدر پیش‌فرض: ")+p.Name, false)
 	case "toggle":
 		p.Enabled = !p.Enabled
-		_ = b.st.UpdateProvider(ctx, *p)
+		if !save() {
+			return
+		}
 		answer(map[bool]string{true: l.t("روشن شد"), false: l.t("خاموش شد")}[p.Enabled], false)
 	case "vision":
 		p.Vision = !p.Vision
-		_ = b.st.UpdateProvider(ctx, *p)
+		if !save() {
+			return
+		}
 		answer(l.t("انجام شد"), false)
 	case "api":
 		p.API = nextAPI(providers.API(*p))
-		_ = b.st.UpdateProvider(ctx, *p)
+		if !save() {
+			return
+		}
 		answer(l.f("نوع API: %s", apiName(p.API)), false)
 	case "stream":
 		p.NoStream = !p.NoStream
-		_ = b.st.UpdateProvider(ctx, *p)
+		if !save() {
+			return
+		}
 		answer(l.f("🌊 استریم: %s", onOff(l, !p.NoStream)), false)
 	case "up", "down":
 		delta := -15
@@ -460,7 +515,9 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 			delta = 15
 		}
 		p.Priority = max(p.Priority+delta, 0)
-		_ = b.st.UpdateProvider(ctx, *p)
+		if !save() {
+			return
+		}
 		answer(l.t("اولویت تغییر کرد"), false)
 	case "test":
 		answer(l.t("دارم تست می‌کنم…"), false)
@@ -475,19 +532,27 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 		ask(&adminInput{kind: "pv_model_edit", target: id}, l.t("🧠 اسم مدل جدید رو بفرست:"))
 		return
 	case "models", "pick":
+		if action == "pick" {
+			in := b.pending(q.From.ID)
+			n, e := strconv.Atoi(strings.Join(parts[4:], ""))
+			if in == nil || in.kind != "pv_models" || in.target != id || in.panelMsg != q.Message.MessageID || e != nil || n < 0 || n >= len(in.models) {
+				answer(l.t("فهرست مدل‌ها منقضی شد؛ دوباره بازش کن"), true)
+				return
+			}
+			p.Model = in.models[n]
+			if !save() {
+				return
+			}
+			b.inputs.Delete(q.From.ID)
+			answer(l.f("مدل: %s", p.Model), false)
+			break
+		}
 		models, err := b.prov.Models(ctx, *p)
 		if err != nil {
 			answer(l.f("فهرست مدل‌ها گرفته نشد: %s", shortText(err.Error(), 150)), true)
 			return
 		}
-		if action == "pick" && len(parts) > 4 {
-			if n, err := strconv.Atoi(parts[4]); err == nil && n >= 0 && n < len(models) {
-				p.Model = models[n]
-				_ = b.st.UpdateProvider(ctx, *p)
-				answer(l.f("مدل: %s", p.Model), false)
-				break
-			}
-		}
+		b.expect(q.From.ID, &adminInput{kind: "pv_models", target: id, panelMsg: q.Message.MessageID, models: append([]string(nil), models...)})
 		answer("", false)
 		show(b.viewModels(l, p, models))
 		return
@@ -499,7 +564,10 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 	case "tools":
 		s := b.toolSkill(id)
 		s.Mode = nextToolMode(s.Mode)
-		b.saveToolSkill(ctx, id, s)
+		if err := b.saveToolSkill(ctx, id, s); err != nil {
+			answer(err.Error(), true)
+			return
+		}
 		answer(map[string]string{toolModeAuto: l.t("🧰 خودکار: همه ابزارها، با آمار فراخوانی‌ها"), toolModeFull: l.t("🧰 همیشه همه ابزارها"),
 			toolModeFocus: l.t("🧰 همیشه ابزارهای متمرکز")}[s.Mode], false)
 	case "eff":
@@ -510,8 +578,13 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 				return
 			}
 			p.Effort = key
-			_ = b.st.UpdateProvider(ctx, *p)
-			_ = b.prov.Reload(ctx)
+			if !save() {
+				return
+			}
+			if err := b.prov.Reload(ctx); err != nil {
+				answer(err.Error(), true)
+				return
+			}
 			answer("⚡ Effort: "+effortName(l, key), false)
 		} else {
 			answer("", false)
@@ -533,19 +606,28 @@ func (b *Bot) handleProviderPanel(ctx context.Context, q *telegram.CallbackQuery
 			row(b.button(l.t("✅ آره، حذف کن"), fmt.Sprintf("a:pv:%d:deleteok", id), telegram.StyleDanger), b.button(l.t("❌ نه"), fmt.Sprintf("a:pv:%d", id), "")))})
 		return
 	case "deleteok":
-		_ = b.st.DeleteProvider(ctx, id)
+		if err := b.st.DeleteProvider(ctx, id); err != nil {
+			answer(err.Error(), true)
+			return
+		}
 		_ = b.st.DeleteSetting(ctx, fmt.Sprint(settingToolSkill, id))
 		if b.prov.ActiveID() == id {
 			_ = b.st.DeleteSetting(ctx, store.SettingActiveProvider)
 		}
-		_ = b.prov.Reload(ctx)
+		if err := b.prov.Reload(ctx); err != nil {
+			answer(err.Error(), true)
+			return
+		}
 		answer(l.t("حذف شد"), false)
 		show(b.viewProviders(ctx, l))
 		return
 	default:
 		answer("", false)
 	}
-	_ = b.prov.Reload(ctx)
+	if err := b.prov.Reload(ctx); err != nil {
+		answer(err.Error(), true)
+		return
+	}
 	show(b.viewProvider(ctx, l, id))
 }
 
@@ -643,7 +725,7 @@ func parseTemperature(text string) (t float64, def, ok bool) {
 	}
 	t, err := strconv.ParseFloat(strings.NewReplacer("۰", "0", "۱", "1", "۲", "2", "۳", "3", "۴", "4", "۵", "5", "۶", "6", "۷", "7", "۸", "8", "۹", "9",
 		"٫", ".", ",", ".").Replace(text), 64)
-	return t, false, err == nil && t >= 0 && t <= 2
+	return t, false, err == nil && !math.IsNaN(t) && !math.IsInf(t, 0) && t >= 0 && t <= 2
 }
 
 func (b *Bot) cacheLine(l lang, id int64) string {

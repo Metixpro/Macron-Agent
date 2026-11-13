@@ -19,32 +19,41 @@ func (m model) modeName() string {
 	}
 	return "Build"
 }
+func (m model) modeColor() lipgloss.TerminalColor {
+	if m.modeName() == "Plan" {
+		return colPlan
+	}
+	return colAccent
+}
 func (m model) composer() string {
 	w := m.contentWidth()
-	mode := stAccent.Bold(true).Render(m.modeName())
-	if m.modeName() == "Plan" {
-		mode = stOK.Bold(true).Render("Plan · read only")
+	mode := lipgloss.NewStyle().Foreground(m.modeColor()).Background(colPanel).Bold(true).Render(m.modeName())
+	model := orDefault(m.info.Model, "/connect model")
+	effortWidth := 0
+	if m.info.Effort != "" {
+		effortWidth = ansi.StringWidth(m.info.Effort) + 2
 	}
-	meta := mode + stDim.Render("  ·  ") + stBold.Render(clip(orDefault(m.info.Model, "choose a model with /connect"), max(w-24, 8)))
-	if m.info.Provider != "" && w > 62 {
-		meta += stDim.Render("  " + clip(m.info.Provider, 18))
+	meta := mode + stDim.Background(colPanel).Render(" · ") + stBold.Background(colPanel).Render(clip(model, max(8, w-18-effortWidth)))
+	if m.info.Provider != "" && w > 64 {
+		meta += stDim.Background(colPanel).Render("  " + clip(m.info.Provider, 20))
 	}
-	body := m.input.View() + "\n\n" + clip(meta, w-5)
-	return lipgloss.NewStyle().Border(lipgloss.Border{Left: "┃"}).BorderLeft(true).BorderForeground(colAccent).Background(colPanel).Foreground(colText).Padding(1, 2).Width(w - 1).Render(body)
+	if m.info.Effort != "" {
+		meta += stWarn.Background(colPanel).Render("  " + m.info.Effort)
+	}
+	body := terminalText(m.input.View()) + "\n\n" + clip(meta, w-5)
+	return lipgloss.NewStyle().Border(lipgloss.Border{Left: "┃"}, false, false, false, true).BorderForeground(m.modeColor()).Background(colPanel).Foreground(colText).Padding(1, 2).Width(w - 1).Render(body)
 }
 func (m model) inputPanel() string {
-	switch {
-	case m.ask != nil:
-		return m.askView()
-	case m.pick != nil:
-		return m.pickView()
-	default:
-		out := m.composer()
-		if len(m.sugg) > 0 {
-			out += "\n" + m.suggView()
-		}
-		return out
+	if m.ask != nil {
+		return terminalText(m.askView())
 	}
+	if m.pick != nil {
+		return terminalText(m.pickView())
+	}
+	if len(m.sugg) > 0 {
+		return m.suggView() + "\n" + m.composer()
+	}
+	return m.composer()
 }
 func logo(width int) string {
 	if width < 38 {
@@ -73,54 +82,50 @@ func logo(width int) string {
 	}
 	return strings.Join(lines, "\n")
 }
+func (m model) frame(content string) string {
+	w := m.contentWidth()
+	h := max(m.height, 1)
+	lines := strings.Split(content, "\n")
+	if len(lines) > h {
+		lines = lines[len(lines)-h:]
+	}
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
+	margin := strings.Repeat(" ", max(0, (m.width-w)/2))
+	for i, line := range lines {
+		line = ansi.Truncate(line, w, "")
+		lines[i] = margin + line + strings.Repeat(" ", max(0, w-ansi.StringWidth(line)))
+	}
+	return lipgloss.NewStyle().Background(colCanvas).Foreground(colText).Width(m.width).Render(strings.Join(lines, "\n"))
+}
 func (m model) homeView() string {
 	w := m.contentWidth()
-	var pieces []string
-	if m.height >= 24 && m.pick == nil {
+	panel := m.inputPanel()
+	if m.pick != nil || m.ask != nil || m.height < 20 {
+		gap := max(0, m.height-lipgloss.Height(panel)-2)
+		return m.frame(panel + strings.Repeat("\n", gap) + "\n" + m.homeFooter(w))
+	}
+	hints := stDim.Render(clip("ctrl+p commands   tab mode   /connect", w))
+	tip := stDim.Render(clip("• Ask anything, or connect your tools with /connect.", w))
+	if m.notice != "" {
+		tip = stWarn.Render(clip(m.notice, w))
+	}
+	tail := panel + "\n" + hints + "\n\n" + tip
+	available := m.height - lipgloss.Height(tail) - 3
+	var header string
+	if available >= 9 && m.pick == nil && len(m.sugg) == 0 {
+		title := lipgloss.PlaceHorizontal(w, lipgloss.Center, logo(w))
 		tagline := "Your workspace. Your tools. Your agent."
 		if w < 40 {
 			tagline = "Your agent. Ready to work."
 		}
-		pieces = append(pieces, lipgloss.PlaceHorizontal(w, lipgloss.Center, logo(w)), "", lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(clip(tagline, w))), "")
+		header = title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n\n"
 	}
-	if m.height >= 34 && m.pick == nil {
-		pieces = append(pieces, "")
-	}
-	pieces = append(pieces, m.inputPanel())
-	hints := "ctrl+p commands   tab mode   /connect services"
-	if w < 54 {
-		hints = "ctrl+p commands · tab mode"
-	}
-	pieces = append(pieces, stDim.Render(clip(hints, w)), "")
-	if m.notice != "" {
-		pieces = append(pieces, stWarn.Render(clip(m.notice, w)))
-	}
-	if m.pick == nil && m.ask == nil && m.height >= 24 {
-		tip := "Connect Gmail, messengers and tools with /connect."
-		if w < 50 {
-			tip = "Connect services with /connect."
-			if w < 34 {
-				tip = "Services: /connect"
-			}
-		}
-		if m.info.Resumed > 0 {
-			tip = fmt.Sprintf("↺ %d earlier messages in this project · /new starts fresh", m.info.Resumed)
-		}
-		pieces = append(pieces, stAccent.Render("• ")+stDim.Render(clip(tip, w-2)))
-		if m.info.Services > 0 {
-			state := fmt.Sprintf("  %d of %d services configured · credentials stay private", m.info.Connections, m.info.Services)
-			if w < 62 {
-				state = fmt.Sprintf("  %d/%d configured · /connections", m.info.Connections, m.info.Services)
-			}
-			pieces = append(pieces, stFaint.Render(clip(state, w)))
-		}
-	}
-	content := strings.Join(pieces, "\n")
-	top := max(0, (m.height-lipgloss.Height(content)-4)/3)
-	mid := strings.Repeat("\n", top) + content
-	bottom := m.homeFooter(w)
-	gap := max(0, m.height-lipgloss.Height(mid)-lipgloss.Height(bottom)-1)
-	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, mid+strings.Repeat("\n", gap)+"\n"+bottom)
+	top := max(0, (m.height-lipgloss.Height(header+tail)-4)/3)
+	body := strings.Repeat("\n", top) + header + tail
+	gap := max(0, m.height-lipgloss.Height(body)-2)
+	return m.frame(body + strings.Repeat("\n", gap) + "\n" + m.homeFooter(w))
 }
 func (m model) homeFooter(w int) string {
 	right := "v" + m.info.Version
@@ -128,15 +133,49 @@ func (m model) homeFooter(w int) string {
 	return stFaint.Render(left + strings.Repeat(" ", max(1, w-ansi.StringWidth(left)-len(right))) + right)
 }
 func (m model) workspaceView() string {
-	var pieces []string
-	if live := strings.TrimSpace(m.liveView()); (m.running || m.busy != "") && live != "" {
-		pieces = append(pieces, live)
+	panel := m.inputPanel()
+	status := m.activityView()
+	footer := m.footer()
+	bottom := panel + "\n" + status + "\n" + footer
+	available := max(0, m.height-lipgloss.Height(bottom)-1)
+	history := ""
+	if available > 0 {
+		history = m.historyView(available) + "\n"
 	}
-	for _, q := range m.queue.list() {
-		pieces = append(pieces, stDim.Render(clip("⧗ "+oneLine(q), m.contentWidth())))
+	return m.frame(history + bottom)
+}
+func (m model) activityView() string {
+	w := m.contentWidth()
+	label := "Ready"
+	if m.modeName() == "Plan" {
+		label = "Plan · read only"
 	}
-	pieces = append(pieces, m.inputPanel(), m.footer())
-	return "\n" + lipgloss.PlaceHorizontal(m.width, lipgloss.Center, strings.Join(pieces, "\n"))
+	if !m.follow {
+		label = "History · ctrl+end to follow"
+	}
+	if m.running || m.busy != "" {
+		label = m.spin.View() + " Thinking"
+		if m.busy != "" {
+			label = m.spin.View() + " " + m.busy
+		}
+		if len(m.tools) > 0 {
+			t := m.tools[len(m.tools)-1]
+			label = m.spin.View() + " " + ansi.Strip(toolTitle(t.name, t.args, w-14))
+		}
+		label += " · esc stop"
+	}
+	if queue := len(m.queue.list()); queue > 0 {
+		label += fmt.Sprintf(" · %d queued", queue)
+	}
+	if m.notice != "" {
+		label = m.notice
+	}
+	if m.info.Yolo {
+		label = "YOLO · " + label
+	} else if m.info.Approvals == "off" {
+		label = "Approvals off · " + label
+	}
+	return lipgloss.NewStyle().Foreground(m.modeColor()).Render(clip("▰ "+label, w))
 }
 func (m model) openCommands() (tea.Model, tea.Cmd) {
 	var items []string

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"runtime/debug"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -23,7 +23,7 @@ import (
 )
 
 type Info struct {
-	Mode, Provider                                  string
+	Mode, Provider, Effort                          string
 	Connections, Services, ToolCount, ContextWindow int
 	Version                                         string
 	Model                                           string
@@ -164,63 +164,7 @@ func (q *queue) list() []string {
 	return append([]string(nil), q.items...)
 }
 
-type printer struct {
-	mu   sync.Mutex
-	q    []string
-	wake chan struct{}
-	p    *tea.Program
-}
-
-func (pr *printer) push(s string) {
-	pr.mu.Lock()
-	pr.q = append(pr.q, s)
-	pr.mu.Unlock()
-	select {
-	case pr.wake <- struct{}{}:
-	default:
-	}
-}
-
-func (pr *printer) loop(done <-chan struct{}) {
-	for {
-		for {
-			pr.mu.Lock()
-			if len(pr.q) == 0 {
-				pr.mu.Unlock()
-				break
-			}
-			s := pr.q[0]
-			pr.mu.Unlock()
-			pr.p.Send(tea.Println(s)())
-			select {
-			case <-done:
-				return
-			default:
-			}
-			pr.mu.Lock()
-			pr.q = pr.q[1:]
-			pr.mu.Unlock()
-		}
-		select {
-		case <-pr.wake:
-		case <-done:
-			return
-		}
-	}
-}
-
-func (pr *printer) rest() []string {
-	pr.mu.Lock()
-	defer pr.mu.Unlock()
-	out := pr.q
-	pr.q = nil
-	return out
-}
-
-type bridge struct {
-	p   *tea.Program
-	out *printer
-}
+type bridge struct{ p *tea.Program }
 
 func (b *bridge) send(msg tea.Msg) {
 	if b.p != nil {
@@ -230,6 +174,9 @@ func (b *bridge) send(msg tea.Msg) {
 
 type model struct {
 	home      bool
+	log       *transcript
+	history   *viewport.Model
+	follow    bool
 	toolCount int
 	e         Engine
 	opt       Options
@@ -281,31 +228,27 @@ func Run(e Engine, opt Options) error {
 	ta.SetHeight(1)
 	ta.SetPromptFunc(2, func(i int) string {
 		if i == 0 {
-			return stAccent.Render("❯ ")
+			return stAccent.Background(colPanel).Render("❯ ")
 		}
 		return "  "
 	})
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.FocusedStyle.Base = lipgloss.NewStyle()
-	ta.FocusedStyle.Placeholder = stFaint
+	ta.FocusedStyle.Base = lipgloss.NewStyle().Background(colPanel)
+	ta.FocusedStyle.Text = lipgloss.NewStyle().Foreground(colText).Background(colPanel)
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle().Background(colPanel)
+	ta.FocusedStyle.Placeholder = stDim.Background(colPanel)
 	ta.BlurredStyle = ta.FocusedStyle
 	ta.KeyMap.InsertNewline.SetKeys("ctrl+j", "alt+enter")
 	ta.Focus()
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: []string{"✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳"}, FPS: time.Second / 8}), spinner.WithStyle(stAccent))
 
-	br := &bridge{out: &printer{wake: make(chan struct{}, 1)}}
-	m := model{home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1}
+	br := &bridge{}
+	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1}
 	m.ctxWindow = m.info.ContextWindow
-	p := tea.NewProgram(m)
-	br.p, br.out.p = p, p
-	done := make(chan struct{})
-	go br.out.loop(done)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	br.p = p
 	_, err := p.Run()
-	close(done)
-	for _, s := range br.out.rest() {
-		fmt.Fprintln(os.Stdout, s)
-	}
 	return err
 }
 
@@ -313,24 +256,36 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(textarea.Blink, tea.WindowSize())
 }
 
-func (m *model) print(s string) {
-	m.home = false
-	if m.width > 0 {
-		s = ansi.Wrap(s, m.width-1, "")
-	}
-	m.br.out.push("\n" + s)
-}
+func (m *model) print(s string) { m.addBlock(transcriptBlock{text: s}) }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.input.SetWidth(max(m.contentWidth()-5, 6))
+		m.md.width = 0
 		m.fitInput()
 		m.dirty = m.stream != ""
 		return m, nil
 	case commandMsg:
 		return m.command(msg.text)
+	case tea.MouseMsg:
+		delta := 0
+		if msg.Button == tea.MouseButtonWheelUp {
+			delta = -3
+		} else if msg.Button == tea.MouseButtonWheelDown {
+			delta = 3
+		}
+		if delta != 0 {
+			if m.pick != nil {
+				m.pick.sel = max(0, min(m.pick.sel+delta, len(m.pick.visible())-1))
+			} else if len(m.sugg) > 0 {
+				m.suggAt = max(0, min(m.suggAt+delta, len(m.sugg)-1))
+			} else {
+				m.scrollHistory(delta)
+			}
+		}
+		return m, nil
 	case tea.KeyMsg:
 		return m.key(msg)
 	case spinner.TickMsg:
@@ -359,7 +314,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.endTool(msg.name, msg.args)
-		m.print(toolBlock(msg.name, msg.args, msg.result, m.width))
+		m.addBlock(transcriptBlock{kind: "tool", name: msg.name, args: msg.args, text: msg.result})
 		return m, nil
 	case progressMsg:
 		for i := len(m.tools) - 1; i >= 0; i-- {
@@ -404,7 +359,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case takenMsg:
 		for _, s := range msg.items {
-			m.print(userBlock(s, m.width))
+			m.addBlock(transcriptBlock{kind: "user", text: s})
 		}
 		return m, nil
 	case doneMsg:
@@ -418,6 +373,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.print(msg.text)
 		}
 		m.info = m.e.Info()
+		m.ctxWindow = m.info.ContextWindow
 		return m, nil
 	case modelsMsg:
 		m.busy = ""
@@ -445,10 +401,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.err = m.reloadModel()
 		}
 		m.info = m.e.Info()
+		m.ctxWindow = m.info.ContextWindow
 		if msg.err != nil {
 			m.print(stFail.Render(bullet) + " " + errText(msg.err))
 		}
-		if m.info.Telegram != "" {
+		if !msg.setup && m.info.Telegram != "" {
 			m.print(stDim.Render("Telegram: ") + m.info.Telegram)
 		}
 		return m, nil
@@ -469,7 +426,7 @@ func (m *model) flushStream() {
 	if text == "" {
 		return
 	}
-	m.print(withBullet(m.md.render(text, m.width), "●"))
+	m.addBlock(transcriptBlock{kind: "assistant", text: text})
 }
 
 func (m *model) endTool(name, args string) {
@@ -518,7 +475,7 @@ func (m *model) renderStream() string {
 	if text == "" {
 		return ""
 	}
-	return withBullet(m.md.render(text, m.width), "●")
+	return withBullet(m.md.render(text, m.contentWidth()), "●")
 }
 
 func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -529,6 +486,26 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.pickKey(msg)
 	}
 	switch msg.String() {
+	case "ctrl+up":
+		m.scrollHistory(-3)
+		return m, nil
+	case "ctrl+down":
+		m.scrollHistory(3)
+		return m, nil
+	case "pgup":
+		m.scrollHistory(-max(1, m.history.Height/2))
+		return m, nil
+	case "pgdown":
+		m.scrollHistory(max(1, m.history.Height/2))
+		return m, nil
+	case "ctrl+home":
+		m.follow = false
+		m.history.GotoTop()
+		return m, nil
+	case "ctrl+end":
+		m.follow = true
+		m.history.GotoBottom()
+		return m, nil
 	case "ctrl+p":
 		return m.openCommands()
 	case "ctrl+k":
@@ -562,6 +539,8 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case len(m.sugg) > 0:
 			m.sugg = nil
+			m.input.Reset()
+			m.fitInput()
 		case m.running:
 			m.interrupt()
 		case m.input.Value() != "":
@@ -570,7 +549,10 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "ctrl+l":
-		return m, tea.ClearScreen
+		m.log = &transcript{}
+		m.home = true
+		m.follow = true
+		return m, nil
 	case "tab":
 		if len(m.sugg) > 0 {
 			m.input.SetValue(m.sugg[m.suggAt].name + " ")
@@ -595,10 +577,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.sugg) > 0 {
 			c := m.sugg[m.suggAt]
 			m.sugg = nil
-			if c.args != "" && !strings.Contains(m.input.Value(), " ") {
-				m.input.SetValue(c.name + " ")
-				return m, nil
-			}
+
 			if !strings.Contains(m.input.Value(), " ") {
 				m.input.SetValue(c.name)
 			}
@@ -661,12 +640,31 @@ func (m *model) browse(up bool) {
 }
 
 func (m *model) fitInput() {
-	w := max(m.input.Width(), 10)
+	limit := max(1, min(6, m.height/4))
+	value := m.input.Value()
+	probe := textarea.New()
+	probe.Prompt = ""
+	probe.ShowLineNumbers = false
+	probe.SetWidth(max(m.input.Width(), 1))
 	rows := 0
-	for _, line := range strings.Split(m.input.Value(), "\n") {
-		rows += max(1, (ansi.StringWidth(line)+w-1)/w)
+	for _, line := range strings.Split(value, "\n") {
+		probe.SetValue(line)
+		rows += max(1, probe.LineInfo().Height)
+		if rows > limit {
+			break
+		}
 	}
-	m.input.SetHeight(min(max(rows, 1), 10))
+	m.input.SetHeight(max(1, min(rows, limit)))
+	if value != "" && rows <= limit {
+		row := m.input.Line()
+		info := m.input.LineInfo()
+		column := info.StartColumn + info.ColumnOffset
+		m.input.SetValue(value)
+		for m.input.Line() > row {
+			m.input.CursorUp()
+		}
+		m.input.SetCursor(column)
+	}
 }
 
 func (m model) submit() (tea.Model, tea.Cmd) {
@@ -704,7 +702,7 @@ func (m *model) startTurn(text string) tea.Cmd {
 	ctx = cmdgate.WithAsker(ctx, m.asker())
 	m.running, m.cancel, m.started, m.interrupted = true, cancel, time.Now(), false
 	m.stream, m.streamView, m.tools, m.subs = "", "", nil, nil
-	m.print(userBlock(text, m.width))
+	m.addBlock(transcriptBlock{kind: "user", text: text})
 	e, l, q, br := m.e, m.listener(), m.queue, m.br
 	inbox := func() []string {
 		items := q.take()
@@ -795,16 +793,17 @@ func (m model) done(msg doneMsg) (tea.Model, tea.Cmd) {
 		m.print("  " + stDim.Render(elbow) + "  " + stWarn.Render("Interrupted") + stDim.Render(" · tell Macron what to do instead, or say «continue»"))
 	case err != nil:
 		if answer != "" {
-			m.print(withBullet(m.md.render(answer, m.width), "●"))
+			m.addBlock(transcriptBlock{kind: "assistant", text: answer})
 		}
 		m.print(stFail.Render(bullet) + " " + errText(err))
 	case answer != "":
-		m.print(withBullet(m.md.render(answer, m.width), "●"))
+		m.addBlock(transcriptBlock{kind: "assistant", text: answer})
 	}
 	if msg.took >= 20*time.Second && !m.interrupted {
 		m.print(stDim.Render("✻ Worked for " + since(msg.took)))
 	}
 	m.info = m.e.Info()
+	m.ctxWindow = m.info.ContextWindow
 	left := m.queue.take()
 	switch {
 	case len(left) == 0:
@@ -867,7 +866,7 @@ func (m model) pickKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.pick = nil
 		if len(items) > 0 {
-			if p.title == "Model" || p.title == "Approvals" {
+			if p.title == "Model" || p.title == "Approvals" || p.title == "Provider" {
 				m.busy = "Switching"
 			}
 			return m, tea.Batch(p.pick(items[p.sel]), m.spin.Tick)
@@ -908,55 +907,6 @@ func (m model) View() string {
 	return m.workspaceView()
 }
 
-func (m model) liveView() string {
-	var lines []string
-	if m.streamView != "" {
-		view := strings.Split(m.streamView, "\n")
-		limit := max(m.height-14, 4)
-		if len(view) > limit {
-			view = append([]string{stDim.Render("  …")}, view[len(view)-limit:]...)
-		}
-		lines = append(lines, "")
-		lines = append(lines, view...)
-	}
-	blink := m.spin.View()
-	for _, t := range m.tools {
-		lines = append(lines, "", blink+" "+toolTitle(t.name, t.args, m.width-12)+stDim.Render(" "+since(time.Since(t.at))))
-		if t.progress != "" {
-			lines = append(lines, "  "+stDim.Render(elbow+"  "+clip(t.progress, m.width-8)))
-		}
-	}
-	for _, s := range m.subs {
-		if s.done {
-			continue
-		}
-		line := fmt.Sprintf("  ↳ %s · %s", oneLine(s.title), plural(s.steps, "step"))
-		if s.last != "" {
-			line += " · " + s.last
-		}
-		lines = append(lines, stDim.Render(clip(line, m.width-1)))
-	}
-	verb := "Thinking"
-	switch {
-	case m.busy != "":
-		verb = m.busy
-	case len(m.tools) > 0:
-		verb = "Working"
-	case m.stream != "":
-		verb = "Writing"
-	}
-	hint := " · esc to interrupt"
-	if m.busy != "" {
-		hint = ""
-	}
-	status := m.spin.View() + " " + stAccent.Render(verb+"…") + stDim.Render(" ("+since(time.Since(m.started))+hint+")")
-	if m.busy != "" {
-		status = m.spin.View() + " " + stAccent.Render(verb+"…")
-	}
-	lines = append(lines, "", status)
-	return strings.Join(lines, "\n")
-}
-
 func (m model) askView() string {
 	q := m.ask.q
 	w := max(m.contentWidth()-2, 12)
@@ -994,14 +944,14 @@ func (m model) pickView() string {
 	w := max(m.contentWidth()-2, 12)
 	items := p.visible()
 	var b strings.Builder
-	b.WriteString(stBold.Render(p.title))
+	b.WriteString(clip(stBold.Render(p.title), w-4))
 	if p.filter != "" {
-		b.WriteString(stDim.Render("  filter: ") + p.filter)
+		b.WriteString("\n" + stDim.Render(clip("filter: "+p.filter, w-4)))
 	} else {
-		b.WriteString(stDim.Render("  type to filter · enter to choose · esc to cancel"))
+		b.WriteString("\n" + stDim.Render(clip("type to filter · enter choose · esc back", w-4)))
 	}
 	b.WriteString("\n")
-	shown := max(2, min(10, m.height-13))
+	shown := max(1, min(7, m.height-11))
 	from := 0
 	if p.sel >= shown {
 		from = p.sel - shown + 1
@@ -1032,45 +982,49 @@ func (m model) pickView() string {
 }
 
 func (m model) suggView() string {
+	w := m.contentWidth()
+	shown := max(1, min(5, m.height/4))
+	from := max(0, m.suggAt-shown+1)
 	var lines []string
-	for i, c := range m.sugg {
-		name := fmt.Sprintf("%-12s", c.name)
-		line := "  " + name + stDim.Render(c.about)
+	for i := from; i < len(m.sugg) && i < from+shown; i++ {
+		c := m.sugg[i]
+		name := fmt.Sprintf("%-14s", c.name)
+		desc := clip(c.about, max(0, w-19))
+		mark := "  "
 		if i == m.suggAt {
-			line = stAccent.Render("❯ "+name) + stDim.Render(c.about)
+			mark = "› "
+			name = stAccent.Background(colPanel).Render(name)
 		}
-		lines = append(lines, clip(line, m.width-1))
+		if w < 44 {
+			desc = ""
+			name = c.name
+			if i == m.suggAt {
+				name = stAccent.Background(colPanel).Render(name)
+			}
+		}
+		lines = append(lines, clip(mark+name+stDim.Background(colPanel).Render(desc), w-2))
 	}
-	return strings.Join(lines, "\n")
+	lines = append(lines, stFaint.Background(colPanel).Render(fmt.Sprintf("  %d/%d · ↑↓ select · tab complete", m.suggAt+1, len(m.sugg))))
+	return lipgloss.NewStyle().Background(colPanel).Padding(0, 1).Width(w).Render(strings.Join(lines, "\n"))
 }
-
 func (m model) footer() string {
 	w := m.contentWidth()
-	if m.notice != "" {
-		return stDim.Render(clip(m.notice, w))
+	left := "ctrl+p commands · pgup history"
+	if w < 48 {
+		left = "ctrl+p commands · tab mode"
 	}
-	var parts []string
+	var stats []string
 	if m.ctxWindow > 0 {
-		percent := min(100, m.ctxUsed*100/m.ctxWindow)
-		parts = append(parts, fmt.Sprintf("context %d%%", percent))
-	}
-	if m.tokIn+m.tokOut > 0 {
-		parts = append(parts, "↑"+short(m.tokIn)+" ↓"+short(m.tokOut))
+		stats = append(stats, fmt.Sprintf("%d%% context", min(100, m.ctxUsed*100/m.ctxWindow)))
 	}
 	if m.toolCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d tools", m.toolCount))
+		stats = append(stats, fmt.Sprintf("%d tools", m.toolCount))
 	}
-	if m.info.Yolo {
-		parts = append(parts, stWarn.Render("yolo"))
-	} else {
-		parts = append(parts, orDefault(m.info.Approvals, "smart"))
+	if w >= 70 && len(stats) > 0 {
+		right := strings.Join(stats, " · ")
+		left += strings.Repeat(" ", max(1, w-ansi.StringWidth(left)-ansi.StringWidth(right))) + right
 	}
-	line := clip(strings.Join(parts, " · "), w)
-	hint := "enter send  ctrl+j newline  ctrl+p commands  tab mode"
-	if m.running {
-		hint = "esc interrupt · type to steer · ctrl+p commands"
-	}
-	return stDim.Render(line) + "\n" + stFaint.Render(clip(hint, w)) + "\n" + m.homeFooter(w)
+	return stFaint.Render(clip(left, w)) + "\n" + m.homeFooter(w)
 }
 
 func userBlock(text string, width int) string {

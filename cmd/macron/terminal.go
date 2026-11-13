@@ -262,6 +262,7 @@ func (t *terminal) Info() tui.Info {
 	if p, ok := t.prov.Active(); ok {
 		i.Model = p.Model
 		i.Provider = p.Name
+		i.Effort = p.Effort
 	}
 	i.Yolo, _ = t.gate.Yolo()
 	return i
@@ -292,6 +293,9 @@ func (t *terminal) about(ctx context.Context) string {
 func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener, inbox func() []string, yield func() <-chan struct{}) (*agent.Result, error) {
 	t.tidy.Add(1)
 	defer t.tidy.Done()
+	if err := t.prov.Reload(ctx); err != nil {
+		return nil, err
+	}
 	mc, err := t.mem.Load(ctx, t.uid)
 	if err != nil {
 		return nil, err
@@ -475,7 +479,11 @@ func (t *terminal) SetModel(ctx context.Context, name string) error {
 		return err
 	}
 	p.Model = name
-	if err := t.st.UpdateProvider(ctx, *p); err != nil {
+	normalized, err := providers.Normalize(*p)
+	if err != nil {
+		return err
+	}
+	if err := t.st.UpdateProvider(ctx, normalized); err != nil {
 		return err
 	}
 	return t.prov.Reload(ctx)
@@ -508,6 +516,19 @@ func (t *terminal) Status(ctx context.Context) string {
 	row := func(k, v string) { fmt.Fprintf(&b, "\n  %-10s %s", k, v) }
 	if p, ok := t.prov.Active(); ok {
 		row("model", p.Model+" · provider "+p.Name)
+		row("API", providers.API(p)+" · "+p.BaseURL)
+		row("stream", fmt.Sprint(!p.NoStream))
+		row("vision", fmt.Sprint(p.Vision))
+		effort := p.Effort
+		if effort == "" {
+			effort = "auto"
+		}
+		row("effort", effort)
+		temperature := "model default"
+		if p.Temperature != nil {
+			temperature = fmt.Sprint(*p.Temperature)
+		}
+		row("temperature", temperature)
 	}
 	row("window", shortCount(t.window())+" tokens")
 	if mc, err := t.mem.Load(ctx, t.uid); err == nil {
@@ -567,26 +588,36 @@ func planToolAllowed(name string) bool {
 	}
 	return false
 }
-func (t *terminal) ReloadModel(ctx context.Context) error {
-	endpoint, key, model := config.ToolEnvValue(config.EnvAPIURL), config.ToolEnvValue(config.EnvAPIKey), config.ToolEnvValue(config.EnvModel)
-	if endpoint == "" || model == "" {
-		return fmt.Errorf("configure a model endpoint and name first")
+func (t *terminal) ReloadModel(ctx context.Context) error { return t.prov.Reload(ctx) }
+
+func (t *terminal) Providers(ctx context.Context) ([]tui.ProviderChoice, error) {
+	if err := t.prov.Reload(ctx); err != nil {
+		return nil, err
 	}
-	base, api := llm.CleanBaseURL(endpoint)
-	id := t.prov.ActiveID()
-	if id == 0 {
-		if _, err := t.st.AddProvider(ctx, store.Provider{Name: "default", BaseURL: base, API: api, APIKey: key, Model: model, Enabled: true, Priority: 10, Vision: true}); err != nil {
-			return err
-		}
-	} else {
-		p, err := t.st.Provider(ctx, id)
-		if err != nil {
-			return err
-		}
-		p.BaseURL, p.API, p.APIKey, p.Model = base, api, key, model
+	var out []tui.ProviderChoice
+	for _, p := range t.prov.Snapshot() {
+		out = append(out, tui.ProviderChoice{ID: p.ID, Name: p.Name, Model: p.Model, Enabled: p.Enabled, Active: p.Active})
+	}
+	return out, nil
+}
+func (t *terminal) SetProvider(ctx context.Context, id int64) error {
+	p, err := t.st.Provider(ctx, id)
+	if err != nil {
+		return err
+	}
+	normalized, err := providers.Normalize(*p)
+	if err != nil {
+		return err
+	}
+	p = &normalized
+	if !p.Enabled {
+		p.Enabled = true
 		if err := t.st.UpdateProvider(ctx, *p); err != nil {
 			return err
 		}
+	}
+	if err := t.st.SetSetting(ctx, store.SettingActiveProvider, fmt.Sprint(id)); err != nil {
+		return err
 	}
 	return t.prov.Reload(ctx)
 }

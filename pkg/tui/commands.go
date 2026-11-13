@@ -21,6 +21,7 @@ var commands = []command{
 	{"/new", "", "start a new conversation in this folder"},
 	{"/clear", "", "clear the screen and start a new conversation"},
 	{"/compact", "", "summarize the conversation to free context"},
+	{"/provider", "", "switch the active provider"},
 	{"/model", "[name]", "show or switch the model"},
 	{"/approvals", "[smart|manual|off]", "how risky commands are approved"},
 	{"/yolo", "", "run commands without asking for 30 minutes (again: off)"},
@@ -73,6 +74,8 @@ func helpText() string {
 		{"esc", "interrupt Macron, or clear the input"},
 		{"↑ ↓", "earlier messages"},
 		{"ctrl+c twice · ctrl+d", "exit"},
+		{"pgup · pgdown", "scroll conversation"},
+		{"ctrl+home · ctrl+end", "start of history · follow latest"},
 		{"ctrl+l", "clear the screen"},
 	} {
 		fmt.Fprintf(&b, "\n  %-30s %s", k[0], stDim.Render(k[1]))
@@ -147,7 +150,9 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 		m.info = e.Info()
 		if name == "/clear" {
 			m.home = true
-			return m, tea.ClearScreen
+			m.log = &transcript{}
+			m.follow = true
+			return m, nil
 		}
 		m.print(stOK.Render(bullet) + " New conversation: earlier messages in this folder are forgotten")
 	case "/compact":
@@ -158,6 +163,8 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			}
 			return noticeMsg{text: stOK.Render(bullet) + " " + s}
 		})
+	case "/provider":
+		return m.providerPicker()
 	case "/model":
 		if arg != "" {
 			return work("Switching", func() tea.Msg {

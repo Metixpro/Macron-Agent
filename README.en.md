@@ -45,13 +45,17 @@ An interactive terminal interface opens: answers stream in rendered Markdown, ev
 |---|---|
 | `Enter` · `Ctrl+J` | send · new line |
 | `Esc` | interrupt |
-| `Ctrl+P` | search commands |
+| `Ctrl+P` | search commands in a bounded, scrollable menu |
+| `PageUp` · `PageDown` · `Ctrl+End` | browse history · follow the latest output |
+| `/provider` | switch the active provider |
 | `Tab` · `Shift+Tab` | switch Build / Plan; Plan exposes only read-only tools |
 | `/connect` · `/connections` | connect a model or service · inspect setup without exposing secrets |
 | `/model` · `/approvals` · `/yolo` | switch the model · how commands are approved · no prompts for 30 minutes |
 | `/new` · `/compact` · `/status` | fresh conversation · summarize the history · status |
 | `/init` | write `MACRON.md` for the project |
 | `/telegram` | connect and manage the Telegram bot |
+
+The conversation keeps its composer and colored status bar at the bottom while history scrolls separately. Persian/Arabic text is shaped and reordered for display; logical input sent to the model is preserved. Set `MACRON_TUI_RTL=logical` for terminals that already render BiDi themselves.
 
 The welcome screen shows the active model and mode and adapts to narrow terminals. Use `/connect model` to configure a provider. Ask in chat to connect Bale, inspect Gmail or configure another service: Macron discovers the connection tool, checks existing settings and asks only for what is missing. Saving credentials and verifying authentication are separate; connection checks do not send messages.
 

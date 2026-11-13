@@ -129,6 +129,9 @@ func (b *Bot) runPrompt(u *store.User, m *telegram.Message, text string, opt pro
 	if !detached && !opt.vote {
 		b.noteRequest(nctx, uid, m.Chat.ID, text)
 	}
+	if err := b.prov.Reload(nctx); err != nil {
+		return say(l.t("تنظیمات پروایدر خوانده نشد؛ دوباره تلاش کن."))
+	}
 	st := standing{tier: tierOwner}
 
 	tc := b.startTriage(uid, m, text, !detached && !opt.vote)
