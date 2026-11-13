@@ -1,0 +1,20 @@
+{
+  "name": "macron-desktop-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "tsc --noEmit && esbuild src/main.tsx --bundle --minify --format=esm --target=chrome105,edge105,safari16 --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --legal-comments=external --outfile=../web/app.js",
+    "watch": "esbuild src/main.tsx --bundle --format=esm --target=chrome105 --jsx=automatic --watch --outfile=../web/app.js"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

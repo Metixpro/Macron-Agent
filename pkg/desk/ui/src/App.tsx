@@ -1,0 +1,113 @@
+import { useEffect, useRef } from "react";
+import { applyTheme, closeDialog, composer, newChat, openDialog, stop, toggleMode } from "./actions";
+import { Composer } from "./components/Composer";
+import { Dialogs } from "./components/Dialogs";
+import { Feed } from "./components/Feed";
+import { Header } from "./components/Header";
+import { LiveCard } from "./components/Live";
+import { Sidebar } from "./components/Sidebar";
+import { connect } from "./events";
+import { useProjectName } from "./hooks";
+import { getState, setState, useStore } from "./store";
+
+function useShortcuts() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const s = getState();
+      if (s.dialog?.kind === "ask") return;
+      const mod = e.ctrlKey || e.metaKey;
+      const k = e.key.toLowerCase();
+      if (e.key === "Escape") {
+        if (s.dialog) {
+          e.preventDefault();
+          closeDialog();
+        } else if (s.sideOpen) setState({ sideOpen: false });
+        else if (s.live.running) {
+          e.preventDefault();
+          stop();
+        }
+        return;
+      }
+      if (mod && k === "k") {
+        e.preventDefault();
+        if (s.dialog?.kind === "palette") closeDialog();
+        else openDialog({ kind: "palette", mode: "root" });
+        return;
+      }
+      if (s.dialog) return;
+      if (mod && e.shiftKey && k === "p") {
+        e.preventDefault();
+        toggleMode();
+      } else if (mod && !e.shiftKey && k === "n") {
+        e.preventDefault();
+        newChat();
+      } else if (mod && k === "o") {
+        e.preventDefault();
+        openDialog({ kind: "folder" });
+      } else if (mod && e.key === ",") {
+        e.preventDefault();
+        openDialog({ kind: "settings" });
+      } else if (!mod && !e.altKey && e.key.length === 1 && (!document.activeElement || document.activeElement === document.body)) {
+        composer.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}
+
+function useTitle() {
+  const name = useProjectName();
+  const unseen = useStore((s) => s.unseen);
+  useEffect(() => {
+    document.title = (unseen ? "● " : "") + (name && name !== "Home" ? name + " · Macron" : "Macron");
+  }, [name, unseen]);
+  useEffect(() => {
+    const seen = () => setState({ unseen: false });
+    window.addEventListener("focus", seen);
+    return () => window.removeEventListener("focus", seen);
+  }, []);
+}
+
+function Toast() {
+  const t = useStore((s) => s.toast);
+  const last = useRef("");
+  if (t) last.current = t.text;
+  return (
+    <div className={"toast" + (t ? " on" : "")} role="status" aria-live="polite">
+      {t ? t.text : last.current}
+    </div>
+  );
+}
+
+export function App() {
+  const theme = useStore((s) => s.theme);
+  const sideOpen = useStore((s) => s.sideOpen);
+
+  useEffect(() => {
+    applyTheme(theme);
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const follow = () => applyTheme(getState().theme);
+    mq.addEventListener("change", follow);
+    return () => mq.removeEventListener("change", follow);
+  }, [theme]);
+
+  useEffect(() => connect(), []);
+  useShortcuts();
+  useTitle();
+
+  return (
+    <div className={"app" + (sideOpen ? " side-open" : "")}>
+      <Sidebar />
+      <div className="scrim" onClick={() => setState({ sideOpen: false })} />
+      <main className="main">
+        <Header />
+        <Feed />
+        <LiveCard />
+        <Composer />
+      </main>
+      <Dialogs />
+      <Toast />
+    </div>
+  );
+}

@@ -342,11 +342,18 @@ func (p *project) inbox() []string {
 	p.mu.Lock()
 	items := p.queue
 	p.queue = nil
+	var flushed *Block
 	var blocks []Block
+	if len(items) > 0 {
+		flushed = p.flushStreamLocked()
+	}
 	for _, t := range items {
 		blocks = append(blocks, p.appendLocked(Block{Kind: "user", Text: t}))
 	}
 	p.mu.Unlock()
+	if flushed != nil {
+		p.emit("block", map[string]any{"block": *flushed})
+	}
 	for _, b := range blocks {
 		p.emit("user", map[string]any{"block": b, "taken": true})
 	}

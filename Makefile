@@ -1,4 +1,4 @@
-.PHONY: build release vet lint vuln fmt fmt-check check audit clean
+.PHONY: build release vet lint vuln fmt fmt-check check audit clean ui
 
 VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' pkg/app/app.go)
 GOFLAGS_REL := -buildvcs=false -trimpath -ldflags "-s -w"
@@ -7,6 +7,9 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 darwin/amd64
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build $(GOFLAGS_REL) -o bin/macron ./cmd/macron
+
+ui:
+	cd pkg/desk/ui && npm ci --no-fund --no-audit && npm run build
 
 release:
 	mkdir -p dist
