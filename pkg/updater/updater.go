@@ -270,6 +270,14 @@ func Install(ctx context.Context, rel *Release, step func(string)) error {
 	if err != nil {
 		return err
 	}
+	if runtime.GOOS == "windows" && strings.Contains(strings.ToLower(filepath.Base(self)), "desktop") {
+		step("update the desktop app")
+		data, err := extractFile(archive, "macron-desktop.exe")
+		if err != nil {
+			return err
+		}
+		return replace(self, data)
+	}
 	step("preflight the new program")
 	if err := Swap(self, bin, rel.Version()); err != nil {
 		return err

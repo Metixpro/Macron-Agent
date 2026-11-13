@@ -630,3 +630,12 @@ The installer prints the Macron logo, a plan, numbered steps with a progress bar
 ### 1.12.2: Persian in terminals that order it themselves
 
 Some terminals (most mobile SSH apps, Konsole, GNOME Terminal) put right-to-left text in order themselves; Macron's own reordering then reversed Persian a second time. `/rtl` switches between `visual` (Macron orders it, for terminals that do not) and `logical` (the terminal does), and the choice is remembered. Until a choice is made, the status line says «Persian reversed? /rtl» once Persian text is on screen. Konsole and GNOME Terminal on the same machine get `logical` by themselves; `MACRON_TUI_RTL` still overrides both.
+
+### 1.13.0: the desktop app and Windows
+
+- `macron desktop` (on Windows, Macron Desktop in the Start menu) is a window of its own (WebView2 on Windows) with the whole workspace: live answers, steps folded into one line once a job ends and the latest ones open while it runs, the checklist and sub-agents, approvals, Build and Plan, model and effort pickers, one folder per project with its own conversation, Persian text and tables right to left, light and dark, and a narrow layout.
+- From the app: connect a model (OpenAI, Anthropic, OpenRouter, Gemini, DeepSeek, Ollama or any compatible address), set effort, context window and temperature, add MCP servers, and connect to Macron on a server over SSH (key, agent or password; the server's key is checked on first use and remembered) or in WSL.
+- The terminal workspace gets `/effort`, `/context`, `/temperature`, `/settings` and `/mcp`; mouse wheel scrolling works in the Windows terminal, and Persian lines that start with an English word stay right to left.
+- On Windows the agent runs commands with PowerShell (PowerShell 7 when installed), stops whole process trees, finds a real Python, and its approval rules know risky Windows commands.
+- `apply_patch` also takes hunks without line numbers and files with Windows line endings, and works without git.
+- Releases ship Windows builds for x64, x86 (32-bit) and ARM64, as zips and as plain exe files (Macron-Desktop-…exe, Macron-Terminal-…exe); `install.ps1` picks the right one.
