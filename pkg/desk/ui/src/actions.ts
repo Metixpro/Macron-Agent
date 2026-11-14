@@ -291,9 +291,28 @@ export async function connectServer(id: string, secrets: { password?: string; pa
     return true;
   } catch (e) {
     await loadServers();
+    const msg = errorText(e);
+    if (/not installed|too old/i.test(msg)) {
+      setState({ toast: null });
+      openDialog({ kind: "server-install", id, update: /too old/i.test(msg) });
+      return false;
+    }
     fail(e);
     return false;
   }
+}
+
+export async function installOnServer(id: string, secrets: { password?: string; passphrase?: string; trust?: string } = {}): Promise<string> {
+  const r = await server.installServer(id, secrets);
+  await loadServers();
+  if (r.need) {
+    openDialog({ kind: "server-auth", id, need: r.need, fingerprint: r.fingerprint, message: r.message, install: true });
+    return "";
+  }
+  setState({ dialog: null });
+  toast(`Macron is on ${serverName(id)} now. Connecting…`);
+  await switchMachine(id);
+  return r.output || "";
 }
 
 export async function switchMachine(id: string) {
@@ -312,7 +331,11 @@ export async function switchMachine(id: string) {
   stream.reconnect();
 }
 
-export async function authServer(id: string, secrets: { password?: string; passphrase?: string; trust?: string }) {
+export async function authServer(id: string, secrets: { password?: string; passphrase?: string; trust?: string }, install = false) {
+  if (install) {
+    openDialog({ kind: "server-install", id, update: false, secrets });
+    return;
+  }
   setState({ dialog: null });
   if (await connectServer(id, secrets)) await switchMachine(id);
 }

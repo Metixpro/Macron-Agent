@@ -153,6 +153,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/servers", s.addServerAPI)
 	mux.HandleFunc("DELETE /api/servers/{id}", s.removeServerAPI)
 	mux.HandleFunc("POST /api/servers/{id}/connect", s.connectServerAPI)
+	mux.HandleFunc("POST /api/servers/{id}/install", s.installServerAPI)
 	mux.HandleFunc("POST /api/servers/{id}/disconnect", s.disconnectServerAPI)
 	mux.HandleFunc("/remote/{id}/api/{rest...}", s.remoteProxy)
 	return s.guard(mux)
@@ -193,7 +194,9 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 			if v == http.ErrAbortHandler {
-				log.Printf("desktop: %s %s: the reply was cut off", r.Method, r.URL.Path)
+				if r.Context().Err() == nil {
+					log.Printf("desktop: %s %s: the reply was cut off", r.Method, r.URL.Path)
+				}
 				panic(v)
 			}
 			log.Printf("desktop: %s %s failed: %v\n%s", r.Method, r.URL.Path, v, debug.Stack())

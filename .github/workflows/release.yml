@@ -24,10 +24,77 @@ jobs:
           fi
           echo "TAG=$tag" >> "$GITHUB_ENV"
       - run: make release
-      - name: publish
+      - name: publish as a draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${TAG#v}"
-          notes="Windows: Macron-Desktop-$v-x64.exe for 64-bit, Macron-Desktop-$v-x86.exe for 32-bit, Macron-Desktop-$v-arm64.exe for ARM. Macron-Terminal-*.exe is the terminal app. The zips hold both, and install.ps1 installs them with shortcuts and updates."
-          gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/*.exe dist/SHA256SUMS --title "Macron Agent $TAG" --notes "$notes" --generate-notes --target "$GITHUB_SHA"
+          notes="Windows: download Macron-Setup-$v.exe, one installer for every Windows PC (it picks 64-bit, 32-bit or ARM by itself; no administrator rights needed). Linux and macOS: install.sh. The zips and tar.gz files are for install.ps1, install.sh and updates."
+          gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/SHA256SUMS --draft --title "Macron Agent $TAG" --notes "$notes" --generate-notes --target "$GITHUB_SHA"
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+        id: draft
+    outputs:
+      tag: ${{ steps.draft.outputs.TAG }}
+
+  windows-setup:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+      - name: build the installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          $v = $env:TAG.TrimStart("v")
+          gh release download $env:TAG -R $env:GITHUB_REPOSITORY -p "macron-$v-windows-*.zip" -D zips
+          packaging/windows/build.ps1 -Version $v -Zips "$PWD\zips"
+      - name: install, run and uninstall it
+        shell: pwsh
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          $v = $env:TAG.TrimStart("v")
+          $setup = "packaging\windows\out\Macron-Setup-$v.exe"
+          Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS=addtopath" -Wait
+          $dest = Join-Path $env:LOCALAPPDATA "Programs\Macron"
+          $got = & "$dest\macron.exe" version
+          if ($got -notmatch [regex]::Escape($v)) { throw "installed version is '$got'" }
+          if (-not (Test-Path "$dest\macron-desktop.exe")) { throw "the desktop app is missing" }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'Macron.lnk'))) { throw "no Start menu shortcut" }
+          if (([Environment]::GetEnvironmentVariable('Path', 'User')) -notlike "*$dest*") { throw "not on PATH" }
+          $env:MACRON_HOME = Join-Path $env:RUNNER_TEMP "setup-home"
+          $psi = [System.Diagnostics.ProcessStartInfo]::new("$dest\macron.exe", "desktop --serve --json")
+          $psi.RedirectStandardInput = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.UseShellExecute = $false
+          $p = [System.Diagnostics.Process]::Start($psi)
+          $line = $p.StandardOutput.ReadLine()
+          if ($line -notmatch '"addr"') { throw "the engine did not start: $line" }
+          $j = $line | ConvertFrom-Json
+          $state = Invoke-RestMethod -Uri "http://$($j.addr)/api/state" -Headers @{ Authorization = "Bearer $($j.token)" }
+          if ($state.info.version -ne $v) { throw "the engine reports $($state.info.version)" }
+          $p.StandardInput.Close()
+          $null = $p.WaitForExit(15000)
+          Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          Start-Sleep 3
+          if (Test-Path "$dest\macron.exe") { throw "the uninstaller left the program" }
+          if (([Environment]::GetEnvironmentVariable('Path', 'User')) -like "*$dest*") { throw "the uninstaller left PATH" }
+          "installer OK: $got"
+      - name: attach it and publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          $v = $env:TAG.TrimStart("v")
+          $setup = "packaging\windows\out\Macron-Setup-$v.exe"
+          gh release download $env:TAG -R $env:GITHUB_REPOSITORY -p SHA256SUMS -D sums
+          $hash = (Get-FileHash -Algorithm SHA256 $setup).Hash.ToLower()
+          [IO.File]::AppendAllText("$PWD\sums\SHA256SUMS", "$hash  Macron-Setup-$v.exe`n")
+          gh release upload $env:TAG -R $env:GITHUB_REPOSITORY $setup "sums\SHA256SUMS" --clobber
+          gh release edit $env:TAG -R $env:GITHUB_REPOSITORY --draft=false --latest

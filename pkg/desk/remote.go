@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -191,6 +193,9 @@ func (rs *remotes) open(ctx context.Context, r *remote, spec ServerSpec, sec Sec
 		if err != nil {
 			return err
 		}
+		r.mu.Lock()
+		r.secrets = Secrets{Password: sec.Password, Passphrase: sec.Passphrase}
+		r.mu.Unlock()
 		tr = t
 	default:
 		return fmt.Errorf("unknown connection kind %q", spec.Kind)
@@ -401,6 +406,83 @@ func (s *Server) connectServerAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, map[string]any{"server": rm.view()})
 	}
+}
+
+func (s *Server) installServerAPI(w http.ResponseWriter, r *http.Request) {
+	rm := s.remotes.get(r.PathValue("id"))
+	if rm == nil {
+		writeErr(w, http.StatusNotFound, errors.New("no such server"))
+		return
+	}
+	var sec Secrets
+	_ = readJSON(r, &sec)
+	rm.mu.Lock()
+	spec := rm.spec
+	if sec.Password == "" {
+		sec.Password = rm.secrets.Password
+	}
+	if sec.Passphrase == "" {
+		sec.Passphrase = rm.secrets.Passphrase
+	}
+	rm.mu.Unlock()
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Minute)
+	defer cancel()
+	rm.shutdown()
+	rm.set("installing", "")
+	s.remotes.changed()
+	var out string
+	var err error
+	switch spec.Kind {
+	case "ssh":
+		var t *sshTransport
+		t, err = dialSSH(ctx, spec, sec)
+		var need *NeedError
+		if errors.As(err, &need) {
+			rm.set("off", "")
+			s.remotes.changed()
+			writeJSON(w, map[string]any{"server": rm.view(), "need": need.Need, "fingerprint": need.Fingerprint, "message": need.Message})
+			return
+		}
+		if err == nil {
+			out, err = t.run(ctx, "sh -lc '"+installScript+"'")
+			t.close()
+		}
+	case "wsl":
+		argv := []string{"wsl.exe"}
+		if spec.Host != "" {
+			argv = append(argv, "-d", spec.Host)
+		}
+		cmd := exec.CommandContext(ctx, argv[0], append(argv[1:], "--", "sh", "-lc", installScript)...)
+		hideWindow(cmd)
+		buf := &tailBuffer{max: 16384}
+		cmd.Stdout, cmd.Stderr = buf, buf
+		err = cmd.Run()
+		out = buf.String()
+	default:
+		err = fmt.Errorf("unknown connection kind %q", spec.Kind)
+	}
+	out = ansiRe.ReplaceAllString(out, "")
+	if err != nil {
+		log.Printf("desktop: installing macron on %s failed: %v\n%s", spec.Name, err, out)
+		rm.set("failed", "installing Macron failed")
+		s.remotes.changed()
+		writeErr(w, http.StatusBadGateway, fmt.Errorf("installing Macron on %s failed%s", spec.Name, tail(strings.TrimSpace(out))))
+		return
+	}
+	log.Printf("desktop: installed macron on %s", spec.Name)
+	rm.set("off", "")
+	s.remotes.changed()
+	writeJSON(w, map[string]any{"server": rm.view(), "output": lastLines(out, 12)})
+}
+
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;?]*[A-Za-z]")
+
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (s *Server) disconnectServerAPI(w http.ResponseWriter, r *http.Request) {

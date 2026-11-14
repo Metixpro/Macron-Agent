@@ -12,7 +12,8 @@ export type Dialog =
   | { kind: "server-add" }
   | { kind: "model-connect" }
   | { kind: "mcp-add" }
-  | { kind: "server-auth"; id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; message?: string }
+  | { kind: "server-auth"; id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; message?: string; install?: boolean }
+  | { kind: "server-install"; id: string; update: boolean; secrets?: { password?: string; passphrase?: string; trust?: string } }
   | null;
 
 export interface State {

@@ -7,6 +7,7 @@ import {
   authServer,
   connectServer,
   disconnectServer,
+  installOnServer,
   removeServer,
   effortAbout,
   effortLevels,
@@ -100,10 +101,83 @@ export function Dialogs() {
     case "server-auth":
       return (
         <Modal kind="form" dismiss>
-          <ServerAuth key={d.id + d.need} id={d.id} need={d.need} fingerprint={d.fingerprint} />
+          <ServerAuth key={d.id + d.need} id={d.id} need={d.need} fingerprint={d.fingerprint} install={d.install} />
+        </Modal>
+      );
+    case "server-install":
+      return (
+        <Modal kind="form" dismiss={false}>
+          <ServerInstall key={d.id + (d.secrets ? "+" : "")} id={d.id} update={d.update} secrets={d.secrets} />
         </Modal>
       );
   }
+}
+
+function ServerInstall({ id, update, secrets }: { id: string; update: boolean; secrets?: { password?: string; passphrase?: string; trust?: string } }) {
+  const srv = useStore((s) => s.servers.find((x) => x.id === id));
+  const name = srv?.name || "the server";
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [started, setStarted] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!busy) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [busy]);
+  useEffect(() => {
+    if (secrets) run();
+  }, []);
+  const run = async () => {
+    setBusy(true);
+    setError("");
+    setStarted(Date.now());
+    try {
+      await installOnServer(id, secrets);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const secs = Math.max(0, Math.round((now - started) / 1000));
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!busy) run();
+      }}
+    >
+      <h3>{update ? `Macron on ${name} needs an update` : `Macron is not on ${name} yet`}</h3>
+      <div className="sub">
+        {update
+          ? "The desktop app talks to a newer Macron than the one on that server. Macron can update it for you over this connection."
+          : "The desktop app runs your work through Macron on the server itself. Macron can install it there for you over this connection."}
+      </div>
+      <div className="hint">
+        It runs the official installer on the server with no questions: the program, its tools, nothing else. The Telegram bot stays off. This usually takes two to five
+        minutes.
+      </div>
+      {busy && (
+        <div className="install-progress">
+          <span className="spin" />
+          {update ? "Updating" : "Installing"} on {name} · {secs < 60 ? secs + "s" : Math.floor(secs / 60) + "m " + String(secs % 60).padStart(2, "0") + "s"}
+        </div>
+      )}
+      {error && <div className="form-error">{error}</div>}
+      <div className="bar">
+        <span />
+        <div className="left">
+          <button type="button" className="btn" onClick={closeDialog} disabled={busy}>
+            {error ? "Close" : "Not now"}
+          </button>
+          <button type="submit" className="btn primary" disabled={busy}>
+            {busy ? "Working…" : error ? "Try again" : update ? "Update it there" : "Install it there"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
 }
 
 function splitArgs(s: string): string[] {
@@ -443,14 +517,14 @@ function ServerAdd() {
   );
 }
 
-function ServerAuth({ id, need, fingerprint }: { id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string }) {
+function ServerAuth({ id, need, fingerprint, install }: { id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; install?: boolean }) {
   const srv = useStore((s) => s.servers.find((x) => x.id === id));
   const [value, setValue] = useState("");
   const where = srv ? (srv.user ? srv.user + "@" : "") + (srv.host || "") : "the server";
   const submit = () => {
-    if (need === "trust") return authServer(id, { trust: fingerprint });
+    if (need === "trust") return authServer(id, { trust: fingerprint }, install);
     if (!value) return;
-    return authServer(id, need === "password" ? { password: value } : { passphrase: value });
+    return authServer(id, need === "password" ? { password: value } : { passphrase: value }, install);
   };
   return (
     <form
@@ -1151,7 +1225,7 @@ function Settings() {
                   Disconnect
                 </button>
               ) : (
-                <button type="button" className="btn ghost" disabled={s.state === "connecting"} onClick={() => connectServer(s.id)}>
+                <button type="button" className="btn ghost" disabled={s.state === "connecting" || s.state === "installing"} onClick={() => connectServer(s.id)}>
                   Connect
                 </button>
               )}

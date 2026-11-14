@@ -9,6 +9,7 @@ import type { ServerView, Summary } from "../types";
 function serverLine(s: ServerView): string {
   if (s.state === "failed" && s.error) return s.error;
   if (s.state === "connecting") return "Connecting…";
+  if (s.state === "installing") return "Installing Macron…";
   if (s.kind === "wsl") return "WSL" + (s.host ? " · " + s.host : "");
   return (s.user ? s.user + "@" : "") + (s.host || "") + (s.port && s.port !== 22 ? ":" + s.port : "");
 }

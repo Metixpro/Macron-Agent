@@ -87,4 +87,6 @@ export const server = {
   connectServer: (id: string, secrets: { password?: string; passphrase?: string; trust?: string }) =>
     call<ConnectResult>("POST", "/api/servers/" + encodeURIComponent(id) + "/connect", secrets),
   disconnectServer: (id: string) => call<Ok>("POST", "/api/servers/" + encodeURIComponent(id) + "/disconnect"),
+  installServer: (id: string, secrets: { password?: string; passphrase?: string; trust?: string } = {}) =>
+    call<ConnectResult & { output?: string }>("POST", "/api/servers/" + encodeURIComponent(id) + "/install", secrets),
 };

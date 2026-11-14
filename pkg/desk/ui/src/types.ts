@@ -172,7 +172,7 @@ export interface ServerView {
   user?: string;
   port?: number;
   key?: string;
-  state: "off" | "connecting" | "ready" | "failed";
+  state: "off" | "connecting" | "installing" | "ready" | "failed";
   error?: string;
   version?: string;
 }

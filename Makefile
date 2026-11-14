@@ -36,11 +36,8 @@ release:
 		cp README.md README.en.md LICENSE config.env.example dist/$$name/; \
 		cp -R assets dist/$$name/; \
 		(cd dist && rm -f $$name.zip && zip -qr $$name.zip $$name) || exit 1; \
-		case $$arch in amd64) label=x64;; 386) label=x86;; *) label=$$arch;; esac; \
-		cp dist/$$name/macron-desktop.exe dist/Macron-Desktop-$(VERSION)-$$label.exe; \
-		cp dist/$$name/macron.exe dist/Macron-Terminal-$(VERSION)-$$label.exe; \
 	done
-	cd dist && (sha256sum *.tar.gz *.zip *.exe 2>/dev/null || shasum -a 256 *.tar.gz *.zip *.exe) > SHA256SUMS
+	cd dist && (sha256sum *.tar.gz *.zip 2>/dev/null || shasum -a 256 *.tar.gz *.zip) > SHA256SUMS
 	@echo "dist/ ready for $(VERSION)"
 
 vet:

@@ -2,6 +2,8 @@ package desk
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -57,20 +59,62 @@ func sshDir() string {
 
 func knownHostsFile() string { return filepath.Join(sshDir(), "known_hosts") }
 
-func hostKeyCallback(trust string) (ssh.HostKeyCallback, error) {
+var preferredHostKeys = []string{ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521, ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+
+func hostKeyAlgos(known ssh.HostKeyCallback, addr string, remote net.Addr) []string {
+	_, probe, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return preferredHostKeys
+	}
+	signer, err := ssh.NewSignerFromKey(probe)
+	if err != nil {
+		return preferredHostKeys
+	}
+	var ke *knownhosts.KeyError
+	if err := known(addr, remote, signer.PublicKey()); err == nil || !errors.As(err, &ke) || len(ke.Want) == 0 {
+		return preferredHostKeys
+	}
+	have := map[string]bool{}
+	for _, k := range ke.Want {
+		have[k.Key.Type()] = true
+	}
+	var out []string
+	for _, a := range preferredHostKeys {
+		t := a
+		if a == ssh.KeyAlgoRSASHA512 || a == ssh.KeyAlgoRSASHA256 {
+			t = ssh.KeyAlgoRSA
+		}
+		if have[t] {
+			out = append(out, a)
+		}
+	}
+	if have[ssh.KeyAlgoRSA] {
+		out = append(out, ssh.KeyAlgoRSA)
+	}
+	if len(out) == 0 {
+		return preferredHostKeys
+	}
+	return out
+}
+
+func knownHosts() (ssh.HostKeyCallback, string, error) {
 	path := knownHostsFile()
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err := os.WriteFile(path, nil, 0o600); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	known, err := knownhosts.New(path)
 	if err != nil {
-		return nil, err
+		return nil, "", fmt.Errorf("could not read %s: %w", path, err)
 	}
+	return known, path, nil
+}
+
+func hostKeyCallback(known ssh.HostKeyCallback, path, trust string) ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		err := known(hostname, remote, key)
 		var ke *knownhosts.KeyError
@@ -91,7 +135,7 @@ func hostKeyCallback(trust string) (ssh.HostKeyCallback, error) {
 		defer f.Close()
 		_, err = fmt.Fprintln(f, knownhosts.Line([]string{knownhosts.Normalize(hostname)}, key))
 		return err
-	}, nil
+	}
 }
 
 func keySigners(spec ServerSpec, passphrase string) ([]ssh.Signer, bool) {
@@ -128,7 +172,7 @@ func keySigners(spec ServerSpec, passphrase string) ([]ssh.Signer, bool) {
 }
 
 func dialSSH(ctx context.Context, spec ServerSpec, sec Secrets) (*sshTransport, error) {
-	cb, err := hostKeyCallback(sec.Trust)
+	known, khPath, err := knownHosts()
 	if err != nil {
 		return nil, err
 	}
@@ -159,12 +203,13 @@ func dialSSH(ctx context.Context, spec ServerSpec, sec Secrets) (*sshTransport, 
 		port = 22
 	}
 	addr := net.JoinHostPort(spec.Host, strconv.Itoa(port))
-	cfg := &ssh.ClientConfig{User: user, Auth: methods, HostKeyCallback: cb, Timeout: 20 * time.Second}
 	d := net.Dialer{Timeout: 20 * time.Second}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("could not reach %s: %w", addr, err)
 	}
+	cfg := &ssh.ClientConfig{User: user, Auth: methods, HostKeyCallback: hostKeyCallback(known, khPath, sec.Trust),
+		HostKeyAlgorithms: hostKeyAlgos(known, addr, conn.RemoteAddr()), Timeout: 20 * time.Second}
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
 	if err != nil {
@@ -233,6 +278,29 @@ func (t *sshTransport) start(context.Context) (io.WriteCloser, io.Reader, func()
 		t.close()
 	}()
 	return stdin, stdout, errs.String, nil
+}
+
+const installScript = `url=https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.sh; ` +
+	`if command -v curl >/dev/null 2>&1; then curl -fsSL "$url"; elif command -v wget >/dev/null 2>&1; then wget -qO- "$url"; ` +
+	`else echo "this machine has neither curl nor wget" >&2; exit 1; fi | bash -s -- --yes --no-setup --no-service`
+
+func (t *sshTransport) run(ctx context.Context, command string) (string, error) {
+	sess, err := t.client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+	out := &tailBuffer{max: 16384}
+	sess.Stdout, sess.Stderr = out, out
+	done := make(chan error, 1)
+	go func() { done <- sess.Run(command) }()
+	select {
+	case err := <-done:
+		return out.String(), err
+	case <-ctx.Done():
+		_ = sess.Close()
+		return out.String(), ctx.Err()
+	}
 }
 
 func (t *sshTransport) dial(ctx context.Context, addr string) (net.Conn, error) {
