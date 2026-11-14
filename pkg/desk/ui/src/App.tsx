@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { applyTheme, closeDialog, composer, newChat, openDialog, stop, toggleMode } from "./actions";
 import { Composer } from "./components/Composer";
 import { Dialogs } from "./components/Dialogs";
+import { Welcome } from "./components/Welcome";
 import { Feed } from "./components/Feed";
 import { Header } from "./components/Header";
 import { LiveCard } from "./components/Live";
@@ -132,6 +133,7 @@ export function App() {
         <Composer />
       </main>
       <Dialogs />
+      <Welcome />
       <Toast />
     </div>
   );

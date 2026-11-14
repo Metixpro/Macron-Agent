@@ -31,19 +31,19 @@ Choose **current user** or **system/root** first. The installer shows the paths,
 
 User installations need no `sudo`. Python packages go into a private environment; a compatible Python is provisioned when needed. Missing optional system executables are reported.
 
-On Windows, in PowerShell:
+On Windows, download `Macron-Setup-…exe` from the [latest release](https://github.com/Metixpro/Macron-Agent/releases/latest) and run it: one installer for every Windows PC (it picks the 64-bit, 32-bit or ARM build by itself; Intel or AMD makes no difference). It installs without admin rights into `%LOCALAPPDATA%\Programs\Macron`, puts in both the desktop and the terminal app, adds the Start menu (and, if you want, the desktop and `PATH`), and uninstalls from Windows' Apps list; conversations and settings stay in `~\.macron`. The file is not code-signed, so Windows may show a SmartScreen warning: More info, then Run anyway.
+
+Or in PowerShell (same folder, same two apps, no installer window):
 
 ```powershell
 irm https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.ps1 | iex
 ```
 
-It installs without admin rights into `%LOCALAPPDATA%\Programs\Macron`, checks the download against `SHA256SUMS`, adds Macron to the Start menu and to `PATH`, and opens the app. To remove it, run the same command with `$env:MACRON_UNINSTALL=1` set (conversations and settings stay in `~\.macron`).
-
 ### The desktop app
 
 On Windows open it from the Start menu; on Linux and macOS run `macron desktop`. It opens its own window (WebView2 on Windows, Edge when WebView2 is missing) with everything the terminal has: live answers, each job's steps with long runs folded into one line, the checklist and sub-agents while they work, files Macron sends you (any kind: pictures and videos with a preview, the rest to open, show in their folder or save), approval for risky commands, Build and Plan, model choice, and one folder per project with its own conversation. Persian text and tables read right to left.
 
-The first time, connect a model from the app itself (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Ollama or any compatible service); the connection is tested before it is saved. `Ctrl+K` searches every action, theme and folder.
+The first time, the app walks you through a short setup: the model provider (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Ollama or any compatible service), the key and a model from the provider's own list (tested before it is saved), and the folder to work in. To work on a server, add an SSH server from the «This PC» menu; when Macron is missing or old there, the app offers to install or update it. `Ctrl+K` searches every action, theme and folder.
 
 On Windows, Macron runs its commands with PowerShell (PowerShell 7 when it is installed), and its approval rules know Windows' risky commands too.
 

@@ -651,3 +651,9 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 - `read_file` shows Windows (CRLF) files as plain lines.
 - Opening a script or program from a file card (.py, .bat, .ps1, .exe…) shows it in its folder instead of running it.
 - This release was run on real Windows, x64 and x86: the engine, a full agent job (PowerShell, Persian output, patches on CRLF files, Python, background jobs, sending a file) and the desktop app.
+
+### 1.14.0: one Windows installer, a first-run setup, and servers that just work
+
+- **Macron-Setup.exe**: one installer for every Windows PC. It picks the 64-bit, 32-bit or ARM build by itself (Intel or AMD makes no difference), installs per user without admin rights into `%LOCALAPPDATA%\Programs\Macron` with the desktop and terminal apps, a Start menu entry, an optional desktop shortcut and `PATH`, closes a running Macron before an upgrade, and uninstalls from Windows' Apps list (your data in `~\.macron` stays). Each release builds it on Windows and installs, runs and uninstalls it before publishing. The separate x64/x86 exe files are gone.
+- **First-run setup** in the desktop app: welcome, the model provider (with a link to get a key), the key and a model from the provider's own list (tested before it is saved), the folder to work in, and a few tips. Skip it any time; Settings has everything later.
+- **Servers**: the SSH client offers the host key type already known for the server, as `ssh` does; a server first reached with the `ssh` command was wrongly reported as «host key changed». When Macron is missing or too old on a server, the app offers to install or update it there over the same connection, then connects. A request that fails while a server is selected says the server connection dropped, and engine errors are logged to `~\.macron\desktop.log` with their reason instead of «the engine is not answering».
