@@ -737,7 +737,7 @@ func (r *Registry) readFile(ctx context.Context, sessionID string, args map[stri
 	if hint := binaryHint(name, data); hint != "" {
 		return hint, nil
 	}
-	text, cut := fitText(strings.ToValidUTF8(string(data), "�"), readShowRunes)
+	text, cut := fitText(strings.ReplaceAll(strings.ToValidUTF8(string(data), "�"), "\r\n", "\n"), readShowRunes)
 	if truncated || cut {
 
 		text = strings.TrimRight(text, "\n") + fmt.Sprintf("\n... [truncated: lines 1-%d shown — read on with start_line=%d, or find things with search_code]",

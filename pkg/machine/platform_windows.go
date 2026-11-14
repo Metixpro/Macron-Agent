@@ -205,7 +205,12 @@ func startTracked(cmd *exec.Cmd) (*tree, error) {
 }
 
 func startGroup(cmd *exec.Cmd) (*tree, error) {
-	return startTracked(cmd)
+	t := &tree{}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	t.attach(cmd.Process.Pid)
+	return t, nil
 }
 
 func (t *tree) kill() {
