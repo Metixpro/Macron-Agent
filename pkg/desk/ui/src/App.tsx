@@ -15,6 +15,7 @@ import { getState, setState, useStore } from "./store";
 function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
       const s = getState();
       if (s.dialog?.kind === "ask") return;
       const mod = e.ctrlKey || e.metaKey;

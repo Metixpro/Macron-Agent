@@ -43,6 +43,12 @@ jobs:
       - run: .\macron.exe version
       - name: regression tests on Windows
         run: go test -count=1 ./...
+      - name: native CLI commands in PowerShell 7 and Windows PowerShell 5
+        shell: pwsh
+        run: |
+          tests/windows/cli.ps1 -Exe "$PWD\macron.exe"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows/cli.ps1 -Exe "$PWD\macron.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: the desktop engine and a full agent job on Windows, x64 and x86
         shell: pwsh
         run: |
@@ -99,7 +105,7 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           macron version
-          macron doctor --tools-only
+          macron doctor --tools-only --require-tools
       - name: a second run keeps the settings
         run: |
           mkdir -p ~/.macron && printf 'TELEGRAM_BOT_TOKEN=x\nMACRON_OWNERS=1\n' > ~/.macron/config.env

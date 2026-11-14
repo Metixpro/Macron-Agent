@@ -123,7 +123,7 @@ func serviceSupported() bool {
 	case "linux":
 		_, err := exec.LookPath("systemctl")
 		return err == nil
-	case "darwin":
+	case "darwin", "windows":
 		return true
 	}
 	return false
@@ -200,6 +200,9 @@ func run(io *IO, name string, args ...string) error {
 }
 
 func serviceInstall(io *IO) int {
+	if runtime.GOOS == "windows" {
+		return windowsService(io, "install")
+	}
 	u, err := currentUnit()
 	if err != nil {
 		io.printf("❌ %v\n", err)
@@ -268,6 +271,9 @@ func systemctl(u unit) []string {
 }
 
 func serviceUninstall(io *IO) int {
+	if runtime.GOOS == "windows" {
+		return windowsService(io, "uninstall")
+	}
 	u, err := currentUnit()
 	if err != nil {
 		io.printf("❌ %v\n", err)
@@ -289,6 +295,9 @@ func serviceUninstall(io *IO) int {
 }
 
 func serviceControl(io *IO, action string) int {
+	if runtime.GOOS == "windows" {
+		return windowsService(io, action)
+	}
 	u, err := currentUnit()
 	if err != nil {
 		io.printf("❌ %v\n", err)
@@ -367,6 +376,9 @@ func exitCode(err error) int {
 }
 
 func logs(io *IO, args []string) int {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" || !systemdUsable() {
+		return fileLogs(io, args)
+	}
 	follow := false
 	lines := "100"
 	for i := 0; i < len(args); i++ {
