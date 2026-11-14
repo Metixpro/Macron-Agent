@@ -895,8 +895,12 @@ function FolderPicker() {
       setMoved(true);
       return;
     }
-    if (e.key !== "Enter" || !listing) return;
+    if (e.key !== "Enter") return;
     e.preventDefault();
+    if (!listing) {
+      if (input.trim()) void go(input.trim());
+      return;
+    }
     if (e.ctrlKey || e.metaKey) return choose(listing.path);
     if (input.trim() && input.trim() !== listing.path) return void go(input.trim());
     if (moved && dirs[sel]) return void go(join(dirs[sel]));
