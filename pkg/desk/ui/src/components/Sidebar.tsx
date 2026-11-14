@@ -25,12 +25,17 @@ function MachineMenu() {
     const away = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+    };
     window.addEventListener("mousedown", away);
-    window.addEventListener("keydown", esc);
+    window.addEventListener("keydown", esc, true);
     return () => {
       window.removeEventListener("mousedown", away);
-      window.removeEventListener("keydown", esc);
+      window.removeEventListener("keydown", esc, true);
     };
   }, [open]);
   const cur = servers.find((x) => x.id === machine);

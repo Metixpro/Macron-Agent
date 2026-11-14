@@ -33,3 +33,5 @@ func inputReady(d time.Duration) bool {
 	n, err := unix.Poll(fds, int(d.Milliseconds()))
 	return err == nil && n > 0
 }
+
+func ownsBackgroundProcess(int) bool { return true }
