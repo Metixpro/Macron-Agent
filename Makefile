@@ -1,4 +1,4 @@
-.PHONY: build windows release vet lint vuln fmt fmt-check check audit clean ui
+.PHONY: build windows release vet lint vuln fmt fmt-check check audit test test-race clean ui
 
 VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' pkg/app/app.go)
 GOFLAGS_REL := -buildvcs=false -trimpath -ldflags "-s -w"
@@ -55,7 +55,13 @@ fmt:
 fmt-check:
 	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
 
-check: fmt-check vet build
+test:
+	go test -count=1 ./...
+
+test-race:
+	go test -race -count=1 ./...
+
+check: fmt-check vet build test
 
 audit: lint vuln
 

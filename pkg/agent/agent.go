@@ -772,7 +772,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		firstTools[t.Function.Name] = true
 	}
 
-	if (req.FocusTools || len(shelf.hide(toolDefs)) > a.toolLimit()) && req.depth == 0 {
+	if shelf == nil && (req.FocusTools || len(toolDefs) > a.toolLimit()) && req.depth == 0 {
 		f := focusPicked(toolDefs, focusText(req), req.FocusPick)
 		if req.EfficientTools {
 			core := map[string]bool{"bash_execute": true, "shell_jobs": true, "read_file": true, "write_file": true, "apply_patch": true, "search_code": true, "send_file": true, ToolSearch: true}
@@ -1067,7 +1067,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		}
 		if chat {
 			offered, callable = []llm.Tool{useToolsDef}, map[string]bool{toolUseTools: true}
-		} else if !unfocused.Load() {
+		} else {
 			offered = shelf.hide(offered)
 		}
 		if req.AnswerOnLastStep && step == maxSteps {

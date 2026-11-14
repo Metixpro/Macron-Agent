@@ -55,6 +55,7 @@ func New(host Host) *Server {
 		paths = append([]string{d}, paths...)
 	}
 	for _, path := range paths {
+		migrateProjectLog(host.DataDir(), path)
 		s.addProject(path)
 	}
 	return s

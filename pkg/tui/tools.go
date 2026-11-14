@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"unicode"
@@ -64,6 +65,9 @@ func strArg(a map[string]any, k string) string {
 
 func ToolHeading(name, args string) (string, string) {
 	title := toolTitles[name]
+	if name == "bash_execute" && runtime.GOOS == "windows" {
+		title = "PowerShell"
+	}
 	if title == "" {
 		title = name
 		if server, tool, ok := strings.Cut(name, "__"); ok && server != "" && tool != "" {

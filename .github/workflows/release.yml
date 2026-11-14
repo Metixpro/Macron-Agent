@@ -59,32 +59,7 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           $v = $env:TAG.TrimStart("v")
-          $setup = "packaging\windows\out\Macron-Setup-$v.exe"
-          Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS=addtopath" -Wait
-          $dest = Join-Path $env:LOCALAPPDATA "Programs\Macron"
-          $got = & "$dest\macron.exe" version
-          if ($got -notmatch [regex]::Escape($v)) { throw "installed version is '$got'" }
-          if (-not (Test-Path "$dest\macron-desktop.exe")) { throw "the desktop app is missing" }
-          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'Macron.lnk'))) { throw "no Start menu shortcut" }
-          if (([Environment]::GetEnvironmentVariable('Path', 'User')) -notlike "*$dest*") { throw "not on PATH" }
-          $env:MACRON_HOME = Join-Path $env:RUNNER_TEMP "setup-home"
-          $psi = [System.Diagnostics.ProcessStartInfo]::new("$dest\macron.exe", "desktop --serve --json")
-          $psi.RedirectStandardInput = $true
-          $psi.RedirectStandardOutput = $true
-          $psi.UseShellExecute = $false
-          $p = [System.Diagnostics.Process]::Start($psi)
-          $line = $p.StandardOutput.ReadLine()
-          if ($line -notmatch '"addr"') { throw "the engine did not start: $line" }
-          $j = $line | ConvertFrom-Json
-          $state = Invoke-RestMethod -Uri "http://$($j.addr)/api/state" -Headers @{ Authorization = "Bearer $($j.token)" }
-          if ($state.info.version -ne $v) { throw "the engine reports $($state.info.version)" }
-          $p.StandardInput.Close()
-          $null = $p.WaitForExit(15000)
-          Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
-          Start-Sleep 3
-          if (Test-Path "$dest\macron.exe") { throw "the uninstaller left the program" }
-          if (([Environment]::GetEnvironmentVariable('Path', 'User')) -like "*$dest*") { throw "the uninstaller left PATH" }
-          "installer OK: $got"
+          tests/windows/installer.ps1 -Setup "packaging/windows/out/Macron-Setup-$v.exe" -Version $v
       - name: attach it and publish the release
         shell: pwsh
         env:

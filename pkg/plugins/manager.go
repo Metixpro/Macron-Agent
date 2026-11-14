@@ -245,7 +245,7 @@ func (m *Manager) Reload(ctx context.Context) {
 			continue
 		}
 		prev, ok := old[key]
-		if ok && prev.mcp != nil && sameServer(prev, p) && p.enabled() {
+		if ok && prev.mcp != nil && prev.enabled() && sameServer(prev, p) && p.enabled() && prev.mcp.reusable() {
 			p.mcp = prev.mcp
 			continue
 		}
@@ -611,7 +611,15 @@ type mcpSession struct {
 	dial       sync.Mutex
 }
 
+func (s *mcpSession) reusable() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.status == StatusConnecting || s.status == StatusReady && s.t != nil && s.t.alive()
+}
+
 func (s *mcpSession) close() {
+	s.dial.Lock()
+	defer s.dial.Unlock()
 	s.mu.Lock()
 	t := s.t
 	s.t, s.status = nil, StatusOff

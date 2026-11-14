@@ -234,9 +234,12 @@ macron uninstall
 
 ## توسعه
 
+تست‌ها داخل ریپو هستند و در GitHub CI روی لینوکس و ویندوز اجرا می‌شوند. [راهنمای تست و مدل واقعی](docs/testing.md).
+
 ```bash
 make check
 make audit   # تحلیل ایستا و بررسی آسیب‌پذیری‌های شناخته‌شده
+make test-race  # تست‌های رگرسیون و race detector
 make build
 ```
 
@@ -446,9 +449,12 @@ After confirmation, uninstall stops this installation’s services and processes
 
 ## Development
 
+Public regression tests run in GitHub CI on Linux and Windows. See [the testing guide](docs/testing.md) for coverage and optional live-model checks.
+
 ```bash
 make check
 make audit   # static analysis and known vulnerabilities
+make test-race  # regression tests with the race detector
 make build
 ```
 

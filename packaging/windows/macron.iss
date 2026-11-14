@@ -82,30 +82,61 @@ begin
   Result := not Is64BitInstallMode;
 end;
 
+function NormalizedPathEntry(Value: string): string;
+begin
+  Value := Trim(Value);
+  if (Length(Value) >= 2) and (Value[1] = '"') and (Value[Length(Value)] = '"') then
+    Value := Copy(Value, 2, Length(Value) - 2);
+  StringChangeEx(Value, '/', '\', True);
+  while (Length(Value) > 3) and (Value[Length(Value)] = '\') do
+    Delete(Value, Length(Value), 1);
+  Result := Uppercase(Value);
+end;
+
 function NeedsAddPath(Dir: string): Boolean;
 var
-  Paths: string;
+  Paths, Entry: string;
+  Sep: Integer;
 begin
-  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths) then
+  Result := True;
+  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths) then exit;
+  while Paths <> '' do
   begin
-    Result := True;
-    exit;
+    Sep := Pos(';', Paths);
+    if Sep = 0 then Sep := Length(Paths) + 1;
+    Entry := Copy(Paths, 1, Sep - 1);
+    Delete(Paths, 1, Sep);
+    if NormalizedPathEntry(Entry) = NormalizedPathEntry(Dir) then
+    begin
+      Result := False;
+      exit;
+    end;
   end;
-  Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Paths) + ';') = 0;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Paths, Dir: string;
+  Paths, Dir, Entry, Kept: string;
+  Sep: Integer;
 begin
   if CurUninstallStep <> usPostUninstall then
     exit;
   if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths) then
     exit;
   Dir := ExpandConstant('{app}');
-  Paths := ';' + Paths + ';';
-  while Pos(';' + Uppercase(Dir) + ';', Uppercase(Paths)) > 0 do
-    StringChangeEx(Paths, ';' + Dir + ';', ';', True);
-  Paths := Copy(Paths, 2, Length(Paths) - 2);
+  Kept := '';
+  while Paths <> '' do
+  begin
+    Sep := Pos(';', Paths);
+    if Sep = 0 then Sep := Length(Paths) + 1;
+    Entry := Copy(Paths, 1, Sep - 1);
+    Delete(Paths, 1, Sep);
+    if NormalizedPathEntry(Entry) <> NormalizedPathEntry(Dir) then
+    begin
+      if Kept <> '' then Kept := Kept + ';';
+      Kept := Kept + Entry;
+    end;
+  end;
+  Paths := Kept;
   RegWriteExpandStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths);
 end;
