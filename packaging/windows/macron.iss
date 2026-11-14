@@ -85,11 +85,15 @@ end;
 function NormalizedPathEntry(Value: string): string;
 begin
   Value := Trim(Value);
-  if (Length(Value) >= 2) and (Value[1] = '"') and (Value[Length(Value)] = '"') then
-    Value := Copy(Value, 2, Length(Value) - 2);
+  if Length(Value) >= 2 then
+    if (Value[1] = '"') and (Value[Length(Value)] = '"') then
+      Value := Copy(Value, 2, Length(Value) - 2);
   StringChangeEx(Value, '/', '\', True);
-  while (Length(Value) > 3) and (Value[Length(Value)] = '\') do
+  while Length(Value) > 3 do
+  begin
+    if Value[Length(Value)] <> '\' then break;
     Delete(Value, Length(Value), 1);
+  end;
   Result := Uppercase(Value);
 end;
 

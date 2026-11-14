@@ -241,7 +241,7 @@ func TestLiveProviderManagerQwenSettings(t *testing.T) {
 	ctx := context.Background()
 	st := providerStore(t)
 	temp := 0.4
-	p := store.Provider{Name: "live-qwen", BaseURL: "https://api.surplusintelligence.ai/v1", APIKey: strings.TrimSpace(string(key)), Model: "qwen-3-8-27b", Enabled: true, NoStream: true, Temperature: &temp, ContextWindow: 32000}
+	p := store.Provider{Name: "live-qwen", BaseURL: liveModelURL(), APIKey: strings.TrimSpace(string(key)), Model: liveModelName(), Enabled: true, NoStream: true, Temperature: &temp, ContextWindow: 32000}
 	id, e := st.AddProvider(ctx, p)
 	if e != nil {
 		t.Fatal(e)
@@ -254,7 +254,7 @@ func TestLiveProviderManagerQwenSettings(t *testing.T) {
 	var delta string
 	ctx, cancel := context.WithTimeout(ctx, 80*time.Second)
 	defer cancel()
-	res, e := manager.Complete(ctx, llm.Request{Messages: []llm.Message{{Role: "user", Content: "فقط عبارت PROVIDER_PROBE_939 را بنویس."}}, MaxTokens: 256, OwnTemperature: true, OnDelta: func(s string) { delta += s }})
+	res, e := manager.Complete(ctx, llm.Request{Messages: []llm.Message{{Role: "user", Content: "فقط عبارت PROVIDER_PROBE_939 را بنویس."}}, MaxTokens: 2048, OwnTemperature: true, OnDelta: func(s string) { delta += s }})
 	if e != nil || res == nil || !strings.Contains(res.Message.Content, "PROVIDER_PROBE_939") || delta != res.Message.Content {
 		t.Fatal(res, e, delta)
 	}
