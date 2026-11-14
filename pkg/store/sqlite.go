@@ -172,7 +172,14 @@ func (c *tconn) CheckNamedValue(nv *driver.NamedValue) error {
 }
 
 func sqliteDSN(path string) string {
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
 	q := url.Values{}
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "busy_timeout(15000)")

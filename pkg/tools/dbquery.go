@@ -60,7 +60,11 @@ func (r *Registry) openDatabase(sessionID, engine, target string) (*sql.DB, stri
 		if _, err := os.Stat(abs); err != nil {
 			return nil, "", fmt.Errorf("no database file %s", path)
 		}
-		db, err := sql.Open("sqlite", "file:"+(&url.URL{Path: abs}).EscapedPath()+"?mode=ro&_pragma=query_only(1)")
+		p := filepath.ToSlash(abs)
+		if !strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: p}).String()+"?mode=ro&_pragma=query_only(1)")
 		return db, "sqlite", err
 	}
 	return nil, "", fmt.Errorf("unknown engine %q: postgres, mysql or sqlite", engine)
