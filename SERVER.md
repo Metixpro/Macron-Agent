@@ -658,16 +658,9 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 - **First-run setup** in the desktop app: welcome, the model provider (with a link to get a key), the key and a model from the provider's own list (tested before it is saved), the folder to work in, and a few tips. Skip it any time; Settings has everything later.
 - **Servers**: the SSH client offers the host key type already known for the server, as `ssh` does; a server first reached with the `ssh` command was wrongly reported as «host key changed». When Macron is missing or too old on a server, the app offers to install or update it there over the same connection, then connects. A request that fails while a server is selected says the server connection dropped, and engine errors are logged to `~\.macron\desktop.log` with their reason instead of «the engine is not answering».
 
-### 1.15.0: a plan panel, and no more frozen text
+### 1.15.2: a plan panel, live progress while the model writes, and desktop tests on Windows
 
 - **Plan panel**: when Macron writes a plan, it opens in a panel beside the conversation, as in Claude Code and Hermes: the steps with the current one marked, how many are done and how long the job has run. It stays after the job ends; a «2/5» button in the header hides or shows it. Windows narrower than 1100 px keep the plan inline.
 - **No more frozen text**: while the model writes a long step (a whole web page for `write_file`), the app showed the last sentence and nothing else. The live card now stays on screen for the whole job and shows the step being written, its file and how much has arrived («Write resume/index.html · writing · 16 KB»); the terminal status line shows the same. This works for OpenAI-compatible, Anthropic and Responses providers.
+- **Folder dialog**: a path typed or pasted into «Open a folder» while the first list is still loading is kept and opens on Enter (it used to be replaced by the home folder, or Enter did nothing), and a late list no longer replaces a newer one.
 - **Tests**: `tests/desktop` runs the desktop app end to end on Windows in CI for x64 and x86 (a whole agent job through the engine, the desktop app starting, and the real interface in Edge from the first-run setup to a server over SSH); see `docs/testing.md`.
-
-### 1.15.1: folder paths open on Enter
-
-A path pasted into the «Open a folder» dialog opens on Enter even before the folder list has loaded; before, the first Enter did nothing on a slow PC.
-
-### 1.15.2: the folder dialog keeps what you type
-
-In «Open a folder», a path typed or pasted while the first list was still loading was replaced by your home folder when the list arrived, so Enter opened the home folder; a late answer for an older path could also replace a newer one. What you type now stays, and only the latest list is shown.
