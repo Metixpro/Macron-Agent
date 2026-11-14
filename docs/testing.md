@@ -17,6 +17,11 @@ Some updater tests build a CLI fixture automatically. To reuse an existing build
 tests/windows/build-installer.ps1
 ```
 
+The desktop app has Windows end-to-end checks in `tests/desktop`, which CI runs on every push:
+
+- `engine.ps1 -Exe macron.exe [-Gui macron-desktop.exe]` starts the engine with a temporary profile, connects the scripted model in `fake_model.py`, and runs a whole agent job through the engine API: PowerShell with Persian output, a patch without line numbers on a CRLF file, edits, `python3`, a failing command, `run_code`, a background job, sending a file and downloading it. It then stops the engine while a job runs and, with `-Gui`, starts the desktop app itself. CI runs it for x64 and x86.
+- `ui.ps1 -Exe macron.exe -Sshd sshd-test.exe` drives the real interface in Microsoft Edge (the engine behind WebView2): the first-run setup, a job with its plan panel and file card, then a server added over SSH (`sshd` is a small local SSH server with the password `pw`), its key check, password, a model connected there, a job there and a download through the connection. On Linux it runs with `MACRON_UI_BROWSER=` (bundled Chromium) and `MACRON_UI_PLAYWRIGHT=playwright`.
+
 Optional real-model tests use a model service but keep Gmail and messenger transports local. They may incur provider charges. Set these variables in your shell or a private CI secret environment, never in tracked files:
 
 ```sh
@@ -29,4 +34,4 @@ go test -count=1 -v ./tests/integration -run '^TestLive'
 
 Without `MACRON_TEST_LIVE=1`, live-model tests are explicitly skipped. A live test does not prove delivery to a real Gmail, Telegram or Bale account: those require separate account credentials and an authorized end-to-end check. Do not add credentials, private profiles, transcripts or downloaded release binaries to test fixtures.
 
-برای اجرای تست‌های عمومی، `make test` و برای بررسی race، دستور `make test-race` را بزن. تست‌های عادی به کلید API نیاز ندارند و پیام یا ایمیل واقعی ارسال نمی‌کنند. تست‌های اصلی روی لینوکس و ویندوز در GitHub CI اجرا می‌شوند و نصب‌کنندهٔ ویندوز هم واقعاً نصب و حذف می‌شود. تست مدل واقعی اختیاری است؛ متغیرهای بالا را فقط در محیط خصوصی تنظیم کن. این تست، اتصال به حساب واقعی پیام‌رسان یا Gmail را تأیید نمی‌کند.
+برای اجرای تست‌های عمومی، `make test` و برای بررسی race، دستور `make test-race` را بزن. تست‌های عادی به کلید API نیاز ندارند و پیام یا ایمیل واقعی ارسال نمی‌کنند. تست‌های اصلی روی لینوکس و ویندوز در GitHub CI اجرا می‌شوند و نصب‌کنندهٔ ویندوز هم واقعاً نصب و حذف می‌شود. برنامهٔ دسکتاپ روی ویندوز هم تست سرتاسری دارد (`tests/desktop`): موتور با یک مدل اسکریپتی یک کار کامل انجام می‌دهد (PowerShell با خروجی فارسی، پچ روی فایل CRLF، پایتون، کار پس‌زمینه، ارسال و دانلود فایل) و خود برنامه باز می‌شود، برای x64 و x86؛ و رابط واقعی در Edge از راه‌اندازی اول تا پنل پلن، کارت فایل و اتصال به سرور از راه SSH امتحان می‌شود. تست مدل واقعی اختیاری است؛ متغیرهای بالا را فقط در محیط خصوصی تنظیم کن. این تست، اتصال به حساب واقعی پیام‌رسان یا Gmail را تأیید نمی‌کند.

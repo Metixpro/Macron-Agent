@@ -43,6 +43,20 @@ jobs:
       - run: .\macron.exe version
       - name: regression tests on Windows
         run: go test -count=1 ./...
+      - name: the desktop engine and a full agent job on Windows, x64 and x86
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = "0"
+          $env:GOARCH = "386"
+          go build -o macron-386.exe ./cmd/macron
+          $env:GOARCH = "amd64"
+          tests/desktop/engine.ps1 -Exe "$PWD\macron.exe" -Gui "$PWD\macron-desktop.exe"
+          tests/desktop/engine.ps1 -Exe "$PWD\macron-386.exe"
+      - name: the desktop app in Edge, with a server over SSH
+        shell: pwsh
+        run: |
+          go build -o sshd-test.exe ./tests/desktop/sshd
+          tests/desktop/ui.ps1 -Exe "$PWD\macron.exe" -Sshd "$PWD\sshd-test.exe"
       - name: build and test the universal Windows installer
         shell: pwsh
         run: tests/windows/build-installer.ps1
