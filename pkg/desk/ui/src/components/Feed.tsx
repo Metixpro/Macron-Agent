@@ -231,7 +231,7 @@ function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
   );
 }
 
-const BlockView = memo(function BlockView({ b, fresh }: { b: Block; fresh: boolean }) {
+const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh: boolean; panel?: boolean }) {
   const enter = fresh ? " enter" : "";
   switch (b.kind) {
     case "user":
@@ -256,7 +256,7 @@ const BlockView = memo(function BlockView({ b, fresh }: { b: Block; fresh: boole
       } catch {
         return null;
       }
-      return <div className={"block" + enter}>{items.length > 0 && <PlanList items={items} />}</div>;
+      return <div className={"block" + enter + (panel ? " panel-plan" : "")}>{items.length > 0 && <PlanList items={items} />}</div>;
     }
     case "file":
       return b.file ? <FileCard f={b.file} fresh={fresh} /> : null;
@@ -369,6 +369,13 @@ export function Feed() {
   const inner = useRef<HTMLDivElement>(null);
   const [away, setAway] = useState(false);
   const items = useMemo(() => group(blocks), [blocks]);
+  const panelPlan = useMemo(() => {
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      if (blocks[i].kind === "divider" || blocks[i].kind === "user") return -1;
+      if (blocks[i].kind === "plan") return i;
+    }
+    return -1;
+  }, [blocks]);
 
   useLayoutEffect(() => {
     follow.on = true;
@@ -409,7 +416,7 @@ export function Feed() {
               it.kind === "steps" ? (
                 <Steps key={"s" + it.i + ":" + it.items[0].at} items={it.items} fresh={it.i >= fresh} live={running && n === items.length - 1} />
               ) : (
-                <BlockView key={it.i + ":" + it.b.at} b={it.b} fresh={it.i >= fresh} />
+                <BlockView key={it.i + ":" + it.b.at} b={it.b} fresh={it.i >= fresh} panel={it.i === panelPlan} />
               ),
             )
           )}

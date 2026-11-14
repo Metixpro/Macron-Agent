@@ -3,6 +3,7 @@ import { applyTheme, closeDialog, composer, newChat, openDialog, stop, toggleMod
 import { Composer } from "./components/Composer";
 import { Dialogs } from "./components/Dialogs";
 import { Welcome } from "./components/Welcome";
+import { PlanPanel, usePanelPlan } from "./components/PlanPanel";
 import { Feed } from "./components/Feed";
 import { Header } from "./components/Header";
 import { LiveCard } from "./components/Live";
@@ -108,6 +109,8 @@ function Toast() {
 export function App() {
   const theme = useStore((s) => s.theme);
   const sideOpen = useStore((s) => s.sideOpen);
+  const planOpen = useStore((s) => s.planOpen);
+  const withPlan = usePanelPlan().length > 0 && planOpen;
 
   useEffect(() => {
     applyTheme(theme);
@@ -123,7 +126,7 @@ export function App() {
   useNative();
 
   return (
-    <div className={"app" + (sideOpen ? " side-open" : "")}>
+    <div className={"app" + (sideOpen ? " side-open" : "") + (withPlan ? " with-plan" : "")}>
       <Sidebar />
       <div className="scrim" onClick={() => setState({ sideOpen: false })} />
       <main className="main">
@@ -132,6 +135,7 @@ export function App() {
         <LiveCard />
         <Composer />
       </main>
+      <PlanPanel />
       <Dialogs />
       <Welcome />
       <Toast />

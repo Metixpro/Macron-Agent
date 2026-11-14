@@ -2,6 +2,7 @@ import { newChat, openDialog } from "../actions";
 import { shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
 import { Icon } from "../icons";
+import { togglePlan, usePanelPlan } from "./PlanPanel";
 import { setState, useStore } from "../store";
 
 export function Header() {
@@ -27,6 +28,7 @@ export function Header() {
           {"‎" + shortPath(path, home) + "‎"}
         </span>
       </div>
+      <PlanToggle />
       <button type="button" className="search" onClick={() => openDialog({ kind: "palette", mode: "root" })}>
         <Icon name="search" size={14} />
         <span>Search or run a command</span>
@@ -36,5 +38,20 @@ export function Header() {
         <Icon name="edit" />
       </button>
     </header>
+  );
+}
+
+function PlanToggle() {
+  const plan = usePanelPlan();
+  const open = useStore((s) => s.planOpen);
+  if (!plan.length) return null;
+  const done = plan.filter((i) => i.status === "done").length;
+  return (
+    <button type="button" className={"plan-toggle" + (open ? " on" : "")} title={open ? "Hide the plan" : "Show the plan"} onClick={() => togglePlan()}>
+      <Icon name="steps" size={14} />
+      <span>
+        {done}/{plan.length}
+      </span>
+    </button>
   );
 }

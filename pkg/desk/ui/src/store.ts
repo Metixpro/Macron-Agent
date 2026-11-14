@@ -36,6 +36,7 @@ export interface State {
   toast: { text: string; n: number } | null;
   theme: Theme;
   sideOpen: boolean;
+  planOpen: boolean;
   unseen: boolean;
 }
 
@@ -73,6 +74,7 @@ let state: State = {
   toast: null,
   theme: local.get<Theme>("theme", "system"),
   sideOpen: false,
+  planOpen: local.get("planOpen", true),
   unseen: false,
 };
 
