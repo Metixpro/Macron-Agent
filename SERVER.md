@@ -667,3 +667,7 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 ### 1.15.1: folder paths open on Enter
 
 A path pasted into the «Open a folder» dialog opens on Enter even before the folder list has loaded; before, the first Enter did nothing on a slow PC.
+
+### 1.15.2: the folder dialog keeps what you type
+
+In «Open a folder», a path typed or pasted while the first list was still loading was replaced by your home folder when the list arrived, so Enter opened the home folder; a late answer for an older path could also replace a newer one. What you type now stays, and only the latest list is shown.

@@ -862,16 +862,23 @@ function FolderPicker() {
     if (el) el.scrollLeft = el.scrollWidth;
   }, [listing]);
 
+  const latest = useRef(0);
+  const typed = useRef(false);
   const go = async (path: string) => {
+    const ticket = ++latest.current;
     try {
       const r = await server.fs(path);
+      if (ticket !== latest.current) return;
       setListing(r);
-      setInput(r.path);
+      if (path !== "" || !typed.current) {
+        typed.current = false;
+        setInput(r.path);
+      }
       setSel(0);
       setMoved(false);
       setError("");
     } catch (e) {
-      setError(errorText(e));
+      if (ticket === latest.current) setError(errorText(e));
     }
   };
 
@@ -914,7 +921,19 @@ function FolderPicker() {
       <div className="sub">Macron works inside the folder you choose. Each folder keeps its own conversation.</div>
       <div className="path-input">
         <Icon name="folder" size={15} />
-        <input ref={pathRef} autoFocus spellCheck={false} dir="ltr" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKey} placeholder="Type or paste a path" />
+        <input
+          ref={pathRef}
+          autoFocus
+          spellCheck={false}
+          dir="ltr"
+          value={input}
+          onChange={(e) => {
+            typed.current = true;
+            setInput(e.target.value);
+          }}
+          onKeyDown={onKey}
+          placeholder="Type or paste a path"
+        />
       </div>
       {listing && (
         <div className="crumbs">
