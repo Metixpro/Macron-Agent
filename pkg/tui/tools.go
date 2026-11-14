@@ -99,6 +99,17 @@ func ToolHeading(name, args string) (string, string) {
 	return title, arg
 }
 
+var draftTargetRe = regexp.MustCompile(`"(?:filename|path|command|url|query)"\s*:\s*"((?:[^"\\]|\\.){1,120})`)
+
+func draftTarget(head string) string {
+	m := draftTargetRe.FindStringSubmatch(head)
+	if m == nil {
+		return ""
+	}
+	v, _, _ := strings.Cut(strings.ReplaceAll(m[1], `\\`, `\`), `\n`)
+	return oneLine(v)
+}
+
 func patchTargets(patch string) string {
 	var names []string
 	for _, l := range strings.Split(patch, "\n") {

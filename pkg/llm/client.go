@@ -411,6 +411,44 @@ var ErrTooLarge = errors.New("the answer is too large")
 
 const maxStreamText = 4 << 20
 
+type toolDraftKey struct{}
+
+type ToolDraft func(name string, size int, head string)
+
+func WithToolDraft(ctx context.Context, fn ToolDraft) context.Context {
+	if fn == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, toolDraftKey{}, fn)
+}
+
+func toolDraftOf(ctx context.Context) ToolDraft {
+	fn, _ := ctx.Value(toolDraftKey{}).(ToolDraft)
+	return fn
+}
+
+type toolGate struct {
+	on   ToolDraft
+	name string
+	size int
+	at   time.Time
+}
+
+func (g *toolGate) push(name, args string) {
+	if g == nil || g.on == nil || name == "" {
+		return
+	}
+	if name == g.name && (g.size > 0 || args == "") && time.Since(g.at) < 200*time.Millisecond {
+		return
+	}
+	g.name, g.size, g.at = name, len(args), time.Now()
+	head := args
+	if len(head) > 600 {
+		head = head[:600]
+	}
+	g.on(name, len(args), head)
+}
+
 type deltaGate struct {
 	on      func(string)
 	n, last int
@@ -829,6 +867,7 @@ func IsUnavailable(err error) bool {
 }
 
 func (c *Client) once(ctx context.Context, payload []byte, onDelta func(string)) (*Response, time.Duration, error) {
+	tools := &toolGate{on: toolDraftOf(ctx)}
 	idle := c.StreamIdle
 	if idle <= 0 {
 		idle = defaultStreamIdle
@@ -885,15 +924,15 @@ func (c *Client) once(ctx context.Context, payload []byte, onDelta func(string))
 
 	switch c.api() {
 	case APIAnthropic:
-		return readAnthropic(resp, onDelta, idle)
+		return readAnthropic(resp, onDelta, tools, idle)
 	case APIResponses:
-		return readResponses(resp, onDelta, idle)
+		return readResponses(resp, onDelta, tools, idle)
 	}
 
 	if mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mt == "text/event-stream" {
 		body := newIdleBody(resp.Body, idle)
 		defer body.Close()
-		out, err := readStream(body, onDelta)
+		out, err := readStream(body, onDelta, tools)
 		return out, 0, err
 	}
 
@@ -921,7 +960,7 @@ func (c *Client) once(ctx context.Context, payload []byte, onDelta func(string))
 	return r, 0, nil
 }
 
-func readStream(body io.Reader, onDelta func(string)) (*Response, error) {
+func readStream(body io.Reader, onDelta func(string), tools *toolGate) (*Response, error) {
 	type toolDelta struct {
 		Index    int    `json:"index"`
 		ID       string `json:"id"`
@@ -1020,6 +1059,7 @@ func readStream(body io.Reader, onDelta func(string)) (*Response, error) {
 				}
 				tc.Function.Arguments += td.Function.Arguments
 				argBytes += len(td.Function.Arguments)
+				tools.push(tc.Function.Name, tc.Function.Arguments)
 			}
 			if c.Delta.Content != "" {
 				text.WriteString(c.Delta.Content)

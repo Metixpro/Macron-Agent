@@ -289,12 +289,12 @@ func orEmptyObject(args string) string {
 	return args
 }
 
-func readResponses(resp *http.Response, onDelta func(string), idle time.Duration) (*Response, time.Duration, error) {
+func readResponses(resp *http.Response, onDelta func(string), tools *toolGate, idle time.Duration) (*Response, time.Duration, error) {
 
 	if mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mt == "text/event-stream" {
 		body := newIdleBody(resp.Body, idle)
 		defer body.Close()
-		out, err := readResponsesStream(body, onDelta)
+		out, err := readResponsesStream(body, onDelta, tools)
 		return out, 0, err
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
@@ -302,7 +302,7 @@ func readResponses(resp *http.Response, onDelta func(string), idle time.Duration
 		return nil, 0, fmt.Errorf("%w: read response body: %w", errTransport, err)
 	}
 	if t := bytes.TrimSpace(data); bytes.HasPrefix(t, []byte("event:")) || bytes.HasPrefix(t, []byte("data:")) {
-		out, err := readResponsesStream(bytes.NewReader(data), onDelta)
+		out, err := readResponsesStream(bytes.NewReader(data), onDelta, nil)
 		return out, 0, err
 	}
 	if ae := envelopeError(data); ae != nil {
@@ -348,7 +348,7 @@ func readResponses(resp *http.Response, onDelta func(string), idle time.Duration
 	return r, 0, nil
 }
 
-func readResponsesStream(body io.Reader, onDelta func(string)) (*Response, error) {
+func readResponsesStream(body io.Reader, onDelta func(string), tools *toolGate) (*Response, error) {
 	type event struct {
 		Type        string          `json:"type"`
 		Delta       string          `json:"delta"`
@@ -448,6 +448,7 @@ func readResponsesStream(body io.Reader, onDelta func(string)) (*Response, error
 			if tc := calls[ev.OutputIndex]; tc != nil {
 				tc.Function.Arguments += ev.Delta
 				argBytes += len(ev.Delta)
+				tools.push(tc.Function.Name, tc.Function.Arguments)
 			}
 		case "response.function_call_arguments.done":
 			if tc := calls[ev.OutputIndex]; tc != nil && ev.Arguments != "" {

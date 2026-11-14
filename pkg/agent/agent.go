@@ -31,6 +31,8 @@ type EventListener struct {
 
 	OnToolProgress func(name, text string, output bool)
 
+	OnToolDraft func(name string, size int, head string)
+
 	OnContext func(used, window int)
 
 	OnCompact func(before, after, window int, summarized bool)
@@ -1090,6 +1092,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		modelDone := func() bool { return false }
 		if req.ModelRequest != nil {
 			modelCtx, modelDone = req.ModelRequest(ctx)
+		}
+		if l.OnToolDraft != nil {
+			modelCtx = llm.WithToolDraft(modelCtx, l.OnToolDraft)
 		}
 		shown = ""
 		resp, err := a.completeRobust(modelCtx, messages, lay.input, offered, stream, noTools, work.len() > 0)

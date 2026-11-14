@@ -12,6 +12,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -81,7 +82,30 @@ type askView struct {
 	reply    chan cmdgate.Choice
 }
 
+type liveDraft struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	Arg   string `json:"arg,omitempty"`
+	Size  int    `json:"size"`
+}
+
+var draftArgRe = regexp.MustCompile(`"(?:filename|path|command|url|query|code)"\s*:\s*"((?:[^"\\]|\\.){1,200})`)
+
+func draftArg(head string) string {
+	m := draftArgRe.FindStringSubmatch(head)
+	if m == nil {
+		return ""
+	}
+	var v string
+	if json.Unmarshal([]byte(`"`+strings.TrimSuffix(m[1], `\`)+`"`), &v) != nil {
+		v = m[1]
+	}
+	v, _, _ = strings.Cut(strings.TrimSpace(v), "\n")
+	return clipRunes(v, 120)
+}
+
 type Live struct {
+	Draft   *liveDraft       `json:"draft,omitempty"`
 	Running bool             `json:"running"`
 	Started int64            `json:"started,omitempty"`
 	HTML    string           `json:"html,omitempty"`
@@ -451,11 +475,23 @@ func (p *project) listener() *agent.EventListener {
 			t := &liveTool{ID: p.toolSeq, Name: name, Label: label, Arg: arg, Started: time.Now().UnixMilli(), args: args}
 			p.live.Tools = append(p.live.Tools, t)
 			p.live.Thought = ""
+			p.live.Draft = nil
 			p.mu.Unlock()
 			if flushed != nil {
 				p.emit("block", map[string]any{"block": *flushed})
 			}
 			p.emit("tool_start", map[string]any{"tool": t})
+		},
+		OnToolDraft: func(name string, size int, head string) {
+			if name == agent.ToolPlan {
+				return
+			}
+			label, _ := tui.ToolHeading(name, "{}")
+			d := &liveDraft{Name: name, Label: label, Arg: draftArg(head), Size: size}
+			p.mu.Lock()
+			p.live.Draft = d
+			p.mu.Unlock()
+			p.emit("tool_draft", map[string]any{"draft": d})
 		},
 		OnToolProgress: func(name, text string, _ bool) {
 			line := lastLine(text)

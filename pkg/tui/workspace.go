@@ -276,6 +276,12 @@ func (m model) activityView() string {
 		switch {
 		case m.busy != "":
 			what = m.busy
+		case m.preparing != nil:
+			title, _ := ToolHeading(m.preparing.name, "{}")
+			if arg := draftTarget(m.preparing.head); arg != "" {
+				title += " " + arg
+			}
+			what = title + " · writing " + short(m.preparing.size)
 		case len(m.tools) > 0:
 			t := m.tools[len(m.tools)-1]
 			what = ansi.Strip(toolTitle(t.name, t.args, w-30))

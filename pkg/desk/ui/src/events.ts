@@ -2,7 +2,7 @@ import { apiBase } from "./api";
 import { composer, fail, loadServers, loadState, openProject, refreshState, stream, switchMachine, toast } from "./actions";
 import { projectName } from "./format";
 import { getState, patchLive, setState } from "./store";
-import type { Ask, Block, LiveSub, LiveTool, PlanItem, ServerEvent, Usage } from "./types";
+import type { Ask, Block, LiveDraft, LiveSub, LiveTool, PlanItem, ServerEvent, Usage } from "./types";
 
 let source: EventSource | null = null;
 let seq = 0;
@@ -124,7 +124,10 @@ function onProjectEvent(ev: ServerEvent) {
       return;
     }
     case "tool_start":
-      patchLive((l) => ({ html: "", thought: "", tools: [...(l.tools || []), ev.tool as LiveTool] }));
+      patchLive((l) => ({ html: "", thought: "", draft: null, tools: [...(l.tools || []), ev.tool as LiveTool] }));
+      return;
+    case "tool_draft":
+      patchLive(() => ({ draft: ev.draft as LiveDraft }));
       return;
     case "tool_progress":
       patchLive((l) => ({ tools: (l.tools || []).map((t) => (t.id === ev.id ? { ...t, progress: ev.line as string } : t)) }));

@@ -284,11 +284,11 @@ func stopReason(s string) string {
 	return "stop"
 }
 
-func readAnthropic(resp *http.Response, onDelta func(string), idle time.Duration) (*Response, time.Duration, error) {
+func readAnthropic(resp *http.Response, onDelta func(string), tools *toolGate, idle time.Duration) (*Response, time.Duration, error) {
 	if mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mt == "text/event-stream" {
 		body := newIdleBody(resp.Body, idle)
 		defer body.Close()
-		out, err := readAnthropicStream(body, onDelta)
+		out, err := readAnthropicStream(body, onDelta, tools)
 		return out, 0, err
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
@@ -334,7 +334,7 @@ func readAnthropic(resp *http.Response, onDelta func(string), idle time.Duration
 	return r, 0, nil
 }
 
-func readAnthropicStream(body io.Reader, onDelta func(string)) (*Response, error) {
+func readAnthropicStream(body io.Reader, onDelta func(string), tools *toolGate) (*Response, error) {
 	type event struct {
 		Type    string `json:"type"`
 		Index   int    `json:"index"`
@@ -408,6 +408,7 @@ func readAnthropicStream(body io.Reader, onDelta func(string)) (*Response, error
 				if tc := calls[ev.Index]; tc != nil {
 					tc.Function.Arguments += ev.Delta.PartialJSON
 					argBytes += len(ev.Delta.PartialJSON)
+					tools.push(tc.Function.Name, tc.Function.Arguments)
 				}
 			case "thinking_delta":
 				thought.WriteString(ev.Delta.Thinking)

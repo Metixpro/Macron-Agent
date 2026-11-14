@@ -1,4 +1,4 @@
-import { took } from "../format";
+import { bytes, took } from "../format";
 import { useNow } from "../hooks";
 import { Icon } from "../icons";
 import { useStore } from "../store";
@@ -12,12 +12,22 @@ export function LiveCard() {
   const subs = live.subs || [];
   const tools = (live.tools || []).filter((t) => !(subs.length && t.name === "delegate_task"));
   const plan = live.plan || [];
-  const idle = !tools.length && !subs.some((s) => !s.done) && !live.html;
-  if (!plan.length && !tools.length && !subs.length && !idle) return null;
+  const draft = live.draft;
+  const idle = !tools.length && !subs.some((s) => !s.done) && !draft;
   return (
     <div className="live">
       <div className="live-card">
         {plan.length > 0 && <PlanList items={plan} live />}
+        {draft && (
+          <div className="live-step draft">
+            <div className="row">
+              <span className="spin" />
+              <span className="lb">{draft.label || draft.name}</span>
+              <span className="ar">{draft.arg}</span>
+              <span className="tm">{draft.size > 0 ? "writing · " + bytes(draft.size) : "preparing"}</span>
+            </div>
+          </div>
+        )}
         {tools.map((t) => (
           <div key={t.id} className="live-step">
             <div className="row">
@@ -51,7 +61,7 @@ export function LiveCard() {
               <span />
               <span className="tm">{took(now - (live.started || now))}</span>
             </div>
-            {live.thought && (
+            {live.thought && !live.html && (
               <div className="thought" dir="auto">
                 {live.thought}
               </div>

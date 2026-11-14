@@ -59,11 +59,15 @@ type Options struct {
 type (
 	textMsg      struct{ s string }
 	toolStartMsg struct{ name, args string }
-	toolEndMsg   struct{ name, args, result string }
-	progressMsg  struct{ name, text string }
-	planMsg      struct{ items []agent.PlanItem }
-	ctxMsg       struct{ used, window int }
-	compactMsg   struct {
+	draftMsg     struct {
+		name, head string
+		size       int
+	}
+	toolEndMsg  struct{ name, args, result string }
+	progressMsg struct{ name, text string }
+	planMsg     struct{ items []agent.PlanItem }
+	ctxMsg      struct{ used, window int }
+	compactMsg  struct {
 		before, after int
 		summarized    bool
 	}
@@ -209,6 +213,7 @@ type model struct {
 	streamAt    time.Time
 	dirty       bool
 	tools       []*liveTool
+	preparing   *draftMsg
 	subs        []*liveSub
 	lastPlan    string
 	plan        []agent.PlanItem
@@ -340,7 +345,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.streamView, m.dirty, m.streamAt = m.renderStream(), false, time.Now()
 		}
 		return m, nil
+	case draftMsg:
+		if msg.name != agent.ToolPlan {
+			d := msg
+			m.preparing = &d
+		}
+		return m, nil
 	case toolStartMsg:
+		m.preparing = nil
 		if msg.name == agent.ToolPlan {
 			return m, nil
 		}
@@ -755,7 +767,7 @@ func (m *model) startTurn(text string) tea.Cmd {
 	m.ask = nil
 	ctx = cmdgate.WithAsker(ctx, m.asker())
 	m.running, m.cancel, m.started, m.interrupted = true, cancel, time.Now(), false
-	m.stream, m.streamView, m.tools, m.subs, m.plan = "", "", nil, nil, nil
+	m.stream, m.streamView, m.tools, m.subs, m.plan, m.preparing = "", "", nil, nil, nil, nil
 	m.input.Placeholder = placeholderBusy
 	m.addBlock(transcriptBlock{kind: "user", text: text})
 	if len(m.notes) > 0 {
@@ -809,6 +821,7 @@ func (m *model) listener() *agent.EventListener {
 			send(toolEndMsg{name: name, args: args, result: result})
 		},
 		OnToolProgress: func(name, text string, _ bool) { send(progressMsg{name: name, text: text}) },
+		OnToolDraft:    func(name string, size int, head string) { send(draftMsg{name: name, head: head, size: size}) },
 		OnPlan:         func(items []agent.PlanItem) { send(planMsg{items: append([]agent.PlanItem(nil), items...)}) },
 		OnContext:      func(used, window int) { send(ctxMsg{used: used, window: window}) },
 		OnCompact: func(before, after, _ int, summarized bool) {
@@ -849,7 +862,7 @@ func (m model) done(msg doneMsg) (tea.Model, tea.Cmd) {
 			m.print(block)
 		}
 	}
-	m.tools, m.subs, m.plan = nil, nil, nil
+	m.tools, m.subs, m.plan, m.preparing = nil, nil, nil, nil
 	res, err := msg.res, msg.err
 	if res != nil {
 		m.tokIn += res.Usage.PromptTokens

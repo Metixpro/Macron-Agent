@@ -59,8 +59,16 @@ export interface Usage {
   out: number;
 }
 
+export interface LiveDraft {
+  name: string;
+  label: string;
+  arg?: string;
+  size: number;
+}
+
 export interface Live {
   running: boolean;
+  draft?: LiveDraft | null;
   started?: number;
   html?: string;
   thought?: string;
