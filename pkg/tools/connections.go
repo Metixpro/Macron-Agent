@@ -16,7 +16,7 @@ import (
 )
 
 const ToolConnections = "connections"
-const ConnectionsGuide = "When the owner asks to connect or configure Gmail/email, Bale, Rubika, Eitaa, Telegram, Slack, Discord, WhatsApp, storage, boards or GitHub, discover connections with tool_search first. Use describe to learn the exact supported capabilities and settings, list to inspect configured fields without exposing secrets, configure to save provided settings, then test with a read-only call. Never call a saved token a verified connection. Service tool settings take effect on their next call; starting a messenger listener still needs its run command/service restart. Gmail supports OAuth search/read/send; SMTP only sends. Bale/Rubika have native text-chat runners; Eitaayar only sends. Do not substitute Telegram credentials/IDs for another messenger, invent OAuth tokens, print keys, send a test message without an explicit recipient instruction, or say a service is connected without a successful test. Ask only for the specific missing credential or account choice after checking available configuration."
+const ConnectionsGuide = "When the owner asks to connect or configure Gmail/email, Bale, Rubika, Eitaa, Telegram, Slack, Discord, WhatsApp, storage, boards or GitHub, discover connections with tool_search first. Use describe to learn the exact supported capabilities and settings, list to inspect configured fields without exposing secrets, configure to save provided settings, then test with a read-only call. Never call a saved token a verified connection. Service tool settings take effect on their next call; starting a messenger listener still needs its run command/service restart. Gmail supports OAuth search/read/send; SMTP only sends. Bale/Rubika have native text-chat runners; Eitaayar only sends. Do not substitute Telegram credentials/IDs for another messenger, invent OAuth tokens, print keys, send a test message without an explicit recipient instruction, or say a service is connected without a successful test. Follow describe field types and required_credential_alternatives. A missing optional URL override is not a missing credential: never ask for MACRON_BALE_API as an API key; leave it unset for the official service. Ask only for the specific missing credential or account choice after checking available configuration."
 
 type ConnectionSpec struct {
 	ID, Name, Capability string
@@ -110,22 +110,7 @@ func (r *Registry) registerConnections() {
 		}
 		switch action {
 		case "describe":
-			var fields []string
-			for _, key := range s.Fields {
-				state := "missing"
-				if config.ToolEnvValue(key) != "" {
-					state = "set"
-				}
-				fields = append(fields, key+": "+state)
-			}
-			out := s.Name + " — " + s.Capability + "\n" + strings.Join(fields, "\n")
-			if s.Restart {
-				out += "\nNative chat also needs the platform owner IDs. The background service runs Telegram and every messenger that has a token and owner IDs side by side; after saving, the owner restarts it with: macron telegram restart."
-			}
-			if s.ID == "gmail" {
-				out += "\nUse a Google-authorized OAuth access token, or client ID + secret + offline refresh token. Scopes: gmail.readonly for search/read, gmail.send for sending. MACRON_GMAIL_FROM identifies the sender."
-			}
-			return out, nil
+			return describeConnection(s), nil
 		case "configure":
 			raw, _ := args["values"].(map[string]any)
 			if len(raw) == 0 {
@@ -141,6 +126,12 @@ func (r *Registry) registerConnections() {
 				value, ok := v.(string)
 				if !ok || !allowed[key] {
 					return "error: unsupported setting " + key + " for " + s.ID, nil
+				}
+				if connectionFields[key].Type == "url" && value != "" {
+					u, err := url.Parse(value)
+					if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+						return "error: " + key + " must be an http(s) URL, not a token or ID; leave optional overrides empty for the default", nil
+					}
 				}
 				if strings.Contains(key, "_PORT") && value != "" {
 					n, err := strconv.Atoi(value)

@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"mime"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -126,8 +128,29 @@ type project struct {
 }
 
 func projectID(path string) string {
-	sum := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(path))))
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+	}
+	sum := sha256.Sum256([]byte(path))
 	return hex.EncodeToString(sum[:6])
+}
+
+// Move only saved projects: a newly opened case variant must never inherit another project's log.
+func migrateProjectLog(dir, path string) {
+	sum := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(path))))
+	oldID, id := hex.EncodeToString(sum[:6]), projectID(path)
+	if oldID == id {
+		return
+	}
+	oldPath := filepath.Join(dir, "desktop", oldID+".jsonl")
+	newPath := filepath.Join(dir, "desktop", id+".jsonl")
+	if _, err := os.Stat(newPath); !os.IsNotExist(err) {
+		return
+	}
+	if err := os.Rename(oldPath, newPath); err != nil && !os.IsNotExist(err) {
+		log.Printf("desktop: migrate project history: %v", err)
+	}
 }
 
 func (p *project) file() string {
