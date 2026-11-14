@@ -1,6 +1,6 @@
+param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string]$Sshd)
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string]$Sshd)
 $temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $root = Join-Path $temp "macron-ui"
 New-Item -ItemType Directory -Force $root, "$root\shots", "$root\remote user\.local\bin", "$root\local work" | Out-Null

@@ -1,6 +1,6 @@
+param([Parameter(Mandatory)][string]$Exe, [string]$Gui)
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-param([Parameter(Mandatory)][string]$Exe, [string]$Gui)
 $temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $root = Join-Path $temp ("macron-engine-" + [IO.Path]::GetFileNameWithoutExtension($Exe))
 New-Item -ItemType Directory -Force $root | Out-Null
