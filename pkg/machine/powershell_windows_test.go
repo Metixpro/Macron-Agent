@@ -34,16 +34,25 @@ func TestWindowsPowerShellUnicodeExitCodesAndTimeout(t *testing.T) {
 	}
 }
 func TestWindowsPowerShellFallback(t *testing.T) {
-	if _, err := exec.LookPath("powershell.exe"); err != nil {
-		t.Skip("Windows PowerShell is not installed")
-	}
-	var kept []string
-	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
-		if _, err := os.Stat(filepath.Join(p, "pwsh.exe")); err != nil {
-			kept = append(kept, p)
+	if os.Getenv("MACRON_TEST_PS_FALLBACK") != "1" {
+		if _, err := exec.LookPath("powershell.exe"); err != nil {
+			t.Skip("Windows PowerShell is not installed")
 		}
+		var kept []string
+		for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+			if _, err := os.Stat(filepath.Join(p, "pwsh.exe")); err != nil {
+				kept = append(kept, p)
+			}
+		}
+		t.Setenv("PATH", strings.Join(kept, string(os.PathListSeparator)))
+		t.Setenv("MACRON_TEST_PS_FALLBACK", "1")
+		// Shell selection is cached per process, just as it is for a fresh app launch.
+		out, err := exec.Command(os.Args[0], "-test.run=^TestWindowsPowerShellFallback$", "-test.v").CombinedOutput()
+		if err != nil {
+			t.Fatalf("fresh-process fallback: %v\n%s", err, out)
+		}
+		return
 	}
-	t.Setenv("PATH", strings.Join(kept, string(os.PathListSeparator)))
 	m, err := New(Config{BaseDir: t.TempDir(), Sandbox: "off"})
 	if err != nil {
 		t.Fatal(err)

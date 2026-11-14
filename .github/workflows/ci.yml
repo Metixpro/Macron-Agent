@@ -41,11 +41,11 @@ jobs:
       - run: go build -o macron.exe ./cmd/macron
       - run: go build -ldflags "-H windowsgui -X main.launch=desktop" -o macron-desktop.exe ./cmd/macron
       - run: .\macron.exe version
+      - name: regression tests on Windows
+        run: go test -count=1 ./...
       - name: build and test the universal Windows installer
         shell: pwsh
         run: tests/windows/build-installer.ps1
-      - name: regression tests on Windows
-        run: go test -count=1 ./...
       - name: the Windows installer parses
         shell: pwsh
         run: |
