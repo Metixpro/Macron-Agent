@@ -9,6 +9,15 @@ New-Item -ItemType Directory -Force $programs, $homeDir | Out-Null
 $originalPath = $env:PATH
 $originalHome = $env:MACRON_HOME
 $originalEnvFile = $env:MACRON_ENV_FILE
+function Path-StillExists([string]$path) {
+    try { Get-Item -LiteralPath $path -Force -ErrorAction Stop | Out-Null; return $true }
+    catch {
+        if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { return $false }
+        # Windows reports a file awaiting final deletion as access denied.
+        if ($_.CategoryInfo.Category -eq 'PermissionDenied' -or $_.Exception -is [UnauthorizedAccessException]) { return $true }
+        throw
+    }
+}
 try {
     $localExe = Join-Path $programs 'macron.exe'
     Copy-Item -LiteralPath $Exe -Destination $localExe
@@ -30,21 +39,24 @@ try {
     & $localExe backup (Join-Path $root 'profile.tar.gz')
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $root 'profile.tar.gz'))) { throw 'backup failed' }
     $result = & $localExe uninstall --dry-run --keep-data 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -or $result -notmatch 'Windows uninstall' -or -not (Test-Path -LiteralPath $localExe)) { throw "uninstall dry-run failed: $result" }
+    if ($LASTEXITCODE -ne 0 -or $result -notmatch 'Windows uninstall' -or -not (Path-StillExists $localExe)) { throw "uninstall dry-run failed: $result" }
     $result = & $localExe uninstall --yes --keep-data 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "uninstall failed: $result" }
     Write-Host $result
     $deadline = (Get-Date).AddSeconds(30)
-    while ((Test-Path -LiteralPath $localExe) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
-    if (Test-Path -LiteralPath $localExe) { throw "Windows still locks the executable after uninstall: $result" }
+    while ((Path-StillExists $localExe) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    if (Path-StillExists $localExe) { throw "Windows still locks the executable after uninstall: $result" }
     if (-not (Test-Path -LiteralPath $unrelated) -or -not (Test-Path -LiteralPath (Join-Path $homeDir 'secret.key'))) { throw 'uninstall removed unrelated files or --keep-data was ignored' }
     # Repeat without --keep-data: only the selected temporary profile is erased.
     Copy-Item -LiteralPath $Exe -Destination $localExe
     $result = & $localExe uninstall --yes 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "uninstall with data removal failed: $result" }
     $deadline = (Get-Date).AddSeconds(30)
-    while (((Test-Path -LiteralPath $localExe) -or (Test-Path -LiteralPath $homeDir)) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
-    if ((Test-Path -LiteralPath $localExe) -or (Test-Path -LiteralPath $homeDir) -or -not (Test-Path -LiteralPath $unrelated)) { throw "uninstall did not remove exactly the selected installation: $result" }
+    while (((Path-StillExists $localExe) -or (Path-StillExists $homeDir)) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    if ((Path-StillExists $localExe) -or (Path-StillExists $homeDir) -or -not (Test-Path -LiteralPath $unrelated)) {
+        if ($result -match 'Log: (.+)') { Get-Content -LiteralPath $Matches[1].Trim() -ErrorAction SilentlyContinue | Write-Host }
+        throw "uninstall did not remove exactly the selected installation: $result"
+    }
     Write-Host "Windows CLI passed on PowerShell $($PSVersionTable.PSVersion)"
 } finally {
     $env:PATH = $originalPath

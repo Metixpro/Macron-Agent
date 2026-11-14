@@ -47,13 +47,17 @@ func windowsUninstall(io *IO, yes, dry, keep bool) int {
 	if strings.EqualFold(filepath.Base(bin), "macron.exe") || strings.EqualFold(filepath.Base(bin), "macron-desktop.exe") {
 		paths = append(paths, filepath.Join(filepath.Dir(bin), "macron.exe"), filepath.Join(filepath.Dir(bin), "macron-desktop.exe"))
 	}
-	script := fmt.Sprintf("$ErrorActionPreference='Stop'; $p=Get-Process -Id %d -ErrorAction SilentlyContinue; if($p){$p.WaitForExit()}; ", os.Getpid())
+	script := "function Remove-MacronFile([string]$path) { for($attempt=0;$attempt -lt 50;$attempt++){ try { Remove-Item -LiteralPath $path -Force -ErrorAction Stop; return } catch { if($_.CategoryInfo.Category -eq 'ObjectNotFound'){return}; if($attempt -eq 49){throw}; Start-Sleep -Milliseconds 100 } } }; "
+	script += fmt.Sprintf("$ErrorActionPreference='Stop'; $p=Get-Process -Id %d -ErrorAction SilentlyContinue; if($p){$p.WaitForExit()}; ", os.Getpid())
 	if installed {
 		script += "$u=Start-Process -FilePath " + psQuote(uninstaller) + " -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait; if($u.ExitCode -ne 0){throw 'Windows uninstall failed'}; "
 	} else {
+		seen := map[string]bool{}
 		for _, path := range paths {
-			if path != "" {
-				script += "if(Test-Path -LiteralPath " + psQuote(path) + "){Remove-Item -LiteralPath " + psQuote(path) + " -Force}; "
+			key := strings.ToLower(filepath.Clean(path))
+			if path != "" && !seen[key] {
+				seen[key] = true
+				script += "Remove-MacronFile " + psQuote(path) + "; "
 			}
 		}
 	}
