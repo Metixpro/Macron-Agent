@@ -643,3 +643,11 @@ Some terminals (most mobile SSH apps, Konsole, GNOME Terminal) put right-to-left
 ### 1.13.1: files in the chat
 
 Macron can hand you a file of any kind in the desktop app and the terminal workspace, as it does in Telegram: `send_file`, or a `![caption](file)` line in its answer. In the app it is a card with the name, type and size, a preview for pictures (SVG too), a player for audio and video, and Open, Show in folder and Save; on a server, Save downloads it through the SSH connection. Pictures and file links inside an answer open the same way, names with spaces included. In the terminal the file is a link you can click (Ctrl+click in Windows Terminal) with its full path.
+
+### 1.13.2: Windows starts and runs commands
+
+- On Windows 1.13.0 and 1.13.1 stopped at once with «cannot open the database: invalid uri authority»: the database address came out as `file://C:/…`. It is `file:///C:/…` now.
+- Commands on Windows (the agent's PowerShell, Python, git) failed with «command with a non-nil Cancel was not created with CommandContext»; they run again.
+- `read_file` shows Windows (CRLF) files as plain lines.
+- Opening a script or program from a file card (.py, .bat, .ps1, .exe…) shows it in its folder instead of running it.
+- This release was run on real Windows, x64 and x86: the engine, a full agent job (PowerShell, Persian output, patches on CRLF files, Python, background jobs, sending a file) and the desktop app.
