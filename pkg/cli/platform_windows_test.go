@@ -1,8 +1,7 @@
 package cli
 
 import (
-	"encoding/base64"
-	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf16"
 
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"golang.org/x/sys/windows/registry"
@@ -51,6 +49,16 @@ func TestWindowsBackgroundLifecycleAndStartup(t *testing.T) {
 	if code := windowsService(out, "status"); code != 0 {
 		t.Fatal(buf.String())
 	}
+	if code := windowsService(out, "stop"); code != 0 {
+		t.Fatal(buf.String())
+	}
+	if code := windowsAutoStart(out, []string{windowsStartupName(home)}); code != 0 {
+		t.Fatalf("sign-in launch: %d %s", code, buf)
+	}
+	first = readPID()
+	if first == 0 {
+		t.Fatal("sign-in launch did not start the bot")
+	}
 	buf.Reset()
 	if code := logs(out, []string{"-n", "1"}); code != 0 || !strings.Contains(buf.String(), "سلام Windows") {
 		t.Fatalf("logs %d: %s", code, buf)
@@ -74,23 +82,29 @@ func TestWindowsBackgroundLifecycleAndStartup(t *testing.T) {
 
 func TestWindowsStartupUnicodeAndLiteralPaths(t *testing.T) {
 	bin := `C:\برنامه من\O'Brien $x ` + "`" + `\macron.exe`
-	home := `C:\Users\my home\.macron`
+	home := filepath.Join(t.TempDir(), "my home", ".macron")
 	command, err := windowsStartupCommand(bin, home, home+`\config.env`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	words := strings.Fields(command)
-	raw, err := base64.StdEncoding.DecodeString(words[len(words)-1])
+	if len(command) > 260 || !strings.Contains(command, `"`+bin+`" telegram autostart `+windowsStartupName(home)) {
+		t.Fatal(command)
+	}
+	defer removeWindowsStartup(home)
+	if err := saveWindowsStartupRecord(bin, home, home+`\config.env`); err != nil {
+		t.Fatal(err)
+	}
+	path, err := windowsStartupRecordPath(windowsStartupName(home))
 	if err != nil {
 		t.Fatal(err)
 	}
-	units := make([]uint16, len(raw)/2)
-	for i := range units {
-		units[i] = binary.LittleEndian.Uint16(raw[i*2:])
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	script := string(utf16.Decode(units))
-	if !strings.Contains(script, "& "+psQuote(bin)+" telegram start") || !strings.Contains(script, "$env:MACRON_HOME="+psQuote(home)) {
-		t.Fatal(script)
+	var saved windowsStartupRecord
+	if err := json.Unmarshal(raw, &saved); err != nil || saved.Binary != bin || saved.Home != home {
+		t.Fatal("Unicode startup record did not round-trip", err)
 	}
 	if windowsStartupName(home) != windowsStartupName(strings.ToUpper(home)) {
 		t.Fatal("case changes startup identity")
@@ -178,5 +192,21 @@ func TestWindowsForeignPIDCannotBeTerminated(t *testing.T) {
 	}
 	if !alive(pid) {
 		t.Fatal("foreign process was terminated")
+	}
+}
+
+func TestWindowsStartupRejectsForeignProfile(t *testing.T) {
+	home := t.TempDir()
+	name := windowsStartupName(home)
+	defer removeWindowsStartup(home)
+	if err := saveWindowsStartupRecord(`C:\Other\macron.exe`, home, filepath.Join(home, "config.env")); err != nil {
+		t.Fatal(err)
+	}
+	out, buf := testIO()
+	if code := windowsAutoStart(out, []string{name}); code != 1 || !strings.Contains(buf.String(), "another Macron installation") {
+		t.Fatalf("%d %s", code, buf)
+	}
+	if _, err := windowsStartupRecordPath("../../other"); err == nil {
+		t.Fatal("allowed startup record traversal")
 	}
 }

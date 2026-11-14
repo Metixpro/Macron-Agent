@@ -53,6 +53,8 @@ func telegramCmd(io *IO, args []string) int {
 		return telegramStatus(io)
 	case "start", "stop", "restart":
 		return telegramControl(io, sub)
+	case "autostart":
+		return windowsAutoStart(io, args)
 	case "logs", "log":
 		return telegramLogs(io, args)
 	case "disconnect", "remove":

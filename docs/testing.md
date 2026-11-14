@@ -38,7 +38,7 @@ Without `MACRON_TEST_LIVE=1`, live-model tests are explicitly skipped. A live te
 
 ## Native Windows command regressions
 
-`go test ./pkg/cli ./pkg/config` checks desktop profiles without config.env, saved encrypted providers, platform install advice, private Python environments and log reading without external programs. The Windows cases actually start, restart and stop a detached process, add and remove a per-profile HKCU startup entry, and reject unrelated/stale process IDs. Every test uses a temporary profile and removes its own startup value.
+`go test ./pkg/cli ./pkg/config` checks desktop profiles without config.env, saved encrypted providers, platform install advice, private Python environments and log reading without external programs. The Windows cases actually start, restart and stop a detached process, add and remove a per-profile HKCU startup entry, execute its registered profile launcher, and reject unrelated/stale process IDs. Every test uses a temporary profile and removes its own startup value.
 
 `tests/windows/cli.ps1 -Exe <absolute-path-to-macron.exe>` runs on Windows PowerShell 5.1 and PowerShell 7 in CI. It checks doctor on a minimal PATH, Persian logs, backup, uninstall dry-run and actual portable uninstall with spaces, Persian and an apostrophe in the installation path. It verifies that `--keep-data` and unrelated files survive. Run it only with a test build; it copies the executable into a temporary installation.
 
@@ -47,3 +47,5 @@ Without `MACRON_TEST_LIVE=1`, live-model tests are explicitly skipped. A live te
 تست‌های فرمان‌های ویندوز در PowerShell 5.1 و 7 اجرا می‌شوند: doctor بدون ابزارهای لینوکسی، لاگ فارسی، بکاپ و حذف نصب واقعی روی یک کپی موقت. تست Go چرخهٔ پردازش پس‌زمینه و ثبت/حذف شروع هنگام ورود کاربر را هم بررسی می‌کند. نبودن ابزار اختیاری هشدار است؛ برای بررسی سخت‌گیرانهٔ پکیج‌های پایتون، `--require-tools` را اضافه کن.
 
 On Windows, `go test ./pkg/updater` also launches the delayed update-restart helper with PowerShell on a PATH without a Unix shell, using a temporary argument-recording fixture.
+
+Windows sign-in startup uses a short native Macron command and a per-profile settings record under `%APPDATA%\Macron\startup`. It avoids the 260-character limit on Run values; long Unicode profile paths are preserved without encoding them into the Run command.

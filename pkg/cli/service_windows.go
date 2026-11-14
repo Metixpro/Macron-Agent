@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -41,11 +43,88 @@ func windowsStartupName(home string) string {
 	return fmt.Sprintf("Macron-Telegram-%x", sum[:8])
 }
 
-func windowsStartupCommand(bin, home, envPath string) (string, error) {
-	// EncodedCommand is UTF-16LE on PowerShell 5 and 7. Literal quoting protects
-	// spaces, Persian paths, quotes, dollar signs and backticks in all paths.
-	script := "$env:MACRON_HOME=" + psQuote(home) + "; $env:MACRON_ENV_FILE=" + psQuote(envPath) + "; & " + psQuote(bin) + " telegram start"
-	return encodedPowerShell(script)
+type windowsStartupRecord struct{ Binary, Home, EnvFile string }
+
+func windowsStartupRecordPath(name string) (string, error) {
+	if !strings.HasPrefix(name, "Macron-Telegram-") || len(name) != len("Macron-Telegram-")+16 {
+		return "", fmt.Errorf("invalid startup profile")
+	}
+	for _, c := range strings.TrimPrefix(name, "Macron-Telegram-") {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return "", fmt.Errorf("invalid startup profile")
+		}
+	}
+	root, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "Macron", "startup", name+".json"), nil
+}
+
+func windowsStartupCommand(bin, home, _ string) (string, error) {
+	// Windows Run values have a 260-character limit. Keep paths/settings in a
+	// private record; an encoded PowerShell script exceeds that limit easily.
+	command := `"` + bin + `" telegram autostart ` + windowsStartupName(home)
+	if len(utf16.Encode([]rune(command))) > 260 {
+		return "", fmt.Errorf("the installation path is too long for Windows sign-in startup; install Macron in a shorter path")
+	}
+	return command, nil
+}
+
+func saveWindowsStartupRecord(bin, home, envPath string) error {
+	path, err := windowsStartupRecordPath(windowsStartupName(home))
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	data, err := json.Marshal(windowsStartupRecord{bin, home, envPath})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+func windowsAutoStart(io *IO, args []string) int {
+	if len(args) != 1 {
+		io.println("telegram autostart requires a registered Windows profile")
+		return 2
+	}
+	path, err := windowsStartupRecordPath(args[0])
+	if err != nil {
+		io.println(err)
+		return 2
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		io.println("Cannot read Windows startup profile:", err)
+		return 1
+	}
+	var record windowsStartupRecord
+	if len(data) > 16384 || json.Unmarshal(data, &record) != nil || !filepath.IsAbs(record.Home) || !filepath.IsAbs(record.EnvFile) || windowsStartupName(record.Home) != args[0] {
+		io.println("Invalid Windows startup profile.")
+		return 1
+	}
+	bin, err := selfBinary()
+	if err != nil || !strings.EqualFold(bin, record.Binary) {
+		io.println("The startup profile belongs to another Macron installation.")
+		return 1
+	}
+	// Restore the environment on return for callers embedding the CLI. The bot
+	// inherits the selected profile when the detached process starts.
+	for key, value := range map[string]string{config.EnvHome: record.Home, config.EnvEnvFile: record.EnvFile} {
+		old, existed := os.LookupEnv(key)
+		defer func() {
+			if existed {
+				_ = os.Setenv(key, old)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		}()
+		_ = os.Setenv(key, value)
+	}
+	return startTelegram(io)
 }
 
 func windowsStartupInstalled() bool {
@@ -58,7 +137,14 @@ func windowsStartupInstalled() bool {
 	return err == nil && value != ""
 }
 
-func removeWindowsStartup(home string) error {
+func removeWindowsStartup(home string) (result error) {
+	defer func() {
+		if path, err := windowsStartupRecordPath(windowsStartupName(home)); err == nil {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				result = errors.Join(result, err)
+			}
+		}
+	}()
 	k, err := registry.OpenKey(registry.CURRENT_USER, windowsRunKey, registry.SET_VALUE)
 	if errors.Is(err, registry.ErrNotExist) {
 		return nil
@@ -98,6 +184,10 @@ func windowsService(io *IO, action string) int {
 		command, err := windowsStartupCommand(bin, home, envPath)
 		if err != nil {
 			io.println(err)
+			return 1
+		}
+		if err := saveWindowsStartupRecord(bin, home, envPath); err != nil {
+			io.println("Cannot save Windows startup profile:", err)
 			return 1
 		}
 		k, _, err := registry.CreateKey(registry.CURRENT_USER, windowsRunKey, registry.SET_VALUE)
