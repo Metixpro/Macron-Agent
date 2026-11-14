@@ -663,3 +663,7 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 - **Plan panel**: when Macron writes a plan, it opens in a panel beside the conversation, as in Claude Code and Hermes: the steps with the current one marked, how many are done and how long the job has run. It stays after the job ends; a «2/5» button in the header hides or shows it. Windows narrower than 1100 px keep the plan inline.
 - **No more frozen text**: while the model writes a long step (a whole web page for `write_file`), the app showed the last sentence and nothing else. The live card now stays on screen for the whole job and shows the step being written, its file and how much has arrived («Write resume/index.html · writing · 16 KB»); the terminal status line shows the same. This works for OpenAI-compatible, Anthropic and Responses providers.
 - **Tests**: `tests/desktop` runs the desktop app end to end on Windows in CI for x64 and x86 (a whole agent job through the engine, the desktop app starting, and the real interface in Edge from the first-run setup to a server over SSH); see `docs/testing.md`.
+
+### 1.15.1: folder paths open on Enter
+
+A path pasted into the «Open a folder» dialog opens on Enter even before the folder list has loaded; before, the first Enter did nothing on a slow PC.
