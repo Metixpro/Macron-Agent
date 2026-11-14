@@ -174,6 +174,8 @@ function fileKind(f: FileRef): { icon: "image" | "film" | "music" | "archive" | 
   return { icon: "file", label: ext ? ext.toUpperCase() + " file" : "File" };
 }
 
+const RUNS = new Set(["exe", "com", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msi", "msp", "scr", "lnk", "url", "reg", "hta", "cpl", "jar", "py", "pyw", "sh", "command", "app", "appimage", "run", "desktop"]);
+
 function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
   const project = useStore((s) => s.current);
   const remote = useStore((s) => s.servers.some((x) => x.id === s.machine));
@@ -181,6 +183,7 @@ function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
   const kind = fileKind(f);
   const src = fileURL(project, f.name);
   const media = !broken && kind.icon;
+  const runs = RUNS.has((f.base.split(".").pop() || "").toLowerCase());
   return (
     <div className={"file-card" + (fresh ? " enter" : "")}>
       {media === "image" && (
@@ -203,7 +206,7 @@ function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
           </span>
         </span>
         <span className="file-actions">
-          {!remote && (
+          {!remote && !runs && (
             <button type="button" className="btn sm" onClick={() => openFile(f.name)}>
               <Icon name="open" size={14} />
               Open

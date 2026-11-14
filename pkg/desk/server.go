@@ -801,6 +801,10 @@ func (h *hub) publish(ev map[string]any) {
 	}
 }
 
+var runsWhenOpened = map[string]bool{".exe": true, ".com": true, ".bat": true, ".cmd": true, ".ps1": true, ".psm1": true, ".vbs": true, ".vbe": true,
+	".js": true, ".jse": true, ".wsf": true, ".wsh": true, ".msi": true, ".msp": true, ".scr": true, ".lnk": true, ".url": true, ".reg": true, ".hta": true,
+	".cpl": true, ".jar": true, ".py": true, ".pyw": true, ".sh": true, ".command": true, ".app": true, ".appimage": true, ".run": true, ".desktop": true}
+
 var inlineTypes = []string{"image/png", "image/svg+xml", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/avif", "application/pdf", "text/plain", "audio/", "video/"}
 
 func (s *Server) projectFile(w http.ResponseWriter, r *http.Request, name string) (string, fs.FileInfo, bool) {
@@ -865,6 +869,9 @@ func (s *Server) revealAPI(w http.ResponseWriter, r *http.Request) {
 	abs, _, ok := s.projectFile(w, r, in.Name)
 	if !ok {
 		return
+	}
+	if runsWhenOpened[strings.ToLower(filepath.Ext(abs))] {
+		in.Folder = true
 	}
 	if err := reveal(abs, in.Folder); err != nil {
 		writeErr(w, http.StatusInternalServerError, fmt.Errorf("could not open it: %w", err))
