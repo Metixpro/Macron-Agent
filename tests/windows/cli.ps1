@@ -38,6 +38,13 @@ try {
     while ((Test-Path -LiteralPath $localExe) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
     if (Test-Path -LiteralPath $localExe) { throw "Windows still locks the executable after uninstall: $result" }
     if (-not (Test-Path -LiteralPath $unrelated) -or -not (Test-Path -LiteralPath (Join-Path $homeDir 'secret.key'))) { throw 'uninstall removed unrelated files or --keep-data was ignored' }
+    # Repeat without --keep-data: only the selected temporary profile is erased.
+    Copy-Item -LiteralPath $Exe -Destination $localExe
+    $result = & $localExe uninstall --yes 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "uninstall with data removal failed: $result" }
+    $deadline = (Get-Date).AddSeconds(30)
+    while (((Test-Path -LiteralPath $localExe) -or (Test-Path -LiteralPath $homeDir)) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    if ((Test-Path -LiteralPath $localExe) -or (Test-Path -LiteralPath $homeDir) -or -not (Test-Path -LiteralPath $unrelated)) { throw "uninstall did not remove exactly the selected installation: $result" }
     Write-Host "Windows CLI passed on PowerShell $($PSVersionTable.PSVersion)"
 } finally {
     $env:PATH = $originalPath

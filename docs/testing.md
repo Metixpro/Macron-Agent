@@ -45,3 +45,5 @@ Without `MACRON_TEST_LIVE=1`, live-model tests are explicitly skipped. A live te
 `macron doctor` treats absent optional tools as warnings. Use `macron doctor --tools-only --require-tools` when validating an installation of the pinned Python/document dependencies; missing imports then fail the command.
 
 تست‌های فرمان‌های ویندوز در PowerShell 5.1 و 7 اجرا می‌شوند: doctor بدون ابزارهای لینوکسی، لاگ فارسی، بکاپ و حذف نصب واقعی روی یک کپی موقت. تست Go چرخهٔ پردازش پس‌زمینه و ثبت/حذف شروع هنگام ورود کاربر را هم بررسی می‌کند. نبودن ابزار اختیاری هشدار است؛ برای بررسی سخت‌گیرانهٔ پکیج‌های پایتون، `--require-tools` را اضافه کن.
+
+On Windows, `go test ./pkg/updater` also launches the delayed update-restart helper with PowerShell on a PATH without a Unix shell, using a temporary argument-recording fixture.

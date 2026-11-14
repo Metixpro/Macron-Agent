@@ -669,6 +669,6 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 
 - `doctor` uses Windows tool names, PowerShell/winget advice and `venv\Scripts\python.exe`, and recognizes saved desktop providers without config.env. Optional tools warn without failing basic health checks; `--require-tools` makes pinned Python dependencies mandatory.
 - `service install` on Windows registers per-user Telegram sign-in startup, starts a detached process, and supports status/start/stop/restart/uninstall. Process identity checks reject stale PIDs belonging to another executable. This does not install an SCM system service or run after sign-out.
-- Both log commands read and follow files in Go; no `tail` or `journalctl` is needed on Windows. Update messages use the actual executable backup name. Native uninstall defers locked executable deletion until exit and supports `--keep-data`.
+- Both log commands read and follow files in Go; no `tail` or `journalctl` is needed on Windows. Update messages use the actual executable backup name; Telegram updates schedule their restart with PowerShell instead of `sh`. Native uninstall defers locked executable deletion until exit and supports `--keep-data`.
 - Closing the machine menu or slash suggestions with Escape no longer stops a running desktop job.
 - Public regressions run Windows process/startup lifecycle checks and native CLI flows on PowerShell 5.1 and 7, including Persian paths/logs and real portable uninstall.

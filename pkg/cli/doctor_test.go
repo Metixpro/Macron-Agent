@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,6 +35,11 @@ func TestDoctorDesktopProviderWithoutConfigEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.Close()
+	reportOut, _ := testIO()
+	saved := reportDatabase(context.Background(), &report{io: reportOut}, config.HomePath(config.FileDB), &envFile{})
+	if saved == nil || saved.APIKey != "private-test-key" {
+		t.Fatal("doctor cannot decrypt the saved provider")
+	}
 	out, buf := testIO()
 	if code := doctor(out, []string{"--offline"}); code != 0 {
 		t.Fatalf("doctor exit %d: %s", code, buf)
@@ -67,5 +73,27 @@ func TestDoctorWindowsHints(t *testing.T) {
 	}
 	if got := pythonInstallHint("windows"); !strings.Contains(got, "Python.Python.3.12") {
 		t.Fatal(got)
+	}
+}
+
+func TestDoctorPythonVersionUsesNativeNewlines(t *testing.T) {
+	py := config.ToolPython()
+	if len(py) == 0 {
+		t.Skip("Python is optional")
+	}
+	args := append(append([]string{}, py[1:]...), "-c", "import sys; print('%d.%d' % sys.version_info[:2])")
+	raw, err := exec.Command(py[0], args...).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ver := strings.TrimSpace(string(raw))
+	parts := versionNumbers(ver)
+	if len(parts) < 2 || parts[0] < 3 || parts[0] == 3 && parts[1] < 12 {
+		t.Skip("pinned optional tools need Python 3.12+")
+	}
+	out, buf := testIO()
+	checkPython(&report{io: out}, py)
+	if strings.Contains(buf.String(), "older than") || !strings.Contains(buf.String(), "✅ Python "+ver+" (") {
+		t.Fatal(buf.String())
 	}
 }

@@ -138,8 +138,8 @@ func doctor(io *IO, args []string) int {
 		}
 	}
 
-	token := getEnv(env, keyToken)
-	owners := getEnv(env, keyOwners)
+	token := doctorValue(env, keyToken)
+	owners := doctorValue(env, keyOwners)
 	if token == "" {
 		r.line(ok, "Telegram is not connected (optional)", "to reach Macron from your phone: macron telegram")
 	} else if !*offline {
@@ -166,7 +166,7 @@ func doctor(io *IO, args []string) int {
 		savedModel = reportDatabase(ctx, r, dbPath, env)
 	}
 
-	url, key, model := getEnv(env, keyAPIURL), getEnv(env, keyAPIKey), getEnv(env, keyModel)
+	url, key, model := doctorValue(env, keyAPIURL), doctorValue(env, keyAPIKey), doctorValue(env, keyModel)
 	if savedModel != nil {
 		url, key, model = savedModel.BaseURL, savedModel.APIKey, savedModel.Model
 		r.line(ok, "saved provider "+savedModel.Name+" · "+model, "")
@@ -249,15 +249,25 @@ func doctor(io *IO, args []string) int {
 	return 0
 }
 
+func doctorValue(env *envFile, key string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return getEnv(env, key)
+}
+
 func getEnvDefault(env *envFile, key, def string) string {
-	if v := getEnv(env, key); v != "" {
+	if v := doctorValue(env, key); v != "" {
 		return v
 	}
 	return def
 }
 
 func reportDatabase(ctx context.Context, r *report, dbPath string, env *envFile) *store.Provider {
-	secret := getEnv(env, config.EnvSecretKey)
+	secret := strings.TrimSpace(os.Getenv(config.EnvSecretKey))
+	if secret == "" {
+		secret = getEnv(env, config.EnvSecretKey)
+	}
 	if secret == "" {
 		data, _ := os.ReadFile(config.HomePath(config.FileSecret))
 		secret = strings.TrimSpace(string(data))
@@ -417,6 +427,11 @@ func toolRequirementsHint() string {
 	if runtime.GOOS == "windows" {
 		py = filepath.Join(config.Home(), "venv", "Scripts", "python.exe")
 		create = "py -3"
+		if _, err := exec.LookPath("py"); err != nil {
+			if _, err := exec.LookPath("python"); err == nil {
+				create = "python"
+			}
+		}
 	}
 	quote := func(s string) string {
 		if runtime.GOOS == "windows" {
@@ -428,7 +443,7 @@ func toolRequirementsHint() string {
 	if runtime.GOOS == "windows" {
 		run = "& " + run
 	}
-	return create + " -m venv " + quote(config.HomePath("venv")) + "; then " + run + " -m pip install --require-hashes -r requirements-tools.lock (from the Macron release folder)"
+	return "from the Macron release folder, run:\n       " + create + " -m venv " + quote(config.HomePath("venv")) + "\n       " + run + " -m pip install --require-hashes -r requirements-tools.lock"
 }
 
 func checkPython(r *report, py []string) {
@@ -443,7 +458,7 @@ func checkPython(r *report, py []string) {
 		r.toolIssue("Python does not run", pythonInstallHint(runtime.GOOS))
 		return
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(string(out)), "\r\n", "\n"), "\n")
 	ver := lines[0]
 	if parts := versionNumbers(ver); len(parts) < 2 || parts[0] < 3 || parts[0] == 3 && parts[1] < 12 {
 		r.toolIssue("Python "+ver+" is older than 3.12 (the pinned optional tools need 3.12+)", pythonInstallHint(runtime.GOOS))

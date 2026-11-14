@@ -351,6 +351,9 @@ func systemZone() string {
 			return tz
 		}
 	}
+	if runtime.GOOS == "windows" {
+		return "Local"
+	}
 	if b, err := os.ReadFile("/etc/timezone"); err == nil {
 		if tz := strings.TrimSpace(string(b)); tz != "" {
 			if _, err := time.LoadLocation(tz); err == nil {
