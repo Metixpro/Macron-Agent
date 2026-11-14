@@ -88,6 +88,10 @@ func TestConnectionsOwnerConfigureHotReloadAndClear(t *testing.T) {
 	if _, e := r.SendIranMessenger(context.Background(), "bale", "", "chat", "message"); e == nil {
 		t.Fatal("cleared token used")
 	}
+	out = connectionCall(t, r, "owner", "configure", "bale", map[string]string{"MACRON_BALE_API": "secret-token-not-an-address"})
+	if !strings.Contains(out, "http(s) URL") || strings.Contains(out, "secret-token-not-an-address") {
+		t.Fatal("invalid URL accepted or leaked", out)
+	}
 	out = connectionCall(t, r, "owner", "configure", "bale", map[string]string{"MACRON_API_KEY": "illegal"})
 	if !strings.Contains(out, "unsupported setting") {
 		t.Fatal(out)

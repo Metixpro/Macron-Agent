@@ -127,6 +127,12 @@ func (r *Registry) registerConnections() {
 				if !ok || !allowed[key] {
 					return "error: unsupported setting " + key + " for " + s.ID, nil
 				}
+				if connectionFields[key].Type == "url" && value != "" {
+					u, err := url.Parse(value)
+					if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+						return "error: " + key + " must be an http(s) URL, not a token or ID; leave optional overrides empty for the default", nil
+					}
+				}
 				if strings.Contains(key, "_PORT") && value != "" {
 					n, err := strconv.Atoi(value)
 					if err != nil || n < 1 || n > 65535 {
