@@ -10,12 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"mime"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -184,7 +186,22 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			http.Error(w, "missing request header", http.StatusForbidden)
 			return
 		}
-		next.ServeHTTP(w, r)
+		rec := &recorder{ResponseWriter: w}
+		defer func() {
+			v := recover()
+			if v == nil {
+				return
+			}
+			if v == http.ErrAbortHandler {
+				log.Printf("desktop: %s %s: the reply was cut off", r.Method, r.URL.Path)
+				panic(v)
+			}
+			log.Printf("desktop: %s %s failed: %v\n%s", r.Method, r.URL.Path, v, debug.Stack())
+			if !rec.wrote {
+				writeErr(w, http.StatusInternalServerError, fmt.Errorf("the engine hit an internal error: %v", v))
+			}
+		}()
+		next.ServeHTTP(rec, r)
 	})
 }
 
@@ -879,3 +896,27 @@ func (s *Server) revealAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
+
+type recorder struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (r *recorder) WriteHeader(code int) {
+	r.wrote = true
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *recorder) Write(b []byte) (int, error) {
+	r.wrote = true
+	return r.ResponseWriter.Write(b)
+}
+
+func (r *recorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		r.wrote = true
+		f.Flush()
+	}
+}
+
+func (r *recorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }

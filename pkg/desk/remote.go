@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -225,6 +226,7 @@ func (rs *remotes) open(ctx context.Context, r *remote, spec ServerSpec, sec Sec
 	case h = <-got:
 	case <-tr.done():
 		tr.close()
+		log.Printf("desktop: macron on %s stopped while starting: %s", spec.Name, strings.TrimSpace(stderr()))
 		return remoteStartError(stderr())
 	case <-time.After(90 * time.Second):
 		tr.close()
@@ -254,6 +256,7 @@ func (rs *remotes) open(ctx context.Context, r *remote, spec ServerSpec, sec Sec
 		}
 		r.mu.Unlock()
 		if same {
+			log.Printf("desktop: the connection to %s was lost", spec.Name)
 			rs.changed()
 		}
 	}()
@@ -386,6 +389,10 @@ func (s *Server) connectServerAPI(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	err := s.remotes.connect(ctx, rm, sec)
 	var need *NeedError
+	if err != nil && !errors.As(err, &need) {
+		v := rm.view()
+		log.Printf("desktop: connecting to %s (%s@%s:%d) failed: %v", v.Name, v.User, v.Host, v.Port, err)
+	}
 	switch {
 	case errors.As(err, &need):
 		writeJSON(w, map[string]any{"server": rm.view(), "need": need.Need, "fingerprint": need.Fingerprint, "message": need.Message})

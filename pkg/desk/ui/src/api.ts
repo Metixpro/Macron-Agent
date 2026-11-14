@@ -28,7 +28,14 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   try {
     res = await fetch(path, init);
   } catch {
-    throw new ApiError("The Macron engine is not answering", "It may have stopped. Start Macron again.");
+    if (base && path.startsWith(base)) {
+      const local = await fetch("/api/servers", { headers: { "X-Macron": "1" }, credentials: "same-origin" }).then(
+        () => true,
+        () => false,
+      );
+      if (local) throw new ApiError("The connection to the server dropped", "Pick the server again in the machine menu to reconnect.");
+    }
+    throw new ApiError("The Macron engine on this PC is not answering", "Close Macron and open it again. If it keeps happening, send the end of .macron\\desktop.log in your user folder.");
   }
   const type = res.headers.get("Content-Type") || "";
   const data = type.includes("json") ? await res.json().catch(() => ({})) : { error: (await res.text()).trim() };
