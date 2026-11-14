@@ -5,17 +5,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Metixpro/macron-agent/pkg/providers"
-	"github.com/Metixpro/macron-agent/pkg/store"
 	neturl "net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/providers"
+	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
