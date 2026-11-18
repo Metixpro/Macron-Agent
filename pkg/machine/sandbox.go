@@ -236,10 +236,18 @@ func topOf(ws string) string {
 }
 
 func (s *Machine) sandboxed(ws string, argv []string) []string {
-	if s.sb == nil {
+	s.sbMu.RLock()
+	sb := s.sb
+	s.sbMu.RUnlock()
+	if sb == nil {
 		return argv
 	}
-	return s.sb.wrap(topOf(ws), ws, argv)
+	return sb.wrap(topOf(ws), ws, argv)
 }
 
-func (s *Machine) Sandboxed() bool { return s.sb != nil }
+func (s *Machine) Sandboxed() bool {
+	s.sbMu.RLock()
+	ok := s.sb != nil
+	s.sbMu.RUnlock()
+	return ok
+}

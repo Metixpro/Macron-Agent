@@ -18,6 +18,7 @@ var commands = []command{
 	{"/connect", "[service]", "connect a model or service"},
 	{"/connections", "", "service capabilities and setup status"},
 	{"/mode", "[build|plan]", "build with tools or inspect and plan"},
+	{"/execution", "[sandbox|best-effort|local]", "execution isolation mode (alias: /sandbox)"},
 	{"/help", "", "commands and keys"},
 	{"/new", "", "start a new conversation in this folder"},
 	{"/clear", "", "clear the screen and start a new conversation"},
@@ -154,6 +155,8 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			}
 			m.info = m.e.Info()
 		}
+	case "/execution", "/sandbox":
+		return m.executionCommand(arg)
 	case "/help", "/?":
 		m.print(helpText())
 	case "/exit", "/quit", "/q":

@@ -30,14 +30,15 @@ type Config struct {
 	ReadOnly     []string
 	Writable     []string
 	Hide         []string
-	
-	// اضافه شده برای پشتیبانی از معماری Execution Manager
+
+	// ExecutionMode controls sandbox behavior: "local", "sandbox", or "best-effort".
 	ExecutionMode string
 }
 
 type Machine struct {
 	BaseDir string
 	cfg     Config
+	sbMu    sync.RWMutex
 	sb      *sandbox
 	sem     chan struct{}
 	heavy   chan struct{}
@@ -119,14 +120,20 @@ func New(cfg Config) (*Machine, error) {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
 
-	// --- باگ Fail-Open رسماً اینجا بسته شد! ---
-	// خروجی سوم (err) رو از سندباکس می‌گیریم
+	mode := strings.ToLower(strings.TrimSpace(cfg.ExecutionMode))
+	if mode == "" {
+		mode = strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_EXECUTION_MODE")))
+	}
+	if mode == "" {
+		mode = "best-effort"
+	}
+	cfg.ExecutionMode = mode
+
+	// Fail closed when strict sandbox isolation is requested but unavailable.
 	sb, note, err := newSandbox(cfg)
 	if err != nil {
-		// اگر ارور مهلک بود (حالت ایزوله خواسته شده بود اما در دسترس نبود)، سیستم متوقف می‌شه
 		return nil, fmt.Errorf("execution manager aborted: %w", err)
 	}
-	// ------------------------------------------
 
 	if note != "" {
 		log.Printf("sandbox: %s", note)
@@ -147,6 +154,58 @@ func New(cfg Config) (*Machine, error) {
 		touched: make(map[string]time.Time),
 		active:  make(map[string]int),
 	}, nil
+}
+
+func (s *Machine) ExecutionMode() string {
+	s.sbMu.RLock()
+	mode := s.cfg.ExecutionMode
+	s.sbMu.RUnlock()
+	if mode == "" {
+		return "best-effort"
+	}
+	return mode
+}
+
+func (s *Machine) SetExecutionMode(mode string) (string, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "local", "sandbox", "best-effort":
+	default:
+		return "", fmt.Errorf("invalid execution mode %q (use local, sandbox, or best-effort)", mode)
+	}
+
+	s.sbMu.RLock()
+	nextCfg := s.cfg
+	s.sbMu.RUnlock()
+	nextCfg.ExecutionMode = mode
+
+	sb, note, err := newSandbox(nextCfg)
+	if err != nil {
+		return "", err
+	}
+
+	s.sbMu.Lock()
+	s.cfg.ExecutionMode = mode
+	s.sb = sb
+	s.sbMu.Unlock()
+
+	s.stopAllShells()
+	return note, nil
+}
+
+func (s *Machine) stopAllShells() {
+	s.mu.Lock()
+	var open []*shell
+	for _, sh := range s.shells {
+		if sh != nil {
+			open = append(open, sh)
+		}
+	}
+	s.mu.Unlock()
+	for _, sh := range open {
+		sh.stop("execution mode changed")
+		<-sh.done
+	}
 }
 
 func (s *Machine) Workspace(sessionID string) (string, error) {
