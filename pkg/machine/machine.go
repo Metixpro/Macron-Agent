@@ -30,6 +30,9 @@ type Config struct {
 	ReadOnly     []string
 	Writable     []string
 	Hide         []string
+	
+	// اضافه شده برای پشتیبانی از معماری Execution Manager
+	ExecutionMode string
 }
 
 type Machine struct {
@@ -115,7 +118,16 @@ func New(cfg Config) (*Machine, error) {
 	if err := os.MkdirAll(cfg.BaseDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
-	sb, note := newSandbox(cfg)
+
+	// --- باگ Fail-Open رسماً اینجا بسته شد! ---
+	// خروجی سوم (err) رو از سندباکس می‌گیریم
+	sb, note, err := newSandbox(cfg)
+	if err != nil {
+		// اگر ارور مهلک بود (حالت ایزوله خواسته شده بود اما در دسترس نبود)، سیستم متوقف می‌شه
+		return nil, fmt.Errorf("execution manager aborted: %w", err)
+	}
+	// ------------------------------------------
+
 	if note != "" {
 		log.Printf("sandbox: %s", note)
 	} else if sb != nil {

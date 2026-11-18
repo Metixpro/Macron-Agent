@@ -33,7 +33,7 @@ release:
 		mkdir -p dist/$$name; \
 		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build $(GOFLAGS_REL) -o dist/$$name/macron.exe ./cmd/macron || exit 1; \
 		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build $(GOFLAGS_GUI) -o dist/$$name/macron-desktop.exe ./cmd/macron || exit 1; \
-		cp README.md README.en.md LICENSE config.env.example dist/$$name/; \
+		cp README.md README.en.md LICENSE config.env.example requirements-tools.lock requirements-tools.txt requirements-browser-agent.lock requirements-browser-agent.txt dist/$$name/; \
 		cp -R assets dist/$$name/; \
 		(cd dist && rm -f $$name.zip && zip -qr $$name.zip $$name) || exit 1; \
 	done

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -42,8 +43,16 @@ func update(io *IO, args []string) int {
 		io.printf("❌ %v\n", err)
 		return 1
 	}
-	io.printf("✅ Updated to %s. (The old program is kept next to it as macron.old.)\n", latest)
+	bin, _ := selfBinary()
+	io.printf("✅ Updated to %s. (The previous program is kept as %s.old.)\n", latest, filepath.Base(bin))
 	if !*noRestart && serviceSupported() {
+		if runtime.GOOS == "windows" {
+			if readPID() > 0 {
+				return serviceControl(io, "restart")
+			}
+			io.println("Close and reopen Macron to use the update.")
+			return 0
+		}
 		u, _ := currentUnit()
 		if _, err := os.Stat(unitPath(u)); err == nil || runtime.GOOS == "darwin" {
 			io.println("Restarting the service…")

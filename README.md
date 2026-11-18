@@ -223,6 +223,8 @@ macron update
 
 از تلگرام هم `/update` یا دکمهٔ بروزرسانی پنل را بزن. نسخه از Release گیت‌هاب دریافت می‌شود؛ checksum و اجرای اولیه بررسی و باینری قبلی نگه داشته می‌شود. برای انتشار نسخهٔ تازه، شمارهٔ نسخه و تگ `vX.Y.Z` باید هماهنگ باشند.
 
+در ویندوز هم همین فرمان‌ها را در PowerShell اجرا کن. `macron doctor --offline` تنظیمات دسکتاپ و ابزارهای ویندوز را بررسی می‌کند. `macron service install` ربات تلگرام را در پس‌زمینه اجرا و شروع آن هنگام ورود همین کاربر به ویندوز را ثبت می‌کند؛ `status`، `stop`، `restart` و `uninstall` هم کار می‌کنند. `macron logs -f` لاگ را بدون نیاز به ابزار لینوکسی می‌خواند. این اجرا تا زمان خروج از حساب ویندوز فعال است؛ سرویس سیستمی ویندوز نیست.
+
 ## حذف نصب
 
 ```bash
@@ -437,6 +439,8 @@ macron update
 ```
 
 You can also use `/update` or the admin panel's Update button. Downloads come from GitHub Releases, with checksum verification, executable preflight and a retained previous binary. To publish a version, keep the source version and `vX.Y.Z` tag aligned.
+
+Use the same commands in PowerShell on Windows. `macron doctor --offline` checks desktop settings and Windows tools. `macron service install` starts the Telegram bot in the background and registers startup when the current user signs in; `status`, `stop`, `restart` and `uninstall` work too. `macron logs -f` reads logs without Unix utilities. This is a per-user background process that ends at sign-out, rather than a Windows system service.
 
 ## Uninstall
 

@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package cli
 
@@ -15,3 +15,5 @@ func alive(int) bool { return false }
 func terminate(int) error { return errors.New("not supported on this system") }
 
 func inputReady(time.Duration) bool { return false }
+
+func ownsBackgroundProcess(int) bool { return true }

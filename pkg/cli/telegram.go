@@ -53,6 +53,8 @@ func telegramCmd(io *IO, args []string) int {
 		return telegramStatus(io)
 	case "start", "stop", "restart":
 		return telegramControl(io, sub)
+	case "autostart":
+		return windowsAutoStart(io, args)
 	case "logs", "log":
 		return telegramLogs(io, args)
 	case "disconnect", "remove":
@@ -190,6 +192,18 @@ func selfBinary() (string, error) {
 	if r, err := filepath.EvalSymlinks(bin); err == nil {
 		bin = r
 	}
+	if runtime.GOOS == "windows" && strings.HasSuffix(strings.ToLower(bin), ".exe.old") {
+		installed := bin[:len(bin)-4]
+		if fileExists(installed) {
+			bin = installed
+		}
+	}
+	if runtime.GOOS == "windows" && strings.EqualFold(filepath.Base(bin), "macron-desktop.exe") {
+		cli := filepath.Join(filepath.Dir(bin), "macron.exe")
+		if fileExists(cli) {
+			bin = cli
+		}
+	}
 	return bin, nil
 }
 
@@ -215,7 +229,7 @@ func trialRun(io *IO) bool {
 	if i := strings.LastIndex(text, "\n"); i >= 0 {
 		last = text[i+1:]
 	}
-	io.printf("     ✓ settings, database and Telegram checked (%s)\n", strings.TrimSpace(last))
+	io.printf("     ✓ local settings and database checked (%s)\n", strings.TrimSpace(last))
 	return true
 }
 
@@ -275,7 +289,7 @@ func readPID() int {
 		return 0
 	}
 	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	if !alive(pid) {
+	if !alive(pid) || !ownsBackgroundProcess(pid) {
 		return 0
 	}
 	if cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil && !strings.Contains(string(cmdline), "telegram") {
@@ -290,16 +304,24 @@ func stopDetached() bool {
 		_ = os.Remove(config.HomePath(pidFile))
 		return false
 	}
-	_ = terminate(pid)
+	if err := terminate(pid); err != nil {
+		return false
+	}
 	for i := 0; i < 40 && alive(pid); i++ {
 		time.Sleep(250 * time.Millisecond)
+	}
+	if alive(pid) {
+		return false
 	}
 	_ = os.Remove(config.HomePath(pidFile))
 	return true
 }
 
 func startDetached(io *IO) int {
-	stopDetached()
+	if readPID() > 0 && !stopDetached() {
+		io.println("Cannot stop the previous bot process; no second copy was started.")
+		return 1
+	}
 	bin, err := selfBinary()
 	if err != nil {
 		io.printf("❌ %v\n", err)
@@ -321,7 +343,12 @@ func startDetached(io *IO) int {
 		return 1
 	}
 	pid := cmd.Process.Pid
-	_ = os.WriteFile(config.HomePath(pidFile), []byte(strconv.Itoa(pid)+"\n"), 0o600)
+	if err := os.WriteFile(config.HomePath(pidFile), []byte(strconv.Itoa(pid)+"\n"), 0o600); err != nil {
+		_ = terminate(pid)
+		_ = cmd.Wait()
+		io.printf("❌ cannot save background process: %v\n", err)
+		return 1
+	}
 	_ = cmd.Process.Release()
 	time.Sleep(3 * time.Second)
 	if !alive(pid) {
@@ -329,7 +356,11 @@ func startDetached(io *IO) int {
 		return 1
 	}
 	io.printf("     ✓ running in the background (process %d, log %s)\n", pid, logPath)
-	io.println("       There is no system service here, so start it again after a reboot: macron telegram start")
+	if runtime.GOOS == "windows" {
+		io.println("       To start it when you sign in: macron service install")
+	} else {
+		io.println("       There is no system service here, so start it again after a reboot: macron telegram start")
+	}
 	return 0
 }
 
@@ -445,7 +476,10 @@ func telegramControl(io *IO, action string) int {
 		io.println("It is not running.")
 		return 0
 	case strings.HasPrefix(st.how, "background") && action == "stop":
-		stopDetached()
+		if !stopDetached() {
+			io.println("Cannot stop the background process.")
+			return 1
+		}
 		io.println("✓ stopped")
 		return 0
 	case st.how == "" || strings.HasPrefix(st.how, "background"):
@@ -467,35 +501,8 @@ func telegramControl(io *IO, action string) int {
 
 func telegramLogs(io *IO, args []string) int {
 	st := telegramState()
-	if st.how == "" || strings.HasPrefix(st.how, "background") || runtime.GOOS == "darwin" {
-		follow, lines := false, "100"
-		for i := 0; i < len(args); i++ {
-			switch args[i] {
-			case "-f", "--follow":
-				follow = true
-			case "-n":
-				if i+1 < len(args) {
-					lines = args[i+1]
-					i++
-				}
-			}
-		}
-		path := config.HomePath(logFile)
-		if _, err := os.Stat(path); err != nil {
-			io.println("No log yet (" + path + ").")
-			return 0
-		}
-		a := []string{"-n", lines}
-		if follow {
-			a = append(a, "-f")
-		}
-		cmd := exec.Command("tail", append(a, path)...)
-		cmd.Stdout, cmd.Stderr = io.Out, io.Err
-		if err := cmd.Run(); err != nil {
-			io.printf("❌ %v\n", err)
-			return 1
-		}
-		return 0
+	if st.how == "" || strings.HasPrefix(st.how, "background") || runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		return fileLogs(io, args)
 	}
 	return logs(io, args)
 }

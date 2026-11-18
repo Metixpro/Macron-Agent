@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -335,6 +336,9 @@ func uninstall(io *IO, args []string) int {
 	if fs.NArg() != 0 {
 		io.println("uninstall accepts flags only")
 		return 2
+	}
+	if runtime.GOOS == "windows" {
+		return windowsUninstall(io, *yes, *dry, *keep)
 	}
 	binary, err := os.Executable()
 	if err != nil {

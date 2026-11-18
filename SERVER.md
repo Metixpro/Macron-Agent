@@ -664,3 +664,11 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 - **No more frozen text**: while the model writes a long step (a whole web page for `write_file`), the app showed the last sentence and nothing else. The live card now stays on screen for the whole job and shows the step being written, its file and how much has arrived («Write resume/index.html · writing · 16 KB»); the terminal status line shows the same. This works for OpenAI-compatible, Anthropic and Responses providers.
 - **Folder dialog**: a path typed or pasted into «Open a folder» while the first list is still loading is kept and opens on Enter (it used to be replaced by the home folder, or Enter did nothing), and a late list no longer replaces a newer one.
 - **Tests**: `tests/desktop` runs the desktop app end to end on Windows in CI for x64 and x86 (a whole agent job through the engine, the desktop app starting, and the real interface in Edge from the first-run setup to a server over SSH); see `docs/testing.md`.
+
+### 1.15.3: Windows-native management commands
+
+- `doctor` uses Windows tool names, PowerShell/winget advice and `venv\Scripts\python.exe`, and recognizes saved desktop providers without config.env. Optional tools warn without failing basic health checks; `--require-tools` makes pinned Python dependencies mandatory.
+- `service install` on Windows registers per-user Telegram sign-in startup, starts a detached process, and supports status/start/stop/restart/uninstall. Process identity checks reject stale PIDs belonging to another executable. This does not install an SCM system service or run after sign-out.
+- Both log commands read and follow files in Go; no `tail` or `journalctl` is needed on Windows. Update messages use the actual executable backup name; Telegram updates schedule their restart with PowerShell instead of `sh`. Native uninstall defers locked executable deletion until exit and supports `--keep-data`.
+- Closing the machine menu or slash suggestions with Escape no longer stops a running desktop job.
+- Public regressions run Windows process/startup lifecycle checks and native CLI flows on PowerShell 5.1 and 7, including Persian paths/logs and real portable uninstall.

@@ -174,6 +174,7 @@ export function Composer() {
   const mode = useStore((s) => s.mode);
   const [text, setText] = useState("");
   const [sel, setSel] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const [fly, setFly] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
   const idRef = useRef(current);
@@ -201,9 +202,10 @@ export function Composer() {
     el.style.height = Math.min(el.scrollHeight, 260) + "px";
   }, [text]);
 
-  const matches = useMemo(() => (text.startsWith("/") && !/\s/.test(text) ? COMMANDS.filter((c) => c.name.startsWith(text.toLowerCase())) : []), [text]);
+  const matches = useMemo(() => (!slashDismissed && text.startsWith("/") && !/\s/.test(text) ? COMMANDS.filter((c) => c.name.startsWith(text.toLowerCase())) : []), [text, slashDismissed]);
 
   const change = (v: string) => {
+    setSlashDismissed(false);
     setText(v);
     setSel(0);
     saveDraft(current, v);
@@ -227,6 +229,12 @@ export function Composer() {
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
     if (matches.length) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setSlashDismissed(true);
+        return;
+      }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         setSel((i) => (i + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);

@@ -42,6 +42,18 @@ const bad = (s) => { out.problems.push(s); console.log("PROBLEM " + s); };
   const job = async (where) => {
     await p.fill(".box textarea", "smoke test: run every step");
     await p.keyboard.press("Enter");
+    await p.waitForSelector(".box.busy", { timeout: 15000 });
+    await p.click(".machine > button");
+    await p.waitForSelector(".machine .menu");
+    await p.keyboard.press("Escape");
+    if (await p.locator(".machine .menu").count()) bad(where + " Escape did not dismiss machine menu");
+    if (!(await p.locator(".box.busy").count())) bad(where + " closing machine menu stopped the job");
+    await p.fill(".box textarea", "/");
+    await p.waitForSelector(".slash");
+    await p.keyboard.press("Escape");
+    if (await p.locator(".slash").count()) bad(where + " Escape did not dismiss commands");
+    if (!(await p.locator(".box.busy").count())) bad(where + " closing commands stopped the job");
+    await p.fill(".box textarea", "");
     const took = await turn(240000);
     const steps = (await p.locator(".feed .tool-row").allInnerTexts()).map((s) => s.replace(/\s+/g, " ").trim());
     const failed = await p.locator(".feed .tool.fail").count();

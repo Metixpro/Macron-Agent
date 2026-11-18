@@ -5,17 +5,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Metixpro/macron-agent/pkg/providers"
-	"github.com/Metixpro/macron-agent/pkg/store"
 	neturl "net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/llm"
+	"github.com/Metixpro/macron-agent/pkg/providers"
+	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
 
@@ -350,6 +351,9 @@ func systemZone() string {
 		if _, err := time.LoadLocation(tz); err == nil {
 			return tz
 		}
+	}
+	if runtime.GOOS == "windows" {
+		return "Local"
 	}
 	if b, err := os.ReadFile("/etc/timezone"); err == nil {
 		if tz := strings.TrimSpace(string(b)); tz != "" {
