@@ -75,6 +75,10 @@ func (h *deskHost) Info() desk.Info {
 	host, _ := os.Hostname()
 	i := desk.Info{Version: app.Version, Platform: runtime.GOOS, Host: host, Approvals: h.w.bot.gateMode(), ContextWindow: h.w.window()}
 	i.Yolo, _ = h.w.gate.Yolo()
+	if h.w.app != nil && h.w.app.Machine != nil {
+		i.ExecutionMode = h.w.app.Machine.ExecutionMode()
+		i.Sandboxed = h.w.app.Machine.Sandboxed()
+	}
 	if p, ok := h.w.prov.Active(); ok {
 		i.Model, i.Provider, i.Effort = p.Model, p.Name, p.Effort
 	}
@@ -92,7 +96,10 @@ func (h *deskHost) SetModel(ctx context.Context, name string) error {
 	return h.any().SetModel(ctx, name)
 }
 func (h *deskHost) SetApprovals(mode string) error { return h.any().SetApprovals(mode) }
-func (h *deskHost) Yolo(on bool) bool              { return h.any().Yolo(on) }
+func (h *deskHost) SetExecutionMode(mode string) (string, error) {
+	return h.any().SetExecutionMode(mode)
+}
+func (h *deskHost) Yolo(on bool) bool { return h.any().Yolo(on) }
 
 func (h *deskHost) Providers(ctx context.Context) ([]desk.ProviderChoice, error) {
 	list, err := h.any().Providers(ctx)

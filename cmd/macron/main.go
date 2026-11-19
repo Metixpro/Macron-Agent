@@ -140,6 +140,9 @@ func runBot(args []string) {
 	}
 	defer st.Close()
 	seedProvider(rootCtx, st, cfg)
+	if !executionModeFlagSet(flag.CommandLine) {
+		applySavedExecutionMode(cfg, st.Setting)
+	}
 
 	llmHTTP := llm.NewHTTPClient()
 	usage := func(provider string, u llm.Usage, failed bool) {

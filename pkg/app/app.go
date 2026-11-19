@@ -42,6 +42,7 @@ func NewWith(ctx context.Context, cfg *config.Config, channel agent.Channel, cli
 		MaxConcurrent: cfg.Slots,
 		Sandbox:       cfg.Sandbox,
 		SandboxNoNet:  cfg.SandboxNoNet,
+		ExecutionMode: cfg.ExecutionMode, // <--- این سیمِ طلایی رو اینجا وصل کردیم! 🔌
 		Hide:          config.SecretFiles(),
 	})
 	if err != nil {

@@ -115,6 +115,7 @@ func setupWorkspace(gateDir string) (*workspace, error) {
 	cfg := &config.Config{OptionalAPIURL: true}
 	fs := flag.NewFlagSet("macron", flag.ContinueOnError)
 	cfg.Bind(fs)
+	applySavedExecutionMode(cfg, st.Setting)
 	if _, err := cfg.Validate(fs); err != nil {
 		w.close()
 		return nil, err
@@ -590,6 +591,7 @@ func (t *terminal) Status(ctx context.Context) string {
 	}
 	row("folder", dir)
 	row("mode", t.Mode())
+	row("execution", t.executionStatus())
 	for _, name := range projectNotes {
 		if _, err := os.Stat(filepath.Join(t.dir, name)); err == nil {
 			row("notes", name)
@@ -701,6 +703,7 @@ func (t *terminal) Mode() string {
 	}
 	return "build"
 }
+
 func (t *terminal) SetMode(mode string) error {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if mode != "plan" && mode != "build" {
@@ -711,6 +714,7 @@ func (t *terminal) SetMode(mode string) error {
 	t.modeMu.Unlock()
 	return nil
 }
+
 func planToolAllowed(name string) bool {
 	switch name {
 	case "read_file", "list_files", "search_code", "find_files", "project_tree", "code_outline", "web_search", "web_fetch", "document_reader", "view_image", "search_past_chats", "recall_history", "update_plan":
@@ -718,6 +722,7 @@ func planToolAllowed(name string) bool {
 	}
 	return false
 }
+
 func (t *terminal) ReloadModel(ctx context.Context) error { return t.prov.Reload(ctx) }
 
 func (t *terminal) Providers(ctx context.Context) ([]tui.ProviderChoice, error) {
@@ -730,6 +735,7 @@ func (t *terminal) Providers(ctx context.Context) ([]tui.ProviderChoice, error) 
 	}
 	return out, nil
 }
+
 func (t *terminal) SetProvider(ctx context.Context, id int64) error {
 	p, err := t.st.Provider(ctx, id)
 	if err != nil {

@@ -76,6 +76,9 @@ func runMessenger(platform string, args []string) error {
 	}
 	defer st.Close()
 	seedProvider(ctx, st, cfg)
+	if !executionModeFlagSet(fs) {
+		applySavedExecutionMode(cfg, st.Setting)
+	}
 	prov, err := providers.New(ctx, st, llm.NewHTTPClient(), nil)
 	if err != nil {
 		return err

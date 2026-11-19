@@ -147,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tuning", s.setTuningAPI)
 	mux.HandleFunc("POST /api/mode", s.modeAPI)
 	mux.HandleFunc("POST /api/approvals", s.approvalsAPI)
+	mux.HandleFunc("POST /api/execution", s.executionAPI)
 	mux.HandleFunc("POST /api/yolo", s.yoloAPI)
 	mux.HandleFunc("GET /api/connections", s.connectionsAPI)
 	mux.HandleFunc("GET /api/fs", s.fsAPI)

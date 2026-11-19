@@ -48,6 +48,8 @@ const emptyInfo: Info = {
   provider: "",
   effort: "",
   approvals: "smart",
+  executionMode: "best-effort",
+  sandboxed: false,
   yolo: false,
   contextWindow: 0,
   connections: 0,

@@ -413,6 +413,13 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 		}
 		b.reply(m, l.t("[!] دستوری منتظر تأیید نیست."))
 		return
+	case "/execution", "/sandbox":
+		if b.isOwner(uid) && m.Chat.Private() {
+			b.executionCommand(ctx, m, l, args)
+			return
+		}
+		b.reply(m, l.t(textUnknownCommand))
+		return
 	case "/yolo":
 		if b.isOwner(uid) && m.Chat.Private() {
 			b.yoloCommand(m, l, args)
@@ -551,6 +558,8 @@ func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
 		b.handleContinueCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "bg:"):
 		b.handleBgCallback(ctx, q, answer)
+	case strings.HasPrefix(q.Data, "exec:"):
+		b.handleExecutionCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "mode:"):
 		b.handleModeCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "sc:"):

@@ -70,6 +70,7 @@ export const server = {
   setProvider: (id: number) => call<InfoResponse>("POST", r("/api/provider"), { id }),
   setMode: (mode: Mode) => call<InfoResponse>("POST", r("/api/mode"), { mode }),
   setApprovals: (mode: string) => call<InfoResponse>("POST", r("/api/approvals"), { mode }),
+  setExecutionMode: (mode: string) => call<InfoResponse>("POST", r("/api/execution"), { mode }),
   setYolo: (on: boolean) => call<InfoResponse>("POST", r("/api/yolo"), { on }),
   connections: () => call<{ connections: Connection[] | null }>("GET", r("/api/connections")),
   fs: (path: string) => call<Listing>("GET", r("/api/fs?path=") + encodeURIComponent(path)),

@@ -99,6 +99,8 @@ export interface Info {
   provider: string;
   effort: string;
   approvals: string;
+  executionMode?: string;
+  sandboxed?: boolean;
   yolo: boolean;
   contextWindow: number;
   connections: number;

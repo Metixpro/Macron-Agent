@@ -15,6 +15,8 @@ type Info struct {
 	Provider      string `json:"provider"`
 	Effort        string `json:"effort"`
 	Approvals     string `json:"approvals"`
+	ExecutionMode string `json:"executionMode"`
+	Sandboxed     bool   `json:"sandboxed"`
 	Yolo          bool   `json:"yolo"`
 	ContextWindow int    `json:"contextWindow"`
 	Connections   int    `json:"connections"`

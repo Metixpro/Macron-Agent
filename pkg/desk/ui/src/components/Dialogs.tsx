@@ -1079,6 +1079,17 @@ function Settings() {
     }
   };
 
+  const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
+  const executionHelp = {
+    sandbox: info.sandboxed
+      ? "Strict bubblewrap isolation is active (fail-closed)."
+      : "Strict bubblewrap isolation (fail-closed if unavailable).",
+    "best-effort": info.sandboxed
+      ? "Sandbox active; falls back to local if unavailable."
+      : "Unsandboxed; uses bubblewrap when available.",
+    local: "Sandbox bypassed. Commands run directly on the host.",
+  }[executionMode];
+
   const approvals = (info.approvals || "smart") as "smart" | "manual" | "off";
   const approvalHelp = {
     smart: "Safe commands run on their own. Anything risky waits for you.",
@@ -1117,6 +1128,17 @@ function Settings() {
               ["off", "Never ask"],
             ]}
             onPick={(m) => apply(() => server.setApprovals(m))}
+          />
+        </Section>
+        <Section title="Execution mode" help={executionHelp}>
+          <Choice
+            value={executionMode}
+            options={[
+              ["sandbox", "Sandbox"],
+              ["best-effort", "Best-effort"],
+              ["local", "Local"],
+            ]}
+            onPick={(m) => apply(() => server.setExecutionMode(m), "Execution mode: " + m)}
           />
         </Section>
         <Section title="YOLO for 30 minutes" help={info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while."}>
