@@ -151,9 +151,20 @@ func (s *shelf) note() string {
 	if s == nil {
 		return ""
 	}
+	s.mu.Lock()
+	unloaded := make([]string, 0, len(s.order))
+	for _, n := range s.order {
+		if !s.loaded[n] {
+			unloaded = append(unloaded, n)
+		}
+	}
+	s.mu.Unlock()
+	if len(unloaded) == 0 {
+		return ""
+	}
 	return fmt.Sprintf("\n[tools] Beyond the tools in your list, these %d wait unloaded: %s. To use one, call %s with its "+
 		"name (several names, comma-separated, are fine) or with what it should do, in a few English words; it can be called "+
-		"from the next step. Calling one by its name also loads it.", len(s.order), strings.Join(s.order, ", "), ToolSearch)
+		"from the next step. Calling one by its name also loads it.", len(unloaded), strings.Join(unloaded, ", "), ToolSearch)
 }
 
 func (s *shelf) loadedNames() []string {

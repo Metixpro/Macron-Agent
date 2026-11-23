@@ -75,6 +75,7 @@ if not url and os.path.exists(LAST):
 
 log, files, errors, dialogs = [], [], [], []
 TIMEOUT = int(CFG.get("timeout_ms") or 15000)
+NAV_TIMEOUT = int(CFG.get("nav_timeout_ms") or max(TIMEOUT, 45000))
 
 
 def name_for(base, ext):
@@ -113,7 +114,7 @@ def act(page, a):
         return loc
 
     if kind == "goto":
-        resp = page.goto(target(a.get("url")), wait_until="domcontentloaded", timeout=45000)
+        resp = page.goto(target(a.get("url")), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
         settle(page)
         return page.url + status_note(resp)
     if kind == "click":
@@ -237,7 +238,7 @@ with sync_playwright() as pw:
     ctx.on("page", watch)
     try:
         if url:
-            resp = page.goto(target(url), wait_until="domcontentloaded", timeout=45000)
+            resp = page.goto(target(url), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
             settle(page)
             if note := status_note(resp):
                 log.append({"step": 0, "what": "open " + url, "ok": False, "detail": note.strip(" ()")})
@@ -265,9 +266,11 @@ with sync_playwright() as pw:
             snapshot = page.evaluate(SNAPSHOT, int(CFG.get("max_text") or 3500))
             if CFG.get("screenshot", True):
                 shot = name_for(CFG.get("shot") or "screenshot", ".png")
-                page.screenshot(path=inside(shot), full_page=bool(CFG.get("full_page")))
-                if shot not in files:
-                    files.append(shot)
+                shot_path = inside(shot)
+                if shot_path:
+                    page.screenshot(path=shot_path, full_page=bool(CFG.get("full_page")))
+                    if shot not in files:
+                        files.append(shot)
             with open(LAST, "w") as f:
                 f.write(page.url)
         ctx.storage_state(path=STATE)

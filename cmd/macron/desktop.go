@@ -195,6 +195,13 @@ func (h *deskHost) SaveConnectionValues(values map[string]string) error {
 	return nil
 }
 
+func (h *deskHost) TestConnection(ctx context.Context, service, resource string) (string, error) {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return "", errors.New("tool registry is not initialized")
+	}
+	return h.w.app.Registry.TestConnection(ctx, service, resource)
+}
+
 func (h *deskHost) Memories() ([]desk.MemoryEntry, error) {
 	if h.w.bot == nil || h.w.bot.brain == nil {
 		return []desk.MemoryEntry{}, nil

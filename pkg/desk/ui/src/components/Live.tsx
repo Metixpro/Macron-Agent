@@ -3,6 +3,7 @@ import { useNow } from "../hooks";
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import { PlanList } from "./Feed";
+import { StarBuddy } from "./StarBuddy";
 
 export function LiveCard() {
   const live = useStore((s) => s.live);
@@ -56,7 +57,7 @@ export function LiveCard() {
         {idle && (
           <>
             <div className="row thinking">
-              <span className="spin" />
+              <StarBuddy size="sm" mood="working" />
               <span className="word">{mode === "plan" ? "Planning" : "Working"}</span>
               <span />
               <span className="tm">{took(now - (live.started || now))}</span>

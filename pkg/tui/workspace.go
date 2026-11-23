@@ -138,13 +138,17 @@ func (m model) homeView() string {
 	var header string
 	if available >= 9 && len(m.sugg) == 0 {
 		title := lipgloss.PlaceHorizontal(w, lipgloss.Center, logo(w))
+		mascot := ""
+		if available >= 15 && w >= 44 {
+			mascot = lipgloss.PlaceHorizontal(w, lipgloss.Center, StarBuddyHero(m.avatarFrame, m.avatarMood())) + "\n\n"
+		}
 		tagline := "Your workspace. Your tools. Your agent."
 		credit := "Built by SpectorDev · t.me/SpectorDev · MIT License"
 		if w < 40 {
 			tagline = "Your agent. Ready to work."
 			credit = "SpectorDev · t.me/SpectorDev"
 		}
-		header = title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(credit)) + "\n\n"
+		header = mascot + title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(credit)) + "\n\n"
 	}
 	top := max(0, (m.height-lipgloss.Height(header+tail)-3)/3)
 	body := strings.Repeat("\n", top) + header + tail
@@ -266,12 +270,13 @@ func planWindow(items []agent.PlanItem, size int) (int, int) {
 
 func (m model) activityView() string {
 	w := m.contentWidth()
-	label := stOK.Render("●") + stDim.Render(" Ready")
+	badge := StarBuddyBadge(m.avatarFrame, m.avatarMood())
+	label := badge + " " + stOK.Render("●") + stDim.Render(" Ready")
 	if m.modeName() == "Plan" {
-		label = lipgloss.NewStyle().Foreground(colPlan).Render("●") + stDim.Render(" Plan mode · reads and plans, changes nothing")
+		label = badge + " " + lipgloss.NewStyle().Foreground(colPlan).Render("●") + stDim.Render(" Plan mode · reads and plans, changes nothing")
 	}
 	if !m.follow {
-		label = stWarn.Render("↑") + stDim.Render(" Reading history · ctrl+end to follow")
+		label = badge + " " + stWarn.Render("↑") + stDim.Render(" Reading history · ctrl+end to follow")
 	}
 	hint := keyHint("ctrl+p", "commands")
 	if m.running || m.busy != "" {
@@ -291,7 +296,7 @@ func (m model) activityView() string {
 		case strings.TrimSpace(m.stream) != "":
 			what = "Writing"
 		}
-		label = stAccent.Render(m.spin.View()) + " " + stBold.Render(clip(what, w-30)) + stDim.Render(" · "+since(time.Since(m.started)))
+		label = badge + " " + stAccent.Render(m.spin.View()) + " " + stBold.Render(clip(what, w-38)) + stDim.Render(" · "+since(time.Since(m.started)))
 		hint = keyHint("esc", "stop")
 		if m.running && m.info.Yolo {
 			label = stWarn.Render("YOLO ") + label

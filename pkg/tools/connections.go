@@ -35,7 +35,7 @@ var connectionSpecs = []ConnectionSpec{
 	{"slack", "Slack", "Send through a webhook or bot token", []string{"SLACK_WEBHOOK_URL", "SLACK_BOT_TOKEN"}, [][]string{{"SLACK_WEBHOOK_URL"}, {"SLACK_BOT_TOKEN"}}, false},
 	{"discord", "Discord", "Send through a webhook", []string{"DISCORD_WEBHOOK_URL"}, [][]string{{"DISCORD_WEBHOOK_URL"}}, false},
 	{"whatsapp", "WhatsApp", "Send using WhatsApp Cloud API", []string{"WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID"}, [][]string{{"WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID"}}, false},
-	{"s3", "S3 / MinIO / R2", "List, upload and download objects", []string{"S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"}, [][]string{{"S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"}}, false},
+	{"s3", "S3 / MinIO / R2", "List, upload and download objects", []string{"S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"}, [][]string{{"S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"}}, false},
 	{"webdav", "WebDAV / Nextcloud", "List, upload and download files", []string{"WEBDAV_URL", "WEBDAV_USER", "WEBDAV_PASS"}, [][]string{{"WEBDAV_URL", "WEBDAV_USER", "WEBDAV_PASS"}}, false},
 	{"notion", "Notion", "Create and list tasks in a database", []string{"NOTION_TOKEN", "NOTION_DATABASE_ID"}, [][]string{{"NOTION_TOKEN"}}, false},
 	{"trello", "Trello", "Create and list cards", []string{"TRELLO_API_KEY", "TRELLO_TOKEN"}, [][]string{{"TRELLO_API_KEY", "TRELLO_TOKEN"}}, false},
@@ -162,7 +162,7 @@ func (r *Registry) registerConnections() {
 		case "test":
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			out, err := r.testConnection(ctx, s.ID, strArg(args, "resource"))
+			out, err := r.TestConnection(ctx, s.ID, strArg(args, "resource"))
 			if err != nil {
 				return "error: " + err.Error(), nil
 			}
@@ -172,8 +172,18 @@ func (r *Registry) registerConnections() {
 	})
 }
 
+// TestConnection runs a read-only authentication probe for the named service
+// without sending any outbound message or mutating remote state.
+func (r *Registry) TestConnection(ctx context.Context, id, resource string) (string, error) {
+	s, ok := connectionSpec(id)
+	if !ok {
+		return "", fmt.Errorf("unknown service %q", id)
+	}
+	return r.testConnection(ctx, s.ID, resource)
+}
+
 func (r *Registry) testConnection(ctx context.Context, id, resource string) (string, error) {
-	token := func(key string) string { return config.ToolEnvValue(key) }
+	token := func(key string) string { return strings.TrimSpace(config.ToolEnvValue(key)) }
 	request := func(endpoint string, headers map[string]string, secrets ...string) (string, error) {
 		data, err := apiCall(ctx, r.cloudClient(), http.MethodGet, endpoint, headers, nil, secrets...)
 		if err != nil {
@@ -214,7 +224,10 @@ func (r *Registry) testConnection(ctx context.Context, id, resource string) (str
 		}
 		return id + ": getMe succeeded; no message sent", nil
 	case "eitaa":
-		return "Eitaayar token can be saved, but no supported read-only account probe is available here. No test message was sent; delivery remains unverified.", nil
+		if token("EITAA_BOT_TOKEN") == "" {
+			return "", fmt.Errorf("EITAA_BOT_TOKEN is missing")
+		}
+		return "Eitaayar token is saved, but no supported read-only account probe is available here. No test message was sent; delivery remains unverified.", nil
 	case "smtp":
 		if err := TestSMTP(ctx); err != nil {
 			return "", err
@@ -223,7 +236,10 @@ func (r *Registry) testConnection(ctx context.Context, id, resource string) (str
 	case "slack":
 		t := token("SLACK_BOT_TOKEN")
 		if t == "" {
-			return "Slack webhook configured status can be inspected, but verifying delivery would send a message. No message sent.", nil
+			if token("SLACK_WEBHOOK_URL") == "" {
+				return "", fmt.Errorf("SLACK_BOT_TOKEN or SLACK_WEBHOOK_URL is missing")
+			}
+			return "Slack webhook is saved, but verifying delivery would send a message. No message sent.", nil
 		}
 		data, err := apiCall(ctx, r.cloudClient(), http.MethodPost, "https://slack.com/api/auth.test", map[string]string{"Authorization": "Bearer " + t}, map[string]any{}, t)
 		if err != nil {
@@ -244,26 +260,44 @@ func (r *Registry) testConnection(ctx context.Context, id, resource string) (str
 		}
 		return request(u, nil, u)
 	case "whatsapp":
-		t := token("WHATSAPP_TOKEN")
-		return request("https://graph.facebook.com/v19.0/"+url.PathEscape(token("WHATSAPP_PHONE_ID")), map[string]string{"Authorization": "Bearer " + t}, t)
+		t, phoneID := token("WHATSAPP_TOKEN"), token("WHATSAPP_PHONE_ID")
+		if t == "" || phoneID == "" {
+			return "", fmt.Errorf("WHATSAPP_TOKEN and WHATSAPP_PHONE_ID are required")
+		}
+		return request("https://graph.facebook.com/v19.0/"+url.PathEscape(phoneID), map[string]string{"Authorization": "Bearer " + t}, t)
 	case "s3":
 		if resource == "" {
-			return "", fmt.Errorf("test requires resource: the S3 bucket name")
+			resource = token("S3_BUCKET")
+		}
+		if resource == "" {
+			return "", fmt.Errorf("test requires S3_BUCKET or resource: the S3 bucket name")
 		}
 		return r.ExecuteCloudStorage(ctx, "connections-check", "s3", "list", resource, "", "", "", "")
 	case "webdav":
 		return r.ExecuteCloudStorage(ctx, "connections-check", "webdav", "list", resource, "", "", "", "")
 	case "notion":
 		t := token("NOTION_TOKEN")
+		if t == "" {
+			return "", fmt.Errorf("NOTION_TOKEN is missing")
+		}
 		return request("https://api.notion.com/v1/users/me", map[string]string{"Authorization": "Bearer " + t, "Notion-Version": "2022-06-28"}, t)
 	case "trello":
 		k, t := token("TRELLO_API_KEY"), token("TRELLO_TOKEN")
+		if k == "" || t == "" {
+			return "", fmt.Errorf("TRELLO_API_KEY and TRELLO_TOKEN are required")
+		}
 		return request("https://api.trello.com/1/members/me?"+url.Values{"key": {k}, "token": {t}}.Encode(), nil, k, t)
 	case "todoist":
 		t := token("TODOIST_TOKEN")
+		if t == "" {
+			return "", fmt.Errorf("TODOIST_TOKEN is missing")
+		}
 		return request("https://api.todoist.com/api/v1/user", map[string]string{"Authorization": "Bearer " + t}, t)
 	case "github":
 		t := r.githubToken()
+		if t == "" {
+			return "", fmt.Errorf("GITHUB_TOKEN is missing")
+		}
 		return request("https://api.github.com/user", map[string]string{"Authorization": "Bearer " + t, "Accept": "application/vnd.github+json"}, t)
 	}
 	return "", fmt.Errorf("unsupported service")

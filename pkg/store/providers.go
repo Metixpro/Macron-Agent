@@ -136,8 +136,6 @@ func (s *Store) RecordProviderResult(ctx context.Context, id int64, ok bool, lat
 }
 
 func (s *Store) RefreshProviderSettings(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	rows, err := s.db.QueryContext(ctx, `SELECT k,v FROM settings WHERE k IN (?,?)`, SettingActiveProvider, SettingFailover)
 	if err != nil {
 		return err
@@ -154,6 +152,7 @@ func (s *Store) RefreshProviderSettings(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	s.mu.Lock()
 	for _, key := range []string{SettingActiveProvider, SettingFailover} {
 		if v, ok := values[key]; ok {
 			s.settings[key] = v
@@ -161,5 +160,6 @@ func (s *Store) RefreshProviderSettings(ctx context.Context) error {
 			delete(s.settings, key)
 		}
 	}
+	s.mu.Unlock()
 	return nil
 }

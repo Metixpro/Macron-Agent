@@ -130,6 +130,8 @@ var focusGroups = []focusGroup{
 		[]string{tools.ToolCrawlSite}},
 	{"python_kernel", "run code in a persistent Python kernel", regexp.MustCompile(`(?i)python kernel|کرنل پایتون|پایتون کرنل|jupyter|ژوپیتر|notebook|نوت ?بوک`),
 		[]string{tools.ToolPythonKernel}},
+	{"security", "defensive security, SIEM, packet capture, IDS, hardening, vulnerability scanning, SAST or digital forensics", regexp.MustCompile(`(?i)\bwazuh\b|\bwireshark\b|\btshark\b|\.pcap(?:ng)?\b|\bsuricata\b|eve\.json|\bzeek\b|\blynis\b|\btrivy\b|\bsemgrep\b|\bautopsy\b|autopsy\.db|\bsiem\b|\bsast\b|\bdfir\b|forensic|فارنزیک|آسیب ?پذیری|اسکن امنیتی`),
+		tools.SecurityToolNames},
 }
 
 const MaxTools = 128

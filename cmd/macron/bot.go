@@ -364,6 +364,9 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	case "/status":
 		b.statusCommand(ctx, m, l)
 		return
+	case "/connections":
+		b.connectionsCommand(ctx, m, args, l)
+		return
 	case "/about":
 		b.aboutCommand(m, l)
 		return

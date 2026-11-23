@@ -30,10 +30,15 @@ func messengerEndpoint(platform, token, method string) (string, error) {
 		return "", fmt.Errorf("messenger API base must be an http(s) URL without credentials, query or fragment")
 	}
 	prefix := "/bot"
-	if platform == "rubika" {
+	switch platform {
+	case "rubika":
 		prefix = "/v3/"
-	} else if platform == "eitaa" {
+		base = strings.TrimSuffix(base, "/v3")
+	case "eitaa":
 		prefix = "/api/"
+		base = strings.TrimSuffix(base, "/api")
+	default:
+		base = strings.TrimSuffix(base, "/bot")
 	}
 	return base + prefix + url.PathEscape(token) + "/" + method, nil
 }
@@ -45,10 +50,7 @@ func (r *Registry) SendIranMessenger(ctx context.Context, messenger, token, chat
 		return "", fmt.Errorf("text is required")
 	}
 
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := r.httpClient()
 
 	routes := map[string]string{
 		"bale": "BALE_BOT_TOKEN", "eitaa": "EITAA_BOT_TOKEN", "rubika": "RUBIKA_BOT_TOKEN",

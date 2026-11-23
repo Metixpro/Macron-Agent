@@ -875,5 +875,84 @@ html[dir="rtl"] .keys dd, html[dir="rtl"] .att-size, html[dir="rtl"] .uatt-size,
 .srch-snip { font-size: 12.5px; line-height: 1.5; color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .srch-mark { background: color-mix(in srgb, var(--amber) 26%, transparent); color: var(--text); border-radius: 3px; padding: 0 2px; font-weight: 600; }
 
+/* Connection test state badges */
+.set-row .state.bad { background: var(--fail); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fail) 18%, transparent); }
+.bad-text { color: var(--fail); font-weight: 550; }
 
+/* Living StarBuddy Mascot Avatar */
+.brand { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; font-weight: 650; font-size: 14.5px; letter-spacing: -.015em; }
+.brand-name { line-height: 1; }
+.intro-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.intro-head { display: flex; flex-direction: column; min-width: 0; }
+.starbuddy { display: inline-flex; align-items: center; justify-content: center; flex: none; user-select: none; position: relative; border-radius: 24%; filter: drop-shadow(0 4px 12px rgba(37, 99, 235, 0.22)); transition: transform .22s cubic-bezier(.22, 1, .36, 1), filter .22s ease; }
+.starbuddy:hover { transform: translateY(-1.5px) scale(1.04); filter: drop-shadow(0 6px 16px rgba(59, 130, 246, 0.36)); }
+.starbuddy svg { display: block; overflow: visible; }
+.starbuddy .sb-character { transform-origin: 60px 84px; animation: sb-breathe 4.4s ease-in-out infinite; }
+.starbuddy .sb-eyes { transform-origin: 60px 60.5px; animation: sb-blink 5.6s ease-in-out infinite, sb-glance 9.2s ease-in-out infinite; }
+.starbuddy .sb-aura { transform-origin: 60px 61px; animation: sb-aura-pulse 3.8s ease-in-out infinite; }
+.starbuddy .sb-paws { transform-origin: 60px 82px; }
+.starbuddy .sb-paw-l { transform-origin: 38px 82px; }
+.starbuddy .sb-paw-r { transform-origin: 82px 82px; }
+.starbuddy .sb-s1 { animation: sb-twinkle 3.1s ease-in-out infinite; }
+.starbuddy .sb-s2 { animation: sb-twinkle 4.3s ease-in-out 1.1s infinite; }
+.starbuddy .sb-s3 { animation: sb-twinkle 3.7s ease-in-out 2.1s infinite; }
 
+/* Active / Working / Streaming / Asking / Offline moods */
+.starbuddy.mood-working .sb-character { animation: sb-work-bob 1.25s ease-in-out infinite; }
+.starbuddy.mood-working .sb-aura { animation: sb-aura-work 1.1s ease-in-out infinite; }
+.starbuddy.mood-working .sb-paw-l { animation: sb-paw-tap 0.9s ease-in-out infinite; }
+.starbuddy.mood-working .sb-paw-r { animation: sb-paw-tap 0.9s ease-in-out 0.45s infinite; }
+.starbuddy.mood-streaming .sb-character { animation: sb-work-bob 0.95s ease-in-out infinite; }
+.starbuddy.mood-streaming .sb-aura { animation: sb-aura-work 0.85s ease-in-out infinite; }
+.starbuddy.mood-asking .sb-character { animation: sb-curious-tilt 2.2s ease-in-out infinite; }
+.starbuddy.mood-offline { filter: saturate(0.45) opacity(0.78); }
+.starbuddy.mood-offline .sb-eyes { transform: scaleY(0.35); animation: none; }
+
+@keyframes sb-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2.4px) scale(1.018, 1.025); }
+}
+@keyframes sb-work-bob {
+  0%, 100% { transform: translateY(-1px) scale(1.02); }
+  50% { transform: translateY(-5px) scale(1.045, 1.03); }
+}
+@keyframes sb-curious-tilt {
+  0%, 100% { transform: rotate(0deg) translateY(-1px); }
+  35% { transform: rotate(-5deg) translateY(-3px); }
+  70% { transform: rotate(4deg) translateY(-2px); }
+}
+@keyframes sb-blink {
+  0%, 44%, 48%, 92%, 96%, 100% { transform: scaleY(1); }
+  46%, 94% { transform: scaleY(0.1); }
+}
+@keyframes sb-glance {
+  0%, 28%, 100% { transform: translate(0, 0); }
+  36%, 52% { transform: translate(2.2px, -0.7px); }
+  64%, 80% { transform: translate(-2.2px, -0.5px); }
+}
+@keyframes sb-aura-pulse {
+  0%, 100% { opacity: 0.78; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.07); }
+}
+@keyframes sb-aura-work {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.16); }
+}
+@keyframes sb-paw-tap {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-2.6px) rotate(-4deg); }
+}
+@keyframes sb-twinkle {
+  0%, 100% { opacity: 0.32; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .starbuddy .sb-character,
+  .starbuddy .sb-eyes,
+  .starbuddy .sb-aura,
+  .starbuddy .sb-paw-l,
+  .starbuddy .sb-paw-r,
+  .starbuddy .sb-s1,
+  .starbuddy .sb-s2,
+  .starbuddy .sb-s3 { animation: none !important; }
+}

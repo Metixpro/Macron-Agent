@@ -33,6 +33,7 @@ type Store struct {
 	now  func() time.Time
 	aead cipher.AEAD
 
+	writeMu  sync.Mutex
 	mu       sync.RWMutex
 	settings map[string]string
 	admins   map[int64]bool
@@ -98,16 +99,25 @@ func (s *Store) migrate(ctx context.Context) error {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	for i := current; i < len(migrations); i++ {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin migration %d: %w", i+1, err)
+		}
 		for _, stmt := range migrations[i] {
-			if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				if !alreadyApplied(err) {
+					_ = tx.Rollback()
 					return fmt.Errorf("migration %d: %w", i+1, err)
 				}
 				log.Printf("store: migration %d was applied already (%v)", i+1, err)
 			}
 		}
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, i+1, s.Now()); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)`, i+1, s.Now()); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("record migration %d: %w", i+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %d: %w", i+1, err)
 		}
 	}
 	return nil
@@ -127,6 +137,10 @@ func (s *Store) reloadCaches(ctx context.Context) error {
 		}
 		settings[k] = v
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 
 	admins := map[int64]bool{}
@@ -142,12 +156,16 @@ func (s *Store) reloadCaches(ctx context.Context) error {
 		}
 		admins[id] = true
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 
 	s.mu.Lock()
 	s.settings, s.admins = settings, admins
 	s.mu.Unlock()
-	return rows.Err()
+	return nil
 }
 
 const (
@@ -194,6 +212,8 @@ func (s *Store) SettingBool(key string, def bool) bool {
 }
 
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (k, v, updated_at) VALUES (?, ?, ?)
 		ON CONFLICT DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at`, key, value, s.Now())
 	if err != nil {
@@ -206,6 +226,8 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 }
 
 func (s *Store) DeleteSetting(ctx context.Context, key string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM settings WHERE k = ?`, key); err != nil {
 		return err
 	}
@@ -222,6 +244,8 @@ func (s *Store) IsAdmin(id int64) bool {
 }
 
 func (s *Store) AddAdmin(ctx context.Context, id, addedBy int64) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO admins (user_id, added_by, created_at) VALUES (?, ?, ?)
 		ON CONFLICT DO NOTHING`, id, addedBy, s.Now())
 	if err != nil {
@@ -234,6 +258,8 @@ func (s *Store) AddAdmin(ctx context.Context, id, addedBy int64) error {
 }
 
 func (s *Store) RemoveAdmin(ctx context.Context, id int64) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM admins WHERE user_id = ?`, id); err != nil {
 		return err
 	}
@@ -269,7 +295,9 @@ func (s *Store) seal(plain string) string {
 		return plain
 	}
 	nonce := make([]byte, s.aead.NonceSize())
-	_, _ = rand.Read(nonce)
+	if _, err := rand.Read(nonce); err != nil {
+		panic(fmt.Sprintf("store: crypto/rand failed: %v", err))
+	}
 	return encPrefix + base64.StdEncoding.EncodeToString(s.aead.Seal(nonce, nonce, []byte(plain), nil))
 }
 
@@ -323,6 +351,8 @@ func (s *Store) SecretSetting(key string) (string, error) {
 }
 
 func (s *Store) EnsureSecretSetting(ctx context.Context, key, candidate string) (string, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (k,v,updated_at) VALUES (?,?,?)
  ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated_at=excluded.updated_at WHERE settings.v=''`, key, s.seal(candidate), s.Now())
 	if err != nil {

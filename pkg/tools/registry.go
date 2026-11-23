@@ -49,8 +49,12 @@ type Registry struct {
 	HTTP        *http.Client
 	GitHubToken string
 
+	mu      sync.RWMutex
 	tools   map[string]llm.Tool
 	handler map[string]ToolHandler
+
+	dlHTTPOnce sync.Once
+	dlHTTP     *http.Client
 
 	langs      map[string]language
 	syntax     map[string]bool
@@ -68,6 +72,39 @@ type Registry struct {
 	skillWrite  func(string) bool
 
 	plugins atomic.Pointer[pluginSource]
+}
+
+var defaultToolHTTP = netclient.NewClient(netclient.Options{})
+
+// httpClient returns a timeout-bounded HTTP client, never falling back to the
+// unbounded http.DefaultClient.
+func (r *Registry) httpClient() *http.Client {
+	if r != nil && r.HTTP != nil {
+		return r.HTTP
+	}
+	return defaultToolHTTP
+}
+
+// downloadHTTP returns an HTTP client suitable for large streaming file
+// downloads: it enforces dial/header/idle timeouts while deferring total
+// deadline enforcement to the request context.
+func (r *Registry) downloadHTTP() *http.Client {
+	if r == nil {
+		return netclient.NewClient(netclient.Options{NoTotalTimeout: true, HeaderTimeout: 30 * time.Second, BodyIdle: 60 * time.Second})
+	}
+	r.dlHTTPOnce.Do(func() {
+		if r.HTTP != nil && r.HTTP.Timeout == 0 {
+			r.dlHTTP = r.HTTP
+			return
+		}
+		r.dlHTTP = netclient.NewClient(netclient.Options{
+			NoTotalTimeout: true,
+			HeaderTimeout:  30 * time.Second,
+			BodyIdle:       60 * time.Second,
+			UseEnvProxy:    true,
+		})
+	})
+	return r.dlHTTP
 }
 
 func NewRegistry(sb *machine.Machine, se *search.Engine, client llm.ChatClient, opts Options) *Registry {
@@ -101,12 +138,15 @@ func NewRegistry(sb *machine.Machine, se *search.Engine, client llm.ChatClient, 
 		r.registerSkillTools()
 	}
 	r.registerDevTools()
+	r.registerSecurityTools()
 	return r
 }
 
 func (r *Registry) Register(tool llm.Tool, handler ToolHandler) {
+	r.mu.Lock()
 	r.tools[tool.Function.Name] = tool
 	r.handler[tool.Function.Name] = handler
+	r.mu.Unlock()
 }
 
 func (r *Registry) add(name, description string, props map[string]any, required []string, h ToolHandler) {
@@ -118,16 +158,21 @@ func (r *Registry) add(name, description string, props map[string]any, required 
 }
 
 func (r *Registry) GetTools() []llm.Tool {
+	r.mu.RLock()
 	list := make([]llm.Tool, 0, len(r.tools))
 	for _, t := range r.tools {
 		list = append(list, t)
 	}
+	r.mu.RUnlock()
 	sort.Slice(list, func(i, j int) bool { return list[i].Function.Name < list[j].Function.Name })
 	return r.withPlugins(list)
 }
 
 func (r *Registry) Has(name string) bool {
-	if _, ok := r.handler[name]; ok {
+	r.mu.RLock()
+	_, ok := r.handler[name]
+	r.mu.RUnlock()
+	if ok {
 		return true
 	}
 	p := r.pluginTools()
@@ -142,7 +187,9 @@ func (r *Registry) Execute(ctx context.Context, sessionID, name, argsJSON string
 		}
 	}()
 
+	r.mu.RLock()
 	h, ok := r.handler[name]
+	r.mu.RUnlock()
 	if !ok {
 		p := r.pluginTools()
 		if p == nil || !p.Has(name) || !p.Allowed(name, sessionID) {

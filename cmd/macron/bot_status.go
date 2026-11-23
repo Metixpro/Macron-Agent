@@ -6,12 +6,14 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"github.com/Metixpro/macron-agent/pkg/providers"
 	"github.com/Metixpro/macron-agent/pkg/telegram"
+	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
 func (b *Bot) statusView(ctx context.Context, uid int64, l lang) panelView {
@@ -209,4 +211,72 @@ func (b *Bot) compactCommand(ctx context.Context, m *telegram.Message, l lang) {
 	} else {
 		b.reply(m, fmt.Sprintf("🗜 Compacted: <code>%s</code> → <code>%s</code> tokens (a summary keeps what was done).", humanInt(before.Tokens), humanInt(afterTok)))
 	}
+}
+
+func (b *Bot) connectionsCommand(ctx context.Context, m *telegram.Message, arg string, l lang) {
+	if !b.isOwner(m.From.ID) {
+		if l == fa {
+			b.reply(m, "این دستور فقط برای مالک ربات است.")
+		} else {
+			b.reply(m, "This command is only available to the bot owner.")
+		}
+		return
+	}
+	fields := strings.Fields(strings.TrimSpace(arg))
+	if len(fields) >= 2 && strings.EqualFold(fields[0], "test") {
+		service := fields[1]
+		resource := ""
+		if len(fields) >= 3 {
+			resource = fields[2]
+		}
+		if b.app == nil || b.app.Registry == nil {
+			b.reply(m, l.t(textError))
+			return
+		}
+		tctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		defer cancel()
+		out, err := b.app.Registry.TestConnection(tctx, service, resource)
+		if err != nil {
+			if l == fa {
+				b.reply(m, fmt.Sprintf("❌ تست <code>%s</code> ناموفق بود:\n<code>%s</code>", esc(service), esc(err.Error())))
+			} else {
+				b.reply(m, fmt.Sprintf("❌ Test failed for <code>%s</code>:\n<code>%s</code>", esc(service), esc(err.Error())))
+			}
+			return
+		}
+		if l == fa {
+			b.reply(m, fmt.Sprintf("✅ <b>%s</b>\n<code>%s</code>", esc(service), esc(out)))
+		} else {
+			b.reply(m, fmt.Sprintf("✅ <b>%s</b>\n<code>%s</code>", esc(service), esc(out)))
+		}
+		return
+	}
+
+	var sb strings.Builder
+	if l == fa {
+		sb.WriteString("🔌 <b>وضعیت اتصال سرویس‌های خارجی</b>\n\n")
+	} else {
+		sb.WriteString("🔌 <b>External Service Connections</b>\n\n")
+	}
+	for _, spec := range tools.ConnectionSpecs() {
+		mark := "⚪"
+		state := "not set up"
+		if l == fa {
+			state = "تنظیم نشده"
+		}
+		if tools.ConnectionReady(spec) {
+			mark = "🟢"
+			state = "configured"
+			if l == fa {
+				state = "تنظیم شده"
+			}
+		}
+		fmt.Fprintf(&sb, "%s <b>%s</b> (<code>%s</code>) — %s\n", mark, esc(spec.Name), esc(spec.ID), esc(state))
+	}
+	if l == fa {
+		sb.WriteString("\nبرای تست خواندنی هر سرویس:\n<code>/connections test github</code>")
+	} else {
+		sb.WriteString("\nRun a read-only probe:\n<code>/connections test github</code>")
+	}
+	b.reply(m, sb.String())
 }

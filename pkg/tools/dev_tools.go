@@ -118,36 +118,37 @@ func (r *Registry) registerDevTools() {
 			names = append(names, l.Name)
 		}
 	}
-	if len(names) == 0 {
-		return
+	if len(names) > 0 {
+		runDesc := "Run a program on this machine and get its real output (stdout and stderr in order) and exit code. " +
+			"code: a snippet; filename + code: save it and run; filename alone: run that file."
+		r.add(ToolRunCode, runDesc,
+			map[string]any{
+				"language":        enumProp("Optional when the extension tells it", names...),
+				"code":            prop("string", ""),
+				"filename":        prop("string", "e.g. 'app_fixed.py'"),
+				"args":            arrayProp("string", ""),
+				"stdin":           prop("string", ""),
+				"timeout_seconds": prop("integer", "Default 60, max 7200"),
+			}, nil, r.runCode)
 	}
-	runDesc := "Run a program on this machine and get its real output (stdout and stderr in order) and exit code. " +
-		"code: a snippet; filename + code: save it and run; filename alone: run that file."
-	r.add(ToolRunCode, runDesc,
-		map[string]any{
-			"language":        enumProp("Optional when the extension tells it", names...),
-			"code":            prop("string", ""),
-			"filename":        prop("string", "e.g. 'app_fixed.py'"),
-			"args":            arrayProp("string", ""),
-			"stdin":           prop("string", ""),
-			"timeout_seconds": prop("integer", "Default 60, max 7200"),
-		}, nil, r.runCode)
 
-	r.add(ToolPythonKernel,
-		"Run code in a persistent Python kernel session that retains state, variables, and imports across turns.",
-		map[string]any{
-			"code":   prop("string", "Python code to execute or evaluate"),
-			"action": enumProp("execute", "execute", "reset", "variables"),
-		}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
-			code := strArg(args, "code")
-			action := strArg(args, "action")
-			if action == "" || action == "execute" {
-				if refused := r.gateCode(ctx, sessionID, "python", code); refused != "" {
-					return refused, nil
+	if have["python3"] {
+		r.add(ToolPythonKernel,
+			"Run code in a persistent Python kernel session that retains state, variables, and imports across turns.",
+			map[string]any{
+				"code":   prop("string", "Python code to execute or evaluate"),
+				"action": enumProp("execute", "execute", "reset", "variables"),
+			}, nil, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+				code := strArg(args, "code")
+				action := strArg(args, "action")
+				if action == "" || action == "execute" {
+					if refused := r.gateCode(ctx, sessionID, "python", code); refused != "" {
+						return refused, nil
+					}
 				}
-			}
-			return r.ExecuteInPythonKernel(ctx, sessionID, action, code)
-		})
+				return r.ExecuteInPythonKernel(ctx, sessionID, action, code)
+			})
+	}
 
 	r.add(ToolGitHubWorkflow,
 		"Manage GitHub pull requests, issues, and discussions.",

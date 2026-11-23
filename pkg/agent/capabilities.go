@@ -31,6 +31,7 @@ var capabilities = []capability{
 	{"🧩 interactive widgets inside the chat: dashboards, forms, calculators, games and live status panels that ask this server for data", []string{"send_widget"}},
 	{"💱 live dollar, euro, dirham, gold, mithqal and coin prices in Toman; cryptocurrency prices; domain and GitHub details", []string{tools.ToolMarketPrice, "crypto_currency_price", "whois_lookup", "github_inspect"}},
 	{"🪪 look up a Telegram id, @username or link: name, bio, premium, profile photos, data center, roughly when the account was made, a group's or channel's members", []string{"telegram_lookup"}},
+	{"🛡 defensive security & DFIR toolkit: Wazuh SIEM alerts/FIM/SCA, Wireshark PCAP analysis, Suricata IDS logs/rules, Zeek network logs, Lynis hardening audits, Trivy CVE/secret scans, Semgrep SAST, and Autopsy digital forensics", tools.SecurityToolNames},
 }
 
 func capabilityList(offers func(string) bool) string {

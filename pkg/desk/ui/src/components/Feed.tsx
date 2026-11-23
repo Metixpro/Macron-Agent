@@ -8,6 +8,7 @@ import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import type { Block, FileRef, PlanItem } from "../types";
+import { StarBuddy } from "./StarBuddy";
 
 function wireFiles(root: HTMLElement, project: string) {
   root.querySelectorAll<HTMLImageElement>("img[data-file]").forEach((img) => {
@@ -364,9 +365,14 @@ function Intro() {
   ];
   return (
     <div className="intro">
-      <div className="intro-name">{name === "Home" ? t("Home") : name}</div>
-      <div className="intro-path" dir="ltr">
-        {"‎" + path}
+      <div className="intro-hero">
+        <StarBuddy size="lg" />
+        <div className="intro-head">
+          <div className="intro-name">{name === "Home" ? t("Home") : name}</div>
+          <div className="intro-path" dir="ltr">
+            {"‎" + path}
+          </div>
+        </div>
       </div>
       {noModel && (
         <div className="setup-card">

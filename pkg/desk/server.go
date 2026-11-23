@@ -179,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/connections", s.connectionsAPI)
 	mux.HandleFunc("GET /api/connections/details", s.connectionDetailsAPI)
 	mux.HandleFunc("POST /api/connections", s.saveConnectionAPI)
+	mux.HandleFunc("POST /api/connections/test", s.testConnectionAPI)
 	mux.HandleFunc("GET /api/memories", s.memoriesAPI)
 	mux.HandleFunc("POST /api/memories", s.addMemoryAPI)
 	mux.HandleFunc("DELETE /api/memories/{id}", s.deleteMemoryAPI)

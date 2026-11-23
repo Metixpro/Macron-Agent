@@ -281,6 +281,8 @@ export function ConnectionsSection() {
   const [openId, setOpenId] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState("");
+  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   const load = () => {
     server
@@ -303,6 +305,18 @@ export function ConnectionsSection() {
     }
   };
 
+  const runTest = async (id: string) => {
+    setTestingId(id);
+    try {
+      const res = await server.testConnection(id);
+      setTestResult((prev) => ({ ...prev, [id]: { ok: !!res.ok, message: res.message || "" } }));
+    } catch (e) {
+      setTestResult((prev) => ({ ...prev, [id]: { ok: false, message: e instanceof Error ? e.message : String(e) } }));
+    } finally {
+      setTestingId("");
+    }
+  };
+
   const save = async (c: ConnectionDetail) => {
     const patch: Record<string, string> = {};
     for (const f of c.fields) {
@@ -319,6 +333,11 @@ export function ConnectionsSection() {
       const res = await server.saveConnections(patch);
       setList(res.connections || []);
       if (res.info) setState({ info: res.info });
+      setTestResult((prev) => {
+        const next = { ...prev };
+        delete next[c.id];
+        return next;
+      });
       setOpenId("");
       setValues({});
     } catch (e) {
@@ -335,15 +354,26 @@ export function ConnectionsSection() {
         {list === null && <div className="empty-row">{t("Loading…")}</div>}
         {(list || []).map((c) => {
           const isOpen = openId === c.id;
+          const tr = testResult[c.id];
+          const isTesting = testingId === c.id;
           return (
             <div key={c.id} className="conn-wrap">
               <div className="set-row static">
-                <span className={"state" + (c.ready ? " ok" : "")} />
+                <span className={"state" + (tr ? (tr.ok ? " ok" : " bad") : c.ready ? " ok" : "")} />
                 <span className="grow">
                   <span className="name">{c.name}</span>
                   {c.capability && <span className="meta">{c.capability}</span>}
+                  {tr && (
+                    <span className={"meta " + (tr.ok ? "ok-text" : "bad-text")} dir="auto">
+                      {tr.ok ? "✓ " : "✗ "}
+                      {tr.message}
+                    </span>
+                  )}
                 </span>
                 <span className="meta">{c.ready ? t("Connected") : t("Not set up")}</span>
+                <button type="button" className="btn ghost sm" disabled={isTesting} onClick={() => runTest(c.id)}>
+                  {isTesting ? t("Testing…") : t("Test")}
+                </button>
                 <button type="button" className="btn ghost sm" onClick={() => toggleOpen(c.id)}>
                   {isOpen ? t("Close") : t("Configure")}
                 </button>
@@ -366,6 +396,9 @@ export function ConnectionsSection() {
                     </label>
                   ))}
                   <div className="conn-actions">
+                    <button type="button" className="btn ghost sm" disabled={isTesting} onClick={() => runTest(c.id)}>
+                      {isTesting ? t("Testing…") : t("Test")}
+                    </button>
                     <button type="button" className="btn primary sm" disabled={saving} onClick={() => save(c)}>
                       {saving ? t("Saving…") : t("Save")}
                     </button>

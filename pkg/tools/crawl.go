@@ -29,10 +29,7 @@ var skipExt = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif":
 	".woff2": true, ".ttf": true, ".exe": true, ".dmg": true, ".apk": true, ".xml": true, ".json": true}
 
 func (r *Registry) pageLinks(ctx context.Context, page *url.URL) []*url.URL {
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := r.httpClient()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, page.String(), nil)
 	if err != nil {
 		return nil
@@ -95,7 +92,17 @@ func crawlKey(u *url.URL) string {
 }
 
 func (r *Registry) CrawlToKnowledgeBase(ctx context.Context, sessionID, startURL, destFolder string, maxPages int) ([]CrawlResult, error) {
+	return r.CrawlToKnowledgeBaseWithTimeout(ctx, sessionID, startURL, destFolder, maxPages, 25)
+}
+
+func (r *Registry) CrawlToKnowledgeBaseWithTimeout(ctx context.Context, sessionID, startURL, destFolder string, maxPages, pageTimeoutSec int) ([]CrawlResult, error) {
 	maxPages = min(max(maxPages, 1), 50)
+	if pageTimeoutSec <= 0 {
+		pageTimeoutSec = 25
+	}
+	if pageTimeoutSec > 120 {
+		pageTimeoutSec = 120
+	}
 	if destFolder = strings.Trim(strings.TrimSpace(destFolder), "/"); destFolder == "" {
 		destFolder = "knowledge_base"
 	}
@@ -119,7 +126,7 @@ func (r *Registry) CrawlToKnowledgeBase(ctx context.Context, sessionID, startURL
 	for len(queue) > 0 && len(results) < maxPages && ctx.Err() == nil && time.Now().Before(deadline) {
 		cur := queue[0]
 		queue = queue[1:]
-		pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		pctx, cancel := netclient.WithRequestTimeout(ctx, pageTimeoutSec, 25, 120)
 		text, err := r.Search.FetchPage(pctx, cur.String(), 20000)
 		var links []*url.URL
 		if err == nil {

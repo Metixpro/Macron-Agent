@@ -39,10 +39,7 @@ func httpProblem(resp *http.Response) error {
 }
 
 func (r *Registry) cloudClient() *http.Client {
-	if r.HTTP != nil {
-		return r.HTTP
-	}
-	return http.DefaultClient
+	return r.httpClient()
 }
 
 func (r *Registry) ExecuteCloudStorage(ctx context.Context, sessionID, provider, action, remotePath, localPath, endpoint, _, _ string) (string, error) {

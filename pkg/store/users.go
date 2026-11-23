@@ -190,15 +190,22 @@ func (s *Store) SetBlockedBot(ctx context.Context, id int64, blocked bool) error
 }
 
 func (s *Store) CountRequest(ctx context.Context, userID int64) error {
-	err := retryDeadlock(func() error {
-		_, err := s.db.ExecContext(ctx, `INSERT INTO daily_usage (user_id, day, requests) VALUES (?, ?, 1)
-			ON CONFLICT DO UPDATE SET requests = requests + 1`, userID, s.Today())
-		return err
+	return retryDeadlockCtx(ctx, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO daily_usage (user_id, day, requests) VALUES (?, ?, 1)
+			ON CONFLICT DO UPDATE SET requests = requests + 1`, userID, s.Today()); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET messages_total = messages_total + 1 WHERE id = ?`, userID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		return tx.Commit()
 	})
-	if err == nil {
-		_, err = s.db.ExecContext(ctx, `UPDATE users SET messages_total = messages_total + 1 WHERE id = ?`, userID)
-	}
-	return err
 }
 
 func (s *Store) TokensToday(ctx context.Context, userID int64) (int, error) {
@@ -210,7 +217,7 @@ func (s *Store) TokensToday(ctx context.Context, userID int64) (int, error) {
 	return n, err
 }
 
-func retryDeadlock(fn func() error) error {
+func retryDeadlockCtx(ctx context.Context, fn func() error) error {
 	var err error
 	for attempt := 0; attempt < 4; attempt++ {
 		if err = fn(); err == nil {
@@ -219,7 +226,13 @@ func retryDeadlock(fn func() error) error {
 		if !isBusy(err) {
 			return err
 		}
-		time.Sleep(time.Duration(attempt+1) * 15 * time.Millisecond)
+		timer := time.NewTimer(time.Duration(attempt+1) * 15 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 	return err
 }
@@ -234,11 +247,21 @@ func (s *Store) AddTokens(ctx context.Context, userID int64, n int) error {
 }
 
 func (s *Store) Refund(ctx context.Context, userID int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE daily_usage SET requests = MAX(requests - 1, 0) WHERE user_id = ? AND day = ?`, userID, s.Today())
-	if err == nil {
-		_, err = s.db.ExecContext(ctx, `UPDATE users SET messages_total = MAX(messages_total - 1, 0) WHERE id = ?`, userID)
-	}
-	return err
+	return retryDeadlockCtx(ctx, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE daily_usage SET requests = MAX(requests - 1, 0) WHERE user_id = ? AND day = ?`, userID, s.Today()); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET messages_total = MAX(messages_total - 1, 0) WHERE id = ?`, userID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		return tx.Commit()
+	})
 }
 
 func (s *Store) UsedToday(ctx context.Context, userID int64) (int, error) {

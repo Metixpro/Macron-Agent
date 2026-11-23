@@ -152,6 +152,7 @@ export const server = {
   connections: () => call<{ connections: Connection[] | null }>("GET", r("/api/connections")),
   connectionDetails: () => call<{ connections: ConnectionDetail[] }>("GET", r("/api/connections/details")),
   saveConnections: (values: Record<string, string>) => call<{ connections: ConnectionDetail[]; info: Info }>("POST", r("/api/connections"), { values }),
+  testConnection: (service: string, resource?: string) => call<{ ok: boolean; message: string }>("POST", r("/api/connections/test"), { service, resource }),
   memories: () => call<{ memories: MemoryEntry[] }>("GET", r("/api/memories")),
   addMemory: (scope: "memory" | "user", text: string) => call<MemoryEntry>("POST", r("/api/memories"), { scope, text }),
   deleteMemory: (scope: "memory" | "user", id: number) => call<Ok>("DELETE", r("/api/memories/") + id + "?scope=" + scope),

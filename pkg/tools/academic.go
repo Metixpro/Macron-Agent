@@ -29,7 +29,7 @@ type AcademicPaper struct {
 
 func SearchArxiv(ctx context.Context, client *http.Client, query string, limit int) ([]AcademicPaper, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultToolHTTP
 	}
 	u := fmt.Sprintf("https://export.arxiv.org/api/query?search_query=all:%s&start=0&max_results=%d",
 		url.QueryEscape(query), limit)
@@ -97,7 +97,7 @@ func SearchArxiv(ctx context.Context, client *http.Client, query string, limit i
 
 func SearchSemanticScholar(ctx context.Context, client *http.Client, query string, limit int) ([]AcademicPaper, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultToolHTTP
 	}
 	u := fmt.Sprintf("https://api.semanticscholar.org/graph/v1/paper/search?query=%s&limit=%d&fields=title,authors,year,abstract,url,citationCount",
 		url.QueryEscape(query), limit)
@@ -131,7 +131,7 @@ func SearchSemanticScholar(ctx context.Context, client *http.Client, query strin
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&result); err != nil {
 		return nil, err
 	}
 
@@ -171,10 +171,7 @@ func (r *Registry) SearchAcademic(ctx context.Context, query, source string, lim
 		source = "all"
 	}
 
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := r.httpClient()
 
 	var (
 		mu     sync.Mutex

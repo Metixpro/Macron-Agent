@@ -125,10 +125,7 @@ func (r *Registry) CallOpenAPIEndpoint(ctx context.Context, sessionID, specFile,
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := r.httpClient()
 
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

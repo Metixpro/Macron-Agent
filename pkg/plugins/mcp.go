@@ -596,12 +596,25 @@ func readSSE(r io.Reader, each func(event, data string) bool) error {
 }
 
 type sseConn struct {
+	epMu     sync.RWMutex
 	endpoint string
 	headers  map[string]string
 	client   *http.Client
 	body     io.Closer
 	w        waiters
 	done     chan struct{}
+}
+
+func (c *sseConn) getEndpoint() string {
+	c.epMu.RLock()
+	defer c.epMu.RUnlock()
+	return c.endpoint
+}
+
+func (c *sseConn) setEndpoint(ep string) {
+	c.epMu.Lock()
+	c.endpoint = ep
+	c.epMu.Unlock()
 }
 
 func startSSE(ctx context.Context, client *http.Client, raw string, headers map[string]string) (*sseConn, error) {
@@ -624,7 +637,16 @@ func startSSE(ctx context.Context, client *http.Client, raw string, headers map[
 		err  error
 	}
 	got := make(chan opened, 1)
-	go func() { resp, err := client.Do(req); got <- opened{resp, err} }()
+	go func() {
+		resp, err := client.Do(req)
+		select {
+		case got <- opened{resp, err}:
+		default:
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+		}
+	}()
 	var resp *http.Response
 	select {
 	case o := <-got:
@@ -635,6 +657,11 @@ func startSSE(ctx context.Context, client *http.Client, raw string, headers map[
 		resp = o.resp
 	case <-ctx.Done():
 		cancel()
+		go func() {
+			if o := <-got; o.resp != nil && o.resp.Body != nil {
+				_ = o.resp.Body.Close()
+			}
+		}()
 		return nil, ctx.Err()
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -661,7 +688,12 @@ func startSSE(ctx context.Context, client *http.Client, raw string, headers map[
 				}
 				switch {
 				case m.Method != "" && len(m.ID) > 0:
-					go c.postRaw(context.Background(), answerServer(m))
+					reply := answerServer(m)
+					go func() {
+						postCtx, postCancel := context.WithTimeout(streamCtx, 30*time.Second)
+						defer postCancel()
+						_ = c.postRaw(postCtx, reply)
+					}()
 				case m.Method == "" && len(m.ID) > 0:
 					c.w.deliver(m)
 				}
@@ -680,7 +712,7 @@ func startSSE(ctx context.Context, client *http.Client, raw string, headers map[
 			c.close()
 			return nil, errors.New("the server's message endpoint is on another site")
 		}
-		c.endpoint = u.String()
+		c.setEndpoint(u.String())
 		return c, nil
 	case <-c.done:
 		return nil, errors.New("the server sent no message endpoint")
@@ -695,7 +727,11 @@ type closerFunc func() error
 func (f closerFunc) Close() error { return f() }
 
 func (c *sseConn) postRaw(ctx context.Context, body []byte) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	ep := c.getEndpoint()
+	if ep == "" {
+		return errors.New("MCP message endpoint is not ready")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ep, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

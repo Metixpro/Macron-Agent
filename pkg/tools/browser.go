@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/machine"
@@ -31,8 +33,9 @@ var (
 
 	webLibDirs = []string{"/usr/local/share/macron/weblibs", "/usr/share/macron/weblibs"}
 
-	revisionRe = regexp.MustCompile(`-(\d+)/`)
+	revisionRe = regexp.MustCompile(`-(\d+)[/\\]`)
 	schemeRe   = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+.-]*):(?:[^\d]|$)`)
+	renderSeq  atomic.Uint64
 )
 
 var checks sync.Map
@@ -48,22 +51,43 @@ func (r *Registry) check(argv ...string) bool {
 }
 
 type browserRuntime struct {
-	chrome string
-	libs   []string
-	slots  chan struct{}
-	agents chan struct{}
+	chrome   string
+	python   string
+	isolated bool
+	libs     []string
+	slots    chan struct{}
+	agents   chan struct{}
 
 	agentPython string
 }
 
+func isRunnableBinary(p string) bool {
+	fi, err := os.Stat(p)
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return fi.Mode()&0o111 != 0
+}
+
 func findChrome() string {
-	dirs := append([]string(nil), chromeDirs...)
+	var dirs []string
+	if env := os.Getenv("PLAYWRIGHT_BROWSERS_PATH"); env != "" && env != "0" {
+		dirs = append(dirs, env)
+	}
 	if cache, err := os.UserCacheDir(); err == nil {
 		dirs = append(dirs, filepath.Join(cache, "ms-playwright"))
 	}
-	if env := os.Getenv("PLAYWRIGHT_BROWSERS_PATH"); env != "" && env != "0" {
-		dirs = append([]string{env}, dirs...)
+	if runtime.GOOS == "windows" {
+		if la := os.Getenv("LOCALAPPDATA"); la != "" {
+			dirs = append(dirs, filepath.Join(la, "ms-playwright"))
+		}
+	} else {
+		dirs = append(dirs, chromeDirs...)
 	}
+
 	revision := func(p string) int {
 		if m := revisionRe.FindStringSubmatch(p); m != nil {
 			n, _ := strconv.Atoi(m[1])
@@ -71,10 +95,39 @@ func findChrome() string {
 		}
 		return 0
 	}
-	for _, patterns := range [][]string{
-		{"chromium_headless_shell-*/chrome-linux/headless_shell", "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"},
-		{"chromium-*/chrome-linux/chrome", "chromium-*/chrome-linux64/chrome"},
-	} {
+
+	var patternGroups [][]string
+	switch runtime.GOOS {
+	case "windows":
+		patternGroups = [][]string{
+			{
+				filepath.Join("chromium_headless_shell-*", "chrome-win", "headless_shell.exe"),
+				filepath.Join("chromium_headless_shell-*", "chrome-headless-shell-win64", "chrome-headless-shell.exe"),
+			},
+			{
+				filepath.Join("chromium-*", "chrome-win", "chrome.exe"),
+				filepath.Join("chromium-*", "chrome-win64", "chrome.exe"),
+			},
+		}
+	case "darwin":
+		patternGroups = [][]string{
+			{
+				"chromium_headless_shell-*/chrome-mac/headless_shell",
+				"chromium_headless_shell-*/chrome-headless-shell-mac-*/chrome-headless-shell",
+			},
+			{
+				"chromium-*/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+				"chromium-*/chrome-mac-*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+			},
+		}
+	default:
+		patternGroups = [][]string{
+			{"chromium_headless_shell-*/chrome-linux/headless_shell", "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"},
+			{"chromium-*/chrome-linux/chrome", "chromium-*/chrome-linux64/chrome"},
+		}
+	}
+
+	for _, patterns := range patternGroups {
 		var found []string
 		for _, d := range dirs {
 			for _, p := range patterns {
@@ -84,17 +137,52 @@ func findChrome() string {
 		}
 		slices.SortFunc(found, func(a, b string) int { return revision(b) - revision(a) })
 		for _, f := range found {
-			return f
+			if isRunnableBinary(f) {
+				return f
+			}
 		}
 	}
-	for _, p := range chromeBinaries {
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+
+	var fixed []string
+	var names []string
+	switch runtime.GOOS {
+	case "windows":
+		for _, base := range []string{os.Getenv("PROGRAMFILES"), os.Getenv("PROGRAMFILES(X86)"), os.Getenv("LOCALAPPDATA")} {
+			if base == "" {
+				continue
+			}
+			fixed = append(fixed,
+				filepath.Join(base, "Google", "Chrome", "Application", "chrome.exe"),
+				filepath.Join(base, "Microsoft", "Edge", "Application", "msedge.exe"),
+				filepath.Join(base, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+				filepath.Join(base, "Chromium", "Application", "chrome.exe"),
+			)
+		}
+		names = []string{"chrome.exe", "msedge.exe", "chromium.exe", "brave.exe"}
+	case "darwin":
+		fixed = []string{
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			"/Applications/Chromium.app/Contents/MacOS/Chromium",
+			"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+			"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+		}
+		names = []string{"chromium", "google-chrome"}
+	default:
+		fixed = chromeBinaries
+		names = []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "microsoft-edge"}
+	}
+
+	for _, p := range fixed {
+		if isRunnableBinary(p) {
 			return p
 		}
 	}
-	for _, name := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"} {
+	for _, name := range names {
 		if p, err := exec.LookPath(name); err == nil && !strings.HasPrefix(p, "/snap/") {
 			if real, err := filepath.EvalSymlinks(p); err == nil && !strings.HasPrefix(real, "/snap/") {
+				return p
+			}
+			if runtime.GOOS == "windows" {
 				return p
 			}
 		}
@@ -107,12 +195,32 @@ func (r *Registry) detectBrowser() *browserRuntime {
 	if chrome == "" {
 		return nil
 	}
-	if !r.check("python3", "-I", "-c", "import playwright.sync_api") {
+	candidates := []struct {
+		bin      string
+		isolated bool
+	}{
+		{"python3", true},
+		{"python3", false},
+		{"python", false},
+	}
+	var py string
+	var isolated bool
+	for _, c := range candidates {
+		argv := []string{c.bin, "-c", "import playwright.sync_api"}
+		if c.isolated {
+			argv = []string{c.bin, "-I", "-c", "import playwright.sync_api"}
+		}
+		if r.check(argv...) {
+			py, isolated = c.bin, c.isolated
+			break
+		}
+	}
+	if py == "" {
 		return nil
 	}
-	b := &browserRuntime{chrome: chrome, slots: make(chan struct{}, 2)}
+	b := &browserRuntime{chrome: chrome, python: py, isolated: isolated, slots: make(chan struct{}, 2)}
 	for _, d := range webLibDirs {
-		if fi, err := os.Stat(d); err == nil && fi.IsDir() && true {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
 			b.libs = append(b.libs, d)
 		}
 	}
@@ -167,10 +275,19 @@ func (r *Registry) runBrowserWith(ctx context.Context, sessionID, script string,
 	}
 	cfg["chrome"], cfg["libs"] = b.chrome, b.libs
 	py := run.python
+	useIsolated := true
 	if py == "" {
-		py = "python3"
+		py = b.python
+		useIsolated = b.isolated
+		if py == "" {
+			py = "python3"
+		}
 	}
-	opts := machine.RunOptions{HostExecutable: true, Args: []string{py, "-I", "-c", string(common) + "\n" + string(code)}, Timeout: run.timeout,
+	args := []string{py, "-c", string(common) + "\n" + string(code)}
+	if useIsolated {
+		args = []string{py, "-I", "-c", string(common) + "\n" + string(code)}
+	}
+	opts := machine.RunOptions{HostExecutable: true, Args: args, Timeout: run.timeout,
 		Heavy: script == "motion.py"}
 
 	cfg["offline"] = !(run.online || run.bridge != nil)
@@ -216,11 +333,12 @@ func (r *Registry) registerBrowserTools() {
 				"screenshot{name?,full_page?,selector?} pdf{name?} extract{selector,attribute?,limit?} eval{script} back forward reload " +
 				"upload{selector,files} download{selector,name?}. Selectors: CSS, text=\"…\", role=button[name=\"…\"], or ones listed before",
 				"items": map[string]any{"type": "object"}},
-			"mobile":      prop("boolean", "Phone viewport"),
-			"full_page":   prop("boolean", "Whole page in the final screenshot"),
-			"screenshot":  prop("boolean", "Final screenshot (default true)"),
-			"locale":      prop("string", "e.g. fa-IR (default en-US)"),
-			"new_session": prop("boolean", "Forget cookies and the last page"),
+			"mobile":          prop("boolean", "Phone viewport"),
+			"full_page":       prop("boolean", "Whole page in the final screenshot"),
+			"screenshot":      prop("boolean", "Final screenshot (default true)"),
+			"locale":          prop("string", "e.g. fa-IR (default en-US)"),
+			"new_session":     prop("boolean", "Forget cookies and the last page"),
+			"timeout_seconds": prop("integer", "Page/action timeout in seconds (default 60, max 180)"),
 		}, nil, r.browse)
 	r.registerBrowserAgent()
 	r.registerMotionTool()
@@ -231,8 +349,10 @@ func (r *Registry) renderPage(ctx context.Context, url string) (*search.Page, er
 		Page  browserPage `json:"page"`
 		Error string      `json:"error"`
 	}
-	cfg := map[string]any{"url": url, "screenshot": false, "new_session": true, "max_text": 60000}
-	if err := r.runBrowser(ctx, renderSession, "browser.py", cfg, true, browserTimeout, &res); err != nil {
+	sess := fmt.Sprintf("%s-%d", renderSession, renderSeq.Add(1))
+	defer func() { _ = r.Machine.Remove(sess, ".browser") }()
+	cfg := map[string]any{"url": url, "screenshot": false, "new_session": true, "max_text": 60000, "nav_timeout_ms": 35000}
+	if err := r.runBrowser(ctx, sess, "browser.py", cfg, true, browserTimeout, &res); err != nil {
 		return nil, err
 	}
 	if res.Error != "" {
@@ -259,8 +379,19 @@ type browserPage struct {
 }
 
 func (r *Registry) browse(ctx context.Context, sessionID string, args map[string]any) (string, error) {
-	cfg := map[string]any{"url": strArg(args, "url"), "mobile": strArg(args, "mobile") == "true", "full_page": strArg(args, "full_page") == "true",
-		"screenshot": strArg(args, "screenshot") != "false", "locale": strArg(args, "locale"), "new_session": strArg(args, "new_session") == "true"}
+	timeoutSec := intArg(args, "timeout_seconds", 60, 5, 180)
+	navTimeoutMS := min(timeoutSec*1000, 90000)
+	actionTimeoutMS := min(max(timeoutSec*500, 5000), 30000)
+	cfg := map[string]any{
+		"url":            strArg(args, "url"),
+		"mobile":         strArg(args, "mobile") == "true",
+		"full_page":      strArg(args, "full_page") == "true",
+		"screenshot":     strArg(args, "screenshot") != "false",
+		"locale":         strArg(args, "locale"),
+		"new_session":    strArg(args, "new_session") == "true",
+		"timeout_ms":     actionTimeoutMS,
+		"nav_timeout_ms": navTimeoutMS,
+	}
 	if raw, ok := args["actions"].(string); ok && strings.TrimSpace(raw) != "" {
 		var acts []any
 		if json.Unmarshal([]byte(raw), &acts) != nil {
@@ -294,7 +425,11 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 			Detail string `json:"detail"`
 		} `json:"log"`
 	}
-	if err := r.runBrowser(ctx, sessionID, "browser.py", cfg, true, browserTimeout, &res); err != nil {
+	runTimeout := time.Duration(timeoutSec)*time.Second + 15*time.Second
+	if runTimeout > browserTimeout {
+		runTimeout = browserTimeout
+	}
+	if err := r.runBrowser(ctx, sessionID, "browser.py", cfg, true, runTimeout, &res); err != nil {
 		return "error: " + err.Error(), nil
 	}
 	if res.Error != "" {

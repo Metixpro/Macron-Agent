@@ -1,10 +1,12 @@
 package desk
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type MemoryEntry struct {
@@ -56,6 +58,10 @@ type skillHost interface {
 type connectionConfigHost interface {
 	ConnectionDetails() []ConnectionDetail
 	SaveConnectionValues(values map[string]string) error
+}
+
+type connectionTestHost interface {
+	TestConnection(ctx context.Context, service, resource string) (string, error)
 }
 
 func (s *Server) memoriesAPI(w http.ResponseWriter, _ *http.Request) {
@@ -216,4 +222,33 @@ func (s *Server) saveConnectionAPI(w http.ResponseWriter, r *http.Request) {
 		"connections": ch.ConnectionDetails(),
 		"info":        s.host.Info(),
 	})
+}
+
+func (s *Server) testConnectionAPI(w http.ResponseWriter, r *http.Request) {
+	th, ok := s.host.(connectionTestHost)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("connection testing is not supported"))
+		return
+	}
+	var in struct {
+		Service  string `json:"service"`
+		Resource string `json:"resource"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	service := strings.TrimSpace(in.Service)
+	if service == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("service is required"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	msg, err := th.TestConnection(ctx, service, strings.TrimSpace(in.Resource))
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "message": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "message": msg})
 }

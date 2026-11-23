@@ -65,7 +65,8 @@ A personal AI agent built in Go for Windows, Linux, and macOS — across Desktop
 | ویژگی | توضیح |
 |---|---|
 | **سه محیط یکپارچه** | اپلیکیشن دسکتاپ بومی، محیط ترمینال تعاملی (TUI) و ربات تلگرام — همگی روی یک موتور واحد |
-| **اپ دسکتاپ پیشرفته (`v1.18.0`)** | رابط کاربری دوزبانه **فارسی / انگلیسی** با طراحی **شیشه‌ای (Frosted Glass) و کروم دست‌ساز**، استودیو شخصی‌سازی کامل **پروایدرها و مدل‌ها**، **مسیریابی هوشمند مدل سبک/قوی**، **رأی‌گیری چندمدلی (MoA)**، **تخمین هزینه دلاری توکن‌ها**، **جستجوی سراسری مکالمات (`Ctrl+Shift+F`)**، پنل تغییرات Git و Diff رنگی، اجرای `!shell` و **آپدیتر خودکار با نوار پیشرفت زنده و سرعت دانلود** |
+| **اپ دسکتاپ پیشرفته (`v1.19.0`)** | رابط کاربری دوزبانه **فارسی / انگلیسی** با طراحی **شیشه‌ای (Frosted Glass) و کروم دست‌ساز**، آواتار زنده و انیمیشنی **StarBuddy**، استودیو شخصی‌سازی کامل **پروایدرها و مدل‌ها**، **مسیریابی هوشمند مدل سبک/قوی**، **رأی‌گیری چندمدلی (MoA)**، **تخمین هزینه دلاری توکن‌ها**، **جستجوی سراسری مکالمات (`Ctrl+Shift+F`)**، تست زنده اتصالات، پنل تغییرات Git و Diff رنگی، اجرای `!shell` و **آپدیتر خودکار با نوار پیشرفت زنده و سرعت دانلود** |
+| **مجموعه ابزار امنیتی و فارنزیک (`pkg/security`)** | ۸ ابزار تخصصی امنیت دفاعی و DFIR (**Wazuh**، **Wireshark**، **Suricata**، **Zeek**، **Lynis**، **Trivy**، **Semgrep** و **Autopsy**) با مصرف توکن فوق‌بهینه (بارگذاری تنبل ۰ توکنی در حالت عادی و خروجی خلاصه‌سازی‌شده) در هر سه محیط دسکتاپ، ترمینال و تلگرام |
 | **امنیت و کنترل واقعی** | حالت‌های **Build** و **Plan** (فقط‌خواندنی)، تأیید دستورات پرخطر (Smart / Always ask / Never ask)، کنترل حالت اجرا (**Sandbox / Best-effort / Local** با پشتیبانی bubblewrap، Landlock و Seatbelt) و حالت موقت YOLO |
 | **کار روی سرور بدون باز کردن پورت** | اتصال مستقیم دسکتاپ به سرورهای Linux/SSH و WSL روی تونل رمزشده SSH با تأیید اثر انگشت (`~/.ssh/known_hosts`) |
 | **حافظه و مهارت‌های دست خودت** | تمام داده‌ها به صورت فایل‌های شفاف و قابل ویرایش (`SOUL.md`، `USER.md`، `MEMORY.md`، `skills/` و SQLite) داخل پروفایل خودت ذخیره می‌شوند |
@@ -368,7 +369,8 @@ macron exec "Inspect this project and run its tests" # one-shot execution for sc
 | **Data & dev** | Read-only PostgreSQL / MySQL / SQLite queries, persistent Python kernel, HTML dashboards, statistics/forecasting, OpenAPI calls, and rollback-capable deploys |
 | **Memory & autonomy** | Persistent conversations, history search, editable skills, learning, schedules, background jobs, task board, and sub-agents |
 | **Markets** | Tehran Stock Exchange (TSETMC) prices, volume, EPS, order book, Codal filings, indices, price alerts, and morning briefings |
-| **Connections & extensions** | MCP servers, plugins, Email, `.ics` calendars, Bale, Eitaa, Rubika, Slack, Discord, WhatsApp, S3/WebDAV, Notion, Trello, Todoist, and GitHub (outbound actions ask first) |
+| **Security & DFIR (`pkg/security`)** | Token-efficient defensive security & forensics across Desktop, TUI, and Telegram: **Wazuh** SIEM/FIM/SCA, **Wireshark** (`tshark` + pure-Go PCAP fallback), **Suricata** IDS (`eve.json`/`fast.log`/PCAP), **Zeek** NSM log analysis, **Lynis** hardening audits, **Trivy** CVE/misconfig/secret scanner, **Semgrep** SAST, and **Autopsy** SQLite digital forensics |
+| **Connections & extensions** | MCP servers, plugins, Email, `.ics` calendars, Bale, Eitaa, Rubika, Slack, Discord, WhatsApp, S3/R2/WebDAV, Notion, Trello, Todoist, and GitHub (with live connection testing across Desktop, TUI, and Telegram) |
 
 Check tool and environment readiness anytime:
 

@@ -6,6 +6,7 @@ import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import type { ServerView, Summary, ThreadSummary } from "../types";
+import { StarBuddy } from "./StarBuddy";
 
 function serverLine(s: ServerView): string {
   if (s.state === "failed" && s.error) return s.error;
@@ -253,7 +254,10 @@ export function Sidebar() {
   const mod = useMod();
   return (
     <aside className="side">
-      <div className="brand">Macron</div>
+      <div className="brand">
+        <StarBuddy size="sm" />
+        <span className="brand-name">Macron</span>
+      </div>
       <MachineMenu />
       <button type="button" className="nav" onClick={() => openDialog({ kind: "folder" })}>
         <Icon name="plus" />
