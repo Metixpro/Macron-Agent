@@ -54,6 +54,7 @@ func TestNew_StrictSandboxFailsClosedWhenBwrapMissing(t *testing.T) {
 
 	_, err := New(Config{
 		BaseDir:       t.TempDir(),
+		Sandbox:       SandboxBwrap,
 		ExecutionMode: "sandbox",
 	})
 	if err == nil {
@@ -121,6 +122,7 @@ func TestSetExecutionMode_FailClosedPreservesPreviousState(t *testing.T) {
 
 	m, err := New(Config{
 		BaseDir:       t.TempDir(),
+		Sandbox:       SandboxBwrap,
 		ExecutionMode: "local",
 	})
 	if err != nil {
