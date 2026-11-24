@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -232,5 +233,21 @@ func TestApplySandboxEnvIsolation(t *testing.T) {
 	}
 	if !strings.HasPrefix(env["TEMP"], ws) || !strings.HasPrefix(env["TMP"], ws) {
 		t.Fatalf("expected TEMP/TMP to be isolated inside workspace %s, got TEMP=%q TMP=%q", ws, env["TEMP"], env["TMP"])
+	}
+}
+
+func TestNew_WindowsNativeSandbox(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	m, err := New(Config{
+		BaseDir:       t.TempDir(),
+		ExecutionMode: "sandbox",
+	})
+	if err != nil {
+		t.Fatalf("expected native Windows Job-Object sandbox to succeed: %v", err)
+	}
+	if !m.Sandboxed() || m.SandboxBackend() != SandboxWindows {
+		t.Fatalf("expected windows-job sandbox active, got sandboxed=%v backend=%q", m.Sandboxed(), m.SandboxBackend())
 	}
 }

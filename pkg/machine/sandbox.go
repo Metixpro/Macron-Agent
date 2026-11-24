@@ -116,7 +116,8 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 	}
 
 	// Native Windows Job-Object + Workspace-Isolated Sandbox (zero external dependencies)
-	if runtime.GOOS == "windows" {
+	// Activates for default/auto/windows-job/on modes; explicit "bwrap" still checks for bwrap.
+	if runtime.GOOS == "windows" && mode != SandboxBwrap {
 		sb := &sandbox{
 			backend:    SandboxWindows,
 			base:       cfg.BaseDir,
