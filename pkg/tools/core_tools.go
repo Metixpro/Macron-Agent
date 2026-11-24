@@ -45,8 +45,9 @@ func (r *Registry) registerCoreTools() {
 	r.add("web_fetch",
 		"A web page's readable text, and the media and download links on it.",
 		map[string]any{
-			"url":       prop("string", ""),
-			"max_chars": prop("integer", "Default 8000, max 14000"),
+			"url":             prop("string", ""),
+			"max_chars":       prop("integer", "Default 8000, max 14000"),
+			"timeout_seconds": prop("integer", "Link request timeout in seconds (default 30, max 120)"),
 		}, []string{"url"}, r.webFetch)
 
 	r.add("search_music",
@@ -57,8 +58,9 @@ func (r *Registry) registerCoreTools() {
 	r.add("download_file",
 		fmt.Sprintf("Download a file from a direct link into the workspace (≤%d MB).", maxDownloadBytes>>20),
 		map[string]any{
-			"url":      prop("string", ""),
-			"filename": prop("string", "Default: from the link"),
+			"url":             prop("string", ""),
+			"filename":        prop("string", "Default: from the link"),
+			"timeout_seconds": prop("integer", "Download timeout in seconds (default 360, max 900)"),
 		}, []string{"url"}, oneDownload(r.downloadFile))
 
 	{
@@ -164,9 +166,10 @@ func (r *Registry) registerCoreTools() {
 	r.add(ToolCrawlSite,
 		"Crawl a website domain into clean Markdown files in the workspace for offline knowledge-base reference.",
 		map[string]any{
-			"url":       prop("string", "Starting URL to crawl"),
-			"max_pages": prop("integer", "Maximum pages to crawl within the domain (default 15, max 50)"),
-			"folder":    prop("string", "Destination folder in workspace (default 'knowledge_base')"),
+			"url":             prop("string", "Starting URL to crawl"),
+			"max_pages":       prop("integer", "Maximum pages to crawl within the domain (default 15, max 50)"),
+			"folder":          prop("string", "Destination folder in workspace (default 'knowledge_base')"),
+			"timeout_seconds": prop("integer", "Per-page request timeout in seconds (default 25, max 120)"),
 		}, []string{"url"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 			u := strArg(args, "url")
 			if u == "" {
@@ -174,7 +177,8 @@ func (r *Registry) registerCoreTools() {
 			}
 			maxPages := intArg(args, "max_pages", 15, 1, 50)
 			folder := strArg(args, "folder")
-			res, err := r.CrawlToKnowledgeBase(ctx, sessionID, u, folder, maxPages)
+			timeoutSec := intArg(args, "timeout_seconds", 25, 1, 120)
+			res, err := r.CrawlToKnowledgeBaseWithTimeout(ctx, sessionID, u, folder, maxPages, timeoutSec)
 			if err != nil {
 				return "crawl error: " + err.Error(), nil
 			}
@@ -466,7 +470,10 @@ func (r *Registry) webFetch(ctx context.Context, _ string, args map[string]any) 
 	if target == "" {
 		return "error: url is required", nil
 	}
-	text, err := r.Search.FetchPage(ctx, target, intArg(args, "max_chars", 8000, 500, readShowRunes))
+	timeoutSec := intArg(args, "timeout_seconds", 30, 1, 120)
+	fctx, cancel := netclient.WithRequestTimeout(ctx, timeoutSec, 30, 120)
+	defer cancel()
+	text, err := r.Search.FetchPage(fctx, target, intArg(args, "max_chars", 8000, 500, readShowRunes))
 	if err != nil {
 		return fmt.Sprintf("fetch error: %v", err), nil
 	}
@@ -516,26 +523,28 @@ func (r *Registry) downloadFile(ctx context.Context, sessionID string, args map[
 		return fmt.Sprintf("error: %s is over the %s download limit", file, humanSize(maxDownloadBytes))
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
+	dlClient := r.downloadHTTP()
+	timeoutSec := intArg(args, "timeout_seconds", 360, 5, 900)
+	ctx, cancel := netclient.WithRequestTimeout(ctx, timeoutSec, 360, 900)
 	defer cancel()
 	req, err := newGet(ctx, u.String())
 	if err != nil {
 		return fmt.Sprintf("create request failed: %v", err), nil
 	}
 	req.Header.Set("Range", "bytes=0-")
-	resp, err := r.HTTP.Do(req)
+	resp, err := dlClient.Do(req)
 	if err == nil && resp.StatusCode == http.StatusForbidden {
 		resp.Body.Close()
 		ctx = asDownloadTool(ctx)
 		if req, err = newGet(ctx, u.String()); err == nil {
 			req.Header.Set("Range", "bytes=0-")
-			resp, err = r.HTTP.Do(req)
+			resp, err = dlClient.Do(req)
 		}
 	}
 	if err == nil && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
 		resp.Body.Close()
 		req.Header.Del("Range")
-		resp, err = r.HTTP.Do(req)
+		resp, err = dlClient.Do(req)
 	}
 	if err != nil {
 		return fmt.Sprintf("download failed: %v", err), nil

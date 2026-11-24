@@ -218,8 +218,8 @@ func openDB(path string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(8)
-	db.SetMaxIdleConns(4)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
 	return db, nil
 }

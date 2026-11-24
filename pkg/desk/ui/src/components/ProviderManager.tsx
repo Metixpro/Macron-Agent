@@ -92,6 +92,8 @@ export function ProvidersSection() {
   const [testing, setTesting] = useState<Record<number, boolean>>({});
   const [testResults, setTestResults] = useState<Record<number, ProviderTestResult>>({});
   const [confirmDel, setConfirmDel] = useState<number | null>(null);
+  const [localServers, setLocalServers] = useState<{ id: string; name: string; baseUrl: string; models: string[] }[] | null>(null);
+  const [scanningLocal, setScanningLocal] = useState(false);
 
   const load = () =>
     server
@@ -102,8 +104,21 @@ export function ProvidersSection() {
       })
       .catch(() => setProviders([]));
 
+  const scanLocal = async () => {
+    setScanningLocal(true);
+    try {
+      const r = await server.localProviders();
+      setLocalServers(r.servers || []);
+    } catch {
+      setLocalServers([]);
+    } finally {
+      setScanningLocal(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    void scanLocal();
   }, [info.provider, info.model, info.effort, info.contextWindow]);
 
   const activate = async (id: number) => {
@@ -257,6 +272,48 @@ export function ProvidersSection() {
             <span className="name">{t("Add custom provider or model…")}</span>
           </span>
         </button>
+        {localServers && localServers.length > 0 && (
+          <div className="local-detect">
+            <div className="local-detect-head">
+              <span>{t("Detected local model servers")}</span>
+              <button type="button" className="btn ghost sm" disabled={scanningLocal} onClick={() => void scanLocal()}>
+                {scanningLocal ? t("Scanning…") : t("Rescan")}
+              </button>
+            </div>
+            {localServers.map((ls) => (
+              <div key={ls.id} className="local-detect-row">
+                <div className="grow">
+                  <div className="name">
+                    {ls.name} <span className="pv-pill api">{ls.models.length} models</span>
+                  </div>
+                  <div className="meta" dir="ltr">
+                    {ls.baseUrl}
+                    {ls.models[0] ? ` · ${ls.models[0]}` : ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={async () => {
+                    if (!ls.models.length) {
+                      openDialog({ kind: "provider-edit" });
+                      return;
+                    }
+                    try {
+                      const r = await server.connectModel({ name: ls.name, url: ls.baseUrl, key: "", model: ls.models[0] });
+                      setState({ info: r.info });
+                      load();
+                    } catch (e) {
+                      fail(e);
+                    }
+                  }}
+                >
+                  {t("Connect")}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <section className="set">
         <div className="set-text">

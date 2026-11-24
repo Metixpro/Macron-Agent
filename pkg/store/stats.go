@@ -113,6 +113,10 @@ func (s *Store) DailySeries(ctx context.Context, n int) ([]DayPoint, error) {
 			points[i].Requests, points[i].Users = req, users
 		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
 	rows.Close()
 
 	_, offset := local.Zone()

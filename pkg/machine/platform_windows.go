@@ -10,12 +10,35 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+var windowsSandboxHardened atomic.Bool
+
+func setWindowsSandboxHardening(on bool) {
+	windowsSandboxHardened.Store(on)
+}
+
+const (
+	jobObjectBasicUIRestrictions = 4
+	jobUILimitHandles            = 0x00000001
+	jobUILimitReadClipboard      = 0x00000002
+	jobUILimitWriteClipboard     = 0x00000004
+	jobUILimitSystemParameters   = 0x00000008
+	jobUILimitDisplaySettings    = 0x00000010
+	jobUILimitGlobalAtoms        = 0x00000020
+	jobUILimitDesktop            = 0x00000040
+	jobUILimitExitWindows        = 0x00000080
+)
+
+type jobObjectBasicUIRestrictionsInfo struct {
+	UIRestrictionsClass uint32
+}
 
 const (
 	useGoShell = true
@@ -170,9 +193,33 @@ func (t *tree) attach(pid int) {
 	}
 	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	if windowsSandboxHardened.Load() {
+		info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION |
+			windows.JOB_OBJECT_LIMIT_ACTIVE_PROCESS |
+			windows.JOB_OBJECT_LIMIT_JOB_MEMORY
+		info.BasicLimitInformation.ActiveProcessLimit = 32
+		// Cap child job tree memory (1 GiB on 32-bit, 2 GiB on 64-bit) to guard against OOM bombs.
+		if unsafe.Sizeof(uintptr(0)) >= 8 {
+			info.JobMemoryLimit = uintptr(2) << 30
+		} else {
+			info.JobMemoryLimit = uintptr(1) << 30
+		}
+	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
 		_ = windows.CloseHandle(job)
 		return
+	}
+	if windowsSandboxHardened.Load() {
+		ui := jobObjectBasicUIRestrictionsInfo{
+			UIRestrictionsClass: jobUILimitReadClipboard |
+				jobUILimitWriteClipboard |
+				jobUILimitSystemParameters |
+				jobUILimitDisplaySettings |
+				jobUILimitGlobalAtoms |
+				jobUILimitDesktop |
+				jobUILimitExitWindows,
+		}
+		_, _ = windows.SetInformationJobObject(job, jobObjectBasicUIRestrictions, uintptr(unsafe.Pointer(&ui)), uint32(unsafe.Sizeof(ui)))
 	}
 	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {

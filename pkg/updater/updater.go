@@ -23,6 +23,21 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/netclient"
+)
+
+var (
+	updaterAPIClient = netclient.NewClient(netclient.Options{
+		Timeout:       30 * time.Second,
+		HeaderTimeout: 20 * time.Second,
+		UseEnvProxy:   true,
+	})
+	updaterDownloadClient = netclient.NewClient(netclient.Options{
+		NoTotalTimeout: true,
+		HeaderTimeout:  30 * time.Second,
+		BodyIdle:       60 * time.Second,
+		UseEnvProxy:    true,
+	})
 )
 
 const Repository = "Metixpro/Macron-Agent"
@@ -108,16 +123,18 @@ func get(ctx context.Context, url string, api bool) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "macron-agent/"+app.Version)
+	client := updaterDownloadClient
 	if !api {
 		req.Header.Set("Accept", "application/octet-stream")
 	}
 	if api {
+		client = updaterAPIClient
 		req.Header.Set("Accept", "application/vnd.github+json")
 		if t := Token(); t != "" {
 			req.Header.Set("Authorization", "Bearer "+t)
 		}
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

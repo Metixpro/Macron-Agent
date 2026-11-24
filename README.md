@@ -37,20 +37,20 @@ A personal AI agent built in Go for Windows, Linux, and macOS — across Desktop
 
 ## Interface Preview · پیش‌نمایش محیط کار
 
-| Desktop (English — Changes, Diff, `@file`, Attachments) | Desktop (فارسی — حالت راست‌به‌چپ هوشمند) |
+| Desktop (`v1.19.0` — English · Midnight Cobalt, StarBuddy & Starter Cards) | Desktop (`v1.19.0` — فارسی · حالت راست‌به‌چپ هوشمند) |
 |---|---|
-| ![Macron Desktop workspace with Git Changes, unified diff, @file mention and image attachment](assets/desktop-preview.webp) | ![Macron Desktop in Persian RTL mode with LTR diff and keyboard shortcuts](assets/desktop-preview-fa.webp) |
+| ![Macron Desktop v1.19.0 framed workspace with Midnight Cobalt palette, header isolation capsule, starter cards, and peeking StarBuddy mascot](assets/desktop-preview.webp) | ![Macron Desktop v1.19.0 in Persian RTL mode with StarBuddy mascot and starter action cards](assets/desktop-preview-fa.webp) |
 
 <details>
-<summary><b>Terminal TUI Preview · پیش‌نمایش محیط ترمینال</b></summary>
+<summary><b>Terminal TUI Preview · پیش‌نمایش محیط ترمینال (StarBuddy ANSI)</b></summary>
 <br>
 <p align="center">
-  <img src="assets/tui-preview.webp" alt="Macron Terminal command palette" width="82%">
+  <img src="assets/tui-preview.webp" alt="Macron Terminal v1.19.0 live animated StarBuddy mascot and mood badges" width="88%">
 </p>
 </details>
 
 > [!NOTE]
-> **Privacy & control / حریم خصوصی و کنترل کامل:** Choose any model provider (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, or a local Ollama/OpenAI-compatible endpoint). Your conversations, memory, skills, and project files stay in your own profile. Cloud providers only receive the prompts you send them; use a local endpoint to keep inference completely on your machine.
+> **Privacy & control / حریم خصوصی و کنترل کامل:** Choose any model provider (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, or a local Ollama/LM Studio/llama.cpp/vLLM endpoint auto-detected on your machine). Your conversations, memory, skills, and project files stay in your own profile. Cloud providers only receive the prompts you send them; use a local endpoint to keep inference completely on your machine.
 
 ---
 
@@ -58,15 +58,16 @@ A personal AI agent built in Go for Windows, Linux, and macOS — across Desktop
 
 # راهنمای فارسی
 
-**مکرون (Macron Agent)** یک دستیار شخصی هوش مصنوعی ساخته‌شده با **Go** است که مستقیماً روی سیستم یا سرور خودت اجرا می‌شود و با ابزارهای واقعی کار را پیش می‌برد: از بررسی و ویرایش کد، اجرای تست و مدیریت Git گرفته تا ساخت اسناد، جستجوی وب، اتصال به سرویس‌ها و مدیریت سرور.
+**مکرون (Macron Agent)** یک دستیار شخصی هوش مصنوعی ساخته‌شده با **Go** است که مستقیماً روی سیستم یا سرور خودت اجرا می‌شود و با ابزارهای واقعی کار را پیش می‌برد: از بررسی و ویرایش کد، اجرای تست و مدیریت Git گرفته تا امنیت دفاعی، ساخت اسناد، جستجوی وب، اتصال به سرویس‌ها و مدیریت سرور.
 
 ### چرا مکرون؟
 
 | ویژگی | توضیح |
 |---|---|
-| **سه محیط یکپارچه** | اپلیکیشن دسکتاپ بومی، محیط ترمینال تعاملی (TUI) و ربات تلگرام — همگی روی یک موتور واحد |
-| **اپ دسکتاپ پیشرفته (`v1.18.0`)** | رابط کاربری دوزبانه **فارسی / انگلیسی** با طراحی **شیشه‌ای (Frosted Glass) و کروم دست‌ساز**، استودیو شخصی‌سازی کامل **پروایدرها و مدل‌ها**، **مسیریابی هوشمند مدل سبک/قوی**، **رأی‌گیری چندمدلی (MoA)**، **تخمین هزینه دلاری توکن‌ها**، **جستجوی سراسری مکالمات (`Ctrl+Shift+F`)**، پنل تغییرات Git و Diff رنگی، اجرای `!shell` و **آپدیتر خودکار با نوار پیشرفت زنده و سرعت دانلود** |
-| **امنیت و کنترل واقعی** | حالت‌های **Build** و **Plan** (فقط‌خواندنی)، تأیید دستورات پرخطر (Smart / Always ask / Never ask)، کنترل حالت اجرا (**Sandbox / Best-effort / Local** با پشتیبانی bubblewrap، Landlock و Seatbelt) و حالت موقت YOLO |
+| **سه محیط یکپارچه** | اپلیکیشن دسکتاپ بومی، محیط ترمینال تعاملی (TUI) و ربات تلگرام — همگی روی یک موتور واحد و رجیستری مشترک ۸۰ ابزار |
+| **اپ دسکتاپ پیشرفته (`v1.19.0`)** | رابط کاربری دوزبانه **فارسی / انگلیسی** با طراحی **بوم شناور قاب‌دار (Framed Floating Canvas)**، **۵ پالت رنگی زنده + پشتیبانی پالت سفارشی (`~/.macron/themes/*.json`)**، آواتار SVG زنده و تعاملی **StarBuddy** روی باکس چت، **۴ کارت شروع سریع**، **تشخیص خودکار سرورهای مدل لوکال** (Ollama / LM Studio / llama.cpp / vLLM)، **مسیریابی هوشمند مدل سبک/قوی**، **رأی‌گیری چندمدلی (MoA)**، **تخمین هزینه دلاری توکن‌ها**، **جستجوی سراسری مکالمات (`Ctrl+Shift+F`)**، تست زنده اتصالات، خروجی عیب‌یابی امن و **آپدیتر خودکار با نوار پیشرفت زنده** |
+| **مجموعه ابزار امنیتی و فارنزیک (`pkg/security`)** | ۸ ابزار تخصصی امنیت دفاعی و DFIR (**Wazuh**، **Wireshark**، **Suricata**، **Zeek**، **Lynis**، **Trivy**، **Semgrep** و **Autopsy**) با مصرف توکن فوق‌بهینه (بارگذاری تنبل ۰ توکنی در حالت عادی و خروجی خلاصه‌سازی‌شده) در هر سه محیط دسکتاپ، ترمینال و تلگرام |
+| **امنیت و سندباکس واقعی در تمام سیستم‌عامل‌ها** | حالت‌های **Build** و **Plan** (فقط‌خواندنی)، تأیید دستورات پرخطر (Smart / Always ask / Never ask)، کنترل حالت اجرا (**Sandbox / Best-effort / Local**) با **سندباکس بومی ویندوز (`windows-job` با Win32 Job Objects)**، لینوکس (`bubblewrap` / Landlock) و مک (Seatbelt)، کپسول وضعیت ایزولاسیون در هدر و حالت موقت YOLO |
 | **کار روی سرور بدون باز کردن پورت** | اتصال مستقیم دسکتاپ به سرورهای Linux/SSH و WSL روی تونل رمزشده SSH با تأیید اثر انگشت (`~/.ssh/known_hosts`) |
 | **حافظه و مهارت‌های دست خودت** | تمام داده‌ها به صورت فایل‌های شفاف و قابل ویرایش (`SOUL.md`، `USER.md`، `MEMORY.md`، `skills/` و SQLite) داخل پروفایل خودت ذخیره می‌شوند |
 
@@ -106,12 +107,13 @@ irm https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.ps1 | i
 macron desktop
 ```
 
-- **رابط کاربری دوزبانه و هوشمند:** پشتیبانی کامل از انگلیسی و **فارسی (RTL)** از داخل `Settings → زبان رابط کاربری`؛ با حفظ جهت چپ‌به‌راست (LTR) برای بلوک‌های کد، Diff، مسیر فایل‌ها و میانبرهای کیبورد.
+- **رابط کاربری مدرن با پالت‌های زنده و آواتار StarBuddy:** طراحی بوم شناور قاب‌دار با ۵ پالت آماده (Obsidian، Midnight Cobalt، Graphite Emerald، Warm Sand و Daylight Paper) + پشتیبانی پالت سفارشی، پشتیبانی کامل از انگلیسی و **فارسی (RTL)** با حفظ LTR برای کد و Diff، آواتار زنده StarBuddy روی باکس چت و ۴ کارت شروع سریع یک‌کلیکی.
+- **سندباکس بومی و کنترل ایزولاسیون:** کپسول قابل کلیک در هدر و تنظیمات `Safety → Execution mode` برای جابه‌جایی بین `Sandbox` / `Best-effort` / `Local` با سندباکس بومی ویندوز (`windows-job`: محدودیت حافظه/پروسه، مسدودسازی کلیپ‌بورد و محیط ایزوله) و لینوکس (`bwrap`).
 - **پیوست فایل و تصویر:** دکمه سنجاقک، کشیدن و رها کردن (Drag & Drop) روی پنجره، یا پیست مستقیم اسکرین‌شات و فایل با `Ctrl+V`. فایل‌ها در `.macron-uploads/` ذخیره و خودکار از Git مخفی می‌شوند.
 - **پنل تغییرات Git و Diff رنگی:** مشاهده لحظه‌ای فایل‌های تغییریافته پروژه، بررسی Diff خط‌به‌خط رنگی و بازگردانی (Revert) دومرحله‌ای هر فایل در کنار پنل Plan.
 - **منشن سریع فایل‌ها (`@file`):** با تایپ `@` در کادر پیام، جستجوی فازی بین فایل‌های پروژه انجام بده و مستقیماً به آن‌ها ارجاع بده.
-- **مکالمات موازی در هر پروژه:** ساخت، جابه‌جایی و حذف چند گفتگوی مستقل (Multi-thread) برای هر فضای کاری با حافظه مجزا.
-- **تنظیمات جامع:** مدیریت مدل، `effort`، پنجره `context`، دما، حالت اجرا (`Sandbox` / `Best-effort` / `Local`)، سرورهای MCP و پلاگین‌ها، مدیریت زنده **اسکیل‌ها**، ویرایش **حافظه (`MEMORY.md` / `USER.md`)**، پیکربندی مستقیم **اتصالات سرویس‌ها** و بررسی/نصب خودکار **آپدیت از GitHub Releases** با تأیید SHA-256.
+- **مکالمات موازی و جستجوی سراسری:** ساخت، جابه‌جایی و حذف چند گفتگوی مستقل (Multi-thread) برای هر فضای کاری و جستجوی فوری در تمام گفتگوها با `Ctrl+Shift+F`.
+- **تنظیمات جامع:** استودیو پروایدرها با **تشخیص خودکار مدل‌های لوکال**، مسیریابی هوشمند مدل، MoA، تخمین هزینه، مدیریت MCP و پلاگین‌ها، اسکیل‌ها، حافظه، تست زنده اتصالات، **خروجی عیب‌یابی بدون افشای رمز** و **آپدیت خودکار از GitHub Releases** با نوار پیشرفت و تأیید SHA-256.
 - **کار روی سرور و WSL:** از منوی بالای نوار کناری (`This PC → Add a server…`) آدرس `user@server` را بده تا مکرون از طریق SSH رمزشده روی سرور اجرا شود؛ اگر روی سرور نصب یا به‌روز نباشد، خودش پیشنهاد نصب یا آپدیت می‌دهد.
 
 ---
@@ -192,7 +194,8 @@ macron exec "پروژه را بررسی کن و تست‌ها را اجرا کن
 | **داده و توسعه** | کوئری فقط‌خواندنی PostgreSQL / MySQL / SQLite، کرنل ماندگار پایتون، داشبورد HTML، فراخوانی OpenAPI و دیپلوی با Rollback |
 | **حافظه و کارهای طولانی** | حافظه ماندگار، یادگیری از اجراها، زمان‌بندی، کارهای پس‌زمینه، برد کار و زیرعامل‌ها |
 | **بورس و بازار** | اطلاعات نمادهای TSETMC (قیمت، حجم، EPS، صف و کدال)، شاخص‌ها، هشدار قیمت و گزارش صبحگاهی |
-| **اتصال‌ها و افزونه‌ها** | MCP، پلاگین‌ها، ایمیل، تقویم `.ics`، بله، ایتا، روبیکا، Slack، Discord، WhatsApp، S3/WebDAV، Notion، Trello، Todoist و GitHub (هر ارسال بیرونی ابتدا تأیید می‌گیرد) |
+| **امنیت و فارنزیک (`pkg/security`)** | ۸ ابزار دفاعی و فارنزیک با مصرف توکن بهینه در هر سه محیط: **Wazuh** (SIEM/FIM/SCA)، **Wireshark** (`tshark` + تحلیل‌گر بومی PCAP)، **Suricata**، **Zeek**، **Lynis**، **Trivy**، **Semgrep** و **Autopsy** |
+| **اتصال‌ها و افزونه‌ها** | MCP، پلاگین‌ها، ایمیل، تقویم `.ics`، بله، ایتا، روبیکا، Slack، Discord، WhatsApp، S3/WebDAV، Notion، Trello، Todoist و GitHub (با تست زنده اتصال و تأیید قبل از ارسال بیرونی) |
 
 وضعیت ابزارهای نصب‌شده را هر زمان با این دستور بررسی کن:
 
@@ -237,15 +240,16 @@ make test-race    # تست‌های رگرسیون همراه با race detector
 
 # English Guide
 
-**Macron Agent** is a personal AI agent written in **Go** that runs on your own machine or server and gets real work done using real tools — inspecting and editing repositories, running tests, managing Git, building documents, browsing the web, connecting to external services, and administering remote servers.
+**Macron Agent** is a personal AI agent written in **Go** that runs on your own machine or server and gets real work done using real tools — inspecting and editing repositories, running tests, managing Git, running defensive security audits, building documents, browsing the web, connecting to external services, and administering remote servers.
 
 ### Highlights
 
 | Area | What you get |
 |---|---|
-| **Three unified interfaces** | Native Desktop app, interactive Terminal (TUI), and Telegram bot — all powered by the same core engine |
-| **Desktop App (`v1.18.0`)** | Full **English & Persian (`فارسی`)** UI with **frosted-glass & machined-chrome craft**, **Per-Model Custom Provider Studio**, **Smart Light/Strong Model Routing**, **Multi-Model Voting (MoA)**, live **USD Cost Estimator**, **Global Session Search (`Ctrl+Shift+F`)**, Git Changes & Unified Diff, `!shell`, and **SHA-256 GitHub Auto-Updater with live download progress bar** |
-| **Safety & execution control** | **Build** vs read-only **Plan** modes, granular command approvals (`Smart` / `Always ask` / `Never ask`), execution mode isolation (**Sandbox / Best-effort / Local** via bubblewrap, Landlock, or Seatbelt), and timed 30-minute YOLO toggle |
+| **Three unified interfaces** | Native Desktop app, interactive Terminal (TUI), and Telegram bot — all powered by the same core engine and shared 80-tool registry |
+| **Desktop App (`v1.19.0`)** | Framed floating-canvas shell with **5 built-in live Theme Palettes + custom `~/.macron/themes/*.json`**, interactive peeking SVG **StarBuddy** mascot, **4 one-click Starter Action Cards**, **English & Persian (`فارسی`)** RTL UI, **Local LLM Auto-Discovery** (Ollama / LM Studio / llama.cpp / vLLM), **Per-Model Custom Provider Studio**, **Smart Light/Strong Routing**, **Multi-Model Voting (MoA)**, live **USD Cost Estimator**, **Global Session Search (`Ctrl+Shift+F`)**, live connection testing, privacy-safe diagnostics export, and **SHA-256 GitHub Auto-Updater with live progress bar** |
+| **Defensive Security & DFIR (`pkg/security`)** | 8 specialized security & forensics tools (**Wazuh**, **Wireshark**, **Suricata**, **Zeek**, **Lynis**, **Trivy**, **Semgrep**, and **Autopsy**) with 0-token idle deferred loading and compact bounded output across Desktop, TUI, and Telegram |
+| **Cross-platform safety & sandbox** | **Build** vs read-only **Plan** modes, granular command approvals (`Smart` / `Always ask` / `Never ask`), execution isolation (**Sandbox / Best-effort / Local**) with **native Windows Job-Object Sandbox (`windows-job`)**, Linux `bubblewrap`/Landlock, and macOS Seatbelt, clickable header isolation capsule, and timed 30-minute YOLO toggle |
 | **Zero-port remote servers** | Launch and control Macron on remote Linux servers or WSL directly from Desktop over encrypted SSH with host-key verification (`~/.ssh/known_hosts`) |
 | **Transparent local memory** | Conversations, personality, notes, and skills stay in plain editable files (`SOUL.md`, `USER.md`, `MEMORY.md`, `skills/`) and local SQLite under your profile |
 
@@ -281,12 +285,13 @@ irm https://raw.githubusercontent.com/Metixpro/Macron-Agent/main/install.ps1 | i
 
 Launch **Macron** from the Start Menu on Windows (uses WebView2, falling back to Edge), or run `macron desktop` on Linux and macOS:
 
-- **Bilingual English / Persian UI:** Switch languages live under `Settings → Language` with smart RTL mirroring while keeping code blocks, diffs, file paths, and shortcuts strictly LTR.
+- **Modern framed shell, live palettes & StarBuddy mascot:** Floating-canvas workspace with 5 built-in Theme Palettes (Obsidian, Midnight Cobalt, Graphite Emerald, Warm Sand, Daylight Paper) + custom JSON palettes, interactive SVG StarBuddy peeking over the composer, 4 one-click starter cards, and live **English / Persian (`فارسی`)** RTL mirroring (keeping code, diffs, paths, and shortcuts LTR).
+- **Native Sandbox & isolation control:** Clickable header isolation capsule and `Settings → Safety → Execution mode` (`Sandbox` / `Best-effort` / `Local`), backed by native **Windows Job Objects (`windows-job`)** on Windows and `bwrap` on Linux.
 - **Attachments & screenshots:** Attach files or images via the paperclip button, window Drag & Drop, or `Ctrl+V` clipboard paste. Uploads are stored under `.macron-uploads/` and automatically excluded from Git.
 - **Git Changes & Unified Diff:** Inspect live workspace modifications, read syntax-colored diffs, and revert individual files with two-step confirmation right alongside the Plan panel.
 - **`@file` fuzzy mentions:** Type `@` in the composer to search and reference project files directly.
-- **Multi-thread workspaces:** Create, switch between, and delete independent conversation threads per project folder with isolated SQLite memory.
-- **Built-in management & auto-updates:** Configure model providers, `effort`, context window, temperature, execution mode, MCP servers & plugins, Skills, Memory (`MEMORY.md` / `USER.md`), interactive Service Connections, and one-click GitHub Releases updates right inside Settings.
+- **Multi-thread workspaces & global search:** Create, switch between, and delete independent conversation threads per project folder with isolated SQLite memory, and search across all history with `Ctrl+Shift+F`.
+- **Built-in management & auto-updates:** Configure custom model providers with **local LLM auto-discovery**, smart routing, MoA, MCP servers & plugins, Skills, Memory (`MEMORY.md` / `USER.md`), live Service Connection tests, **privacy-safe diagnostics export**, and one-click GitHub Releases updates right inside Settings.
 - **Remote servers & WSL:** Choose **Add a server…** in the sidebar header (`user@server`) to work on remote machines over encrypted SSH — no exposed ports required. If Macron is missing or outdated remotely, the app offers to install or update it for you.
 
 ---
@@ -368,7 +373,8 @@ macron exec "Inspect this project and run its tests" # one-shot execution for sc
 | **Data & dev** | Read-only PostgreSQL / MySQL / SQLite queries, persistent Python kernel, HTML dashboards, statistics/forecasting, OpenAPI calls, and rollback-capable deploys |
 | **Memory & autonomy** | Persistent conversations, history search, editable skills, learning, schedules, background jobs, task board, and sub-agents |
 | **Markets** | Tehran Stock Exchange (TSETMC) prices, volume, EPS, order book, Codal filings, indices, price alerts, and morning briefings |
-| **Connections & extensions** | MCP servers, plugins, Email, `.ics` calendars, Bale, Eitaa, Rubika, Slack, Discord, WhatsApp, S3/WebDAV, Notion, Trello, Todoist, and GitHub (outbound actions ask first) |
+| **Security & DFIR (`pkg/security`)** | Token-efficient defensive security & forensics across Desktop, TUI, and Telegram: **Wazuh** SIEM/FIM/SCA, **Wireshark** (`tshark` + pure-Go PCAP fallback), **Suricata** IDS (`eve.json`/`fast.log`/PCAP), **Zeek** NSM log analysis, **Lynis** hardening audits, **Trivy** CVE/misconfig/secret scanner, **Semgrep** SAST, and **Autopsy** SQLite digital forensics |
+| **Connections & extensions** | MCP servers, plugins, Email, `.ics` calendars, Bale, Eitaa, Rubika, Slack, Discord, WhatsApp, S3/R2/WebDAV, Notion, Trello, Todoist, and GitHub (with live connection testing across Desktop, TUI, and Telegram) |
 
 Check tool and environment readiness anytime:
 

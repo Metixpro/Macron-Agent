@@ -11,10 +11,18 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
+
+var gmailTokenCache struct {
+	mu          sync.Mutex
+	refreshKey  string
+	accessToken string
+	expiresAt   time.Time
+}
 
 func gmailConfigured() bool {
 	return firstEnv("MACRON_GMAIL_ACCESS_TOKEN", "MACRON_GMAIL_REFRESH_TOKEN") != ""
@@ -31,6 +39,15 @@ func (r *Registry) gmailToken(ctx context.Context, refresh bool) (string, error)
 	if token == "" || id == "" || secret == "" {
 		return "", fmt.Errorf("Gmail OAuth requires MACRON_GMAIL_ACCESS_TOKEN or MACRON_GMAIL_CLIENT_ID, MACRON_GMAIL_CLIENT_SECRET and MACRON_GMAIL_REFRESH_TOKEN")
 	}
+	cacheKey := id + ":" + token
+	if !refresh {
+		gmailTokenCache.mu.Lock()
+		cached, valid := gmailTokenCache.accessToken, gmailTokenCache.refreshKey == cacheKey && time.Now().Add(30*time.Second).Before(gmailTokenCache.expiresAt)
+		gmailTokenCache.mu.Unlock()
+		if valid && cached != "" {
+			return cached, nil
+		}
+	}
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {token}, "client_id": {id}, "client_secret": {secret}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://oauth2.googleapis.com/token", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -44,6 +61,7 @@ func (r *Registry) gmailToken(ctx context.Context, refresh bool) (string, error)
 	defer resp.Body.Close()
 	var reply struct {
 		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
 		Error       string `json:"error"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&reply); err != nil {
@@ -52,6 +70,15 @@ func (r *Registry) gmailToken(ctx context.Context, refresh bool) (string, error)
 	if resp.StatusCode/100 != 2 || reply.AccessToken == "" {
 		return "", fmt.Errorf("Gmail OAuth refresh refused (HTTP %d, %s)", resp.StatusCode, reply.Error)
 	}
+	ttl := time.Duration(reply.ExpiresIn) * time.Second
+	if ttl <= 0 {
+		ttl = 50 * time.Minute
+	}
+	gmailTokenCache.mu.Lock()
+	gmailTokenCache.refreshKey = cacheKey
+	gmailTokenCache.accessToken = reply.AccessToken
+	gmailTokenCache.expiresAt = time.Now().Add(ttl)
+	gmailTokenCache.mu.Unlock()
 	return reply.AccessToken, nil
 }
 

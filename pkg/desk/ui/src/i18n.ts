@@ -251,6 +251,38 @@ const FA: Record<string, string> = {
   "Updating desktop app": "به‌روزرسانی اپلیکیشن دسکتاپ",
   "Ready to restart": "آماده برای راه‌اندازی مجدد",
   "Retry": "تلاش مجدد",
+  "Ready": "آماده",
+  "Listening…": "گوش به زنگ…",
+  "Writing…": "در حال نوشتن…",
+  "Waiting for your approval": "منتظر تأیید شما",
+  "Detected local model servers": "سرورهای مدل محلی شناسایی‌شده",
+  "Scanning…": "در حال جستجو…",
+  "Rescan": "جستجوی مجدد",
+  "Export diagnostics": "خروجی گزارش سلامت",
+  "Exporting…": "در حال آماده‌سازی…",
+  "Theme palette": "پالت رنگی محیط",
+  "Sandbox active": "سندباکس فعال است",
+  "Click to configure": "برای تنظیم کلیک کنید",
+  "Security & DFIR Audit": "ممیزی امنیت و فارنزیک",
+  "Wazuh, Wireshark, Suricata, Zeek, Lynis, Trivy, Semgrep & Autopsy": "Wazuh، Wireshark، Suricata، Zeek، Lynis، Trivy، Semgrep و Autopsy",
+  "Code & Git Review": "بررسی کد و تغییرات Git",
+  "Map files, inspect git changes, find bugs & run tests": "نقشه پروژه، مشاهده Diff، خطایابی و اجرای تست‌ها",
+  "Browser & Web Research": "مرورگر و تحقیق وب",
+  "Open websites, interact with forms, and capture screenshots": "باز کردن سایت‌ها، کار با فرم‌ها و گرفتن اسکرین‌شات",
+  "Data & Docs Studio": "تحلیل داده و اسناد",
+  "Query CSV/SQLite data, build charts, or export reports": "کوئری CSV/SQLite، رسم نمودار و ساخت گزارش",
+  "Windows Job-Object sandbox is active (process, memory, clipboard & workspace temp isolation).":
+    "سندباکس بومی Windows Job-Object فعال است (محدودیت پردازش، حافظه، کلیپ‌بورد و ایزوله‌سازی محیط).",
+  "Strict Windows Job-Object sandbox (process, memory, clipboard & secret-env isolation).":
+    "سندباکس سخت‌گیرانه Windows Job-Object (محدودیت پردازش، حافظه، کلیپ‌بورد و حذف کلیدهای محرمانه).",
+  "Windows Job-Object sandbox active; falls back to local if unavailable.":
+    "سندباکس Windows Job-Object فعال است؛ در صورت در دسترس نبودن به حالت محلی می‌رود.",
+  "Uses native Windows Job-Object sandbox when enabled.":
+    "در صورت فعال بودن از سندباکس بومی Windows Job-Object استفاده می‌کند.",
+  "Strict sandbox isolation (Linux bubblewrap / Windows Job-Object).":
+    "ایزوله‌سازی سخت‌گیرانه سندباکس (bubblewrap در لینوکس / Job-Object در ویندوز).",
+  "Unsandboxed; uses platform sandbox when available.":
+    "بدون سندباکس؛ در صورت وجود از سندباکس سیستم‌عامل استفاده می‌کند.",
 };
 
 export function tr(lang: Lang, key: string): string {

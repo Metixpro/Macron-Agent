@@ -130,6 +130,8 @@ def local_url(name):
 
 def save_png(data, name):
     path = inside(name)
+    if not path:
+        raise ValueError(f"invalid output path outside workspace: {name!r}")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
         f.write(data)

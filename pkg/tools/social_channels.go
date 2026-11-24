@@ -9,6 +9,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -22,10 +23,7 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 		return "", fmt.Errorf("text is required")
 	}
 
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := r.httpClient()
 
 	switch platform {
 	case "discord":
@@ -42,6 +40,24 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 		return sendHTTPPost(ctx, client, u, payload, nil)
 
 	case "slack":
+		ch := strings.TrimSpace(channel)
+		botToken := token
+		if botToken == "" {
+			botToken = config.ToolEnvValue("SLACK_BOT_TOKEN")
+		}
+		// If the caller explicitly targeted a channel and a bot token is available,
+		// use chat.postMessage instead of silently ignoring channel via incoming webhook.
+		if ch != "" && webhookURL == "" && botToken != "" {
+			payload, _ := json.Marshal(map[string]any{
+				"channel": ch,
+				"text":    text,
+			})
+			headers := map[string]string{
+				"Authorization": "Bearer " + botToken,
+				"Content-Type":  "application/json",
+			}
+			return sendHTTPPost(ctx, client, "https://slack.com/api/chat.postMessage", payload, headers)
+		}
 		u := webhookURL
 		if u == "" {
 			u = config.ToolEnvValue("SLACK_WEBHOOK_URL")
@@ -52,18 +68,18 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 			})
 			return sendHTTPPost(ctx, client, u, payload, nil)
 		}
-		if token == "" {
-			token = config.ToolEnvValue("SLACK_BOT_TOKEN")
-		}
-		if token == "" {
+		if botToken == "" {
 			return "", fmt.Errorf("Slack is not set up: macron config set SLACK_WEBHOOK_URL <webhook>, or SLACK_BOT_TOKEN for chat.postMessage with a channel")
 		}
+		if ch == "" {
+			return "", fmt.Errorf("channel is required when sending via SLACK_BOT_TOKEN")
+		}
 		payload, _ := json.Marshal(map[string]any{
-			"channel": channel,
+			"channel": ch,
 			"text":    text,
 		})
 		headers := map[string]string{
-			"Authorization": "Bearer " + token,
+			"Authorization": "Bearer " + botToken,
 			"Content-Type":  "application/json",
 		}
 		return sendHTTPPost(ctx, client, "https://slack.com/api/chat.postMessage", payload, headers)
@@ -72,11 +88,15 @@ func (r *Registry) SendExternalMessenger(ctx context.Context, platform, webhookU
 		if token == "" {
 			token = config.ToolEnvValue("WHATSAPP_TOKEN")
 		}
-		phoneID := config.ToolEnvValue("WHATSAPP_PHONE_ID")
+		phoneID := strings.TrimSpace(config.ToolEnvValue("WHATSAPP_PHONE_ID"))
 		if token == "" || phoneID == "" {
 			return "", fmt.Errorf("whatsapp requires WHATSAPP_TOKEN and WHATSAPP_PHONE_ID")
 		}
-		endpoint := fmt.Sprintf("https://graph.facebook.com/v19.0/%s/messages", phoneID)
+		to = strings.TrimSpace(to)
+		if to == "" {
+			return "", fmt.Errorf("to (recipient phone number) is required for whatsapp")
+		}
+		endpoint := fmt.Sprintf("https://graph.facebook.com/v19.0/%s/messages", url.PathEscape(phoneID))
 		payload, _ := json.Marshal(map[string]any{
 			"messaging_product": "whatsapp",
 			"to":                to,

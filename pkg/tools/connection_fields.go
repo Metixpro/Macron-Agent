@@ -31,10 +31,10 @@ var connectionFields = map[string]connectionField{
 	"MACRON_SMTP_TLS":            {Type: "enum", Purpose: "Optional override: implicit. Leave unset for STARTTLS; port 465 selects implicit TLS automatically"},
 	"BALE_BOT_TOKEN":             {Type: "credential", Secret: true, Purpose: "Bale bot token from Bale's own bot-management service; never substitute a Telegram token"},
 	"MACRON_BALE_OWNERS":         {Type: "id_list", Purpose: "Comma-separated Bale owner user IDs; needed for incoming private chat, not for outbound-only use", RequiredFor: []string{"native_chat"}},
-	"MACRON_BALE_API":            {Type: "url", Default: "https://tapi.bale.ai/bot", Purpose: "Optional API base URL override for a trusted relay. This is an address, NOT an API key or bot ID; leave unset for the official service"},
+	"MACRON_BALE_API":            {Type: "url", Default: "https://tapi.bale.ai", Purpose: "Optional API base URL override for a trusted relay. This is an address, NOT an API key or bot ID; leave unset for the official service"},
 	"RUBIKA_BOT_TOKEN":           {Type: "credential", Secret: true, Purpose: "Rubika bot token from Rubika"},
 	"MACRON_RUBIKA_OWNERS":       {Type: "id_list", Purpose: "Comma-separated Rubika owner user IDs", RequiredFor: []string{"native_chat"}},
-	"MACRON_RUBIKA_API":          {Type: "url", Default: "https://botapi.rubika.ir/v3/", Purpose: "Optional trusted API base URL override; not a credential"},
+	"MACRON_RUBIKA_API":          {Type: "url", Default: "https://botapi.rubika.ir", Purpose: "Optional trusted API base URL override; not a credential"},
 	"EITAA_BOT_TOKEN":            {Type: "credential", Secret: true, Purpose: "Eitaayar outbound bot token; native inbound chat is not supported"},
 	"TELEGRAM_BOT_TOKEN":         {Type: "credential", Secret: true, Purpose: "Telegram bot token from Telegram's @BotFather"},
 	"MACRON_OWNERS":              {Type: "id_list", Purpose: "Comma-separated Telegram owner user IDs", RequiredFor: []string{"native_chat"}},
@@ -46,6 +46,7 @@ var connectionFields = map[string]connectionField{
 	"WHATSAPP_PHONE_ID":          {Type: "identifier", Purpose: "WhatsApp Cloud API phone-number ID, not the phone number"},
 	"S3_ENDPOINT":                {Type: "url", Purpose: "Optional S3-compatible endpoint for MinIO/R2 or another provider"},
 	"S3_REGION":                  {Type: "identifier", Default: "us-east-1", Purpose: "S3 signing region"},
+	"S3_BUCKET":                  {Type: "identifier", Purpose: "Default S3/MinIO/R2 bucket name for uploads, downloads, and connection tests"},
 	"S3_ACCESS_KEY_ID":           {Type: "credential", Secret: true, Purpose: "S3 access key ID"},
 	"S3_SECRET_ACCESS_KEY":       {Type: "credential", Secret: true, Purpose: "S3 secret access key"},
 	"WEBDAV_URL":                 {Type: "url", Purpose: "WebDAV server base URL"},
@@ -72,7 +73,14 @@ func describeConnection(s ConnectionSpec) string {
 	}
 	notes := "Required credential alternatives describe basic service access; required_for lists extra action-specific fields. Fields outside both are optional. A missing optional field is not a setup failure. Configured does not mean authenticated; use a read-only test."
 	if s.Restart {
-		notes += " Native chat needs owner IDs from that same platform. After saving, restart the listener with macron telegram restart; configured messengers can run side by side."
+		cmd := "macron telegram restart"
+		switch s.ID {
+		case "bale":
+			cmd = "macron bale run"
+		case "rubika":
+			cmd = "macron rubika run"
+		}
+		notes += " Native chat needs owner IDs from that same platform. After saving, start or restart the listener with " + cmd + "; configured messengers can run side by side."
 	}
 	if s.ID == "gmail" {
 		notes += " OAuth scopes: gmail.readonly for search/read, gmail.send for sending. Never invent OAuth credentials."

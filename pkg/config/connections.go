@@ -23,12 +23,29 @@ func toolEnvLine(line string) (string, string, bool) {
 		return "", "", false
 	}
 	key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-	if len(value) >= 2 && (value[0] == '\'' || value[0] == '"') && value[len(value)-1] == value[0] {
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		value = unescapeDoubleQuoted(value[1 : len(value)-1])
+	} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
 		value = value[1 : len(value)-1]
 	} else if i := strings.Index(value, " #"); i >= 0 {
 		value = strings.TrimSpace(value[:i])
 	}
 	return key, value, key != ""
+}
+
+func unescapeDoubleQuoted(s string) string {
+	if !strings.ContainsRune(s, '\\') {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && (s[i+1] == '"' || s[i+1] == '\\') {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 func ToolEnvValue(key string) string {
 	value, _ := ToolEnvLookup(key)
@@ -40,11 +57,16 @@ func ToolEnvLookup(key string) (string, bool) {
 		defer f.Close()
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 4096), 1<<20)
+		var val string
+		found := false
 		for sc.Scan() {
 			k, v, ok := toolEnvLine(sc.Text())
 			if ok && k == key {
-				return v, true
+				val, found = v, true
 			}
+		}
+		if found {
+			return val, true
 		}
 	}
 	return os.LookupEnv(key)
@@ -117,5 +139,8 @@ func quoteToolEnv(value string) string {
 	if !strings.Contains(value, "\"") {
 		return "\"" + value + "\""
 	}
-	return "'" + value + "'"
+	if !strings.Contains(value, "'") {
+		return "'" + value + "'"
+	}
+	return "\"" + strings.ReplaceAll(strings.ReplaceAll(value, "\\", "\\\\"), "\"", "\\\"") + "\""
 }

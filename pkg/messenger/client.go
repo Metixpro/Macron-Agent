@@ -60,9 +60,6 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 		return fmt.Errorf("%s request failed: %s", c.Platform, strings.ReplaceAll(err.Error(), c.Token, "<token>"))
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("%s refused %s (HTTP %d): %s", c.Platform, method, resp.StatusCode, http.StatusText(resp.StatusCode))
-	}
 	var reply struct {
 		OK          *bool           `json:"ok"`
 		Status      string          `json:"status"`
@@ -70,14 +67,22 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 		Data        json.RawMessage `json:"data"`
 		Description string          `json:"description"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&reply); err != nil {
+	decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&reply)
+	if resp.StatusCode/100 != 2 {
+		detail := strings.TrimSpace(reply.Description)
+		if detail == "" {
+			detail = http.StatusText(resp.StatusCode)
+		}
+		return fmt.Errorf("%s refused %s (HTTP %d): %s", c.Platform, method, resp.StatusCode, detail)
+	}
+	if decodeErr != nil {
 		return fmt.Errorf("%s returned invalid JSON (HTTP %d)", c.Platform, resp.StatusCode)
 	}
 	valid := reply.OK != nil && *reply.OK
 	if c.Platform == "rubika" {
 		valid = reply.Status == "OK"
 	}
-	if resp.StatusCode/100 != 2 || !valid {
+	if !valid {
 		reason := reply.Status
 		if reply.Description != "" {
 			reason = reply.Description
@@ -207,15 +212,17 @@ func (c *Client) CursorKey() string {
 }
 
 func (c *Client) SetAPIBase(base string) error {
-	u, err := url.Parse(strings.TrimRight(base, "/"))
+	clean := strings.TrimRight(base, "/")
+	u, err := url.Parse(clean)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return fmt.Errorf("messenger API base must be an http(s) URL without credentials, query or fragment")
 	}
-	c.BaseURL = strings.TrimRight(base, "/")
 	if c.Platform == "bale" {
-		c.BaseURL += "/bot" + c.Token
+		clean = strings.TrimSuffix(clean, "/bot")
+		c.BaseURL = clean + "/bot" + c.Token
 	} else {
-		c.BaseURL += "/v3/" + c.Token
+		clean = strings.TrimSuffix(clean, "/v3")
+		c.BaseURL = clean + "/v3/" + c.Token
 	}
 	return nil
 }

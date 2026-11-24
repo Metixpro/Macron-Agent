@@ -138,12 +138,17 @@ func New(cfg Config) (*Machine, error) {
 	if note != "" {
 		log.Printf("sandbox: %s", note)
 	} else if sb != nil {
-		netNote := "with network access"
-		if sb.noNet {
-			netNote = "network disabled"
+		if sb.backend == SandboxWindows {
+			log.Printf("🔒 commands run in a Windows Job-Object sandbox (process/memory/UI limits + isolated env, workspace %s)", cfg.BaseDir)
+		} else {
+			netNote := "with network access"
+			if sb.noNet {
+				netNote = "network disabled"
+			}
+			log.Printf("🔒 commands run in a bubblewrap sandbox (%s, workspace %s)", netNote, cfg.BaseDir)
 		}
-		log.Printf("🔒 commands run in a bubblewrap sandbox (%s, workspace %s)", netNote, cfg.BaseDir)
 	}
+	setWindowsSandboxHardening(sb != nil && sb.backend == SandboxWindows)
 	log.Printf("🖥  running on this machine with the rights of %s", currentUser())
 	return &Machine{
 		BaseDir: cfg.BaseDir,
@@ -191,6 +196,7 @@ func (s *Machine) SetExecutionMode(mode string) (string, error) {
 	s.cfg.ExecutionMode = mode
 	s.sb = sb
 	s.sbMu.Unlock()
+	setWindowsSandboxHardening(sb != nil && sb.backend == SandboxWindows)
 
 	s.stopAllShells()
 	return note, nil
@@ -564,6 +570,9 @@ func (s *Machine) baseEnv(opts RunOptions, ws string) map[string]string {
 	}
 	if env["HOME"] == "" {
 		env["HOME"] = home
+	}
+	if backend := s.SandboxBackend(); backend == SandboxWindows {
+		applySandboxEnv(env, ws, backend)
 	}
 	for k, v := range opts.Env {
 		putEnv(env, k, s.hostPath(ws, v))

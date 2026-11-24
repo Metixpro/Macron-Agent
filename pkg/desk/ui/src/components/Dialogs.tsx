@@ -40,9 +40,10 @@ import { useT } from "../i18n";
 import type { Lang } from "../i18n";
 import { Icon } from "../icons";
 import type { IconName } from "../icons";
+import { applyPalette, clearPaletteOverrides, getSavedPaletteId, loadPalettes } from "../palettes";
 import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
-import type { Ask, Listing, Plugin } from "../types";
+import type { Ask, Listing, Plugin, ThemePalette } from "../types";
 import { ProviderEditor, ProvidersSection } from "./ProviderManager";
 import { RoutingMoaSection } from "./RoutingMoaSection";
 import { SessionSearch } from "./SessionSearch";
@@ -1071,6 +1072,8 @@ function Settings() {
   const tuning = useStore((s) => s.tuning);
   const mod = useMod();
   const [plugins, setPlugins] = useState<Plugin[] | null>(null);
+  const [palettes, setPalettes] = useState<ThemePalette[]>([]);
+  const [activePalette, setActivePalette] = useState<string>(() => getSavedPaletteId());
   const dialog = useStore((s) => s.dialog);
   const loadPlugins = () =>
     server
@@ -1078,7 +1081,10 @@ function Settings() {
       .then((r) => setPlugins(r.plugins || []))
       .catch(() => setPlugins([]));
   useEffect(() => {
-    if (dialog?.kind === "settings") loadPlugins();
+    if (dialog?.kind === "settings") {
+      loadPlugins();
+      void loadPalettes().then((r) => setPalettes(r.themes || []));
+    }
   }, [dialog?.kind]);
   const togglePlugin = async (p: Plugin) => {
     setPlugins((list) => (list || []).map((x) => (x.key === p.key ? { ...x, enabled: !p.enabled, status: p.enabled ? "off" : "connecting" } : x)));
@@ -1107,20 +1113,43 @@ function Settings() {
     }
   };
 
+  const pickThemeMode = (next: Theme) => {
+    clearPaletteOverrides();
+    applyPalette(null);
+    setActivePalette("");
+    setTheme(next);
+  };
+
+  const pickPalette = (p: ThemePalette) => {
+    setTheme(p.appearance);
+    applyPalette(p);
+    setActivePalette(p.id);
+  };
+
   const isLinux = !info.platform || info.platform === "linux";
+  const isWindows = info.platform === "windows";
+  const backend = info.sandboxBackend || "";
   const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
   const executionHelp = t(
     {
       sandbox: info.sandboxed
-        ? "Strict bubblewrap isolation is active (fail-closed)."
-        : isLinux
-          ? "Strict bubblewrap isolation (fail-closed if unavailable)."
-          : "Strict bubblewrap isolation is only available on Linux.",
+        ? isWindows || backend === "windows-job"
+          ? "Windows Job-Object sandbox is active (process, memory, clipboard & workspace temp isolation)."
+          : "Strict bubblewrap isolation is active (fail-closed)."
+        : isWindows
+          ? "Strict Windows Job-Object sandbox (process, memory, clipboard & secret-env isolation)."
+          : isLinux
+            ? "Strict bubblewrap isolation (fail-closed if unavailable)."
+            : "Strict sandbox isolation (Linux bubblewrap / Windows Job-Object).",
       "best-effort": info.sandboxed
-        ? "Sandbox active; falls back to local if unavailable."
-        : isLinux
-          ? "Unsandboxed; uses bubblewrap when available."
-          : "Unsandboxed (bubblewrap sandbox is Linux-only).",
+        ? isWindows || backend === "windows-job"
+          ? "Windows Job-Object sandbox active; falls back to local if unavailable."
+          : "Sandbox active; falls back to local if unavailable."
+        : isWindows
+          ? "Uses native Windows Job-Object sandbox when enabled."
+          : isLinux
+            ? "Unsandboxed; uses bubblewrap when available."
+            : "Unsandboxed; uses platform sandbox when available.",
       local: "Sandbox bypassed. Commands run directly on the host.",
     }[executionMode],
   );
@@ -1152,9 +1181,38 @@ function Settings() {
               ["light", t("Light")],
               ["dark", t("Dark")],
             ]}
-            onPick={setTheme}
+            onPick={pickThemeMode}
           />
         </Section>
+        {palettes.length > 0 && (
+          <div className="palette-wrap">
+            <div className="palette-label">
+              <span>{t("Theme palette")}</span>
+              <span className="palette-hint" dir="ltr">
+                ~/.macron/themes/*.json
+              </span>
+            </div>
+            <div className="palette-row" role="radiogroup" aria-label={t("Theme palette")}>
+              {palettes.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={activePalette === p.id}
+                  className={"palette-pill" + (activePalette === p.id ? " on" : "")}
+                  onClick={() => pickPalette(p)}
+                >
+                  <span className="swatches" aria-hidden="true">
+                    {p.swatches.map((hex, i) => (
+                      <i key={i} style={{ background: hex }} />
+                    ))}
+                  </span>
+                  <span>{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <Section title={t("Language")}>
           <Choice<Lang>
             value={lang}

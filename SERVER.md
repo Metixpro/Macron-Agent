@@ -709,5 +709,29 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
   - Fixed bottom sidebar clearance so `Engine ready` and `SpectorDev · MIT` never clip on Windows.
   - Added automatic legacy `SOUL.md` migration (`pkg/brain`) so users upgrading from pre-SpectorDev versions automatically receive the official SpectorDev identity while preserving custom user-written `SOUL.md` files.
 
+### 1.19.0: Living StarBuddy mascot & app icon, 8-tool Security & DFIR suite, link request timeouts, SQLite hardening & live connection testing
 
-
+- **Living StarBuddy mascot avatar & new app icon**:
+  - Added the living animated **StarBuddy** SVG mascot (`pkg/desk/ui/src/components/StarBuddy.tsx`) in the Desktop Sidebar header, Workspace empty-state hero, Welcome setup dialog, and live thinking card, reacting dynamically to agent state (`idle` breathing/blinking/glancing, `working` peeking & paw-tapping with sapphire halo pulse, `streaming`, `asking`, and `offline`), with full `prefers-reduced-motion` support.
+  - Added the multi-frame animated Unicode/ANSI **StarBuddy** mascot (`pkg/tui/avatar.go`) to the TUI Home screen and live activity bar.
+  - Updated the Windows multi-resolution executable/installer icon (`packaging/windows/macron.ico`, `cmd/macron/rsrc_windows_{amd64,386,arm64}.syso`) and Desktop web favicon (`pkg/desk/web/index.html`) to match the StarBuddy star-over-planet artwork.
+- **8-Tool Defensive Security & DFIR Suite (`pkg/security` + `pkg/tools/security.go`)**:
+  - Dedicated `pkg/security` package wired into the shared tool registry across Desktop, TUI, and Telegram with zero-token idle overhead via deferred tool preloading and 3,600-character structured output caps:
+    1. `wazuh`: Wazuh Manager REST API (`status`, `agents`, `alerts`, `syscheck`, `sca`, `vulnerabilities` with JWT auth) plus offline `parse_alerts` (`alerts.json`).
+    2. `wireshark`: `tshark` packet analysis plus a zero-dependency pure-Go classic `.pcap` fallback (`summary`, `packets`, `conversations`, `dns`, `http`, `tls`, `extract_ips`, `status`).
+    3. `suricata`: pure-Go `eve.json` and `fast.log` alert/DNS/HTTP/TLS summarizer plus `scan_pcap` and `test_rules`.
+    4. `zeek`: pure-Go Zeek TSV and JSON log analyzer (`parse_log`, `summary_dir`, `scan_pcap`, `status`).
+    5. `lynis`: pure-Go `lynis-report.dat` parser (hardening index, warnings, suggestions, vulnerable packages) plus `audit_system` and `audit_dockerfile`.
+    6. `trivy`: Trivy CVE/misconfiguration/secret scanner (`fs`, `image`, `config`, `repo`) and deduplicated `parse_report` summarizer.
+    7. `semgrep`: Semgrep SAST scanner (`scan`) and JSON/SARIF `parse_report` summarizer with CWE/OWASP tags.
+    8. `autopsy`: pure-Go read-only SQLite forensic inspector for `autopsy.db` (`case_summary`, `artifacts`, `files`, `deleted`, `keyword_search`, `timeline`) plus Sleuth Kit `image_info`.
+- **Link & HTTP Request Timeout System**:
+  - Added `netclient.DefaultTimeout` (45s), `NoTotalTimeout` streaming client option, thread-safe `idleBody` timer guard, and `WithRequestTimeout(ctx, sec, def, max)`.
+  - Replaced all remaining unbounded `http.DefaultClient` calls across `pkg/updater`, `pkg/plugins` (with per-request 30s MCP SSE POST timeouts and mutex-protected endpoint state), and `pkg/tools` (`academic`, `cloud_storage`, `deploy`, `openapi`, `iran_messengers`, `social_channels`).
+  - Added explicit `timeout_seconds` parameters to `web_fetch` (default 30s, max 120s), `download_file` (default 360s, max 900s), `crawl_site` (per-page default 25s, max 120s), and `browser` (default 60s, max 180s).
+- **Browser Tool Cross-Platform Hardening**:
+  - Cross-platform Chrome/Chromium/Edge/Brave binary resolution on Windows, macOS, and Linux, resilient Python runtime detection (`python3 -I` → `python3` → `python`), isolated per-call `renderPage` sessions with automatic cleanup, and verified end-to-end live Chromium navigation, form fill, click, and PNG screenshot capture.
+- **SQLite Database Concurrency & Transaction Hardening (`pkg/store`)**:
+  - Single-connection serialized SQLite pool (`MaxOpenConns(1)` / `MaxIdleConns(1)`) to eliminate `SQLITE_BUSY` lock contention across goroutines, transactional `CountRequest`/`Refund` and `AddFact`, per-migration transactions, `writeMu`-serialized settings/admin cache mutations, and `rows.Err()` verification before cache swaps.
+- **App Connections Audit & Live Testing Across All 3 Surfaces**:
+  - Deduplicated trailing `/bot`, `/v3`, and `/api` URL suffixes for Bale, Rubika, and Eitaa; added `S3_BUCKET` default bucket support and `r2` provider enum; added in-memory OAuth token caching for Gmail; routed Slack bot-token channel posts via `chat.postMessage`; and added live one-click connection testing in Desktop Settings (`POST /api/connections/test`), TUI (`/connect`), and Telegram (`/connections [test <service>]`).

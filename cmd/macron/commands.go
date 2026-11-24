@@ -40,6 +40,7 @@ var commandSpecs = []commandSpec{
 	{"tasks", "کارهای پس‌زمینه", "Background tasks", commandUser},
 	{"search", "جستجوی گفتگوهای قبلی", "Search past conversations", commandOwner},
 	{"board", "برد کارها", "Task board", commandOwner},
+	{"connections", "اتصال‌ها و تست سرویس‌ها", "Service connections and health tests", commandOwner},
 	{"dashboard", "داشبورد وب", "Web dashboard", commandOwner},
 	{"settings", "پنل مدیریت", "Administration panel", commandAdmin},
 	{"execution", "حالت اجرای دستورات و سندباکس", "Execution mode and sandbox", commandOwner},

@@ -23,6 +23,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/guard"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
+	"github.com/Metixpro/macron-agent/pkg/netclient"
 )
 
 type State struct {
@@ -203,7 +204,12 @@ func (m *Manager) init() {
 		m.States = &MemoryStates{}
 	}
 	if m.HTTP == nil {
-		m.HTTP = &http.Client{}
+		m.HTTP = netclient.NewClient(netclient.Options{
+			NoTotalTimeout: true,
+			HeaderTimeout:  30 * time.Second,
+			BodyIdle:       90 * time.Second,
+			UseEnvProxy:    true,
+		})
 	}
 }
 

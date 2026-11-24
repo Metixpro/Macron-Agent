@@ -24,7 +24,12 @@ func (r *Registry) SetPlugins(p PluginTools) {
 	r.plugins.Store(&pluginSource{p})
 }
 
-func (r *Registry) Builtin(name string) bool { _, ok := r.handler[name]; return ok }
+func (r *Registry) Builtin(name string) bool {
+	r.mu.RLock()
+	_, ok := r.handler[name]
+	r.mu.RUnlock()
+	return ok
+}
 
 func (r *Registry) Plugin(name string) bool {
 	p := r.pluginTools()

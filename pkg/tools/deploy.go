@@ -18,10 +18,7 @@ func (r *Registry) DeployWithRollback(ctx context.Context, sessionID, deployCmd,
 		return "", fmt.Errorf("deploy_cmd is required")
 	}
 
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := r.httpClient()
 
 	deployOpts := machine.RunOptions{
 		Shell:   deployCmd,

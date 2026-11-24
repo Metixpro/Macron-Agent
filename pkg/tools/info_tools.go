@@ -170,7 +170,7 @@ func (r *Registry) registerInfoTools() {
 	r.add(ToolCloudStorage,
 		"Upload, download, or list files on S3, MinIO, R2, or WebDAV (Nextcloud).",
 		map[string]any{
-			"provider":    enumProp("s3", "s3", "webdav", "minio"),
+			"provider":    enumProp("s3", "s3", "webdav", "minio", "r2"),
 			"action":      enumProp("upload", "upload", "download", "list"),
 			"remote_path": prop("string", "Remote path or key"),
 			"local_path":  prop("string", "Local workspace file path"),
@@ -194,10 +194,10 @@ func (r *Registry) registerInfoTools() {
 		map[string]any{
 			"platform":     enumProp("notion", "notion", "trello", "todoist"),
 			"action":       enumProp("create_task", "create_task", "list_tasks"),
-			"title":        prop("string", "Task title"),
+			"title":        prop("string", "Task title (required for create_task)"),
 			"container_id": prop("string", "Database ID (Notion), List ID (Trello), or Project ID (Todoist)"),
 			"description":  prop("string", "Task description"),
-		}, []string{"platform", "action", "title"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+		}, []string{"platform", "action"}, func(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 			p := strArg(args, "platform")
 			act := strArg(args, "action")
 			title := strArg(args, "title")

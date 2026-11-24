@@ -27,6 +27,7 @@ import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import type { FileRef } from "../types";
+import { StarBuddy, useStarBuddyMood } from "./StarBuddy";
 
 type Command = { name: string; hint: string; run: () => void };
 
@@ -500,6 +501,21 @@ export function Composer() {
     }
   };
 
+  const [focused, setFocused] = useState(false);
+  const autoMood = useStarBuddyMood();
+  const buddyMood = autoMood === "idle" && (focused || text.trim().length > 0) ? "typing" : autoMood;
+  const menuOpen = matches.length > 0 || Boolean(atMatch && atFiles.length > 0);
+  const buddyTip =
+    buddyMood === "working"
+      ? tr("Working")
+      : buddyMood === "streaming"
+        ? tr("Writing…")
+        : buddyMood === "asking"
+          ? tr("Waiting for your approval")
+          : buddyMood === "typing"
+            ? tr("Listening…")
+            : tr("Ready");
+
   const placeholder = running
     ? tr("Add to what Macron is doing, or press Esc to stop")
     : mode === "plan"
@@ -550,81 +566,86 @@ export function Composer() {
           ))}
         </div>
       )}
-      <div className={"box" + (mode === "plan" ? " plan" : "") + (running ? " busy" : "")}>
-        {(attachments.length > 0 || uploading > 0) && (
-          <div className="att-bar">
-            {attachments.map((a) => {
-              const isImg = (a.type || "").startsWith("image/");
-              return (
-                <span key={a.name} className="att-chip" title={a.base}>
-                  {isImg ? <img className="att-thumb" src={fileURL(current, a.name)} alt={a.base} /> : <Icon name="file" size={13} />}
-                  <span className="att-name" dir="ltr">
-                    {a.base}
+      <div className="box-stage">
+        <StarBuddy variant="peek" mood={buddyMood} tucked={menuOpen} interactive title={`Macron · ${buddyTip}`} />
+        <div className={"box" + (mode === "plan" ? " plan" : "") + (running ? " busy" : "")}>
+          {(attachments.length > 0 || uploading > 0) && (
+            <div className="att-bar">
+              {attachments.map((a) => {
+                const isImg = (a.type || "").startsWith("image/");
+                return (
+                  <span key={a.name} className="att-chip" title={a.base}>
+                    {isImg ? <img className="att-thumb" src={fileURL(current, a.name)} alt={a.base} /> : <Icon name="file" size={13} />}
+                    <span className="att-name" dir="ltr">
+                      {a.base}
+                    </span>
+                    <span className="att-size">{bytes(a.size)}</span>
+                    <button
+                      type="button"
+                      className="att-rm"
+                      aria-label={tr("Remove")}
+                      onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
+                    >
+                      <Icon name="x" size={11} />
+                    </button>
                   </span>
-                  <span className="att-size">{bytes(a.size)}</span>
-                  <button
-                    type="button"
-                    className="att-rm"
-                    aria-label={tr("Remove")}
-                    onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
-                  >
-                    <Icon name="x" size={11} />
-                  </button>
+                );
+              })}
+              {uploading > 0 && (
+                <span className="att-chip uploading">
+                  <span className="spin" />
+                  <span>{tr("Uploading…")}</span>
                 </span>
-              );
-            })}
-            {uploading > 0 && (
-              <span className="att-chip uploading">
-                <span className="spin" />
-                <span>{tr("Uploading…")}</span>
+              )}
+            </div>
+          )}
+          <textarea
+            ref={ref}
+            rows={1}
+            dir="auto"
+            value={text}
+            placeholder={placeholder}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onPaste={onPaste}
+            onClick={(e) => setCaret(e.currentTarget.selectionStart || 0)}
+            onKeyUp={(e) => setCaret(e.currentTarget.selectionStart || 0)}
+            onChange={(e) => change(e.target.value, e.target.selectionStart || 0)}
+            onKeyDown={onKey}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = "";
+              if (files.length) void uploadFiles(files);
+            }}
+          />
+          <div className="toolbar">
+            <ModeSwitch />
+            <button
+              type="button"
+              className="icon-btn sm attach-btn"
+              title={tr("Attach files or images")}
+              aria-label={tr("Attach files or images")}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon name="paperclip" size={15} />
+            </button>
+            <ModelButton />
+            <EffortMenu />
+            <span className="grow" />
+            {queued > 0 && (
+              <span className="queued">
+                {queued} {tr("waiting")}
               </span>
             )}
+            <Meter />
+            <SendStop running={running} hasContent={text.trim().length > 0 || attachments.length > 0} fly={fly} onSend={submit} />
           </div>
-        )}
-        <textarea
-          ref={ref}
-          rows={1}
-          dir="auto"
-          value={text}
-          placeholder={placeholder}
-          onPaste={onPaste}
-          onClick={(e) => setCaret(e.currentTarget.selectionStart || 0)}
-          onKeyUp={(e) => setCaret(e.currentTarget.selectionStart || 0)}
-          onChange={(e) => change(e.target.value, e.target.selectionStart || 0)}
-          onKeyDown={onKey}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            const files = Array.from(e.target.files || []);
-            e.target.value = "";
-            if (files.length) void uploadFiles(files);
-          }}
-        />
-        <div className="toolbar">
-          <ModeSwitch />
-          <button
-            type="button"
-            className="icon-btn sm attach-btn"
-            title={tr("Attach files or images")}
-            aria-label={tr("Attach files or images")}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Icon name="paperclip" size={15} />
-          </button>
-          <ModelButton />
-          <EffortMenu />
-          <span className="grow" />
-          {queued > 0 && (
-            <span className="queued">
-              {queued} {tr("waiting")}
-            </span>
-          )}
-          <Meter />
-          <SendStop running={running} hasContent={text.trim().length > 0 || attachments.length > 0} fly={fly} onSend={submit} />
         </div>
       </div>
     </footer>

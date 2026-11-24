@@ -239,6 +239,7 @@ type model struct {
 	filesAt     time.Time
 	notes       []string
 	thought     string
+	avatarFrame int
 }
 
 func Run(e Engine, opt Options) error {
@@ -293,13 +294,16 @@ func Run(e Engine, opt Options) error {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tea.WindowSize())
+	return tea.Batch(textarea.Blink, tea.WindowSize(), avatarTick())
 }
 
 func (m *model) print(s string) { m.addBlock(transcriptBlock{text: s}) }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case avatarTickMsg:
+		m.avatarFrame = (m.avatarFrame + 1) % 64
+		return m, avatarTick()
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.input.SetWidth(max(m.contentWidth()-5, 6))

@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import shutil
 import tempfile
 
@@ -11,6 +12,7 @@ import tempfile
 ANSWER = sys.stdout
 sys.stdout = sys.stderr
 CONF = tempfile.mkdtemp(prefix="bu-")
+atexit.register(shutil.rmtree, CONF, True)
 os.environ.update({
     "ANONYMIZED_TELEMETRY": "false", "BROWSER_USE_CLOUD_SYNC": "false", "BROWSER_USE_VERSION_CHECK": "false",
     "BROWSER_USE_CLOUD_HINTS": "false", "BROWSER_USE_DISABLE_EXTENSIONS": "1", "BROWSER_USE_LOGGING_LEVEL": "warning",

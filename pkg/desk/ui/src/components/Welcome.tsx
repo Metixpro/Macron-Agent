@@ -5,6 +5,7 @@ import { local } from "../format";
 import { useMod } from "../hooks";
 import { Icon } from "../icons";
 import { setState, useStore } from "../store";
+import { StarBuddy } from "./StarBuddy";
 
 type Provider = { id: string; label: string; about: string; url: string; key: boolean; keyAt?: string; keyHint?: string };
 
@@ -88,10 +89,7 @@ function Hello({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   return (
     <div className="welcome-card">
       <div className="welcome-mark" aria-hidden>
-        <svg viewBox="0 0 256 256" width="44" height="44">
-          <rect x="12" y="12" width="232" height="232" rx="54" fill="currentColor" />
-          <polyline points="76,180 76,80 128,138 180,80 180,180" fill="none" stroke="var(--bg)" strokeWidth="28" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <StarBuddy size="xl" mood="idle" />
       </div>
       <h1>Welcome to Macron</h1>
       <p className="lead">An agent that works on this computer: it reads and changes your files, runs commands, looks things up and hands you the results.</p>

@@ -29,6 +29,8 @@ var toolTitles = map[string]string{
 	"calendar_client": "Calendar", "iran_messenger": "Message", "external_messenger": "Message", "task_board": "Tasks",
 	"generate_briefing": "Briefing", "rag_search": "Search Docs", "crawl_site": "Crawl", "deep_research": "Research",
 	"currency_gold_price": "Prices", "crypto_currency_price": "Crypto",
+	"wazuh": "Wazuh", "wireshark": "Wireshark", "suricata": "Suricata", "zeek": "Zeek",
+	"lynis": "Lynis", "trivy": "Trivy", "semgrep": "Semgrep", "autopsy": "Autopsy",
 }
 
 var lookTools = map[string]bool{
@@ -38,7 +40,7 @@ var lookTools = map[string]bool{
 	"academic_search": true, "rag_search": true, "tsetmc_stock": true, "database_query": true,
 }
 
-var argKeys = []string{"command", "deploy_cmd", "code", "filename", "file", "path", "pattern", "query", "symbol", "claim", "url", "topic", "title", "goal", "name", "sql", "fact", "to", "repo", "spec_path", "prompt", "remote_path", "action", "language", "id"}
+var argKeys = []string{"command", "deploy_cmd", "code", "filename", "file", "path", "target", "pattern", "query", "symbol", "claim", "url", "topic", "title", "goal", "name", "sql", "fact", "to", "repo", "spec_path", "prompt", "remote_path", "action", "language", "id"}
 
 var (
 	exitRe  = regexp.MustCompile(`^\[(?:exit (-?\d+)[^\]]*|timed out[^\]]*|could not run: [^\]]*)\]$`)

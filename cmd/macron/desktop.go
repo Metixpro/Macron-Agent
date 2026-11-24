@@ -93,6 +93,7 @@ func (h *deskHost) Info() desk.Info {
 	if h.w.app != nil && h.w.app.Machine != nil {
 		i.ExecutionMode = h.w.app.Machine.ExecutionMode()
 		i.Sandboxed = h.w.app.Machine.Sandboxed()
+		i.SandboxBackend = h.w.app.Machine.SandboxBackend()
 	}
 	if p, ok := h.w.prov.Active(); ok {
 		i.Model, i.Provider, i.Effort = p.Model, p.Name, p.Effort
@@ -193,6 +194,13 @@ func (h *deskHost) SaveConnectionValues(values map[string]string) error {
 		}
 	}
 	return nil
+}
+
+func (h *deskHost) TestConnection(ctx context.Context, service, resource string) (string, error) {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return "", errors.New("tool registry is not initialized")
+	}
+	return h.w.app.Registry.TestConnection(ctx, service, resource)
 }
 
 func (h *deskHost) Memories() ([]desk.MemoryEntry, error) {
