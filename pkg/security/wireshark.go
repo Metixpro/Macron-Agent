@@ -175,6 +175,9 @@ func parseClassicPCAP(path, action string, limit int) (string, error) {
 		}
 		tsSec := order.Uint32(ph[0:4])
 		inclLen := order.Uint32(ph[8:12])
+		if inclLen > 16<<20 {
+			return "", fmt.Errorf("corrupt or unsupported PCAP packet length (%d bytes > 16MB limit)", inclLen)
+		}
 		if inclLen > uint32(len(buf)) {
 			buf = make([]byte, inclLen)
 		}

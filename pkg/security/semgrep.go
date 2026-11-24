@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 )
@@ -53,7 +52,7 @@ func (e Env) RunSemgrep(ctx context.Context, sessionID string, p SemgrepParams) 
 		if err != nil {
 			return "", err
 		}
-		data, err := os.ReadFile(resolved)
+		data, err := ReadFileCapped(resolved, 25<<20)
 		if err != nil {
 			return "", fmt.Errorf("cannot read Semgrep report %s: %w", resolved, err)
 		}

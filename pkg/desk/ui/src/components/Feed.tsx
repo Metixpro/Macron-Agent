@@ -283,6 +283,10 @@ const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh
     case "assistant":
       return (
         <div className={"msg assistant" + enter}>
+          <div className="msg-who">
+            <StarBuddy size="xs" mood="idle" />
+            <span>Macron</span>
+          </div>
           <Prose html={b.html || ""} />
           <Actions b={b} />
         </div>
@@ -344,6 +348,10 @@ function Stream() {
   if (!html) return null;
   return (
     <div className="msg assistant">
+      <div className="msg-who">
+        <StarBuddy size="xs" mood="streaming" />
+        <span>Macron</span>
+      </div>
       <Prose html={html} streaming />
     </div>
   );

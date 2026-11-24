@@ -142,6 +142,9 @@ func queryAutopsyDB(ctx context.Context, dbPath, action, query string, limit int
 						fmt.Fprintf(&sb, "- %s: %d\n", name, cnt)
 					}
 				}
+				if err := rows.Err(); err != nil {
+					return "", err
+				}
 			}
 		}
 		return CapOutput(sb.String()), nil
@@ -171,6 +174,9 @@ func queryAutopsyDB(ctx context.Context, dbPath, action, query string, limit int
 				n++
 				fmt.Fprintf(&sb, "- [%s] %s = %s\n", artType, attrName, truncateLine(val, 110))
 			}
+		}
+		if err := rows.Err(); err != nil {
+			return "", err
 		}
 		if n == 0 {
 			sb.WriteString("No matching artifacts.\n")
@@ -217,6 +223,9 @@ func queryAutopsyDB(ctx context.Context, dbPath, action, query string, limit int
 				fmt.Fprintf(&sb, "- %s%s (%dB, mtime=%s%s)\n", parent, name, size, ts, hashNote)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
 		if n == 0 {
 			sb.WriteString("No matching file records.\n")
 		}
@@ -241,6 +250,9 @@ func queryAutopsyDB(ctx context.Context, dbPath, action, query string, limit int
 				fmt.Fprintf(&sb, "- %s | %s%s (%dB)\n",
 					time.Unix(mtime, 0).UTC().Format("2006-01-02 15:04:05"), parent, name, size)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			return "", err
 		}
 		return CapOutput(sb.String()), nil
 	}

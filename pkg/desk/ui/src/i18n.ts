@@ -251,6 +251,15 @@ const FA: Record<string, string> = {
   "Updating desktop app": "به‌روزرسانی اپلیکیشن دسکتاپ",
   "Ready to restart": "آماده برای راه‌اندازی مجدد",
   "Retry": "تلاش مجدد",
+  "Ready": "آماده",
+  "Listening…": "گوش به زنگ…",
+  "Writing…": "در حال نوشتن…",
+  "Waiting for your approval": "منتظر تأیید شما",
+  "Detected local model servers": "سرورهای مدل محلی شناسایی‌شده",
+  "Scanning…": "در حال جستجو…",
+  "Rescan": "جستجوی مجدد",
+  "Export diagnostics": "خروجی گزارش سلامت",
+  "Exporting…": "در حال آماده‌سازی…",
 };
 
 export function tr(lang: Lang, key: string): string {

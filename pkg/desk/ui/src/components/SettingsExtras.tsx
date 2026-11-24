@@ -567,6 +567,28 @@ export function AboutCard() {
   const info = useStore((s) => s.info);
   const creator = info.creator || "SpectorDev";
   const url = info.creatorUrl || "https://t.me/SpectorDev";
+  const [exporting, setExporting] = useState(false);
+
+  const exportDiag = async () => {
+    setExporting(true);
+    try {
+      const data = await server.diagnostics();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `macron-diagnostics-v${info.version || "1.19.0"}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 1500);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="about-card">
       <div className="about-top">
@@ -583,9 +605,14 @@ export function AboutCard() {
             {info.host ? " · " + info.host : ""}
           </div>
         </div>
-        <a className="btn ghost sm about-link" href={url} target="_blank" rel="noreferrer" dir="ltr">
-          @SpectorDev
-        </a>
+        <div className="about-actions">
+          <button type="button" className="btn ghost sm" disabled={exporting} onClick={() => void exportDiag()}>
+            {exporting ? t("Exporting…") : t("Export diagnostics")}
+          </button>
+          <a className="btn ghost sm about-link" href={url} target="_blank" rel="noreferrer" dir="ltr">
+            @SpectorDev
+          </a>
+        </div>
       </div>
     </div>
   );

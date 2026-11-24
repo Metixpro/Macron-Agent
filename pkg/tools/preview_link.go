@@ -61,7 +61,7 @@ func (r *Registry) StartLivePreview(sessionID string, port int, subDir string) (
 		if cur.dir == dir {
 			return fmt.Sprintf("The preview already runs: http://127.0.0.1:%d/ (serving %s). From another computer: ssh -L %d:127.0.0.1:%d this-server", cur.port, subDirOr(subDir), cur.port, cur.port), nil
 		}
-		_ = cur.server.Shutdown(context.Background())
+		shutdownPreviewServer(cur.server)
 		delete(activePreviews, sessionID)
 	}
 	l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(max(port, 0)))
@@ -88,11 +88,22 @@ func subDirOr(s string) string {
 	return s
 }
 
+func shutdownPreviewServer(srv *http.Server) {
+	if srv == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		_ = srv.Close()
+	}
+}
+
 func StopLivePreview(sessionID string) bool {
 	previewMu.Lock()
 	defer previewMu.Unlock()
 	if srv, ok := activePreviews[sessionID]; ok {
-		_ = srv.server.Shutdown(context.Background())
+		shutdownPreviewServer(srv.server)
 		delete(activePreviews, sessionID)
 		return true
 	}

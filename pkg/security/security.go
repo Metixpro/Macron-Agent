@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -175,4 +176,25 @@ func truncateLine(s string, maxRunes int) string {
 		return s
 	}
 	return string(r[:maxRunes]) + "…"
+}
+
+// ReadFileCapped reads a file up to maxBytes, returning an error if it exceeds the cap
+// so accidentally pointing a security report parser at a huge file cannot OOM the agent.
+func ReadFileCapped(path string, maxBytes int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil && fi.Size() > maxBytes {
+		return nil, fmt.Errorf("file %s is too large (%d bytes; max %d bytes)", path, fi.Size(), maxBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("file %s exceeds %d byte safety limit", path, maxBytes)
+	}
+	return data, nil
 }
