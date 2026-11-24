@@ -207,3 +207,30 @@ func TestSetExecutionMode_ConcurrentSafe(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestApplySandboxEnvIsolation(t *testing.T) {
+	ws := t.TempDir()
+	env := map[string]string{
+		"PATH":             "/usr/bin",
+		"OPENAI_API_KEY":   "sk-secret-123",
+		"GITHUB_TOKEN":     "ghp_secret_456",
+		"WAZUH_API_PASS":   "wazuh-secret",
+		"SAFE_PROJECT_VAR": "keep-me",
+	}
+	applySandboxEnv(env, ws, SandboxWindows)
+
+	for _, secret := range []string{"OPENAI_API_KEY", "GITHUB_TOKEN", "WAZUH_API_PASS"} {
+		if _, exists := env[secret]; exists {
+			t.Fatalf("expected secret env %s to be stripped in sandbox mode", secret)
+		}
+	}
+	if env["SAFE_PROJECT_VAR"] != "keep-me" {
+		t.Fatalf("expected non-secret env var to remain intact")
+	}
+	if env["MACRON_SANDBOX_ACTIVE"] != "1" || env["MACRON_SANDBOX_BACKEND"] != SandboxWindows {
+		t.Fatalf("expected sandbox markers in env, got active=%q backend=%q", env["MACRON_SANDBOX_ACTIVE"], env["MACRON_SANDBOX_BACKEND"])
+	}
+	if !strings.HasPrefix(env["TEMP"], ws) || !strings.HasPrefix(env["TMP"], ws) {
+		t.Fatalf("expected TEMP/TMP to be isolated inside workspace %s, got TEMP=%q TMP=%q", ws, env["TEMP"], env["TMP"])
+	}
+}

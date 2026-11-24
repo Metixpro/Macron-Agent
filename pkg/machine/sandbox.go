@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	SandboxOff   = "off"
-	SandboxBwrap = "bwrap"
-	SandboxAuto  = "auto"
+	SandboxOff     = "off"
+	SandboxBwrap   = "bwrap"
+	SandboxWindows = "windows-job"
+	SandboxAuto    = "auto"
 )
 
 var homeSecrets = []string{
@@ -24,9 +25,22 @@ var homeSecrets = []string{
 	".config/gh", ".config/gcloud", ".config/rclone",
 }
 
+var sandboxSecretEnvKeys = map[string]bool{
+	"MACRON_API_KEY": true, "OPENAI_API_KEY": true, "ANTHROPIC_API_KEY": true,
+	"GEMINI_API_KEY": true, "OPENROUTER_API_KEY": true, "DEEPSEEK_API_KEY": true,
+	"TELEGRAM_BOT_TOKEN": true, "GITHUB_TOKEN": true, "GH_TOKEN": true,
+	"AWS_SECRET_ACCESS_KEY": true, "AWS_SESSION_TOKEN": true, "AZURE_CLIENT_SECRET": true,
+	"SLACK_BOT_TOKEN": true, "SLACK_WEBHOOK_URL": true, "DISCORD_BOT_TOKEN": true,
+	"DISCORD_WEBHOOK_URL": true, "NOTION_TOKEN": true, "TRELLO_TOKEN": true,
+	"TODOIST_API_TOKEN": true, "WAZUH_API_PASS": true, "GMAIL_REFRESH_TOKEN": true,
+	"GMAIL_CLIENT_SECRET": true, "SMTP_PASS": true, "BALE_BOT_TOKEN": true,
+	"RUBIKA_BOT_TOKEN": true, "EITAA_TOKEN": true, "WHATSAPP_ACCESS_TOKEN": true,
+}
+
 var homeCaches = []string{".cache", "go", ".npm", ".cargo/registry", ".cargo/git", ".rustup", ".m2", ".gradle", ".local/share/pnpm", ".bun/install"}
 
 type sandbox struct {
+	backend    string
 	bwrap      string
 	base       string
 	macronHome string
@@ -78,8 +92,12 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 	if mode == "" {
 		mode = strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_SANDBOX")))
 	}
-	if mode == "" && execMode == "sandbox" {
-		mode = SandboxBwrap
+	if mode == "" {
+		if runtime.GOOS == "windows" {
+			mode = SandboxWindows
+		} else if execMode == "sandbox" {
+			mode = SandboxBwrap
+		}
 	}
 
 	switch {
@@ -88,13 +106,24 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 			return nil, "", errors.New("sandbox execution mode is required, but sandbox setting is 'off'")
 		}
 		return nil, "", nil
-	case mode == SandboxBwrap || mode == SandboxAuto || mode == "on" || mode == "1" || mode == "true" || mode == "yes":
+	case mode == SandboxWindows || mode == SandboxBwrap || mode == SandboxAuto || mode == "on" || mode == "1" || mode == "true" || mode == "yes":
 	default:
-		msg := "unknown sandbox " + strconv.Quote(mode) + " (use bwrap or off)"
+		msg := "unknown sandbox " + strconv.Quote(mode) + " (use bwrap, windows-job, auto, or off)"
 		if execMode == "sandbox" {
 			return nil, "", fmt.Errorf("%s, but strict sandbox mode is required", msg)
 		}
 		return nil, msg + "; commands run without one", nil
+	}
+
+	// Native Windows Job-Object + Workspace-Isolated Sandbox (zero external dependencies)
+	if runtime.GOOS == "windows" {
+		sb := &sandbox{
+			backend:    SandboxWindows,
+			base:       cfg.BaseDir,
+			macronHome: cfg.HomeDir,
+			noNet:      cfg.SandboxNoNet || offWord(os.Getenv("MACRON_SANDBOX_NET")),
+		}
+		return sb, "", nil
 	}
 
 	bw, err := exec.LookPath("bwrap")
@@ -110,6 +139,7 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 	}
 
 	sb := &sandbox{
+		backend:    SandboxBwrap,
 		bwrap:      bw,
 		base:       cfg.BaseDir,
 		macronHome: cfg.HomeDir,
@@ -159,6 +189,9 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 }
 
 func (sb *sandbox) wrap(top, dir string, argv []string) []string {
+	if sb.backend != SandboxBwrap || sb.bwrap == "" {
+		return argv
+	}
 	a := []string{
 		sb.bwrap,
 		"--ro-bind", "/", "/",
@@ -247,6 +280,40 @@ func (s *Machine) sandboxed(ws string, argv []string) []string {
 		return argv
 	}
 	return sb.wrap(topOf(ws), ws, argv)
+}
+
+// SandboxBackend returns the active isolation backend ("bwrap", "windows-job", or "").
+func (s *Machine) SandboxBackend() string {
+	s.sbMu.RLock()
+	sb := s.sb
+	s.sbMu.RUnlock()
+	if sb == nil {
+		return ""
+	}
+	return sb.backend
+}
+
+// applySandboxEnv strips sensitive credential variables and isolates temp
+// directories inside the active workspace when running in sandbox mode.
+func applySandboxEnv(env map[string]string, ws, backend string) {
+	for k := range env {
+		if sandboxSecretEnvKeys[strings.ToUpper(k)] {
+			delete(env, k)
+		}
+	}
+	if ws != "" {
+		tmpDir := filepath.Join(ws, ".macron-sandbox-tmp")
+		if os.MkdirAll(tmpDir, 0o700) == nil {
+			putEnv(env, "TEMP", tmpDir)
+			putEnv(env, "TMP", tmpDir)
+			putEnv(env, "TMPDIR", tmpDir)
+			putEnv(env, "MPLCONFIGDIR", filepath.Join(tmpDir, "mpl"))
+		}
+	}
+	putEnv(env, "MACRON_SANDBOX_ACTIVE", "1")
+	if backend != "" {
+		putEnv(env, "MACRON_SANDBOX_BACKEND", backend)
+	}
 }
 
 func (s *Machine) Sandboxed() bool {

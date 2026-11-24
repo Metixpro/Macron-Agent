@@ -30,6 +30,7 @@ export function Header() {
           {"‎" + shortPath(path, home) + "‎"}
         </span>
       </div>
+      <IsolationPill />
       <ChangesToggle />
       <PlanToggle />
       <button type="button" className="search" onClick={() => openDialog({ kind: "palette", mode: "root" })}>
@@ -41,6 +42,31 @@ export function Header() {
         <Icon name="edit" />
       </button>
     </header>
+  );
+}
+
+function IsolationPill() {
+  const t = useT();
+  const info = useStore((s) => s.info);
+  const running = useStore((s) => s.live.running);
+  if (!info.version) return null;
+  const sandboxed = Boolean(info.sandboxed);
+  const backend = info.sandboxBackend === "windows-job" ? "Windows Job" : info.sandboxBackend === "bwrap" ? "bwrap" : "";
+  const mode = info.executionMode || "best-effort";
+  const label = sandboxed ? t("Sandbox") : mode === "local" ? t("Local") : t("Best-effort");
+  const title = sandboxed
+    ? `${t("Sandbox active")}${backend ? ` (${backend})` : ""} — ${t("Click to configure")}`
+    : `${t("Execution mode")}: ${label} — ${t("Click to configure")}`;
+  return (
+    <button
+      type="button"
+      className={"iso-pill" + (sandboxed ? " on" : "") + (running ? " live" : "")}
+      title={title}
+      onClick={() => openDialog({ kind: "settings" })}
+    >
+      <span className="iso-dot" aria-hidden="true" />
+      <span>{label}</span>
+    </button>
   );
 }
 

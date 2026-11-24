@@ -13,6 +13,7 @@ import { connect } from "./events";
 import { useProjectName } from "./hooks";
 import { applyLang, useT } from "./i18n";
 import { Icon } from "./icons";
+import { restoreSavedPalette } from "./palettes";
 import { getState, setState, useStore } from "./store";
 
 function useShortcuts() {
@@ -142,6 +143,10 @@ export function App() {
   useEffect(() => {
     applyLang(lang);
   }, [lang]);
+
+  useEffect(() => {
+    void restoreSavedPalette();
+  }, []);
 
   useEffect(() => connect(), []);
   useShortcuts();

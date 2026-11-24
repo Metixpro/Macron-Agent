@@ -8,25 +8,26 @@ import (
 )
 
 type Info struct {
-	Version       string `json:"version"`
-	Creator       string `json:"creator,omitempty"`
-	CreatorURL    string `json:"creatorUrl,omitempty"`
-	License       string `json:"license,omitempty"`
-	Platform      string `json:"platform"`
-	Host          string `json:"host"`
-	Model         string `json:"model"`
-	Provider      string `json:"provider"`
-	Effort        string `json:"effort"`
-	Approvals     string `json:"approvals"`
-	ExecutionMode string `json:"executionMode"`
-	Sandboxed     bool   `json:"sandboxed"`
-	Yolo          bool   `json:"yolo"`
-	Failover      bool   `json:"failover"`
-	RoutingActive bool   `json:"routingActive,omitempty"`
-	MoaActive     string `json:"moaActive,omitempty"`
-	ContextWindow int    `json:"contextWindow"`
-	Connections   int    `json:"connections"`
-	Services      int    `json:"services"`
+	Version        string `json:"version"`
+	Creator        string `json:"creator,omitempty"`
+	CreatorURL     string `json:"creatorUrl,omitempty"`
+	License        string `json:"license,omitempty"`
+	Platform       string `json:"platform"`
+	Host           string `json:"host"`
+	Model          string `json:"model"`
+	Provider       string `json:"provider"`
+	Effort         string `json:"effort"`
+	Approvals      string `json:"approvals"`
+	ExecutionMode  string `json:"executionMode"`
+	Sandboxed      bool   `json:"sandboxed"`
+	SandboxBackend string `json:"sandboxBackend,omitempty"`
+	Yolo           bool   `json:"yolo"`
+	Failover       bool   `json:"failover"`
+	RoutingActive  bool   `json:"routingActive,omitempty"`
+	MoaActive      string `json:"moaActive,omitempty"`
+	ContextWindow  int    `json:"contextWindow"`
+	Connections    int    `json:"connections"`
+	Services       int    `json:"services"`
 }
 
 type Tuning struct {

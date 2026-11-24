@@ -157,6 +157,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/providers/models", s.listModelsAPI)
 	mux.HandleFunc("GET /api/providers/local", s.localProvidersAPI)
 	mux.HandleFunc("GET /api/diagnostics", s.diagnosticsAPI)
+	mux.HandleFunc("GET /api/themes", s.themesAPI)
 	mux.HandleFunc("POST /api/failover", s.failoverAPI)
 	mux.HandleFunc("GET /api/routing", s.routingGetAPI)
 	mux.HandleFunc("POST /api/routing", s.routingSaveAPI)

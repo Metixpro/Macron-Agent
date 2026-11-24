@@ -166,6 +166,7 @@ export const server = {
   listModels: (url: string, key: string) => call<{ models: string[] | null }>("POST", r("/api/providers/models"), { url, key }),
   localProviders: () => call<{ servers: { id: string; name: string; baseUrl: string; models: string[] }[] }>("GET", r("/api/providers/local")),
   diagnostics: () => call<Record<string, unknown>>("GET", r("/api/diagnostics")),
+  themes: () => call<{ themes: { id: string; name: string; appearance: "dark" | "light"; builtin?: boolean; swatches: [string, string, string]; colors: Record<string, string> }[]; dir: string }>("GET", r("/api/themes")),
   plugins: () => call<{ plugins: Plugin[] }>("GET", r("/api/plugins")),
   addPlugin: (p: { name: string; target: string; args: string[]; env: Record<string, string> }) => call<Plugin>("POST", r("/api/plugins"), p),
   enablePlugin: (key: string, on: boolean) => call<Plugin>("POST", r("/api/plugins/") + encodeURIComponent(key) + "/enable", { on }),

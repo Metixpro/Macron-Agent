@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { follow, onServer, openDialog, openFile, saveFile } from "../actions";
+import { composer, follow, onServer, openDialog, openFile, saveFile } from "../actions";
 import { fileURL } from "../api";
 import { bidi, bytes, clock, copyText, prettyArgs, shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
@@ -364,17 +364,42 @@ function Intro() {
   const path = useStore((s) => shortPath(s.projects.find((p) => p.id === s.current)?.path || "", s.home));
   const mod = useMod();
   const noModel = useStore((s) => s.online === true && !s.info.model);
+  const starters: { icon: "alert" | "code" | "open" | "steps"; title: string; desc: string; prompt: string }[] = [
+    {
+      icon: "alert",
+      title: t("Security & DFIR Audit"),
+      desc: t("Wazuh, Wireshark, Suricata, Zeek, Lynis, Trivy, Semgrep & Autopsy"),
+      prompt: "Check security toolkit status (trivy, semgrep, wireshark, wazuh, suricata, zeek, lynis, autopsy) and audit this workspace.",
+    },
+    {
+      icon: "code",
+      title: t("Code & Git Review"),
+      desc: t("Map files, inspect git changes, find bugs & run tests"),
+      prompt: "Map this workspace structure, check git status, and highlight any bugs or improvements.",
+    },
+    {
+      icon: "open",
+      title: t("Browser & Web Research"),
+      desc: t("Open websites, interact with forms, and capture screenshots"),
+      prompt: "Search the web and open the top result in the browser with a clean summary.",
+    },
+    {
+      icon: "steps",
+      title: t("Data & Docs Studio"),
+      desc: t("Query CSV/SQLite data, build charts, or export reports"),
+      prompt: "Inspect the data and documents in this folder and summarize the key insights.",
+    },
+  ];
   const keys: [string, string[]][] = [
     [t("Command palette"), [mod, "K"]],
+    [t("Search chats"), [mod, "Shift", "F"]],
+    [t("Plan mode"), [mod, "Shift", "P"]],
     [t("New conversation"), [mod, "N"]],
-    [t("Plan before changing anything"), [mod, "Shift", "P"]],
-    [t("Open another folder"), [mod, "O"]],
-    [t("Stop the current job"), ["Esc"]],
   ];
   return (
     <div className="intro">
       <div className="intro-hero">
-        <StarBuddy size="lg" />
+        <StarBuddy size="lg" interactive />
         <div className="intro-head">
           <div className="intro-name">{name === "Home" ? t("Home") : name}</div>
           <div className="intro-path" dir="ltr">
@@ -398,18 +423,39 @@ function Intro() {
           ? t("Conversations that don't belong to a project live here. Open a folder to give Macron a project to work in.")
           : t("Macron reads and changes files in this folder, runs commands here, and looks things up when it needs to.")}
       </p>
-      <dl className="keys">
+      <div className="starter-grid">
+        {starters.map((st) => (
+          <button
+            key={st.title}
+            type="button"
+            className="starter-card"
+            onClick={() => {
+              composer.prepend(st.prompt);
+              composer.focus();
+            }}
+          >
+            <span className="starter-ico">
+              <Icon name={st.icon} size={15} />
+            </span>
+            <span className="starter-body">
+              <span className="starter-title">{st.title}</span>
+              <span className="starter-desc">{st.desc}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="intro-keys">
         {keys.map(([label, combo]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>
+          <span key={label} className="ikey">
+            <span>{label}</span>
+            <span className="ikey-kbd" dir="ltr">
               {combo.map((k) => (
                 <kbd key={k}>{k}</kbd>
               ))}
-            </dd>
-          </div>
+            </span>
+          </span>
         ))}
-      </dl>
+      </div>
     </div>
   );
 }

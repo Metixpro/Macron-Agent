@@ -107,6 +107,7 @@ export interface Info {
   approvals: string;
   executionMode?: string;
   sandboxed?: boolean;
+  sandboxBackend?: string;
   yolo: boolean;
   failover?: boolean;
   routingActive?: boolean;
@@ -114,6 +115,15 @@ export interface Info {
   contextWindow: number;
   connections: number;
   services: number;
+}
+
+export interface ThemePalette {
+  id: string;
+  name: string;
+  appearance: "dark" | "light";
+  builtin?: boolean;
+  swatches: [string, string, string];
+  colors: Record<string, string>;
 }
 
 export type Mode = "build" | "plan";
