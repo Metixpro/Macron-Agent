@@ -5,17 +5,12 @@ import {
   addServer,
   answer,
   authServer,
-  connectServer,
-  disconnectServer,
   installOnServer,
-  removeServer,
   effortAbout,
   effortLevels,
   effortName,
-  effortNote,
   exportConversation,
   setTuning,
-  windowName,
   chooseModel,
   closeDialog,
   compact,
@@ -36,18 +31,16 @@ import {
 import { server } from "../api";
 import { shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
-import { useT } from "../i18n";
-import type { Lang } from "../i18n";
 import { Icon } from "../icons";
 import type { IconName } from "../icons";
-import { applyPalette, clearPaletteOverrides, getSavedPaletteId, loadPalettes } from "../palettes";
 import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
-import type { Ask, Listing, Plugin, ThemePalette } from "../types";
-import { ProviderEditor, ProvidersSection } from "./ProviderManager";
-import { RoutingMoaSection } from "./RoutingMoaSection";
+import type { Ask, Listing, Plugin } from "../types";
+import { ProviderEditor } from "./ProviderManager";
 import { SessionSearch } from "./SessionSearch";
-import { AboutCard, ConnectionsSection, MemorySection, SkillsSection, SoulSection, StatusDialog, UpdatesSection } from "./SettingsExtras";
+import { StatusDialog } from "./SettingsExtras";
+import { SettingsWorkspace } from "./settings/SettingsWorkspace";
+import { StarBuddy } from "./StarBuddy";
 
 function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; children: ReactNode }) {
   return (
@@ -93,11 +86,7 @@ export function Dialogs() {
         </Modal>
       );
     case "settings":
-      return (
-        <Modal kind="settings" dismiss>
-          <Settings />
-        </Modal>
-      );
+      return <SettingsWorkspace initialSection={d.section || "general"} />;
     case "status":
       return (
         <Modal kind="settings" dismiss>
@@ -625,9 +614,7 @@ function AskDialog({ ask }: { ask: Ask }) {
   return (
     <>
       <div className="ask-head">
-        <span className="ask-icon">
-          <Icon name="alert" size={16} />
-        </span>
+        <StarBuddy variant="stage" size="md" mood="asking" interactive />
         <div>
           <h3>{ask.title || "Allow this?"}</h3>
           <div className="sub">Macron wants to run this in {name}.</div>
@@ -1051,352 +1038,3 @@ function Choice<T extends string>({ value, options, onPick }: { value: T; option
   );
 }
 
-function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
-  return (
-    <section className="set">
-      <div className="set-text">
-        <div className="set-title">{title}</div>
-        {help && <div className="set-help">{help}</div>}
-      </div>
-      <div className="set-control">{children}</div>
-    </section>
-  );
-}
-
-function Settings() {
-  const t = useT();
-  const info = useStore((s) => s.info);
-  const theme = useStore((s) => s.theme);
-  const lang = useStore((s) => s.lang);
-  const servers = useStore((s) => s.servers);
-  const tuning = useStore((s) => s.tuning);
-  const mod = useMod();
-  const [plugins, setPlugins] = useState<Plugin[] | null>(null);
-  const [palettes, setPalettes] = useState<ThemePalette[]>([]);
-  const [activePalette, setActivePalette] = useState<string>(() => getSavedPaletteId());
-  const dialog = useStore((s) => s.dialog);
-  const loadPlugins = () =>
-    server
-      .plugins()
-      .then((r) => setPlugins(r.plugins || []))
-      .catch(() => setPlugins([]));
-  useEffect(() => {
-    if (dialog?.kind === "settings") {
-      loadPlugins();
-      void loadPalettes().then((r) => setPalettes(r.themes || []));
-    }
-  }, [dialog?.kind]);
-  const togglePlugin = async (p: Plugin) => {
-    setPlugins((list) => (list || []).map((x) => (x.key === p.key ? { ...x, enabled: !p.enabled, status: p.enabled ? "off" : "connecting" } : x)));
-    try {
-      await server.enablePlugin(p.key, !p.enabled);
-    } catch (e) {
-      fail(e);
-    }
-    loadPlugins();
-  };
-  const dropPlugin = async (p: Plugin) => {
-    try {
-      await server.removePlugin(p.key);
-    } catch (e) {
-      fail(e);
-    }
-    loadPlugins();
-  };
-
-  const apply = async (fn: () => Promise<{ info: typeof info }>, _done?: string) => {
-    try {
-      const r = await fn();
-      setState({ info: r.info });
-    } catch (e) {
-      fail(e);
-    }
-  };
-
-  const pickThemeMode = (next: Theme) => {
-    clearPaletteOverrides();
-    applyPalette(null);
-    setActivePalette("");
-    setTheme(next);
-  };
-
-  const pickPalette = (p: ThemePalette) => {
-    setTheme(p.appearance);
-    applyPalette(p);
-    setActivePalette(p.id);
-  };
-
-  const isLinux = !info.platform || info.platform === "linux";
-  const isWindows = info.platform === "windows";
-  const backend = info.sandboxBackend || "";
-  const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
-  const executionHelp = t(
-    {
-      sandbox: info.sandboxed
-        ? isWindows || backend === "windows-job"
-          ? "Windows Job-Object sandbox is active (process, memory, clipboard & workspace temp isolation)."
-          : "Strict bubblewrap isolation is active (fail-closed)."
-        : isWindows
-          ? "Strict Windows Job-Object sandbox (process, memory, clipboard & secret-env isolation)."
-          : isLinux
-            ? "Strict bubblewrap isolation (fail-closed if unavailable)."
-            : "Strict sandbox isolation (Linux bubblewrap / Windows Job-Object).",
-      "best-effort": info.sandboxed
-        ? isWindows || backend === "windows-job"
-          ? "Windows Job-Object sandbox active; falls back to local if unavailable."
-          : "Sandbox active; falls back to local if unavailable."
-        : isWindows
-          ? "Uses native Windows Job-Object sandbox when enabled."
-          : isLinux
-            ? "Unsandboxed; uses bubblewrap when available."
-            : "Unsandboxed; uses platform sandbox when available.",
-      local: "Sandbox bypassed. Commands run directly on the host.",
-    }[executionMode],
-  );
-
-  const approvals = (info.approvals || "smart") as "smart" | "manual" | "off";
-  const approvalHelp = t(
-    {
-      smart: "Safe commands run on their own. Anything risky waits for you.",
-      manual: "Every command waits for your OK.",
-      off: "Nothing waits. Only for machines you can afford to break.",
-    }[approvals],
-  );
-
-  return (
-    <>
-      <div className="settings-head">
-        <h3>{t("Settings")}</h3>
-        <button type="button" className="icon-btn" title="Close (Esc)" onClick={closeDialog}>
-          <Icon name="x" />
-        </button>
-      </div>
-      <div className="settings-body">
-        <div className="set-group">{t("General")}</div>
-        <Section title={t("Appearance")}>
-          <Choice<Theme>
-            value={theme}
-            options={[
-              ["system", t("System")],
-              ["light", t("Light")],
-              ["dark", t("Dark")],
-            ]}
-            onPick={pickThemeMode}
-          />
-        </Section>
-        {palettes.length > 0 && (
-          <div className="palette-wrap">
-            <div className="palette-label">
-              <span>{t("Theme palette")}</span>
-              <span className="palette-hint" dir="ltr">
-                ~/.macron/themes/*.json
-              </span>
-            </div>
-            <div className="palette-row" role="radiogroup" aria-label={t("Theme palette")}>
-              {palettes.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={activePalette === p.id}
-                  className={"palette-pill" + (activePalette === p.id ? " on" : "")}
-                  onClick={() => pickPalette(p)}
-                >
-                  <span className="swatches" aria-hidden="true">
-                    {p.swatches.map((hex, i) => (
-                      <i key={i} style={{ background: hex }} />
-                    ))}
-                  </span>
-                  <span>{p.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <Section title={t("Language")}>
-          <Choice<Lang>
-            value={lang}
-            options={[
-              ["en", "English"],
-              ["fa", "فارسی"],
-            ]}
-            onPick={setLang}
-          />
-        </Section>
-        <UpdatesSection />
-        <div className="set-group">{t("Safety")}</div>
-        <Section title={t("Command approvals")} help={approvalHelp}>
-          <Choice
-            value={approvals}
-            options={[
-              ["smart", t("Smart")],
-              ["manual", t("Always ask")],
-              ["off", t("Never ask")],
-            ]}
-            onPick={(m) => apply(() => server.setApprovals(m))}
-          />
-        </Section>
-        <Section title={t("Execution mode")} help={executionHelp}>
-          <Choice
-            value={executionMode}
-            options={[
-              ["sandbox", t("Sandbox")],
-              ["best-effort", t("Best-effort")],
-              ["local", t("Local")],
-            ]}
-            onPick={(m) => apply(() => server.setExecutionMode(m))}
-          />
-        </Section>
-        <Section title={t("YOLO for 30 minutes")} help={t(info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while.")}>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={info.yolo}
-            className={"switch" + (info.yolo ? " on" : "")}
-            onClick={() => apply(() => server.setYolo(!getState().info.yolo))}
-          >
-            <span />
-          </button>
-        </Section>
-        <ProvidersSection />
-        <RoutingMoaSection />
-        {tuning && tuning.model && (
-          <>
-            <Section title={t("Effort")} help={effortNote(tuning)}>
-              <Choice
-                value={tuning.effort || "auto"}
-                options={effortLevels.map((l) => [l || "auto", l === "ultracode" ? "Ultra" : effortName(l)] as [string, string])}
-                onPick={(v) => setTuning("effort", v)}
-              />
-            </Section>
-            <Section
-              title={t("Context window")}
-              help={tuning.window ? "Set by you. A window larger than the model really has makes requests fail." : `Worked out from the model's name: ${windowName(tuning.autoWindow)} tokens.`}
-            >
-              <Choice
-                value={String(tuning.window)}
-                options={[
-                  ["0", "Auto"],
-                  ...(["128000", "200000", "400000", "1000000"].includes(String(tuning.window)) || !tuning.window ? [] : [[String(tuning.window), windowName(tuning.window)] as [string, string]]),
-                  ["128000", "128k"],
-                  ["200000", "200k"],
-                  ["400000", "400k"],
-                  ["1000000", "1M"],
-                ]}
-                onPick={(v) => setTuning("window", Number(v))}
-              />
-            </Section>
-            <Section title={t("Temperature")} help="Lower answers are exact and repeatable, higher ones are more varied.">
-              <Choice
-                value={tuning.temperature === null ? "auto" : String(tuning.temperature)}
-                options={[
-                  ["auto", "Auto"],
-                  ["0", "0"],
-                  ["0.2", "0.2"],
-                  ["0.5", "0.5"],
-                  ["0.7", "0.7"],
-                  ["1", "1"],
-                  ...(tuning.tempLimit >= 2 ? [["1.5", "1.5"] as [string, string]] : []),
-                ]}
-                onPick={(v) => setTuning("temperature", v === "auto" ? null : Number(v))}
-              />
-            </Section>
-          </>
-        )}
-        <SkillsSection />
-        <MemorySection />
-        <SoulSection />
-        <div className="set-group">{t("MCP servers and plugins")}</div>
-        <div className="set-list">
-          {plugins === null && <div className="empty-row">{t("Loading…")}</div>}
-          {plugins && !plugins.length && <div className="empty-row">None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.</div>}
-          {(plugins || []).map((p) => (
-            <div key={p.key} className="set-row static">
-              <span className={"state" + (p.enabled && p.status === "ready" && !p.error ? " ok" : p.enabled && p.error ? " bad" : "")} />
-              <span className="grow">
-                <span className="name">{p.name}</span>
-                <span className={"meta" + (p.error ? " bad-text" : "")} title={p.target}>
-                  {(p.kind === "mcp" ? "MCP" : "Plugin") + " · " + pluginStatus(p)}
-                </span>
-              </span>
-              <button type="button" role="switch" aria-checked={p.enabled} title={p.enabled ? "Turn off" : "Turn on"} className={"switch" + (p.enabled ? " on" : "")} onClick={() => togglePlugin(p)}>
-                <span />
-              </button>
-              {p.removable && (
-                <button type="button" className="icon-btn" title={t("Remove")} onClick={() => dropPlugin(p)}>
-                  <Icon name="x" size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button type="button" className="set-row" onClick={() => openDialog({ kind: "mcp-add" })}>
-            <Icon name="plus" size={14} />
-            <span className="grow">
-              <span className="name">{t("Add an MCP server…")}</span>
-            </span>
-          </button>
-        </div>
-        <div className="set-group">{t("Servers")}</div>
-        <div className="set-list">
-          {!servers.length && <div className="empty-row">No servers yet. Add one to let Macron work on a VPS or in WSL.</div>}
-          {servers.map((s) => (
-            <div key={s.id} className="set-row static">
-              <span className={"state" + (s.state === "ready" ? " ok" : s.state === "failed" ? " bad" : "")} />
-              <span className="grow">
-                <span className="name">{s.name}</span>
-                <span className="meta">
-                  {s.state === "failed" && s.error ? s.error : s.kind === "wsl" ? "WSL" + (s.host ? " · " + s.host : "") : (s.user ? s.user + "@" : "") + s.host}
-                  {s.version ? " · Macron " + s.version : ""}
-                </span>
-              </span>
-              {s.state === "ready" ? (
-                <button type="button" className="btn ghost" onClick={() => disconnectServer(s.id)}>
-                  {t("Disconnect")}
-                </button>
-              ) : (
-                <button type="button" className="btn ghost" disabled={s.state === "connecting" || s.state === "installing"} onClick={() => connectServer(s.id)}>
-                  {t("Connect")}
-                </button>
-              )}
-              <button type="button" className="icon-btn" title={t("Remove")} onClick={() => removeServer(s.id)}>
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-          ))}
-          <button type="button" className="set-row" onClick={() => openDialog({ kind: "server-add" })}>
-            <Icon name="plus" size={14} />
-            <span className="grow">
-              <span className="name">{t("Add a server…")}</span>
-            </span>
-          </button>
-        </div>
-        <ConnectionsSection />
-        <div className="set-group">{t("Keyboard")}</div>
-        <dl className="keys compact">
-          {(
-            [
-              [t("Send"), ["Enter"]],
-              [t("New line"), ["Shift", "Enter"]],
-              [t("Stop"), ["Esc"]],
-              [t("Command palette"), [mod, "K"]],
-              [t("Search chats"), [mod, "Shift", "F"]],
-              [t("New conversation"), [mod, "N"]],
-              [t("Plan mode"), [mod, "Shift", "P"]],
-              [t("Open folder"), [mod, "O"]],
-            ] as [string, string[]][]
-          ).map(([label, combo]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>
-                {combo.map((k) => (
-                  <kbd key={k}>{k}</kbd>
-                ))}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <AboutCard />
-      </div>
-    </>
-  );
-}

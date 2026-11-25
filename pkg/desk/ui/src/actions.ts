@@ -3,7 +3,7 @@ import { local } from "./format";
 import { applyLang } from "./i18n";
 import type { Lang } from "./i18n";
 import { getState, setState } from "./store";
-import type { Dialog, RightTab, Theme } from "./store";
+import type { Density, Dialog, MotionPref, RightTab, SettingsSectionId, Theme } from "./store";
 import type { FileRef, Mode, Snapshot } from "./types";
 
 export const composer = {
@@ -187,11 +187,16 @@ export async function revertFile(path: string): Promise<boolean> {
 export function setRightTab(tab: RightTab) {
   if (tab === "changes") {
     local.set("changesOpen", true);
-    setState({ rightTab: "changes", changesOpen: true });
+    local.set("companionOpen", true);
+    setState({ rightTab: "changes", changesOpen: true, companionOpen: true });
     loadChanges();
-  } else {
+  } else if (tab === "plan") {
     local.set("planOpen", true);
-    setState({ rightTab: "plan", planOpen: true });
+    local.set("companionOpen", true);
+    setState({ rightTab: "plan", planOpen: true, companionOpen: true });
+  } else {
+    local.set("companionOpen", true);
+    setState({ rightTab: "activity", companionOpen: true });
   }
 }
 
@@ -200,11 +205,50 @@ export function toggleChanges(open?: boolean) {
     const next = open ?? !(s.changesOpen && s.rightTab === "changes");
     local.set("changesOpen", next);
     if (next) {
+      local.set("companionOpen", true);
       loadChanges(s.current);
-      return { changesOpen: true, rightTab: "changes" };
+      return { changesOpen: true, companionOpen: true, rightTab: "changes" };
     }
-    return { changesOpen: false };
+    return { changesOpen: false, companionOpen: false };
   });
+}
+
+export function toggleCompanion(open?: boolean, tab?: RightTab) {
+  setState((s) => {
+    const currentlyOpen = s.companionOpen || s.changesOpen || (s.planOpen && s.rightTab === "plan" && Boolean(s.live.plan?.length));
+    const next = open ?? !currentlyOpen;
+    local.set("companionOpen", next);
+    if (!next) {
+      local.set("planOpen", false);
+      local.set("changesOpen", false);
+      return { companionOpen: false, planOpen: false, changesOpen: false };
+    }
+    const nextTab = tab ?? s.rightTab ?? "activity";
+    if (nextTab === "changes") {
+      local.set("changesOpen", true);
+      loadChanges(s.current);
+      return { companionOpen: true, changesOpen: true, rightTab: "changes" };
+    }
+    if (nextTab === "plan") {
+      local.set("planOpen", true);
+      return { companionOpen: true, planOpen: true, rightTab: "plan" };
+    }
+    return { companionOpen: true, rightTab: "activity" };
+  });
+}
+
+export function toggleSidebarCollapsed(next?: boolean) {
+  setState((s) => {
+    const collapsed = next ?? !s.sideCollapsed;
+    local.set("sideCollapsed", collapsed);
+    return { sideCollapsed: collapsed };
+  });
+}
+
+export function setSideWidth(width: number) {
+  const clamped = Math.max(216, Math.min(360, Math.round(width)));
+  local.set("sideWidth", clamped);
+  setState({ sideWidth: clamped });
 }
 
 export async function send(text: string, attachments?: FileRef[]): Promise<boolean> {
@@ -404,6 +448,30 @@ export function setTheme(theme: Theme) {
 export function applyTheme(theme: Theme) {
   const dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+
+export function setDensity(density: Density) {
+  local.set("density", density);
+  applyDensity(density);
+  setState({ density });
+}
+
+export function applyDensity(density: Density) {
+  document.documentElement.dataset.density = density;
+}
+
+export function setMotion(motion: MotionPref) {
+  local.set("motion", motion);
+  applyMotion(motion);
+  setState({ motion });
+}
+
+export function applyMotion(motion: MotionPref) {
+  document.documentElement.dataset.motion = motion;
+}
+
+export function openSettings(section?: SettingsSectionId) {
+  openDialog({ kind: "settings", section });
 }
 
 export function setLang(lang: Lang) {

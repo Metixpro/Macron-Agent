@@ -191,10 +191,12 @@ function onProjectEvent(ev: ServerEvent) {
     case "done": {
       const blocks = (ev.blocks as Block[] | null) || [];
       const ctx = (ev.context as { used: number; window: number } | undefined) || undefined;
+      const hadError = blocks.some((b) => b.kind === "error");
       setState((s) => ({
         blocks: [...s.blocks, ...blocks],
         live: { running: false, usage: ev.usage as Usage, context: ctx ?? s.live.context },
         lastTook: (ev.took as number) || 0,
+        lastTurnResult: { ok: !hadError, at: Date.now() },
         dialog: s.dialog?.kind === "ask" ? null : s.dialog,
         unseen: document.hasFocus() ? s.unseen : true,
       }));

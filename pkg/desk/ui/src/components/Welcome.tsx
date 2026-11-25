@@ -88,8 +88,8 @@ export function Welcome() {
 function Hello({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   return (
     <div className="welcome-card">
-      <div className="welcome-mark" aria-hidden>
-        <StarBuddy size="xl" mood="idle" />
+      <div className="welcome-mark">
+        <StarBuddy variant="stage" size="xl" mood="idle" interactive trackPointer />
       </div>
       <h1>Welcome to Macron</h1>
       <p className="lead">An agent that works on this computer: it reads and changes your files, runs commands, looks things up and hands you the results.</p>

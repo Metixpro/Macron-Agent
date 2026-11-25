@@ -1,0 +1,152 @@
+:root {
+  /* Typography */
+  --font: "Geist Variable", "Estedad Variable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono Variable", "Cascadia Mono", "SF Mono", Consolas, Menlo, monospace;
+
+  /* 4px Spatial Scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* Layout Dimensions */
+  --side-w: 256px;
+  --comp-w: 328px;
+  --col: 740px;
+  --header-h: 46px;
+  --frame-gap: 8px;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r: 10px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  /* Motion Language */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snappy: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+
+  /* Density Tokens (comfortable default) */
+  --text-base: 14px;
+  --leading-base: 1.64;
+  --msg-gap: 20px;
+  --pad-feed-x: 28px;
+  --row-py: 7px;
+}
+
+[data-density="compact"] {
+  --text-base: 13.5px;
+  --leading-base: 1.56;
+  --msg-gap: 14px;
+  --pad-feed-x: 20px;
+  --row-py: 5px;
+  --header-h: 42px;
+}
+
+[data-density="spacious"] {
+  --text-base: 14.5px;
+  --leading-base: 1.72;
+  --msg-gap: 26px;
+  --pad-feed-x: 36px;
+  --row-py: 9px;
+  --header-h: 50px;
+}
+
+:root[dir="rtl"] {
+  --leading-base: 1.78;
+}
+
+/* Signature Macron Graphite Dark Theme */
+[data-theme="dark"] {
+  --frame: #141416;
+  --side: #171719;
+  --bg: #1b1b1e;
+  --raised: #242429;
+  --elevated: #26262c;
+  --sunk: #131316;
+  --glass: rgba(27, 27, 30, 0.82);
+  --glass-strong: rgba(24, 24, 28, 0.94);
+  --glass-line: rgba(255, 255, 255, 0.075);
+  --chrome-hi: rgba(255, 255, 255, 0.055);
+  --chrome-lo: rgba(0, 0, 0, 0.36);
+  --hover: rgba(255, 255, 255, 0.048);
+  --active: rgba(255, 255, 255, 0.082);
+  --line: #28282f;
+  --line-2: #34343b;
+  --text: #eaeaef;
+  --text-2: #c4c4cf;
+  --dim: #9696a0;
+  --faint: #64646f;
+  --ink: #eaeaef;
+  --on-ink: #141416;
+  --accent: #cbd4eb;
+  --on-accent: #141418;
+  --link: #9bb6f4;
+  --user: #24242b;
+  --ok: #46b884;
+  --warn: #e2a340;
+  --amber: #e2a340;
+  --fail: #e6645c;
+  --focus: rgba(203, 212, 235, 0.34);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.42), 0 20px 48px -14px rgba(0, 0, 0, 0.68);
+  --scrim: rgba(10, 10, 13, 0.62);
+  color-scheme: dark;
+}
+
+/* Signature Macron Paper Light Theme */
+[data-theme="light"] {
+  --frame: #ecece9;
+  --side: #f3f3f0;
+  --bg: #faf9f7;
+  --raised: #ffffff;
+  --elevated: #ffffff;
+  --sunk: #f0f0ec;
+  --glass: rgba(250, 249, 247, 0.84);
+  --glass-strong: rgba(255, 255, 255, 0.94);
+  --glass-line: rgba(20, 20, 24, 0.085);
+  --chrome-hi: rgba(255, 255, 255, 0.92);
+  --chrome-lo: rgba(20, 20, 24, 0.05);
+  --hover: rgba(20, 20, 24, 0.044);
+  --active: rgba(20, 20, 24, 0.075);
+  --line: #e5e5e0;
+  --line-2: #d3d3cc;
+  --text: #16161a;
+  --text-2: #3e3e46;
+  --dim: #6c6c76;
+  --faint: #9b9ba6;
+  --ink: #16161a;
+  --on-ink: #faf9f7;
+  --accent: #2d3d63;
+  --on-accent: #f8f9fc;
+  --link: #2554c7;
+  --user: #efefe9;
+  --ok: #1d8058;
+  --warn: #b06c12;
+  --amber: #b06c12;
+  --fail: #c43c32;
+  --focus: rgba(45, 61, 99, 0.24);
+  --shadow-sm: 0 2px 8px rgba(15, 15, 20, 0.06);
+  --shadow: 0 1px 2px rgba(15, 15, 20, 0.05), 0 18px 40px -12px rgba(15, 15, 20, 0.14);
+  --scrim: rgba(236, 236, 233, 0.64);
+  color-scheme: light;
+}
+
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

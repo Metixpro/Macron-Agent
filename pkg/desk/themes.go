@@ -30,6 +30,22 @@ var (
 func builtinThemePalettes() []ThemePalette {
 	return []ThemePalette{
 		{
+			ID:         "macron-graphite",
+			Name:       "Macron Graphite",
+			Appearance: "dark",
+			Builtin:    true,
+			Swatches:   [3]string{"#141416", "#1b1b1e", "#cbd4eb"},
+			Colors: map[string]string{
+				"frame":   "#141416",
+				"sidebar": "#171719",
+				"canvas":  "#1b1b1e",
+				"surface": "#26262c",
+				"sunk":    "#131316",
+				"accent":  "#cbd4eb",
+				"link":    "#9bb4f0",
+			},
+		},
+		{
 			ID:         "obsidian",
 			Name:       "Obsidian",
 			Appearance: "dark",

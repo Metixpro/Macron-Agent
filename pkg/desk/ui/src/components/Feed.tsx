@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import type { MouseEvent } from "react";
 import { composer, follow, onServer, openDialog, openFile, saveFile } from "../actions";
 import { fileURL } from "../api";
-import { bidi, bytes, clock, copyText, prettyArgs, shortPath } from "../format";
+import { bidi, bytes, clock, copyText, prettyArgs, shortPath, took } from "../format";
 import { useMod, useProjectName } from "../hooks";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
@@ -38,6 +38,7 @@ export function Prose({ html, streaming }: { html: string; streaming?: boolean }
     bidi(ref.current);
     wireFiles(ref.current, project);
   }, [html, project]);
+
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
     const file = (e.target as HTMLElement).closest<HTMLElement>("[data-file]");
     if (file) {
@@ -50,20 +51,26 @@ export function Prose({ html, streaming }: { html: string; streaming?: boolean }
     const pre = btn.closest(".code")?.querySelector("pre");
     copyText(pre ? pre.innerText : "").then(() => {
       btn.textContent = "Copied";
-      window.setTimeout(() => (btn.textContent = "Copy"), 1400);
+      btn.classList.add("copied");
+      window.setTimeout(() => {
+        btn.textContent = "Copy";
+        btn.classList.remove("copied");
+      }, 1500);
     });
   };
+
   return <div ref={ref} className={streaming ? "prose streaming" : "prose"} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export function PlanList({ items, live }: { items: PlanItem[]; live?: boolean }) {
+  const t = useT();
   const done = items.filter((i) => i.status === "done").length;
   return (
     <div className={live ? "plan live" : "plan"}>
       <div className="plan-head">
-        <span>Plan</span>
-        <span className="plan-count">
-          {done} of {items.length}
+        <span>{t("Plan")}</span>
+        <span className="plan-count" dir="ltr">
+          {done}/{items.length}
         </span>
         <span className="plan-bar">
           <span style={{ width: `${items.length ? (100 * done) / items.length : 0}%` }} />
@@ -84,26 +91,53 @@ export function PlanList({ items, live }: { items: PlanItem[]; live?: boolean })
   );
 }
 
+function isShellTool(b: Block): boolean {
+  const n = (b.name || "").toLowerCase();
+  return n === "run_command" || n === "shell" || n === "bash" || n === "exec" || n === "terminal" || n === "run_shell";
+}
+
 const ToolRow = memo(function ToolRow({ b }: { b: Block }) {
   const [open, setOpen] = useState(false);
   const args = open && b.args && b.args !== "{}" ? prettyArgs(b.args) : "";
+  const isTerm = isShellTool(b);
+
   return (
-    <div className={"tool" + (b.failed ? " fail" : "") + (open ? " open" : "")}>
+    <div className={"tool" + (b.failed ? " fail" : "") + (open ? " open" : "") + (isTerm ? " term" : "")}>
       <button type="button" className="tool-row" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="st">
-          <Icon name={b.failed ? "x" : "check"} size={13} />
+          <Icon name={b.failed ? "x" : isTerm ? "terminal" : "check"} size={12} />
         </span>
         <span className="lb">{b.label || b.name}</span>
-        <span className="ar">{b.arg}</span>
+        <span className="ar" dir="ltr">
+          {b.arg}
+        </span>
         <span className="chev">
-          <Icon name="right" size={12} />
+          <Icon name="right" size={11} />
         </span>
       </button>
-      {!open && b.failed && b.summary && <div className="why">{b.summary}</div>}
+      {!open && b.failed && b.summary && (
+        <div className="why" dir="auto">
+          {b.summary}
+        </div>
+      )}
       {open && (
-        <div className="detail">
-          {args && args.trim() !== (b.arg || "").trim() && <div className="args">{args}</div>}
-          <pre className="out">{b.output && b.output.trim() ? b.output : "(no output)"}</pre>
+        <div className={"detail" + (isTerm ? " term-detail" : "")}>
+          {isTerm && b.arg ? (
+            <div className="term-cmd" dir="ltr">
+              <span className="term-prompt">$</span>
+              <span>{b.arg}</span>
+            </div>
+          ) : (
+            args &&
+            args.trim() !== (b.arg || "").trim() && (
+              <div className="args" dir="ltr">
+                {args}
+              </div>
+            )
+          )}
+          <pre className="out" dir="ltr">
+            {b.output && b.output.trim() ? b.output : "(no output)"}
+          </pre>
         </div>
       )}
     </div>
@@ -111,8 +145,12 @@ const ToolRow = memo(function ToolRow({ b }: { b: Block }) {
 });
 
 function Steps({ items, fresh, live }: { items: Block[]; fresh: boolean; live: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
-  if (items.length <= 3) {
+  const failed = items.filter((b) => b.failed).length;
+  const spanMs = items.length > 1 && items[0].at && items[items.length - 1].at ? Math.max(0, items[items.length - 1].at - items[0].at) : 0;
+
+  if (items.length <= 2) {
     return (
       <div className={"steps" + (fresh ? " enter" : "")}>
         {items.map((b, i) => (
@@ -121,24 +159,37 @@ function Steps({ items, fresh, live }: { items: Block[]; fresh: boolean; live: b
       </div>
     );
   }
-  const failed = items.filter((b) => b.failed).length;
+
   const last = items[items.length - 1];
-  const tail = !open && live ? 3 : 0;
+  const tail = !open && live ? 2 : 0;
   const shown = open ? items : items.slice(items.length - tail);
   const from = items.length - shown.length;
+
   return (
     <div className={"steps grouped" + (open ? " open" : "") + (tail ? " live" : "") + (fresh ? " enter" : "")}>
       <button type="button" className="tool-row head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="st">
-          <Icon name="steps" size={13} />
+          <Icon name={failed > 0 ? "alert" : "steps"} size={12} />
         </span>
-        <span className="lb">{tail ? items.length - tail + " earlier steps" : items.length + " steps"}</span>
-        <span className="ar">
-          {failed > 0 && <em>{failed} failed{open || tail ? "" : " · "}</em>}
-          {open || tail ? "" : (last.label || last.name) + " " + (last.arg || "")}
+        <span className="lb">
+          {tail ? `${items.length - tail} ${t("earlier steps")}` : `${items.length} ${t("steps")}`}
         </span>
+        <span className="ar" dir="auto">
+          {failed > 0 && (
+            <em>
+              {failed} {t("failed")}
+              {open || tail ? "" : " · "}
+            </em>
+          )}
+          {open || tail ? "" : `${last.label || last.name} ${last.arg || ""}`}
+        </span>
+        {spanMs >= 1000 && (
+          <span className="steps-dur" dir="ltr">
+            {took(spanMs)}
+          </span>
+        )}
         <span className="chev">
-          <Icon name="right" size={12} />
+          <Icon name="right" size={11} />
         </span>
       </button>
       {shown.length > 0 && (
@@ -159,19 +210,23 @@ function Actions({ b }: { b: Block }) {
     <div className="msg-actions">
       <button
         type="button"
-        className="act"
+        className={"act" + (copied ? " copied" : "")}
         title={t("Copy")}
         onClick={() =>
           copyText(b.text || "").then(() => {
             setCopied(true);
-            window.setTimeout(() => setCopied(false), 1400);
+            window.setTimeout(() => setCopied(false), 1500);
           })
         }
       >
-        <Icon name={copied ? "check" : "copy"} size={13} />
+        <Icon name={copied ? "check" : "copy"} size={12} />
         <span>{copied ? t("Copied") : t("Copy")}</span>
       </button>
-      {b.at > 0 && <span className="when">{clock(b.at)}</span>}
+      {b.at > 0 && (
+        <span className="when" dir="ltr">
+          {clock(b.at)}
+        </span>
+      )}
     </div>
   );
 }
@@ -209,30 +264,30 @@ function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
       {media === "music" && <audio className="file-media" src={src} controls preload="metadata" onError={() => setBroken(true)} />}
       <div className="file-row">
         <span className="file-icon">
-          <Icon name={kind.icon} size={18} />
+          <Icon name={kind.icon} size={17} />
         </span>
         <span className="file-meta">
           <span className="file-name" dir="auto" title={f.name}>
             {f.base}
           </span>
-          <span className="file-size">
+          <span className="file-size" dir="ltr">
             {kind.label} · {bytes(f.size)}
           </span>
         </span>
         <span className="file-actions">
           {!remote && !runs && (
-            <button type="button" className="btn sm" onClick={() => openFile(f.name)}>
-              <Icon name="open" size={14} />
+            <button type="button" className="btn ghost sm" onClick={() => openFile(f.name)}>
+              <Icon name="open" size={13} />
               Open
             </button>
           )}
           {!remote && (
             <button type="button" className="icon-btn sm" title="Show in folder" aria-label="Show in folder" onClick={() => openFile(f.name, true)}>
-              <Icon name="folder" size={15} />
+              <Icon name="folder" size={14} />
             </button>
           )}
           <button type="button" className="icon-btn sm" title="Save a copy" aria-label="Save a copy" onClick={() => saveFile(f.name, f.base)}>
-            <Icon name="save" size={15} />
+            <Icon name="save" size={14} />
           </button>
         </span>
       </div>
@@ -269,6 +324,7 @@ function UserAttachments({ items }: { items?: FileRef[] }) {
 }
 
 const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh: boolean; panel?: boolean }) {
+  const t = useT();
   const enter = fresh ? " enter" : "";
   switch (b.kind) {
     case "user":
@@ -276,17 +332,13 @@ const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh
         <div className={"msg user" + enter}>
           <div className="bubble" dir="auto" title={b.at ? new Date(b.at).toLocaleString() : undefined}>
             <UserAttachments items={b.attachments} />
-            {b.text}
+            <div className="bubble-text">{b.text}</div>
           </div>
         </div>
       );
     case "assistant":
       return (
         <div className={"msg assistant" + enter}>
-          <div className="msg-who">
-            <StarBuddy size="xs" mood="idle" />
-            <span>Macron</span>
-          </div>
           <Prose html={b.html || ""} />
           <Actions b={b} />
         </div>
@@ -305,18 +357,27 @@ const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh
     case "divider":
       return (
         <div className={"divider" + enter}>
-          <span>{b.text || "New conversation"}</span>
+          <span>{b.text === "New conversation" || !b.text ? t("New conversation") : b.text}</span>
         </div>
       );
     case "error":
       return (
         <div className={"error" + enter}>
-          <div className="et">{b.text}</div>
-          {b.summary && <div className="eh">{b.summary}</div>}
+          <div className="err-head">
+            <Icon name="alert" size={14} />
+            <div className="et" dir="auto">
+              {b.text}
+            </div>
+          </div>
+          {b.summary && (
+            <div className="eh" dir="auto">
+              {b.summary}
+            </div>
+          )}
           {b.output && b.output !== b.text && (
             <details>
-              <summary>Details</summary>
-              <div>{b.output}</div>
+              <summary>{t("Details")}</summary>
+              <pre dir="ltr">{b.output}</pre>
             </details>
           )}
         </div>
@@ -347,11 +408,7 @@ function Stream() {
   const html = useStore((s) => s.live.html);
   if (!html) return null;
   return (
-    <div className="msg assistant">
-      <div className="msg-who">
-        <StarBuddy size="xs" mood="streaming" />
-        <span>Macron</span>
-      </div>
+    <div className="msg assistant live-stream">
       <Prose html={html} streaming />
     </div>
   );
@@ -364,13 +421,8 @@ function Intro() {
   const path = useStore((s) => shortPath(s.projects.find((p) => p.id === s.current)?.path || "", s.home));
   const mod = useMod();
   const noModel = useStore((s) => s.online === true && !s.info.model);
-  const starters: { icon: "alert" | "code" | "open" | "steps"; title: string; desc: string; prompt: string }[] = [
-    {
-      icon: "alert",
-      title: t("Security & DFIR Audit"),
-      desc: t("Wazuh, Wireshark, Suricata, Zeek, Lynis, Trivy, Semgrep & Autopsy"),
-      prompt: "Check security toolkit status (trivy, semgrep, wireshark, wazuh, suricata, zeek, lynis, autopsy) and audit this workspace.",
-    },
+
+  const starters: { icon: "shield" | "code" | "globe" | "steps"; title: string; desc: string; prompt: string }[] = [
     {
       icon: "code",
       title: t("Code & Git Review"),
@@ -378,7 +430,13 @@ function Intro() {
       prompt: "Map this workspace structure, check git status, and highlight any bugs or improvements.",
     },
     {
-      icon: "open",
+      icon: "shield",
+      title: t("Security & DFIR Audit"),
+      desc: t("Wazuh, Wireshark, Suricata, Zeek, Lynis, Trivy, Semgrep & Autopsy"),
+      prompt: "Check security toolkit status (trivy, semgrep, wireshark, wazuh, suricata, zeek, lynis, autopsy) and audit this workspace.",
+    },
+    {
+      icon: "globe",
       title: t("Browser & Web Research"),
       desc: t("Open websites, interact with forms, and capture screenshots"),
       prompt: "Search the web and open the top result in the browser with a clean summary.",
@@ -390,23 +448,26 @@ function Intro() {
       prompt: "Inspect the data and documents in this folder and summarize the key insights.",
     },
   ];
+
   const keys: [string, string[]][] = [
     [t("Command palette"), [mod, "K"]],
     [t("Search chats"), [mod, "Shift", "F"]],
     [t("Plan mode"), [mod, "Shift", "P"]],
     [t("New conversation"), [mod, "N"]],
   ];
+
   return (
     <div className="intro">
       <div className="intro-hero">
-        <StarBuddy size="lg" interactive />
+        <StarBuddy variant="stage" size="lg" interactive trackPointer title="Macron StarBuddy" />
         <div className="intro-head">
           <div className="intro-name">{name === "Home" ? t("Home") : name}</div>
           <div className="intro-path" dir="ltr">
-            {"‎" + path}
+            {"\u200E" + path}
           </div>
         </div>
       </div>
+
       {noModel && (
         <div className="setup-card">
           <div>
@@ -418,11 +479,13 @@ function Intro() {
           </button>
         </div>
       )}
-      <p>
+
+      <p className="intro-lead">
         {isHome
           ? t("Conversations that don't belong to a project live here. Open a folder to give Macron a project to work in.")
           : t("Macron reads and changes files in this folder, runs commands here, and looks things up when it needs to.")}
       </p>
+
       <div className="starter-grid">
         {starters.map((st) => (
           <button
@@ -444,6 +507,7 @@ function Intro() {
           </button>
         ))}
       </div>
+
       <div className="intro-keys">
         {keys.map(([label, combo]) => (
           <span key={label} className="ikey">
@@ -461,6 +525,7 @@ function Intro() {
 }
 
 export function Feed() {
+  const t = useT();
   const blocks = useStore((s) => s.blocks);
   const fresh = useStore((s) => s.fresh);
   const running = useStore((s) => s.live.running);
@@ -469,6 +534,7 @@ export function Feed() {
   const inner = useRef<HTMLDivElement>(null);
   const [away, setAway] = useState(false);
   const items = useMemo(() => group(blocks), [blocks]);
+
   const panelPlan = useMemo(() => {
     for (let i = blocks.length - 1; i >= 0; i--) {
       if (blocks[i].kind === "divider" || blocks[i].kind === "user") return -1;
@@ -527,7 +593,8 @@ export function Feed() {
         <button
           type="button"
           className="jump"
-          title="Jump to the latest"
+          title={t("Jump to latest")}
+          aria-label={t("Jump to latest")}
           onClick={() => {
             follow.on = true;
             setAway(false);
@@ -535,7 +602,7 @@ export function Feed() {
             if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
           }}
         >
-          <Icon name="arrowDown" size={15} />
+          <Icon name="arrowDown" size={14} />
         </button>
       )}
     </>

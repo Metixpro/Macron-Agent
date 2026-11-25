@@ -455,7 +455,7 @@ export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
         setState({ info: r.info.info });
       }
       await refreshState();
-      openDialog({ kind: "settings" });
+      openDialog({ kind: "settings", section: "providers" });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -636,7 +636,7 @@ export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
       </div>
 
       <div className="bar">
-        <button type="button" className="btn" onClick={() => openDialog({ kind: "settings" })}>
+        <button type="button" className="btn" onClick={() => openDialog({ kind: "settings", section: "providers" })}>
           {t("Cancel")}
         </button>
         <div className="left">

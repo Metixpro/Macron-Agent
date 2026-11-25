@@ -1,6 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent } from "react";
-import { applyTheme, clearError, closeDialog, composer, newChat, openDialog, stop, toggleMode } from "./actions";
+import type { CSSProperties, DragEvent } from "react";
+import {
+  applyDensity,
+  applyMotion,
+  applyTheme,
+  clearError,
+  closeDialog,
+  composer,
+  newChat,
+  openDialog,
+  openSettings,
+  stop,
+  toggleCompanion,
+  toggleMode,
+  toggleSidebarCollapsed,
+} from "./actions";
 import { Composer } from "./components/Composer";
 import { Dialogs } from "./components/Dialogs";
 import { Feed } from "./components/Feed";
@@ -47,8 +61,20 @@ function useShortcuts() {
         else openDialog({ kind: "search" });
         return;
       }
+      if (mod && e.key === ",") {
+        e.preventDefault();
+        if (s.dialog?.kind === "settings") closeDialog();
+        else openSettings("general");
+        return;
+      }
       if (s.dialog) return;
-      if (mod && e.shiftKey && k === "p") {
+      if (mod && e.key === "\\") {
+        e.preventDefault();
+        toggleSidebarCollapsed();
+      } else if (mod && e.key === ".") {
+        e.preventDefault();
+        toggleCompanion();
+      } else if (mod && e.shiftKey && k === "p") {
         e.preventDefault();
         toggleMode();
       } else if (mod && !e.shiftKey && k === "n") {
@@ -57,9 +83,6 @@ function useShortcuts() {
       } else if (mod && k === "o") {
         e.preventDefault();
         openDialog({ kind: "folder" });
-      } else if (mod && e.key === ",") {
-        e.preventDefault();
-        openDialog({ kind: "settings" });
       } else if (!mod && !e.altKey && e.key.length === 1 && (!document.activeElement || document.activeElement === document.body)) {
         composer.focus();
       }
@@ -126,8 +149,12 @@ function ErrorBanner() {
 export function App() {
   const t = useT();
   const theme = useStore((s) => s.theme);
+  const density = useStore((s) => s.density);
+  const motion = useStore((s) => s.motion);
   const lang = useStore((s) => s.lang);
   const sideOpen = useStore((s) => s.sideOpen);
+  const sideCollapsed = useStore((s) => s.sideCollapsed);
+  const sideWidth = useStore((s) => s.sideWidth);
   const withRight = useRightPanelVisible();
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
@@ -139,6 +166,14 @@ export function App() {
     mq.addEventListener("change", follow);
     return () => mq.removeEventListener("change", follow);
   }, [theme]);
+
+  useEffect(() => {
+    applyDensity(density);
+  }, [density]);
+
+  useEffect(() => {
+    applyMotion(motion);
+  }, [motion]);
 
   useEffect(() => {
     applyLang(lang);
@@ -180,8 +215,18 @@ export function App() {
     if (files.length) composer.attachFiles(files);
   };
 
+  const shellStyle = { "--side-w": `${sideWidth}px` } as CSSProperties;
+  const appClass = [
+    "app",
+    sideOpen ? "side-open" : "",
+    sideCollapsed ? "side-collapsed" : "",
+    withRight ? "with-plan" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={"app" + (sideOpen ? " side-open" : "") + (withRight ? " with-plan" : "")}>
+    <div className={appClass} style={shellStyle}>
       <Sidebar />
       <div className="scrim" onClick={() => setState({ sideOpen: false })} />
       <main className="main" onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={onDrop}>

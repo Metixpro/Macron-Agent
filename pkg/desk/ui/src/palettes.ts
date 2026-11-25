@@ -14,6 +14,16 @@ const PALETTE_VARS: [string, string][] = [
 
 let cachedPalettes: ThemePalette[] = [];
 
+function hexLuminance(hex: string): number {
+  const clean = hex.replace("#", "").trim();
+  if (clean.length !== 6 && clean.length !== 8) return 0.5;
+  const r = parseInt(clean.slice(0, 2), 16) / 255;
+  const g = parseInt(clean.slice(2, 4), 16) / 255;
+  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
 export function getSavedPaletteId(): string {
   return local.get("palette", "");
 }
@@ -23,6 +33,7 @@ export function clearPaletteOverrides() {
   for (const [, cssVar] of PALETTE_VARS) {
     root.style.removeProperty(cssVar);
   }
+  root.style.removeProperty("--on-accent");
 }
 
 export function applyPalette(palette: ThemePalette | null) {
@@ -36,6 +47,10 @@ export function applyPalette(palette: ThemePalette | null) {
   for (const [key, cssVar] of PALETTE_VARS) {
     const val = palette.colors?.[key];
     if (val) root.style.setProperty(cssVar, val);
+  }
+  const accent = palette.colors?.accent;
+  if (accent) {
+    root.style.setProperty("--on-accent", hexLuminance(accent) > 0.42 ? "#141418" : "#F8F8FA");
   }
 }
 
