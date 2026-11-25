@@ -330,7 +330,17 @@ export function ProvidersSection() {
   );
 }
 
-export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
+export function ProviderEditor({
+  provider,
+  inline = false,
+  onCancel,
+  onSaved,
+}: {
+  provider?: ProviderDetail;
+  inline?: boolean;
+  onCancel?: () => void;
+  onSaved?: () => void;
+}) {
   const t = useT();
   const isEdit = Boolean(provider);
   const [preset, setPreset] = useState<string>(isEdit ? "custom" : "openai");
@@ -352,6 +362,19 @@ export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!inline || !onCancel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [inline, onCancel]);
 
   const tempLimit = api === "anthropic" || (!api && url.toLowerCase().includes("anthropic")) ? 1.0 : 2.0;
 
@@ -455,7 +478,8 @@ export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
         setState({ info: r.info.info });
       }
       await refreshState();
-      openDialog({ kind: "settings", section: "providers" });
+      if (onSaved) onSaved();
+      else openDialog({ kind: "settings", section: "providers" });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -463,24 +487,29 @@ export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
     }
   };
 
+  const cancel = () => {
+    if (onCancel) onCancel();
+    else closeDialog();
+  };
+
   const shown = (models || []).filter((m) => m.toLowerCase().includes(model.trim().toLowerCase())).slice(0, 200);
   const currentWinNum = parseWindowInput(windowInput);
 
   return (
     <form
-      className="pv-editor"
+      className={"pv-editor" + (inline ? " inline-studio" : "")}
       onSubmit={(e) => {
         e.preventDefault();
         void submit(isEdit);
       }}
     >
-      <div className="settings-head pv-ed-head">
+      <div className={inline ? "stg-inline-head" : "settings-head pv-ed-head"}>
         <h3>{isEdit ? t("Customize model & provider") : t("Add custom provider")}</h3>
-        <button type="button" className="icon-btn" title="Close (Esc)" onClick={closeDialog}>
-          <Icon name="x" />
+        <button type="button" className="icon-btn sm" title="Close (Esc)" aria-label={t("Close")} onClick={cancel}>
+          <Icon name="x" size={14} />
         </button>
       </div>
-      <div className="pv-ed-body">
+      <div className={inline ? "stg-inline-body" : "pv-ed-body"}>
         {!isEdit && (
           <div className="presets">
             {PRESETS.map((x) => (
@@ -635,17 +664,17 @@ export function ProviderEditor({ provider }: { provider?: ProviderDetail }) {
         {error && <div className="form-error">{error}</div>}
       </div>
 
-      <div className="bar">
-        <button type="button" className="btn" onClick={() => openDialog({ kind: "settings", section: "providers" })}>
+      <div className={inline ? "stg-inline-foot" : "bar"}>
+        <button type="button" className="btn ghost sm" onClick={cancel}>
           {t("Cancel")}
         </button>
         <div className="left">
           {!isEdit && (
-            <button type="button" className="btn ghost" disabled={busy || !name.trim() || !url.trim() || !model.trim()} onClick={() => void submit(true)}>
+            <button type="button" className="btn ghost sm" disabled={busy || !name.trim() || !url.trim() || !model.trim()} onClick={() => void submit(true)}>
               {t("Save without testing")}
             </button>
           )}
-          <button type="submit" className="btn primary" disabled={busy || !name.trim() || !url.trim() || !model.trim()}>
+          <button type="submit" className="btn primary sm" disabled={busy || !name.trim() || !url.trim() || !model.trim()}>
             {busy ? t("Saving…") : isEdit ? t("Save changes") : t("Test and connect")}
           </button>
         </div>

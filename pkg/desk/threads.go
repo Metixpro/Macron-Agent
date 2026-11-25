@@ -154,6 +154,9 @@ func (p *project) readThreadBlocks(tid string) ([]Block, time.Time) {
 	for sc.Scan() {
 		var b Block
 		if json.Unmarshal(sc.Bytes(), &b) == nil {
+			if b.Kind == "assistant" {
+				b.Text = stripInternalNotes(b.Text)
+			}
 			blocks = append(blocks, b)
 		}
 	}

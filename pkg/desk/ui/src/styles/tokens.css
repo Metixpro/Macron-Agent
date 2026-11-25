@@ -39,32 +39,104 @@
 
   /* Density Tokens (comfortable default) */
   --text-base: 14px;
+  --text-sm: 13px;
+  --text-xs: 12px;
   --leading-base: 1.64;
   --msg-gap: 20px;
   --pad-feed-x: 28px;
+  --feed-py: 24px;
   --row-py: 7px;
+  --bubble-py: 10px;
+  --bubble-px: 15px;
+  --tool-py: 6px;
+  --composer-pt: 26px;
+  --composer-pb: 16px;
+  --composer-input-h: 44px;
+  --composer-input-pt: 12px;
+  --composer-tb-py: 6px;
+  --comp-pad: 14px;
+  --comp-gap: 12px;
+  --stg-scroll-py: 28px;
+  --stg-scroll-px: 36px;
+  --stg-gap: 20px;
+  --stg-row-py: 13px;
+  --stg-card-pad: 14px 16px;
+  --stg-nav-py: 6px;
+  --ctrl-h: 32px;
 }
 
 [data-density="compact"] {
-  --text-base: 13.5px;
-  --leading-base: 1.56;
-  --msg-gap: 14px;
-  --pad-feed-x: 20px;
-  --row-py: 5px;
-  --header-h: 42px;
+  --text-base: 13px;
+  --text-sm: 12px;
+  --text-xs: 11px;
+  --leading-base: 1.48;
+  --col: 820px;
+  --header-h: 40px;
+  --frame-gap: 5px;
+  --msg-gap: 11px;
+  --pad-feed-x: 18px;
+  --feed-py: 14px;
+  --row-py: 4px;
+  --bubble-py: 7px;
+  --bubble-px: 12px;
+  --tool-py: 4px;
+  --composer-pt: 18px;
+  --composer-pb: 10px;
+  --composer-input-h: 38px;
+  --composer-input-pt: 9px;
+  --composer-tb-py: 4px;
+  --comp-pad: 10px;
+  --comp-gap: 8px;
+  --stg-scroll-py: 18px;
+  --stg-scroll-px: 24px;
+  --stg-gap: 12px;
+  --stg-row-py: 8px;
+  --stg-card-pad: 10px 12px;
+  --stg-nav-py: 4px;
+  --ctrl-h: 28px;
 }
 
 [data-density="spacious"] {
-  --text-base: 14.5px;
-  --leading-base: 1.72;
-  --msg-gap: 26px;
-  --pad-feed-x: 36px;
-  --row-py: 9px;
-  --header-h: 50px;
+  --text-base: 15px;
+  --text-sm: 14px;
+  --text-xs: 12.5px;
+  --leading-base: 1.78;
+  --col: 680px;
+  --header-h: 54px;
+  --frame-gap: 12px;
+  --msg-gap: 30px;
+  --pad-feed-x: 40px;
+  --feed-py: 34px;
+  --row-py: 10px;
+  --bubble-py: 14px;
+  --bubble-px: 19px;
+  --tool-py: 9px;
+  --composer-pt: 32px;
+  --composer-pb: 22px;
+  --composer-input-h: 50px;
+  --composer-input-pt: 14px;
+  --composer-tb-py: 8px;
+  --comp-pad: 18px;
+  --comp-gap: 16px;
+  --stg-scroll-py: 38px;
+  --stg-scroll-px: 48px;
+  --stg-gap: 28px;
+  --stg-row-py: 18px;
+  --stg-card-pad: 18px 20px;
+  --stg-nav-py: 8.5px;
+  --ctrl-h: 36px;
 }
 
 :root[dir="rtl"] {
   --leading-base: 1.78;
+}
+
+:root[dir="rtl"][data-density="compact"] {
+  --leading-base: 1.62;
+}
+
+:root[dir="rtl"][data-density="spacious"] {
+  --leading-base: 1.92;
 }
 
 /* Signature Macron Graphite Dark Theme */

@@ -59,77 +59,102 @@ function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; ch
 
 export function Dialogs() {
   const d = useStore((s) => s.dialog);
+  const settingsBg = useStore((s) => s.settingsBg);
   if (!d) return null;
+  if (d.kind === "settings") {
+    return <SettingsWorkspace initialSection={d.section || "general"} />;
+  }
+
+  let modal: ReactNode = null;
   switch (d.kind) {
     case "ask":
-      return (
+      modal = (
         <Modal kind="ask" dismiss={false}>
           <AskDialog ask={d.ask} />
         </Modal>
       );
+      break;
     case "palette":
-      return (
+      modal = (
         <Modal kind="palette" dismiss>
           <Palette key={d.mode} mode={d.mode} />
         </Modal>
       );
+      break;
     case "search":
-      return (
+      modal = (
         <Modal kind="palette" dismiss>
           <SessionSearch />
         </Modal>
       );
+      break;
     case "folder":
-      return (
+      modal = (
         <Modal kind="folder" dismiss>
           <FolderPicker />
         </Modal>
       );
-    case "settings":
-      return <SettingsWorkspace initialSection={d.section || "general"} />;
+      break;
     case "status":
-      return (
+      modal = (
         <Modal kind="settings" dismiss>
           <StatusDialog onClose={closeDialog} />
         </Modal>
       );
+      break;
     case "provider-edit":
-      return (
+      modal = (
         <Modal kind="settings provider-modal" dismiss>
           <ProviderEditor key={d.provider ? String(d.provider.id) : "new"} provider={d.provider} />
         </Modal>
       );
+      break;
     case "mcp-add":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <McpAdd />
         </Modal>
       );
+      break;
     case "model-connect":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <ModelConnect />
         </Modal>
       );
+      break;
     case "server-add":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <ServerAdd />
         </Modal>
       );
+      break;
     case "server-auth":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <ServerAuth key={d.id + d.need} id={d.id} need={d.need} fingerprint={d.fingerprint} install={d.install} />
         </Modal>
       );
+      break;
     case "server-install":
-      return (
+      modal = (
         <Modal kind="form" dismiss={false}>
           <ServerInstall key={d.id + (d.secrets ? "+" : "")} id={d.id} update={d.update} secrets={d.secrets} />
         </Modal>
       );
+      break;
   }
+
+  if (settingsBg) {
+    return (
+      <>
+        <SettingsWorkspace initialSection={settingsBg} />
+        {modal}
+      </>
+    );
+  }
+  return modal;
 }
 
 function ServerInstall({ id, update, secrets }: { id: string; update: boolean; secrets?: { password?: string; passphrase?: string; trust?: string } }) {

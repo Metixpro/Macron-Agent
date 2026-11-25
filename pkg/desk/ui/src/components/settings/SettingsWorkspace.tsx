@@ -3,6 +3,7 @@ import { closeDialog } from "../../actions";
 import { useT } from "../../i18n";
 import { Icon } from "../../icons";
 import type { IconName } from "../../icons";
+import { setState } from "../../store";
 import type { SettingsSectionId } from "../../store";
 import { ConnectionsSettingsPage, McpSettingsPage, ServersSettingsPage, SkillsSettingsPage } from "./CapabilitiesSettings";
 import {
@@ -59,6 +60,11 @@ export function SettingsWorkspace({ initialSection = "general" }: { initialSecti
   const [query, setQuery] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
 
+  const selectSection = (next: SettingsSectionId) => {
+    setSection(next);
+    setState((s) => (s.dialog?.kind === "settings" ? { dialog: { kind: "settings", section: next } } : {}));
+  };
+
   useEffect(() => {
     setSection(initialSection);
   }, [initialSection]);
@@ -78,7 +84,7 @@ export function SettingsWorkspace({ initialSection = "general" }: { initialSecti
 
   useEffect(() => {
     if (query.trim() && filtered.length > 0 && !filtered.some((x) => x.id === section)) {
-      setSection(filtered[0].id);
+      selectSection(filtered[0].id);
     }
   }, [query, filtered, section]);
 
@@ -177,7 +183,7 @@ export function SettingsWorkspace({ initialSection = "general" }: { initialSecti
                     type="button"
                     className={"stg-nav-item" + (section === item.id ? " on" : "")}
                     aria-current={section === item.id ? "page" : undefined}
-                    onClick={() => setSection(item.id)}
+                    onClick={() => selectSection(item.id)}
                   >
                     <Icon name={item.icon} size={14} />
                     <span>{t(item.label)}</span>

@@ -169,7 +169,7 @@ function Meter() {
               {hasCtx && ctx && (
                 <div className="mp-block">
                   <div className="mp-row">
-                    <span>Context</span>
+                    <span>{tr("Context")}</span>
                     <strong>
                       {tokens(ctx.used)} / {tokens(ctx.window)} ({pctNum}%)
                     </strong>
@@ -182,22 +182,22 @@ function Meter() {
               {hasUsage && usage && (
                 <div className="mp-stats">
                   <div className="mp-row">
-                    <span>Input</span>
+                    <span>{tr("Input")}</span>
                     <span>{tokens(usage.in)}</span>
                   </div>
                   <div className="mp-row">
-                    <span>Output</span>
+                    <span>{tr("Output")}</span>
                     <span>{tokens(usage.out)}</span>
                   </div>
                   {usage.costKnown && typeof usage.cost === "number" && (
                     <div className="mp-row">
-                      <span>Est. cost</span>
+                      <span>{tr("Est. cost")}</span>
                       <span>~{formatCost(usage.cost)}</span>
                     </div>
                   )}
                   {last > 0 && (
                     <div className="mp-row">
-                      <span>Last turn</span>
+                      <span>{tr("Last turn")}</span>
                       <span>{took(last)}</span>
                     </div>
                   )}
@@ -244,6 +244,7 @@ function Gauge({ level }: { level: number }) {
 }
 
 function EffortMenu() {
+  const tr = useT();
   const t = useStore((s) => s.tuning);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -284,7 +285,7 @@ function EffortMenu() {
       </button>
       {open && (
         <div className="effort-menu" role="menu">
-          <div className="em-head">Reasoning effort</div>
+          <div className="em-head">{tr("Reasoning effort")}</div>
           {effortLevels.map((l, i) => (
             <button
               key={l || "auto"}
@@ -431,6 +432,10 @@ export function Composer() {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (!text) {
+      el.style.height = "";
+      return;
+    }
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 240) + "px";
   }, [text]);

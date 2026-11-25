@@ -478,7 +478,7 @@ func (p *project) signal() <-chan struct{} {
 }
 
 func (p *project) flushStreamLocked() *Block {
-	text := strings.TrimSpace(p.stream)
+	text := stripInternalNotes(p.stream)
 	p.stream, p.live.HTML = "", ""
 	if text == "" {
 		return nil
@@ -491,9 +491,7 @@ func (p *project) listener() *agent.EventListener {
 	var subs atomic.Int32
 	l := &agent.EventListener{
 		OnText: func(s string) {
-			if i := strings.LastIndex(s, "<work_notes"); i >= 0 {
-				s = s[:i]
-			}
+			s = stripInternalNotes(s)
 			p.mu.Lock()
 			p.stream = s
 			due := time.Since(p.renderAt) >= renderEvery || s == ""
@@ -680,11 +678,11 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 	stopped := errors.Is(err, context.Canceled) || ctx.Err() != nil
 	p.mu.Lock()
 	var out []Block
-	partial := strings.TrimSpace(p.stream)
+	partial := stripInternalNotes(p.stream)
 	p.stream, p.live.HTML = "", ""
 	answer := ""
 	if res != nil {
-		answer = strings.TrimSpace(res.Answer)
+		answer = stripInternalNotes(res.Answer)
 		p.usageIn += res.Usage.PromptTokens
 		p.usageOut += res.Usage.CompletionTokens
 		if usd, ok := llm.EstimateCost(p.srv.host.Info().Model, res.Usage); ok {

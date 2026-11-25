@@ -1,10 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
-import { connectServer, disconnectServer, fail, openDialog, removeServer } from "../../actions";
+import { connectServer, disconnectServer, errorText, fail, loadServers, removeServer } from "../../actions";
 import { server } from "../../api";
 import { useT } from "../../i18n";
 import { Icon } from "../../icons";
 import { setState, useStore } from "../../store";
 import type { ConnectionDetail, Plugin, SkillView } from "../../types";
+
+function splitArgs(s: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quote = "";
+  let has = false;
+  for (const ch of s) {
+    if (quote) {
+      if (ch === quote) quote = "";
+      else cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      has = true;
+    } else if (/\s/.test(ch)) {
+      if (has || cur) out.push(cur);
+      cur = "";
+      has = false;
+    } else cur += ch;
+  }
+  if (has || cur) out.push(cur);
+  return out;
+}
 
 function pluginStatus(p: Plugin): string {
   if (!p.enabled) return "Off";
@@ -17,6 +39,14 @@ function pluginStatus(p: Plugin): string {
 export function McpSettingsPage() {
   const t = useT();
   const [plugins, setPlugins] = useState<Plugin[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [target, setTarget] = useState("");
+  const [vars, setVars] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const remote = /^https?:\/\//i.test(target.trim());
 
   const load = () =>
     server
@@ -27,6 +57,61 @@ export function McpSettingsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!adding) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeForm();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [adding]);
+
+  const closeForm = () => {
+    setAdding(false);
+    setName("");
+    setTarget("");
+    setVars("");
+    setError("");
+  };
+
+  const submitAdd = async () => {
+    setError("");
+    const env: Record<string, string> = {};
+    for (const line of vars.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const i = remote && trimmed.includes(":") && !trimmed.includes("=") ? trimmed.indexOf(":") : trimmed.indexOf("=");
+      if (i <= 0) {
+        setError(`“${trimmed}” is not KEY=value`);
+        return;
+      }
+      env[trimmed.slice(0, i).trim()] = trimmed.slice(i + 1).trim();
+    }
+    const parts = remote ? [target.trim()] : splitArgs(target.trim());
+    if (!parts.length || !parts[0]) {
+      setError(t("Command or address is required."));
+      return;
+    }
+    setBusy(true);
+    try {
+      const p = await server.addPlugin({ name: name.trim(), target: parts[0], args: parts.slice(1), env });
+      load();
+      if (p.error || (p.enabled && p.status !== "ready")) {
+        setError(`${p.name} was added, but it is not ready: ${pluginStatus(p)}`);
+        return;
+      }
+      closeForm();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const toggle = async (p: Plugin) => {
     setPlugins((list) => (list || []).map((x) => (x.key === p.key ? { ...x, enabled: !p.enabled, status: p.enabled ? "off" : "connecting" } : x)));
@@ -52,18 +137,78 @@ export function McpSettingsPage() {
       <header className="stg-head stg-head-row">
         <div>
           <h1>{t("Tools & MCP")}</h1>
-          <p>{t("MCP servers and plugins")}</p>
+          <p>{t("Connect local or remote MCP tool servers to extend Macron's capabilities.")}</p>
         </div>
-        <button type="button" className="btn primary sm" onClick={() => openDialog({ kind: "mcp-add" })}>
-          <Icon name="plus" size={14} />
-          <span>{t("Add an MCP server…")}</span>
-        </button>
+        {!adding && (
+          <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={14} />
+            <span>{t("Add an MCP server…")}</span>
+          </button>
+        )}
       </header>
+
+      {adding && (
+        <form
+          className="stg-inline-studio"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitAdd();
+          }}
+        >
+          <div className="stg-inline-head">
+            <h3>{t("Add an MCP server")}</h3>
+            <button type="button" className="icon-btn sm" title="Close (Esc)" aria-label={t("Close")} onClick={closeForm}>
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+          <div className="stg-inline-body">
+            <p className="stg-inline-sub">
+              {t("Its tools reach Macron here, in the terminal and in Telegram. Local servers run on this machine; remote ones are reached by their address.")}
+            </p>
+            <div className="pv-grid2">
+              <label className="field">
+                <span>{t("Name")}</span>
+                <input autoFocus spellCheck={false} placeholder="e.g. github" value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>{t("Command or address")}</span>
+                <input
+                  spellCheck={false}
+                  dir="ltr"
+                  placeholder="npx -y @modelcontextprotocol/server-github  or  https://example.com/mcp"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>{remote ? t("Headers (one per line)") : t("Environment variables (one per line)")}</span>
+              <textarea
+                spellCheck={false}
+                dir="ltr"
+                rows={3}
+                placeholder={remote ? "Authorization: Bearer …" : "GITHUB_PERSONAL_ACCESS_TOKEN=…"}
+                value={vars}
+                onChange={(e) => setVars(e.target.value)}
+              />
+            </label>
+            {error && <div className="form-error">{error}</div>}
+          </div>
+          <div className="stg-inline-foot">
+            <button type="button" className="btn ghost sm" onClick={closeForm}>
+              {t("Cancel")}
+            </button>
+            <button type="submit" className="btn primary sm" disabled={busy || !name.trim() || !target.trim()}>
+              {busy ? t("Connecting…") : t("Add and connect")}
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="set-list">
         {plugins === null && <div className="empty-row">{t("Loading…")}</div>}
         {plugins && !plugins.length && (
-          <div className="empty-row">None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.</div>
+          <div className="empty-row">{t("None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.")}</div>
         )}
         {(plugins || []).map((p) => (
           <div key={p.key} className="set-row static">
@@ -78,7 +223,7 @@ export function McpSettingsPage() {
               type="button"
               role="switch"
               aria-checked={p.enabled}
-              title={p.enabled ? "Turn off" : "Turn on"}
+              title={p.enabled ? t("Disable") : t("Enable")}
               className={"switch" + (p.enabled ? " on" : "")}
               onClick={() => void toggle(p)}
             >
@@ -154,7 +299,7 @@ export function SkillsSettingsPage() {
         <h1>
           {t("Skills")} {skills ? <span className="stg-head-count" dir="ltr">{skills.filter((s) => s.enabled).length}/{skills.length}</span> : null}
         </h1>
-        <p>{t("Filter skills…")}</p>
+        <p>{t("Manage reusable capabilities and domain instructions for Macron.")}</p>
       </header>
 
       <div className="set-search">
@@ -224,6 +369,19 @@ export function ConnectionsSettingsPage() {
       .catch(() => setList([]));
   }, []);
 
+  useEffect(() => {
+    if (!openId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpenId("");
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [openId]);
+
   const toggleOpen = (id: string) => {
     setOpenId((prev) => (prev === id ? "" : id));
     setValues({});
@@ -273,7 +431,7 @@ export function ConnectionsSettingsPage() {
     <div className="stg-page">
       <header className="stg-head">
         <h1>{t("Connected Services")}</h1>
-        <p>{t("Connections")}</p>
+        <p>{t("Configure credentials for Telegram, GitHub, and external integrations.")}</p>
       </header>
 
       <div className="set-list">
@@ -322,6 +480,9 @@ export function ConnectionsSettingsPage() {
                     </label>
                   ))}
                   <div className="conn-actions">
+                    <button type="button" className="btn ghost sm" onClick={() => setOpenId("")}>
+                      {t("Cancel")}
+                    </button>
                     <button type="button" className="btn ghost sm" disabled={isTesting} onClick={() => void runTest(c.id)}>
                       {isTesting ? t("Testing…") : t("Test")}
                     </button>
@@ -339,32 +500,208 @@ export function ConnectionsSettingsPage() {
   );
 }
 
+const addressRe = /^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:@\s]+)(?::(\d{1,5}))?$/;
+
 export function ServersSettingsPage() {
   const t = useT();
   const servers = useStore((s) => s.servers);
+  const wsl = useStore((s) => s.wsl);
+
+  const [adding, setAdding] = useState(false);
+  const [kind, setKind] = useState<"ssh" | "wsl">("ssh");
+  const [address, setAddress] = useState("");
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    void loadServers();
+  }, []);
+
+  useEffect(() => {
+    if (!adding) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeForm();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [adding]);
+
+  const closeForm = () => {
+    setAdding(false);
+    setKind("ssh");
+    setAddress("");
+    setName("");
+    setKey("");
+    setMore(false);
+    setError("");
+  };
+
+  const submitAdd = async (andConnect: boolean) => {
+    setError("");
+    let host = address.trim();
+    let user = "";
+    let port = 0;
+    if (kind === "ssh") {
+      const m = addressRe.exec(host);
+      if (!m) {
+        setError(t("Write it like root@203.0.113.7 or me@example.com:2222"));
+        return;
+      }
+      user = m[1] || "";
+      host = m[2].replace(/^\[|\]$/g, "");
+      port = m[3] ? Number(m[3]) : 0;
+    }
+    setBusy(true);
+    try {
+      const created = await server.addServer({ kind, name: name.trim(), host, user, port, key: key.trim() });
+      await loadServers();
+      closeForm();
+      if (andConnect && created?.id) {
+        void connectServer(created.id);
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="stg-page">
       <header className="stg-head stg-head-row">
         <div>
           <h1>{t("SSH & Remote")}</h1>
-          <p>{t("Servers")}</p>
+          <p>{t("Work seamlessly on remote Linux servers over SSH or inside WSL.")}</p>
         </div>
-        <button type="button" className="btn primary sm" onClick={() => openDialog({ kind: "server-add" })}>
-          <Icon name="plus" size={14} />
-          <span>{t("Add a server…")}</span>
-        </button>
+        {!adding && (
+          <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={14} />
+            <span>{t("Add a server…")}</span>
+          </button>
+        )}
       </header>
 
+      {adding && (
+        <form
+          className="stg-inline-studio"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitAdd(false);
+          }}
+        >
+          <div className="stg-inline-head">
+            <h3>{t("Add a server")}</h3>
+            <button type="button" className="icon-btn sm" title="Close (Esc)" aria-label={t("Close")} onClick={closeForm}>
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+          <div className="stg-inline-body">
+            <p className="stg-inline-sub">
+              {t("Macron runs over an encrypted SSH tunnel or directly inside WSL — no port is exposed to the internet.")}
+            </p>
+            {wsl && (
+              <div className="field">
+                <span>{t("Connection type")}</span>
+                <div className="choice" role="radiogroup">
+                  {(
+                    [
+                      ["ssh", t("Server over SSH")],
+                      ["wsl", t("WSL on this PC")],
+                    ] as const
+                  ).map(([val, lbl]) => (
+                    <button key={val} type="button" role="radio" aria-checked={kind === val} className={kind === val ? "on" : ""} onClick={() => setKind(val)}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="pv-grid2">
+              {kind === "ssh" ? (
+                <label className="field">
+                  <span>{t("Address")}</span>
+                  <input
+                    autoFocus
+                    spellCheck={false}
+                    dir="ltr"
+                    placeholder="root@203.0.113.7 or me@example.com:2222"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
+                </label>
+              ) : (
+                <label className="field">
+                  <span>{t("Linux distribution")}</span>
+                  <input autoFocus spellCheck={false} dir="ltr" placeholder="Ubuntu (or leave blank for default)" value={address} onChange={(e) => setAddress(e.target.value)} />
+                </label>
+              )}
+              <label className="field">
+                <span>{t("Name")}</span>
+                <input spellCheck={false} dir="auto" placeholder={kind === "ssh" ? "e.g. Production VPS" : "WSL"} value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+            </div>
+            {kind === "ssh" &&
+              (more ? (
+                <label className="field">
+                  <span>{t("Private key file")}</span>
+                  <input
+                    spellCheck={false}
+                    dir="ltr"
+                    placeholder="Default: SSH agent, then ~/.ssh/id_ed25519, id_ecdsa, id_rsa"
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                  />
+                </label>
+              ) : (
+                <button type="button" className="link-btn" onClick={() => setMore(true)}>
+                  {t("Use a specific key file")}
+                </button>
+              ))}
+            {error && <div className="form-error">{error}</div>}
+          </div>
+          <div className="stg-inline-foot">
+            <button type="button" className="btn ghost sm" onClick={closeForm}>
+              {t("Cancel")}
+            </button>
+            <div className="left">
+              <button type="submit" className="btn ghost sm" disabled={busy || (kind === "ssh" && !address.trim())}>
+                {busy ? t("Saving…") : t("Save")}
+              </button>
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={busy || (kind === "ssh" && !address.trim())}
+                onClick={() => void submitAdd(true)}
+              >
+                {busy ? t("Connecting…") : t("Add and connect")}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
       <div className="set-list">
-        {!servers.length && <div className="empty-row">No servers yet. Add one to let Macron work on a VPS or in WSL.</div>}
+        {!servers.length && <div className="empty-row">{t("No servers yet. Add one to let Macron work on a VPS or in WSL.")}</div>}
         {servers.map((s) => (
           <div key={s.id} className="set-row static">
-            <span className={"state" + (s.state === "ready" ? " ok" : s.state === "failed" ? " bad" : "")} />
+            <span className={"state" + (s.state === "ready" ? " ok" : s.state === "failed" ? " bad" : s.state === "connecting" || s.state === "installing" ? " warn" : "")} />
             <span className="grow">
               <span className="name">{s.name}</span>
-              <span className="meta" dir="ltr">
-                {s.state === "failed" && s.error ? s.error : s.kind === "wsl" ? "WSL" + (s.host ? " · " + s.host : "") : (s.user ? s.user + "@" : "") + s.host}
+              <span className={"meta" + (s.state === "failed" ? " bad-text" : "")} dir="ltr">
+                {s.state === "failed" && s.error
+                  ? s.error
+                  : s.state === "connecting"
+                    ? t("Connecting…")
+                    : s.kind === "wsl"
+                      ? "WSL" + (s.host ? " · " + s.host : "")
+                      : (s.user ? s.user + "@" : "") + s.host + (s.port && s.port !== 22 ? ":" + s.port : "")}
                 {s.version ? " · Macron " + s.version : ""}
               </span>
             </span>
@@ -374,7 +711,7 @@ export function ServersSettingsPage() {
               </button>
             ) : (
               <button type="button" className="btn ghost sm" disabled={s.state === "connecting" || s.state === "installing"} onClick={() => void connectServer(s.id)}>
-                {t("Connect")}
+                {s.state === "connecting" ? t("Connecting…") : t("Connect")}
               </button>
             )}
             <button type="button" className="icon-btn sm" title={t("Remove")} onClick={() => void removeServer(s.id)}>

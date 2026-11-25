@@ -9,8 +9,8 @@
   border-radius: var(--r-lg);
   border: 1px solid var(--glass-line);
   background: var(--side);
-  padding: 14px;
-  gap: 12px;
+  padding: var(--comp-pad);
+  gap: var(--comp-gap);
   overflow: hidden;
   animation: fade var(--dur-base) var(--ease);
 }

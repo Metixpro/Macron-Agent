@@ -401,12 +401,22 @@ export async function chooseModel(name: string) {
 }
 
 export function openDialog(d: Dialog) {
-  setState({ dialog: d });
+  setState((s) => {
+    if (!d) return { dialog: null, settingsBg: null };
+    if (d.kind === "settings") return { dialog: d, settingsBg: null };
+    const bg = s.dialog?.kind === "settings" ? s.dialog.section || "general" : s.settingsBg;
+    return { dialog: d, settingsBg: bg };
+  });
 }
 
 export function closeDialog() {
-  if (getState().dialog?.kind === "ask") return;
-  setState({ dialog: null });
+  const s = getState();
+  if (s.dialog?.kind === "ask") return;
+  if (s.dialog?.kind !== "settings" && s.settingsBg) {
+    setState({ dialog: { kind: "settings", section: s.settingsBg }, settingsBg: null });
+    return;
+  }
+  setState({ dialog: null, settingsBg: null });
   composer.focus();
 }
 
@@ -539,8 +549,14 @@ export async function installOnServer(id: string, secrets: { password?: string; 
     openDialog({ kind: "server-auth", id, need: r.need, fingerprint: r.fingerprint, message: r.message, install: true });
     return "";
   }
-  setState({ dialog: null });
-  await switchMachine(id);
+  const inSettings = Boolean(getState().settingsBg);
+  if (inSettings) {
+    closeDialog();
+    await connectServer(id, secrets);
+  } else {
+    setState({ dialog: null, settingsBg: null });
+    await switchMachine(id);
+  }
   return r.output || "";
 }
 
@@ -567,6 +583,7 @@ export async function switchMachine(id: string) {
     activeThread: "default",
     live: { running: false },
     dialog: null,
+    settingsBg: null,
     online: null,
     sideOpen: false,
     lastTook: 0,
@@ -579,14 +596,17 @@ export async function authServer(id: string, secrets: { password?: string; passp
     openDialog({ kind: "server-install", id, update: false, secrets });
     return;
   }
-  setState({ dialog: null });
-  if (await connectServer(id, secrets)) await switchMachine(id);
+  const inSettings = Boolean(getState().settingsBg);
+  closeDialog();
+  if (await connectServer(id, secrets)) {
+    if (!inSettings) await switchMachine(id);
+  }
 }
 
 export async function addServer(spec: { kind: "ssh" | "wsl"; name?: string; host?: string; user?: string; port?: number; key?: string }) {
   const v = await server.addServer(spec);
   await loadServers();
-  setState({ dialog: null });
+  setState({ dialog: null, settingsBg: null });
   await switchMachine(v.id);
 }
 

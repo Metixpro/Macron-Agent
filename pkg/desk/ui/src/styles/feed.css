@@ -4,7 +4,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px var(--pad-feed-x) 28px;
+  padding: var(--feed-py) var(--pad-feed-x) calc(var(--feed-py) + 4px);
   scroll-behavior: smooth;
 }
 
@@ -185,11 +185,12 @@
 .msg.user .bubble {
   max-width: min(82%, 580px);
   width: fit-content;
-  padding: 10px 15px;
+  padding: var(--bubble-py) var(--bubble-px);
   border-radius: 16px 16px 5px 16px;
   background: var(--user);
   border: 1px solid var(--line);
   color: var(--text);
+  font-size: var(--text-base);
   white-space: pre-wrap;
   word-break: break-word;
   line-height: var(--leading-base);
@@ -524,9 +525,9 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 10px;
+  padding: var(--tool-py) 10px;
   border-radius: var(--r-sm);
-  font-size: 12.5px;
+  font-size: var(--text-xs);
   color: var(--dim);
   transition: background var(--dur-fast), color var(--dur-fast);
 }
@@ -671,7 +672,7 @@
 }
 
 /* ── Inline Plan, File Cards, Notes, Dividers, Errors ── */
-.plan {
+.plan:not(.box) {
   border-radius: var(--r);
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--raised) 45%, var(--sunk));

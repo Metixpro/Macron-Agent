@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   effortLevels,
   effortName,
@@ -6,6 +6,7 @@ import {
   errorText,
   fail,
   openDialog,
+  openSettings,
   refreshState,
   setTuning,
   windowName,
@@ -15,6 +16,7 @@ import { useT } from "../../i18n";
 import { Icon } from "../../icons";
 import { setState, useStore } from "../../store";
 import type { MemoryEntry, MoaState, ProviderDetail, ProviderTestResult, RoutingConfig, RoutingTestResult } from "../../types";
+import { ProviderEditor } from "../ProviderManager";
 
 function ProviderMark({ name, api }: { name: string; api?: string }) {
   const n = (name + " " + (api || "")).toLowerCase();
@@ -115,6 +117,15 @@ export function ProvidersSettingsPage() {
   const [confirmDel, setConfirmDel] = useState<number | null>(null);
   const [localServers, setLocalServers] = useState<{ id: string; name: string; baseUrl: string; models: string[] }[] | null>(null);
   const [scanningLocal, setScanningLocal] = useState(false);
+  const [editor, setEditor] = useState<{ mode: "add" } | { mode: "edit"; provider: ProviderDetail } | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  const openEditor = (next: { mode: "add" } | { mode: "edit"; provider: ProviderDetail }) => {
+    setEditor(next);
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  };
 
   const load = () =>
     server
@@ -186,6 +197,7 @@ export function ProvidersSettingsPage() {
     try {
       await server.deleteProvider(id);
       setConfirmDel(null);
+      if (editor?.mode === "edit" && editor.provider.id === id) setEditor(null);
       await refreshState();
       load();
     } catch (e) {
@@ -213,11 +225,29 @@ export function ProvidersSettingsPage() {
           <h1>{t("Models & Providers")}</h1>
           <p>{t("Models & custom providers")}</p>
         </div>
-        <button type="button" className="btn primary sm" onClick={() => openDialog({ kind: "provider-edit" })}>
-          <Icon name="plus" size={14} />
-          <span>{t("Add provider")}</span>
-        </button>
+        {!editor && (
+          <button type="button" className="btn primary sm" onClick={() => openEditor({ mode: "add" })}>
+            <Icon name="plus" size={14} />
+            <span>{t("Add provider")}</span>
+          </button>
+        )}
       </header>
+
+      {/* Inline Add / Customize Provider Studio */}
+      {editor && (
+        <div ref={editorRef} className="stg-inline-studio-wrap">
+          <ProviderEditor
+            key={editor.mode === "edit" ? String(editor.provider.id) : "new"}
+            provider={editor.mode === "edit" ? editor.provider : undefined}
+            inline
+            onCancel={() => setEditor(null)}
+            onSaved={() => {
+              setEditor(null);
+              load();
+            }}
+          />
+        </div>
+      )}
 
       {/* Active Model Spotlight */}
       {info.model ? (
@@ -239,22 +269,24 @@ export function ProvidersSettingsPage() {
               {t("Pick the model")}
             </button>
             {activeProv && (
-              <button type="button" className="btn ghost sm" onClick={() => openDialog({ kind: "provider-edit", provider: activeProv })}>
+              <button type="button" className="btn ghost sm" onClick={() => openEditor({ mode: "edit", provider: activeProv })}>
                 {t("Configure model")}
               </button>
             )}
           </div>
         </div>
       ) : (
-        <div className="stg-empty-banner">
-          <div>
-            <div className="stg-empty-title">{t("No active model connected")}</div>
-            <p>{t("Macron needs a language model: OpenAI, Anthropic, Gemini, OpenRouter, a local Ollama, or any compatible provider.")}</p>
+        !editor && (
+          <div className="stg-empty-banner">
+            <div>
+              <div className="stg-empty-title">{t("No active model connected")}</div>
+              <p>{t("Macron needs a language model: OpenAI, Anthropic, Gemini, OpenRouter, a local Ollama, or any compatible provider.")}</p>
+            </div>
+            <button type="button" className="btn primary sm" onClick={() => openEditor({ mode: "add" })}>
+              {t("Connect a model")}
+            </button>
           </div>
-          <button type="button" className="btn primary sm" onClick={() => openDialog({ kind: "model-connect" })}>
-            {t("Connect a model")}
-          </button>
-        </div>
+        )
       )}
 
       {/* Search + Auto-Failover bar */}
@@ -311,7 +343,7 @@ export function ProvidersSettingsPage() {
                   <button type="button" className="btn ghost sm" disabled={isTesting} onClick={() => runTest(p)}>
                     {isTesting ? t("Testing…") : t("Test")}
                   </button>
-                  <button type="button" className="btn ghost sm" onClick={() => openDialog({ kind: "provider-edit", provider: p })}>
+                  <button type="button" className="btn ghost sm" onClick={() => openEditor({ mode: "edit", provider: p })}>
                     {t("Customize")}
                   </button>
                   <button
@@ -391,7 +423,7 @@ export function ProvidersSettingsPage() {
                 className="btn ghost sm"
                 onClick={async () => {
                   if (!ls.models.length) {
-                    openDialog({ kind: "provider-edit" });
+                    openEditor({ mode: "add" });
                     return;
                   }
                   try {
@@ -609,6 +641,19 @@ export function MoaSettingsPage() {
     server.moa().then(setMoa).catch(() => setMoa(null));
   }, []);
 
+  useEffect(() => {
+    if (!addingMoa) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setAddingMoa(false);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [addingMoa]);
+
   const toggleRef = (name: string) => {
     setMRefs((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
   };
@@ -675,7 +720,7 @@ export function MoaSettingsPage() {
       <header className="stg-head stg-head-row">
         <div>
           <h1>{t("Mixture of Agents")}</h1>
-          <p>{t("No MoA presets yet. Combine multiple models to vote and synthesize better answers.")}</p>
+          <p>{t("Combine multiple models to vote and synthesize better answers.")}</p>
         </div>
         {!addingMoa && (
           <button
@@ -844,7 +889,7 @@ export function ParametersSettingsPage() {
             <div className="stg-empty-title">{t("No active model connected")}</div>
             <p>{t("Connect a provider to unlock model parameters.")}</p>
           </div>
-          <button type="button" className="btn primary sm" onClick={() => openDialog({ kind: "model-connect" })}>
+          <button type="button" className="btn primary sm" onClick={() => openSettings("providers")}>
             {t("Connect a model")}
           </button>
         </div>

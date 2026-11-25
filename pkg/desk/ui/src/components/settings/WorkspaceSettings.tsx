@@ -36,7 +36,7 @@ export function GeneralSettingsPage() {
     <div className="stg-page">
       <header className="stg-head">
         <h1>{t("General")}</h1>
-        <p>{t("Workspace")}</p>
+        <p>{t("Overview of your active workspace and keyboard shortcuts.")}</p>
       </header>
 
       <div className="stg-summary-strip">
@@ -53,7 +53,7 @@ export function GeneralSettingsPage() {
           <strong>{info.sandboxed ? t("Sandbox") : info.executionMode || "best-effort"}</strong>
         </div>
         <div className="stg-metric">
-          <span className="stg-metric-label">Mode</span>
+          <span className="stg-metric-label">{t("Mode")}</span>
           <strong>{mode === "plan" ? t("Plan") : t("Build")}</strong>
         </div>
       </div>
@@ -121,11 +121,18 @@ export function AppearanceSettingsPage() {
     speaking: t("Speaking"),
   };
 
+  const densitySpec =
+    density === "compact"
+      ? "13px · 11px gap · 820px col"
+      : density === "spacious"
+        ? "15px · 30px gap · 680px col"
+        : "14px · 20px gap · 740px col";
+
   return (
     <div className="stg-page">
       <header className="stg-head">
         <h1>{t("Appearance & Theme")}</h1>
-        <p>{t("Theme palette")}</p>
+        <p>{t("Customize theme, color palette, layout density, motion, and StarBuddy.")}</p>
       </header>
 
       {/* Interactive StarBuddy Live Preview Studio */}
@@ -161,7 +168,7 @@ export function AppearanceSettingsPage() {
             </div>
             {previewMood === "speaking" && (
               <label className="stg-audio-slider">
-                <span>Audio amplitude</span>
+                <span>{t("Audio amplitude")}</span>
                 <input
                   type="range"
                   min={0.05}
@@ -259,7 +266,7 @@ export function AppearanceSettingsPage() {
         <div className="stg-row-setting">
           <div>
             <div className="stg-row-title">{t("Interface density")}</div>
-            <div className="stg-row-help">{t("Compact")} · {t("Comfortable")} · {t("Spacious")}</div>
+            <div className="stg-row-help">{t("Adjust spacing, typography scale, and reading measure across the entire app.")}</div>
           </div>
           <div className="choice" role="radiogroup">
             {(
@@ -274,6 +281,25 @@ export function AppearanceSettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Live Density Specimen */}
+        <div className="stg-density-preview" aria-live="polite">
+          <div className="dp-head">
+            <span>{t("Live layout preview")}</span>
+            <span className="dp-tag" dir="ltr">
+              {densitySpec}
+            </span>
+          </div>
+          <div className="dp-user">{t("Inspect the build pipeline and fix any flaky tests.")}</div>
+          <div className="dp-tool" dir="ltr">
+            <span className="dp-ok">
+              <Icon name="check" size={12} />
+            </span>
+            <span>run_command</span>
+            <code>go test ./...</code>
+          </div>
+          <div className="dp-reply">{t("All 42 tests pass. Spacing and typography update instantly across chat, sidebar, and settings.")}</div>
         </div>
 
         <div className="stg-row-setting">

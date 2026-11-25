@@ -45,8 +45,8 @@ const FA: Record<string, string> = {
   "No matching files": "فایلی پیدا نشد",
   "waiting": "در صف",
   "Add to what Macron is doing, or press Esc to stop": "ادامه دستور را بنویسید یا Esc را بزنید",
-  "Describe the goal; Macron plans first and changes nothing": "هدف را توضیح دهید؛ مکرون ابتدا برنامه می‌چیند بدون تغییر فایل",
-  "Ask Macron to build, fix, research or automate something": "از مکرون بخواهید بسازد، خطایابی کند یا خودکارسازی انجام دهد (@فایل یا Ctrl+V)",
+  "Describe the goal; Macron plans first and changes nothing": "هدف را بنویسید؛ مکرون بدون تغییر فایل برنامه‌ریزی می‌کند…",
+  "Ask Macron to build, fix, research or automate something": "از مکرون بخواهید بسازد، بررسی کند یا خودکارسازی کند…",
   "Pick a model": "انتخاب مدل",
 
   // Plan & Changes Inspector
@@ -374,6 +374,51 @@ const FA: Record<string, string> = {
   "Advisors": "مدل‌های مشاور",
   "Aggregator": "مدل جمع‌بندی‌کننده",
   "Final answer": "پاسخ نهایی",
+
+  // v2.0.0 Polish, Inline Settings Studios & Density Preview
+  "Mode": "حالت کار",
+  "Audio amplitude": "شدت صدا",
+  "Overview of your active workspace and keyboard shortcuts.": "نمای کلی فضای کاری فعال و میانبرهای صفحه‌کلید",
+  "Customize theme, color palette, layout density, motion, and StarBuddy.": "شخصی‌سازی تم، پالت رنگی، تراکم رابط، انیمیشن و StarBuddy",
+  "Adjust spacing, typography scale, and reading measure across the entire app.": "فاصله‌گذاری، اندازه تایپوگرافی و عرض ستون خواندن را در کل برنامه تنظیم کنید.",
+  "Live layout preview": "پیش‌نمایش زنده تراکم چیدمان",
+  "Inspect the build pipeline and fix any flaky tests.": "لطفاً پایپ‌لاین بیلد را بررسی کن و تست‌های ناپایدار را اصلاح کن.",
+  "All 42 tests pass. Spacing and typography update instantly across chat, sidebar, and settings.":
+    "هر ۴۲ تست با موفقیت پاس شد. فاصله‌گذاری و تایپوگرافی به‌صورت آنی در چت، سایدبار و تنظیمات اعمال می‌شود.",
+  "Combine multiple models to vote and synthesize better answers.": "چند مدل را ترکیب کنید تا با رأی‌گیری پاسخ دقیق‌تری بسازند.",
+  "Connect local or remote MCP tool servers to extend Macron's capabilities.": "سرورهای ابزار MCP محلی یا ریموت را متصل کنید تا قابلیت‌های مکرون گسترش یابد.",
+  "Manage reusable capabilities and domain instructions for Macron.": "مهارت‌های قابل استفاده مجدد و دستورالعمل‌های تخصصی مکرون را مدیریت کنید.",
+  "Configure credentials for Telegram, GitHub, and external integrations.": "کلیدها و اطلاعات اتصال تلگرام، گیت‌هاب و سرویس‌های بیرونی را تنظیم کنید.",
+  "Work seamlessly on remote Linux servers over SSH or inside WSL.": "روی سرورهای لینوکس از طریق SSH یا داخل WSL به صورت یکپارچه کار کنید.",
+  "Add an MCP server": "افزودن سرور MCP",
+  "Its tools reach Macron here, in the terminal and in Telegram. Local servers run on this machine; remote ones are reached by their address.":
+    "ابزارهای این سرور هم اینجا، هم در ترمینال و هم در تلگرام در دسترس مکرون قرار می‌گیرند. سرورهای محلی روی همین سیستم اجرا می‌شوند.",
+  "Name": "نام",
+  "Command or address": "دستور یا آدرس سرور",
+  "Command or address is required.": "وارد کردن دستور یا آدرس الزامی است.",
+  "Headers (one per line)": "هدرها (هر خط یک مورد)",
+  "Environment variables (one per line)": "متغیرهای محیطی (هر خط یک مورد)",
+  "Add and connect": "افزودن و اتصال",
+  "None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.":
+    "هنوز سرور MCP اضافه نشده است. سرورهای MCP ابزارهای بیشتری مثل گیت‌هاب، دیتابیس و طراحی به مکرون می‌دهند.",
+  "Add a server": "افزودن سرور جدید",
+  "Macron runs over an encrypted SSH tunnel or directly inside WSL — no port is exposed to the internet.":
+    "مکرون از طریق تونل رمزنگاری‌شده SSH یا مستقیماً داخل WSL اجرا می‌شود و هیچ پورتی به اینترنت باز نمی‌شود.",
+  "Connection type": "نوع اتصال",
+  "Server over SSH": "سرور از طریق SSH",
+  "WSL on this PC": "WSL روی همین سیستم",
+  "Address": "آدرس سرور",
+  "Linux distribution": "توزیع لینوکس",
+  "Private key file": "فایل کلید خصوصی",
+  "Use a specific key file": "استفاده از فایل کلید اختصاصی",
+  "Write it like root@203.0.113.7 or me@example.com:2222": "آدرس را به شکل root@203.0.113.7 یا me@example.com:2222 وارد کنید",
+  "No servers yet. Add one to let Macron work on a VPS or in WSL.": "هنوز سروری اضافه نشده است. برای کار روی VPS یا WSL یک سرور اضافه کنید.",
+  "Reasoning effort": "میزان عمق استدلال",
+  "Context": "کانتکست",
+  "Input": "ورودی",
+  "Output": "خروجی",
+  "Est. cost": "هزینه تخمینی",
+  "Last turn": "آخرین پاسخ",
 };
 
 export function tr(lang: Lang, key: string): string {

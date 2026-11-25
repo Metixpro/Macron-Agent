@@ -60,6 +60,7 @@ export interface State {
   live: Live;
   lastTook: number;
   dialog: Dialog;
+  settingsBg: SettingsSectionId | null;
   errorAlert: string | null;
   theme: Theme;
   density: Density;
@@ -118,6 +119,7 @@ let state: State = {
   live: { running: false },
   lastTook: 0,
   dialog: null,
+  settingsBg: null,
   errorAlert: null,
   theme: local.get<Theme>("theme", "system"),
   density: local.get<Density>("density", "comfortable"),
