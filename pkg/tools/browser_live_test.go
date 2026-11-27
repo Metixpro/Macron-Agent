@@ -50,7 +50,7 @@ func TestBrowserToolLiveEndToEnd(t *testing.T) {
 		t.Fatalf("marshal args: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	out, err := reg.Execute(ctx, sess, ToolBrowser, string(argsJSON))

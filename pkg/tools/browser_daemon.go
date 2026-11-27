@@ -20,7 +20,11 @@ import (
 const (
 	browserDaemonIdle     = 15 * time.Minute
 	browserDaemonReapTick = 2 * time.Minute
-	browserDaemonBootWait = 35 * time.Second
+	// Cold start spawns Python, imports Playwright and launches Chromium;
+	// on loaded or low-power machines that can take well over 35s, and the
+	// wait only caps failure detection — a healthy daemon signals ready as
+	// soon as it is up, so a generous cap costs nothing on the happy path.
+	browserDaemonBootWait = 60 * time.Second
 )
 
 var errDaemonUnsupported = errors.New("persistent browser daemon unavailable")
