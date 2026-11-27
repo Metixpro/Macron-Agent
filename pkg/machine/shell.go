@@ -126,9 +126,37 @@ func (sh *shell) read(r io.Reader) {
 				j.Running, j.Code, j.Ended = false, m.Code, time.Now()
 			}
 		} else if ch := sh.calls[m.ID]; ch != nil {
-			select {
-			case ch <- m:
+			switch m.Op {
+			case "exit", "detached", "nodetach", "started", "error", "killed":
+				// Never drop terminal/control replies even if output buffered 1024 chunks.
+				select {
+				case ch <- m:
+				default:
+				drain:
+					for len(ch) >= cap(ch) {
+						select {
+						case old := <-ch:
+							if old.Op == "exit" || old.Op == "detached" {
+								select {
+								case ch <- old:
+								default:
+								}
+								// Preserve an already queued terminal reply and stop draining.
+								break drain
+							}
+						default:
+						}
+					}
+					select {
+					case ch <- m:
+					default:
+					}
+				}
 			default:
+				select {
+				case ch <- m:
+				default:
+				}
 			}
 		}
 		sh.mu.Unlock()
@@ -373,16 +401,22 @@ wait:
 		case <-ctx.Done():
 			stopRun()
 			res.ExitCode, res.Error = -1, "cancelled"
-			select {
-			case <-time.After(3 * time.Second):
-				break wait
-			case <-sh.done:
-				break wait
-			case m := <-ch:
-				if m.Op == "exit" {
-					break wait
+			drain := time.NewTimer(3 * time.Second)
+		drainLoop:
+			for {
+				select {
+				case <-drain.C:
+					break drainLoop
+				case <-sh.done:
+					break drainLoop
+				case m := <-ch:
+					if m.Op == "exit" {
+						break drainLoop
+					}
 				}
 			}
+			drain.Stop()
+			break wait
 		case <-deadline.C:
 			stopRun()
 			res.ExitCode, res.Error = 124, fmt.Sprintf("execution timed out after %v", timeout)
@@ -477,6 +511,8 @@ func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job,
 	if err := sh.send(map[string]any{"op": "bg", "id": id, "job": n, "script": s.hostPath(ws, command), "log": filepath.Join(ws, filepath.FromSlash(log))}); err != nil {
 		return fail(fmt.Errorf("the background shell is gone: %w", err))
 	}
+	startTimer := time.NewTimer(20 * time.Second)
+	defer startTimer.Stop()
 	select {
 	case m := <-ch:
 		if m.Op != "started" {
@@ -491,9 +527,9 @@ func (s *Machine) StartJob(ctx context.Context, sessionID, command string) (Job,
 		why, _ := sh.why.Load().(string)
 		return fail(errors.New("the background shell ended: " + why))
 	case <-ctx.Done():
-		return Job{}, ctx.Err()
-	case <-time.After(20 * time.Second):
-		return Job{}, errors.New("the background shell did not answer")
+		return fail(ctx.Err())
+	case <-startTimer.C:
+		return fail(errors.New("the background shell did not answer"))
 	}
 }
 
@@ -554,12 +590,14 @@ func (s *Machine) KillJob(ctx context.Context, sessionID string, n int) error {
 	if err := sh.send(map[string]any{"op": "kill", "id": id, "job": n}); err != nil {
 		return err
 	}
+	killTimer := time.NewTimer(10 * time.Second)
+	defer killTimer.Stop()
 	select {
 	case <-ch:
 	case <-sh.done:
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(10 * time.Second):
+	case <-killTimer.C:
 		return errors.New("the background shell did not answer")
 	}
 	return nil
@@ -700,6 +738,7 @@ def run(m):
             except OSError:
                 pass
         send({"op": "jobexit", "job": r["job"], "code": code})
+        jobs.pop(r["job"], None)
         return
     kill(p)
     if code is None:
@@ -720,7 +759,9 @@ def bg(m):
     jobs[n] = {"p": p, "log": m["log"]}
     send({"op": "started", "id": m["id"], "job": n, "pid": p.pid})
     def wait():
-        send({"op": "jobexit", "job": n, "code": p.wait()})
+        code = p.wait()
+        jobs.pop(n, None)
+        send({"op": "jobexit", "job": n, "code": code})
     threading.Thread(target=wait, daemon=True).start()
 
 def killjob(m):

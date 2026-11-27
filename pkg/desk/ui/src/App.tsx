@@ -4,7 +4,6 @@ import {
   applyDensity,
   applyMotion,
   applyTheme,
-  clearError,
   closeDialog,
   composer,
   newChat,
@@ -19,7 +18,6 @@ import { Composer } from "./components/Composer";
 import { Dialogs } from "./components/Dialogs";
 import { Feed } from "./components/Feed";
 import { Header } from "./components/Header";
-import { LiveCard } from "./components/Live";
 import { PlanPanel, useRightPanelVisible } from "./components/PlanPanel";
 import { Sidebar } from "./components/Sidebar";
 import { Welcome } from "./components/Welcome";
@@ -129,23 +127,6 @@ function useTitle() {
   }, []);
 }
 
-function ErrorBanner() {
-  const t = useT();
-  const err = useStore((s) => s.errorAlert);
-  if (!err) return null;
-  return (
-    <div className="err-banner" role="alert">
-      <Icon name="alert" size={14} />
-      <span className="grow" dir="auto">
-        {err}
-      </span>
-      <button type="button" className="icon-btn sm" title={t("Dismiss")} aria-label={t("Dismiss")} onClick={clearError}>
-        <Icon name="x" size={13} />
-      </button>
-    </div>
-  );
-}
-
 export function App() {
   const t = useT();
   const theme = useStore((s) => s.theme);
@@ -231,9 +212,9 @@ export function App() {
       <div className="scrim" onClick={() => setState({ sideOpen: false })} />
       <main className="main" onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={onDrop}>
         <Header />
-        <Feed />
-        <LiveCard />
-        <ErrorBanner />
+        <div className="feed-stage">
+          <Feed />
+        </div>
         <Composer />
         {dragging && (
           <div className="drop-veil">

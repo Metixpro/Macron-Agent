@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/alecthomas/chroma/v2"
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -70,7 +71,6 @@ var md = goldmark.New(
 )
 
 var (
-	linkRe     = regexp.MustCompile(`<a href="`)
 	imgTagRe   = regexp.MustCompile(`<img src="([^"]*)" alt="([^"]*)"(?: title="[^"]*")?\s*/?>`)
 	fileLinkRe = regexp.MustCompile(`<a href="([^"]*)"`)
 	schemeRe   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]+:`)
@@ -82,9 +82,10 @@ func fileRef(src string) (string, bool) {
 	if u, err := url.PathUnescape(src); err == nil {
 		src = u
 	}
+	src = strings.TrimSpace(src)
 	lower := strings.ToLower(src)
 	switch {
-	case src == "", strings.HasPrefix(src, "#"), strings.HasPrefix(src, "//"):
+	case src == "", strings.HasPrefix(src, "#"), strings.HasPrefix(src, "//"), strings.HasPrefix(src, `\\`):
 		return "", false
 	case strings.HasPrefix(lower, "file://"):
 		src = src[len("file://"):]
@@ -95,6 +96,21 @@ func fileRef(src string) (string, bool) {
 		return "", false
 	}
 	return src, true
+}
+
+func safeHTMLHref(raw string) bool {
+	s := strings.TrimSpace(html.UnescapeString(raw))
+	if s == "" || strings.HasPrefix(s, "#") || strings.HasPrefix(s, "/api/") {
+		return true
+	}
+	if strings.HasPrefix(s, "//") || strings.HasPrefix(s, `\\`) {
+		return false
+	}
+	low := strings.ToLower(s)
+	if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") || strings.HasPrefix(low, "mailto:") {
+		return true
+	}
+	return !schemeRe.MatchString(s)
 }
 
 func fileTags(out string) string {
@@ -171,41 +187,10 @@ func fixLineTargets(text string) string {
 	})
 }
 
-var (
-	internalNotesRe   = regexp.MustCompile(`(?is)<work_notes\b[^>]*>.*?(?:</work_notes>|\z)|</?work_notes\b[^>]*>|<files_sent\b[^>]*>.*?(?:</files_sent>|\z)|</?files_sent\b[^>]*>`)
-	partialOpenNoteRe = regexp.MustCompile(`(?is)<(?:work_notes|files_sent)\b[^>]*\z`)
-	codeSpanRe        = regexp.MustCompile("(?s)```.*?(?:```|\\z)|~~~.*?(?:~~~|\\z)|`[^`\n]*`")
-	blankLinesRe      = regexp.MustCompile(`\n{3,}`)
-)
-
-func outsideCodeSpans(md string, fn func(string) string) string {
-	var b strings.Builder
-	last := 0
-	for _, loc := range codeSpanRe.FindAllStringIndex(md, -1) {
-		b.WriteString(fn(md[last:loc[0]]))
-		b.WriteString(md[loc[0]:loc[1]])
-		last = loc[1]
-	}
-	b.WriteString(fn(md[last:]))
-	return b.String()
-}
-
 // stripInternalNotes removes internal agent bookkeeping tags (<work_notes>, <files_sent>)
-// emitted by models (e.g. DeepSeek echoing system-injected history tags) outside code blocks.
+// emitted by models outside code blocks.
 func stripInternalNotes(s string) string {
-	if !strings.Contains(s, "<") {
-		return strings.TrimSpace(s)
-	}
-	lower := strings.ToLower(s)
-	if !strings.Contains(lower, "work_notes") && !strings.Contains(lower, "files_sent") {
-		return strings.TrimSpace(s)
-	}
-	cleaned := outsideCodeSpans(s, func(part string) string {
-		part = internalNotesRe.ReplaceAllString(part, "")
-		part = partialOpenNoteRe.ReplaceAllString(part, "")
-		return part
-	})
-	return strings.TrimSpace(blankLinesRe.ReplaceAllString(cleaned, "\n\n"))
+	return textutil.StripInternalNotes(s)
 }
 
 func renderMarkdown(text string) string {
@@ -217,7 +202,13 @@ func renderMarkdown(text string) string {
 	if err := md.Convert([]byte(fixTargets(text)), &buf); err != nil {
 		return "<p>" + html.EscapeString(text) + "</p>"
 	}
-	return linkRe.ReplaceAllString(fileTags(buf.String()), `<a target="_blank" rel="noopener noreferrer" href="`)
+	return fileLinkRe.ReplaceAllStringFunc(fileTags(buf.String()), func(tag string) string {
+		href := fileLinkRe.FindStringSubmatch(tag)[1]
+		if !safeHTMLHref(href) {
+			return `<a rel="noopener noreferrer" href="#"`
+		}
+		return `<a target="_blank" rel="noopener noreferrer" href="` + href + `"`
+	})
 }
 
 var (

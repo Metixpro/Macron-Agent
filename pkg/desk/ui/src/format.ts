@@ -46,6 +46,10 @@ export function clock(ms: number): string {
 
 export function shortPath(path: string, home: string): string {
   if (!path) return "";
+  // Windows paths are shown in full, in their native form (C:\Users\me\Macron); "~" is a POSIX idiom.
+  if (/^[A-Za-z]:(?:[\\/]|$)|^\\\\/.test(path) || /^[A-Za-z]:[\\/]|^\\\\/.test(home)) {
+    return path.replace(/\//g, "\\");
+  }
   if (home && (path === home || path.startsWith(home + "/") || path.startsWith(home + "\\"))) return "~" + path.slice(home.length);
   return path;
 }
@@ -104,6 +108,22 @@ export function bidi(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>("p, h1, h2, h3, h4, h5, h6, blockquote, td, th").forEach((n) => {
     if (n.tagName === "P" && n.closest("li")) n.removeAttribute("dir");
     else setDir(n, firstDir(prose(n)));
+  });
+  anchorInlineCode(root);
+}
+
+// Inline code is an isolated LTR island. Parentheses and punctuation touching it
+// would otherwise resolve against the island and render mirrored in Persian/Arabic
+// text. A right-to-left mark on each side keeps them in the surrounding direction.
+const RLM = "\u200F";
+function anchorInlineCode(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((c) => {
+    const host = c.closest<HTMLElement>("[dir]");
+    if (!host || host.getAttribute("dir") !== "rtl") return;
+    const before = c.previousSibling;
+    if (!(before && before.nodeType === 3 && (before.nodeValue || "").endsWith(RLM))) c.before(document.createTextNode(RLM));
+    const after = c.nextSibling;
+    if (!(after && after.nodeType === 3 && (after.nodeValue || "").startsWith(RLM))) c.after(document.createTextNode(RLM));
   });
 }
 

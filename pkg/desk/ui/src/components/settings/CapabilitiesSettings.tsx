@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { connectServer, disconnectServer, errorText, fail, loadServers, removeServer } from "../../actions";
 import { server } from "../../api";
+import { useHomePath } from "../../hooks";
 import { useT } from "../../i18n";
 import { Icon } from "../../icons";
 import { setState, useStore } from "../../store";
@@ -506,6 +507,7 @@ export function ServersSettingsPage() {
   const t = useT();
   const servers = useStore((s) => s.servers);
   const wsl = useStore((s) => s.wsl);
+  const sshKeyDefault = useHomePath(".ssh/id_ed25519");
 
   const [adding, setAdding] = useState(false);
   const [kind, setKind] = useState<"ssh" | "wsl">("ssh");
@@ -654,7 +656,7 @@ export function ServersSettingsPage() {
                   <input
                     spellCheck={false}
                     dir="ltr"
-                    placeholder="Default: SSH agent, then ~/.ssh/id_ed25519, id_ecdsa, id_rsa"
+                    placeholder={`Default: SSH agent, then ${sshKeyDefault}, id_ecdsa, id_rsa`}
                     value={key}
                     onChange={(e) => setKey(e.target.value)}
                   />

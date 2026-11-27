@@ -331,6 +331,127 @@ pre.command {
   margin-bottom: 8px;
   font-size: 12px;
   color: var(--dim);
+  direction: ltr;
+  text-align: left;
+}
+
+.folder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.folder-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--sunk);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 520;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+
+.folder-chip:hover {
+  background: var(--hover-2);
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+.folder-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--sunk);
+  color: var(--dim);
+  min-width: 140px;
+  flex: 1 1 140px;
+  max-width: 210px;
+}
+
+.folder-filter:focus-within {
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+.folder-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.folder-filter input::placeholder {
+  color: var(--faint);
+}
+
+.folder-filter-x {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--dim);
+}
+
+.folder-filter-x:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.dialog.folder .folder-bar {
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+
+.folder-selected {
+  flex: 1;
+  min-width: 0;
+  font: 400 11.5px/1.3 var(--mono);
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog.folder .folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  flex: none;
+}
+
+.dialog.folder .folder-open-btn {
+  max-width: min(210px, 44vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[dir="rtl"] .dialog.folder .entry .end svg {
+  transform: rotate(180deg);
 }
 
 .crumbs button {

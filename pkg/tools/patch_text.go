@@ -156,11 +156,18 @@ func (r *Registry) textPatch(sessionID, dir, patch, strip string) ([]string, err
 	for _, f := range files {
 		switch {
 		case f.to == "/dev/null":
-			plan = append(plan, write{name: path.Join(dir, f.from), drop: true})
+			rel, err := r.ensureWorkspaceRel(sessionID, path.Join(dir, f.from))
+			if err != nil || rel == "." {
+				return nil, fmt.Errorf("unsafe patch path %q", f.from)
+			}
+			plan = append(plan, write{name: rel, drop: true})
 			names = append(names, f.from)
 			continue
 		case f.from == "/dev/null":
-			target := path.Join(dir, f.to)
+			target, err := r.ensureWorkspaceRel(sessionID, path.Join(dir, f.to))
+			if err != nil || target == "." {
+				return nil, fmt.Errorf("unsafe patch path %q", f.to)
+			}
 			if _, err := r.Machine.Stat(sessionID, target); err == nil {
 				return nil, fmt.Errorf("%s already exists", f.to)
 			}
@@ -175,7 +182,10 @@ func (r *Registry) textPatch(sessionID, dir, patch, strip string) ([]string, err
 		if len(f.hunks) == 0 {
 			continue
 		}
-		target := path.Join(dir, f.from)
+		target, err := r.ensureWorkspaceRel(sessionID, path.Join(dir, f.from))
+		if err != nil || target == "." {
+			return nil, fmt.Errorf("unsafe patch path %q", f.from)
+		}
 		data, truncated, err := r.Machine.ReadFile(sessionID, target, 32<<20)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %s", f.from, friendlyFSError(err))
@@ -187,7 +197,10 @@ func (r *Registry) textPatch(sessionID, dir, patch, strip string) ([]string, err
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f.from, err)
 		}
-		dest := path.Join(dir, f.to)
+		dest, err := r.ensureWorkspaceRel(sessionID, path.Join(dir, f.to))
+		if err != nil || dest == "." {
+			return nil, fmt.Errorf("unsafe patch path %q", f.to)
+		}
 		plan = append(plan, write{name: dest, data: []byte(out)})
 		if dest != target {
 			plan = append(plan, write{name: target, drop: true})

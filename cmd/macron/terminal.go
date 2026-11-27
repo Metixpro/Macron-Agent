@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/cli"
 	"github.com/Metixpro/macron-agent/pkg/cmdgate"
 	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/desk"
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/memory"
@@ -44,7 +46,7 @@ const (
 
 var projectNotes = []string{"MACRON.md", "AGENTS.md", "CLAUDE.md"}
 
-var hiddenWork = []string{machine.SubDir + "/", machine.JobsDir + "/", ".tool-output/", ".run/", ".docindex/", ".widgets/", ".macron-uploads/", ".macron_page_watches/", ".macron_price_alerts/"}
+var hiddenWork = []string{machine.SubDir + "/", machine.JobsDir + "/", ".browser/", ".tool-output/", ".run/", ".docindex/", ".widgets/", ".macron-uploads/", ".macron_page_watches/", ".macron_price_alerts/"}
 
 func interactiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("TERM") != "dumb"
@@ -188,6 +190,9 @@ func (t *terminal) SetThread(threadID string) {
 }
 
 func (w *workspace) close() {
+	if w.app != nil && w.app.Registry != nil {
+		w.app.Registry.CloseAllBrowsers()
+	}
 	if w.pm != nil {
 		w.pm.Close()
 	}
@@ -250,6 +255,9 @@ func runTerminal() int {
 }
 
 func shortDir(dir string) string {
+	if runtime.GOOS == "windows" {
+		return dir
+	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		if dir == home {
 			return "~"
@@ -755,6 +763,115 @@ func (t *terminal) Files() []string {
 		return nil
 	})
 	return files
+}
+
+func (t *terminal) HasBrowser() bool {
+	return t.app != nil && t.app.Registry != nil && t.app.Registry.HasBrowser()
+}
+
+func (t *terminal) Browse(ctx context.Context, args map[string]any) (string, error) {
+	if !t.HasBrowser() {
+		return "", errors.New("browser runtime is not available")
+	}
+	return t.app.Registry.Browse(ctx, t.session, args)
+}
+
+func convertBrowserState(s tools.BrowserLiveState) desk.BrowserState {
+	out := desk.BrowserState{
+		Available:      s.Available,
+		Open:           s.Open,
+		Live:           s.Live,
+		AgentActive:    s.AgentActive,
+		Takeover:       s.Takeover,
+		TakeoverReason: s.TakeoverReason,
+		URL:            s.URL,
+		Title:          s.Title,
+		Updated:        s.Updated,
+	}
+	if len(s.Tabs) > 0 {
+		out.Tabs = make([]desk.BrowserTab, len(s.Tabs))
+		for i, tab := range s.Tabs {
+			out.Tabs[i] = desk.BrowserTab{
+				Index:  tab.Index,
+				URL:    tab.URL,
+				Title:  tab.Title,
+				Active: tab.Active,
+			}
+		}
+	}
+	if s.Viewport != nil {
+		out.Viewport = &desk.BrowserViewport{Width: s.Viewport.Width, Height: s.Viewport.Height}
+	}
+	return out
+}
+
+func (t *terminal) BrowserLiveState() desk.BrowserState {
+	if !t.HasBrowser() {
+		return desk.BrowserState{}
+	}
+	return convertBrowserState(t.app.Registry.BrowserState(t.session))
+}
+
+func (t *terminal) BrowserNav(ctx context.Context, action string, params map[string]any) (desk.BrowserState, error) {
+	if !t.HasBrowser() {
+		return desk.BrowserState{}, errors.New("browser runtime is not available")
+	}
+	st, err := t.app.Registry.BrowserNav(ctx, t.session, action, params)
+	return convertBrowserState(st), err
+}
+
+func (t *terminal) BrowserInput(ctx context.Context, ev desk.BrowserInput) error {
+	if !t.HasBrowser() {
+		return errors.New("browser runtime is not available")
+	}
+	return t.app.Registry.BrowserInput(ctx, t.session, tools.BrowserInputEvent{
+		Type:       ev.Type,
+		X:          ev.X,
+		Y:          ev.Y,
+		DeltaX:     ev.DeltaX,
+		DeltaY:     ev.DeltaY,
+		Button:     ev.Button,
+		ClickCount: ev.ClickCount,
+		Key:        ev.Key,
+		Text:       ev.Text,
+		Modifiers:  ev.Modifiers,
+	})
+}
+
+func (t *terminal) SetBrowserTakeover(ctx context.Context, active bool, reason string) (desk.BrowserState, error) {
+	if !t.HasBrowser() {
+		return desk.BrowserState{}, errors.New("browser runtime is not available")
+	}
+	st, err := t.app.Registry.SetBrowserTakeover(ctx, t.session, active, reason)
+	return convertBrowserState(st), err
+}
+
+func (t *terminal) SubscribeBrowserFrames() ([]byte, <-chan []byte, func()) {
+	if !t.HasBrowser() {
+		closed := make(chan []byte)
+		close(closed)
+		return nil, closed, func() {}
+	}
+	return t.app.Registry.SubscribeBrowserFrames(t.session)
+}
+
+func (t *terminal) SetBrowserObserver(fn func()) {
+	if !t.HasBrowser() {
+		return
+	}
+	if fn == nil {
+		t.app.Registry.SetBrowserObserver(t.session, nil)
+		return
+	}
+	t.app.Registry.SetBrowserObserver(t.session, func(tools.BrowserLiveState) {
+		fn()
+	})
+}
+
+func (t *terminal) CloseBrowser() {
+	if t.HasBrowser() {
+		t.app.Registry.CloseBrowser(t.session)
+	}
 }
 
 func (t *terminal) Shell(ctx context.Context, command string) string {

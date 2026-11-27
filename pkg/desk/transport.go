@@ -123,7 +123,7 @@ func hostKeyCallback(known ssh.HostKeyCallback, path, trust string) ssh.HostKeyC
 		}
 		fp := ssh.FingerprintSHA256(key)
 		if len(ke.Want) > 0 {
-			return fmt.Errorf("the server's host key changed (now %s); if you did not reinstall it, someone may be in the middle. Check ~/.ssh/known_hosts", fp)
+			return fmt.Errorf("the server's host key changed (now %s); if you did not reinstall it, someone may be in the middle. Check %s", fp, path)
 		}
 		if trust != fp {
 			return &NeedError{Need: "trust", Fingerprint: fp, Message: "first connection to this server: check its key fingerprint"}
@@ -334,10 +334,11 @@ func (t *sshTransport) close() {
 }
 
 type execTransport struct {
-	argv  []string
-	cmd   *exec.Cmd
-	ended chan struct{}
-	once  sync.Once
+	argv     []string
+	cmd      *exec.Cmd
+	ended    chan struct{}
+	once     sync.Once
+	killOnce sync.Once
 }
 
 func wslArgv(distro string) []string {
@@ -364,7 +365,7 @@ func (t *execTransport) start(context.Context) (io.WriteCloser, io.Reader, func(
 	t.cmd = cmd
 	go func() {
 		_ = cmd.Wait()
-		t.close()
+		t.once.Do(func() { close(t.ended) })
 	}()
 	return stdin, stdout, errs.String, nil
 }
@@ -377,12 +378,14 @@ func (t *execTransport) dial(ctx context.Context, addr string) (net.Conn, error)
 func (t *execTransport) done() <-chan struct{} { return t.ended }
 
 func (t *execTransport) close() {
-	t.once.Do(func() {
+	t.killOnce.Do(func() {
 		if t.cmd != nil && t.cmd.Process != nil {
 			_ = t.cmd.Process.Kill()
 		}
-		close(t.ended)
 	})
+	if t.cmd == nil {
+		t.once.Do(func() { close(t.ended) })
+	}
 }
 
 type tailBuffer struct {

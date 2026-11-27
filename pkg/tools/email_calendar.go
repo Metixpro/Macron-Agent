@@ -202,6 +202,15 @@ func TestSMTP(ctx context.Context) error {
 	return smtpSession(ctx, host, port, user, pass, func(*smtp.Client) error { return nil })
 }
 
+func cleanICalText(s string, keepNewlines bool) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "")
+	if keepNewlines {
+		return strings.ReplaceAll(s, "\n", `\n`)
+	}
+	return strings.ReplaceAll(s, "\n", " ")
+}
+
 func GenerateICalendar(title, description, location string, start, end time.Time) string {
 	var sb strings.Builder
 	now := time.Now().UTC().Format("20060102T150405Z")
@@ -218,12 +227,12 @@ func GenerateICalendar(title, description, location string, start, end time.Time
 	sb.WriteString(fmt.Sprintf("DTSTAMP:%s\r\n", now))
 	sb.WriteString(fmt.Sprintf("DTSTART:%s\r\n", startStr))
 	sb.WriteString(fmt.Sprintf("DTEND:%s\r\n", endStr))
-	sb.WriteString(fmt.Sprintf("SUMMARY:%s\r\n", title))
+	sb.WriteString(fmt.Sprintf("SUMMARY:%s\r\n", cleanICalText(title, false)))
 	if description != "" {
-		sb.WriteString(fmt.Sprintf("DESCRIPTION:%s\r\n", strings.ReplaceAll(description, "\n", "\\n")))
+		sb.WriteString(fmt.Sprintf("DESCRIPTION:%s\r\n", cleanICalText(description, true)))
 	}
 	if location != "" {
-		sb.WriteString(fmt.Sprintf("LOCATION:%s\r\n", location))
+		sb.WriteString(fmt.Sprintf("LOCATION:%s\r\n", cleanICalText(location, false)))
 	}
 	sb.WriteString("STATUS:CONFIRMED\r\n")
 	sb.WriteString("END:VEVENT\r\n")

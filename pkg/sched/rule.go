@@ -120,6 +120,9 @@ func (r Rule) String() string {
 func (r Rule) Once() bool { return r.Kind == "" }
 
 func (r Rule) Next(t time.Time, loc *time.Location) time.Time {
+	if loc == nil {
+		loc = time.Local
+	}
 	lt := t.In(loc)
 	at := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, r.Hour, r.Minute, 0, 0, loc) }
 	switch r.Kind {
@@ -236,6 +239,9 @@ func toPersianDigits(s string) string {
 }
 
 func ParseLocal(s string, loc *time.Location) (time.Time, error) {
+	if loc == nil {
+		loc = time.Local
+	}
 	s = strings.TrimSpace(toASCIIDigits(s))
 	for _, layout := range []string{"2006-01-02 15:04", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02T15:04:05", "2006/01/02 15:04"} {
 		if t, err := time.ParseInLocation(layout, s, loc); err == nil {

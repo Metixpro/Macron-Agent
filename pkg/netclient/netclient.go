@@ -8,10 +8,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -36,6 +38,13 @@ func NewClient(opts Options) *http.Client {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
+		ControlContext: func(_ context.Context, _, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			return checkMetadataHost(host)
+		},
 	}
 	tr := &http.Transport{
 		DialContext:           dialer.DialContext,
@@ -64,7 +73,7 @@ func NewClient(opts Options) *http.Client {
 			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 				return fmt.Errorf("redirect to unsupported scheme %q", req.URL.Scheme)
 			}
-			return nil
+			return checkMetadataHost(req.URL.Hostname())
 		},
 	}
 }
@@ -96,6 +105,9 @@ type idleTransport struct {
 }
 
 func (t idleTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := checkMetadataHost(req.URL.Hostname()); err != nil {
+		return nil, err
+	}
 	resp, err := t.next.RoundTrip(req)
 	if err != nil || resp.Body == nil {
 		return resp, err
@@ -139,6 +151,33 @@ func (b *idleBody) Close() error {
 	return b.rc.Close()
 }
 
+func checkMetadataHost(host string) error {
+	if isMetadataHost(host) {
+		return fmt.Errorf("access to metadata host %q is blocked", host)
+	}
+	return nil
+}
+
+func isMetadataHost(host string) bool {
+	h := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(host, ".")))
+	if h == "" {
+		return false
+	}
+	if h == "metadata.google.internal" || h == "metadata.goog" || h == "instance-data" {
+		return true
+	}
+	addr, err := netip.ParseAddr(h)
+	if err != nil {
+		return false
+	}
+	addr = addr.WithZone("").Unmap()
+	switch addr.String() {
+	case "169.254.169.254", "169.254.170.2", "100.100.100.200", "fd00:ec2::254":
+		return true
+	}
+	return addr.IsLinkLocalUnicast() && addr.Is4() && strings.HasPrefix(addr.String(), "169.254.169.")
+}
+
 func ValidateURL(raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	u, err := url.Parse(raw)
@@ -150,6 +189,9 @@ func ValidateURL(raw string) (*url.URL, error) {
 	}
 	if u.Hostname() == "" {
 		return nil, errors.New("URL has no host")
+	}
+	if err := checkMetadataHost(u.Hostname()); err != nil {
+		return nil, err
 	}
 	return u, nil
 }

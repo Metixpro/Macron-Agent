@@ -64,7 +64,9 @@ export function saveDraft(id: string, text: string) {
 }
 
 export async function loadState() {
+  const machine = getState().machine;
   const st = await server.state();
+  if (getState().machine !== machine) return;
   const projects = st.projects || [];
   setState((s) => {
     const ids = projects.map((p) => p.id);
@@ -77,14 +79,16 @@ export async function loadState() {
 }
 
 export async function loadTuning() {
-  if (!getState().info.model) {
+  const { machine, info } = getState();
+  if (!info.model) {
     setState({ tuning: null });
     return;
   }
   try {
-    setState({ tuning: await server.tuning() });
+    const tuning = await server.tuning();
+    if (getState().machine === machine && getState().info.model === info.model) setState({ tuning });
   } catch {
-    setState({ tuning: null });
+    if (getState().machine === machine && getState().info.model === info.model) setState({ tuning: null });
   }
 }
 
@@ -134,16 +138,18 @@ export function refreshState() {
   }, 250);
 }
 
-function applySnapshot(snap: Snapshot) {
+function applySnapshot(snap: Snapshot, project?: string) {
   const blocks = snap.blocks || [];
   const live = snap.live || { running: false };
   setState((s) => ({
+    ...(project !== undefined && project !== s.current ? { current: project, changes: null, browserView: null, errorAlert: null } : {}),
+    ...(project !== undefined ? { sideOpen: false } : {}),
     blocks,
     fresh: blocks.length,
     live,
     lastTook: 0,
-    activeThread: snap.thread || s.activeThread,
-    threads: snap.threads || s.threads,
+    activeThread: snap.thread || (project === undefined || project === s.current ? s.activeThread : "default"),
+    threads: snap.threads || (project === undefined || project === s.current ? s.threads : []),
     dialog: live.ask ? { kind: "ask", ask: live.ask } : s.dialog?.kind === "ask" ? null : s.dialog,
   }));
 }
@@ -152,20 +158,29 @@ let opening = 0;
 
 export async function openProject(id: string) {
   const n = ++opening;
+  let snap: Snapshot;
+  try {
+    snap = await server.project(id);
+  } catch (err) {
+    if (n !== opening) return false;
+    fail(err);
+    return false;
+  }
+  if (n !== opening) return false;
   follow.on = true;
-  setState({ current: id, sideOpen: false, changes: null });
   local.set("project:" + (getState().machine || "local"), id);
-  const snap = await server.project(id);
-  if (n !== opening) return;
-  applySnapshot(snap);
+  applySnapshot(snap, id);
   loadChanges(id);
+  void loadBrowser(id);
+  return true;
 }
 
 export async function loadChanges(id = getState().current) {
   if (!id) return;
+  const machine = getState().machine;
   try {
     const ch = await server.changes(id);
-    if (getState().current === id) setState({ changes: ch });
+    if (getState().machine === machine && getState().current === id) setState({ changes: ch });
   } catch {
     // Ignore errors when remote engine is older.
   }
@@ -184,12 +199,42 @@ export async function revertFile(path: string): Promise<boolean> {
   }
 }
 
+const visitedBrowserWorkspaces = new Set<string>();
+
+export function noteBrowserVisit(id: string) {
+  if (id) visitedBrowserWorkspaces.add(scoped(id));
+}
+
+export function openBrowserOnFirstVisit(id: string) {
+  if (visitedBrowserWorkspaces.has(scoped(id))) return false;
+  noteBrowserVisit(id);
+  return true;
+}
+
+export async function loadBrowser(id = getState().current) {
+  if (!id) return;
+  const { machine, browserView } = getState();
+  try {
+    const bv = await server.browserState(id);
+    if (getState().machine === machine && getState().current === id && getState().browserView === browserView) {
+      if (bv.open) noteBrowserVisit(id);
+      setState({ browserView: bv });
+    }
+  } catch {
+    // Ignore when engine is older.
+  }
+}
+
 export function setRightTab(tab: RightTab) {
   if (tab === "changes") {
     local.set("changesOpen", true);
     local.set("companionOpen", true);
     setState({ rightTab: "changes", changesOpen: true, companionOpen: true });
     loadChanges();
+  } else if (tab === "browser") {
+    local.set("companionOpen", true);
+    setState({ rightTab: "browser", companionOpen: true });
+    void loadBrowser();
   } else if (tab === "plan") {
     local.set("planOpen", true);
     local.set("companionOpen", true);
@@ -233,7 +278,7 @@ export function toggleCompanion(open?: boolean, tab?: RightTab) {
       local.set("planOpen", true);
       return { companionOpen: true, planOpen: true, rightTab: "plan" };
     }
-    return { companionOpen: true, rightTab: "activity" };
+    return { companionOpen: true, rightTab: nextTab };
   });
 }
 
@@ -275,9 +320,11 @@ export async function stop() {
 
 export async function newChat() {
   const s = getState();
+  if (!s.current) return;
   if (s.live.running) return showError("Stop the current job first");
   try {
     const res = await server.newChat(s.current);
+    if (getState().machine !== s.machine || getState().current !== s.current) return;
     if (res.snapshot) applySnapshot(res.snapshot);
     composer.focus();
   } catch (e) {
@@ -285,16 +332,28 @@ export async function newChat() {
   }
 }
 
-export async function switchThread(tid: string) {
+let switchingThread = false;
+
+export async function switchThread(tid: string): Promise<boolean> {
   const s = getState();
-  if (s.live.running) return showError("Stop the current job first");
-  if (tid === s.activeThread) return;
+  if (!s.current || switchingThread) return false;
+  if (s.live.running) {
+    showError("Stop the current job first");
+    return false;
+  }
+  if (tid === s.activeThread) return true;
+  switchingThread = true;
   try {
     const snap = await server.switchThread(s.current, tid);
+    if (getState().machine !== s.machine || getState().current !== s.current) return false;
     applySnapshot(snap);
     composer.focus();
+    return true;
   } catch (e) {
     fail(e);
+    return false;
+  } finally {
+    switchingThread = false;
   }
 }
 
@@ -303,6 +362,7 @@ export async function deleteThread(tid: string) {
   if (s.live.running) return showError("Stop the current job first");
   try {
     const res = await server.deleteThread(s.current, tid);
+    if (getState().machine !== s.machine || getState().current !== s.current) return;
     if (res.snapshot) applySnapshot(res.snapshot);
     else setState({ activeThread: res.active, threads: res.threads });
   } catch (e) {
@@ -436,7 +496,7 @@ export async function answer(choice: "once" | "session" | "always" | "deny") {
 export async function addFolder(path: string) {
   const p = await server.addProject(path);
   await loadState();
-  await openProject(p.id);
+  return openProject(p.id);
 }
 
 export async function removeProject(id: string) {
@@ -458,6 +518,7 @@ export function setTheme(theme: Theme) {
 export function applyTheme(theme: Theme) {
   const dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+  (window as { macronTheme?: (dark: boolean) => Promise<void> }).macronTheme?.(dark).catch(() => undefined);
 }
 
 export function setDensity(density: Density) {
@@ -572,6 +633,7 @@ export async function switchMachine(id: string) {
     if (srv.state !== "ready" && !(await connectServer(id))) return;
   }
   setBase(id ? "/remote/" + encodeURIComponent(id) : "");
+  opening++;
   setState({
     machine: id,
     projects: [],
@@ -579,6 +641,7 @@ export async function switchMachine(id: string) {
     fresh: 0,
     current: "",
     changes: null,
+    browserView: null,
     threads: [],
     activeThread: "default",
     live: { running: false },

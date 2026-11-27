@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/machine"
+	"github.com/Metixpro/macron-agent/pkg/netclient"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
@@ -31,6 +32,9 @@ type PageWatch struct {
 }
 
 func (r *Registry) CreatePageWatch(ctx context.Context, sessionID, targetURL, selector, title string) (*PageWatch, error) {
+	if _, err := netclient.ValidateURL(targetURL); err != nil {
+		return nil, err
+	}
 	if title == "" {
 		title = targetURL
 	}
@@ -68,7 +72,11 @@ func (r *Registry) CreatePageWatch(ctx context.Context, sessionID, targetURL, se
 }
 
 func (r *Registry) CheckPageWatch(ctx context.Context, sessionID, watchID string) (bool, string, error) {
-	path := fmt.Sprintf("%s/%s.json", pageWatchDir, watchID)
+	cleanID := sanitizeBase(watchID)
+	if cleanID == "" {
+		return false, "", fmt.Errorf("invalid watch id")
+	}
+	path := fmt.Sprintf("%s/%s.json", pageWatchDir, cleanID)
 	data, _, err := r.Machine.ReadFile(sessionID, path, 64<<10)
 	if err != nil {
 		return false, "", fmt.Errorf("watch %s not found", watchID)

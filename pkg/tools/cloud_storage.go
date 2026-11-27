@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
-	"github.com/Metixpro/macron-agent/pkg/config"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +15,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
+	"github.com/Metixpro/macron-agent/pkg/netclient"
 )
 
 const (
@@ -56,7 +58,11 @@ func (r *Registry) readUpload(sessionID, localPath string) ([]byte, error) {
 	if strings.TrimSpace(localPath) == "" {
 		return nil, fmt.Errorf("local_path is required for upload")
 	}
-	data, _, err := r.Machine.ReadFile(sessionID, localPath, cloudMaxBytes)
+	rel, err := r.ensureWorkspaceRel(sessionID, localPath)
+	if err != nil || rel == "." {
+		return nil, fmt.Errorf("local_path must stay inside the workspace: %v", err)
+	}
+	data, _, err := r.Machine.ReadFile(sessionID, rel, cloudMaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", localPath, err)
 	}
@@ -68,7 +74,7 @@ func downloadName(localPath, remotePath string) string {
 		return localPath
 	}
 	if b := path.Base(strings.TrimRight(remotePath, "/")); b != "." && b != "/" && b != "" {
-		return b
+		return sanitizeBase(b)
 	}
 	return "download"
 }
@@ -79,6 +85,9 @@ func (r *Registry) webdav(ctx context.Context, sessionID, action, remotePath, lo
 	}
 	if endpoint == "" {
 		return "", fmt.Errorf("WebDAV is not set up: macron config set WEBDAV_URL https://cloud.example.com/remote.php/dav/files/USER (and WEBDAV_USER, WEBDAV_PASS)")
+	}
+	if _, err := netclient.ValidateURL(endpoint); err != nil {
+		return "", err
 	}
 	user, pass := firstEnv("WEBDAV_USER"), firstEnv("WEBDAV_PASS")
 	full := strings.TrimRight(endpoint, "/") + "/" + strings.TrimLeft(remotePath, "/")
@@ -167,6 +176,10 @@ func (r *Registry) webdav(ctx context.Context, sessionID, action, remotePath, lo
 }
 
 func (r *Registry) saveDownload(sessionID, name string, body io.Reader, from string) (string, error) {
+	rel, err := r.ensureWorkspaceRel(sessionID, name)
+	if err != nil || rel == "." {
+		return "", fmt.Errorf("destination %q must stay inside the workspace", name)
+	}
 	data, err := io.ReadAll(io.LimitReader(body, cloudMaxBytes+1))
 	if err != nil {
 		return "", err
@@ -174,10 +187,10 @@ func (r *Registry) saveDownload(sessionID, name string, body io.Reader, from str
 	if len(data) > cloudMaxBytes {
 		return "", fmt.Errorf("%s is larger than %s", from, humanSize(cloudMaxBytes))
 	}
-	if err := r.Machine.WriteFile(sessionID, name, data); err != nil {
+	if err := r.Machine.WriteFile(sessionID, rel, data); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Downloaded %s to %s (%s).", from, name, humanSize(int64(len(data)))), nil
+	return fmt.Sprintf("Downloaded %s to %s (%s).", from, rel, humanSize(int64(len(data)))), nil
 }
 
 type s3Account struct {
@@ -282,6 +295,9 @@ func signS3(req *http.Request, a s3Account, payloadHash string, now time.Time) {
 func (r *Registry) s3(ctx context.Context, sessionID, action, remotePath, localPath, endpoint string) (string, error) {
 	a, err := s3FromEnv(endpoint)
 	if err != nil {
+		return "", err
+	}
+	if _, err := netclient.ValidateURL(a.endpoint); err != nil {
 		return "", err
 	}
 	remote := strings.TrimLeft(strings.TrimSpace(remotePath), "/")

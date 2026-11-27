@@ -137,6 +137,11 @@ type Summary struct {
 	Asking  bool   `json:"asking"`
 }
 
+type queuedPrompt struct {
+	prompt string
+	block  Block
+}
+
 type project struct {
 	srv  *Server
 	id   string
@@ -146,9 +151,11 @@ type project struct {
 	sess          Session
 	blocks        []Block
 	loaded        bool
+	starting      bool
+	done          chan struct{}
 	live          Live
 	cancel        context.CancelFunc
-	queue         []string
+	queue         []queuedPrompt
 	yield         chan struct{}
 	stream        string
 	renderAt      time.Time
@@ -276,6 +283,32 @@ func clipRunes(s string, n int) string {
 	return s
 }
 
+func cloneBlock(b Block) Block {
+	if b.File != nil {
+		cp := *b.File
+		b.File = &cp
+	}
+	if len(b.Attachments) > 0 {
+		b.Attachments = append([]File(nil), b.Attachments...)
+	}
+	return b
+}
+
+func queuedTexts(q []queuedPrompt) []string {
+	if len(q) == 0 {
+		return nil
+	}
+	out := make([]string, len(q))
+	for i, item := range q {
+		if item.block.Text != "" {
+			out[i] = item.block.Text
+		} else {
+			out[i] = item.prompt
+		}
+	}
+	return out
+}
+
 func (p *project) snapshot() map[string]any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -286,10 +319,54 @@ func (p *project) snapshot() map[string]any {
 			p.blocks[i].HTML = renderMarkdown(b.Text)
 			b = p.blocks[i]
 		}
-		blocks[i] = b
+		blocks[i] = cloneBlock(b)
 	}
 	live := p.live
-	live.Queued = append([]string(nil), p.queue...)
+	if live.Draft != nil {
+		d := *live.Draft
+		live.Draft = &d
+	}
+	if len(live.Plan) > 0 {
+		live.Plan = append([]agent.PlanItem(nil), live.Plan...)
+	}
+	if len(live.Subs) > 0 {
+		subs := make([]*liveSub, len(live.Subs))
+		for i, s := range live.Subs {
+			if s != nil {
+				cp := *s
+				subs[i] = &cp
+			}
+		}
+		live.Subs = subs
+	}
+	if len(live.Tools) > 0 {
+		tools := make([]*liveTool, len(live.Tools))
+		for i, t := range live.Tools {
+			if t != nil {
+				cp := *t
+				tools[i] = &cp
+			}
+		}
+		live.Tools = tools
+	}
+	if live.Ask != nil {
+		a := *live.Ask
+		a.Findings = append([]string(nil), live.Ask.Findings...)
+		a.reply = nil
+		live.Ask = &a
+	}
+	if live.Context != nil {
+		ctxCopy := make(map[string]int, len(live.Context))
+		for k, v := range live.Context {
+			ctxCopy[k] = v
+		}
+		live.Context = ctxCopy
+	}
+	if live.Usage != nil {
+		u := *live.Usage
+		live.Usage = &u
+	}
+	live.Queued = queuedTexts(p.queue)
 	threads := append([]ThreadSummary(nil), p.threads...)
 	return map[string]any{
 		"id":      p.id,
@@ -312,13 +389,15 @@ func (p *project) emit(kind string, data map[string]any) {
 
 func (p *project) session() (Session, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.loadThreadsLocked()
 	if p.sess != nil {
-		return p.sess, nil
+		s := p.sess
+		p.mu.Unlock()
+		return s, nil
 	}
 	s, err := p.srv.host.Open(p.path)
 	if err != nil {
+		p.mu.Unlock()
 		return nil, err
 	}
 	if p.mode != "" {
@@ -328,11 +407,13 @@ func (p *project) session() (Session, error) {
 		ts.SetThread(p.activeThread)
 	}
 	p.sess = s
+	p.mu.Unlock()
+	if lbs, ok := s.(LiveBrowserSession); ok {
+		lbs.SetBrowserObserver(func() {
+			p.emit("browser", map[string]any{"browser": p.srv.browserState(p)})
+		})
+	}
 	return s, nil
-}
-
-func (p *project) send(text string) error {
-	return p.sendWithAttachments(text, nil)
 }
 
 func (p *project) sendWithAttachments(text string, attachments []File) error {
@@ -365,25 +446,6 @@ func (p *project) sendWithAttachments(text string, attachments []File) error {
 		prompt = strings.TrimSpace(sb.String())
 	}
 
-	p.mu.Lock()
-	p.loadLocked()
-	if p.live.Running {
-		p.queue = append(p.queue, prompt)
-		if p.yield != nil {
-			close(p.yield)
-			p.yield = nil
-		}
-		q := append([]string(nil), p.queue...)
-		p.mu.Unlock()
-		p.emit("queued", map[string]any{"queued": q})
-		return nil
-	}
-	p.mu.Unlock()
-	sess, err := p.session()
-	if err != nil {
-		return err
-	}
-	p.mu.Lock()
 	displayText := text
 	if displayText == "" && len(clean) > 0 {
 		names := make([]string, len(clean))
@@ -392,21 +454,49 @@ func (p *project) sendWithAttachments(text string, attachments []File) error {
 		}
 		displayText = strings.Join(names, ", ")
 	}
-	user := p.appendLocked(Block{Kind: "user", Text: displayText, Attachments: clean})
+	userBlk := Block{Kind: "user", Text: displayText, Attachments: clean}
+
+	p.mu.Lock()
+	p.loadLocked()
+	if p.live.Running || p.starting {
+		p.queue = append(p.queue, queuedPrompt{prompt: prompt, block: userBlk})
+		if p.yield != nil {
+			close(p.yield)
+			p.yield = nil
+		}
+		q := queuedTexts(p.queue)
+		p.mu.Unlock()
+		p.emit("queued", map[string]any{"queued": q})
+		return nil
+	}
+	p.starting = true
+	p.mu.Unlock()
+	sess, err := p.session()
+	p.mu.Lock()
+	p.starting = false
+	if err != nil {
+		p.mu.Unlock()
+		return err
+	}
+	user := p.appendLocked(userBlk)
 	ctx, cancel := context.WithCancel(context.Background())
-	p.cancel = cancel
-	p.live = Live{Running: true, Started: time.Now().UnixMilli()}
+	done := make(chan struct{})
+	started := time.Now().UnixMilli()
+	p.cancel, p.done = cancel, done
+	p.live = Live{Running: true, Started: started}
 	p.stream, p.toolSeq = "", 0
 	p.mu.Unlock()
 	p.emit("user", map[string]any{"block": user})
-	p.emit("state", map[string]any{"running": true, "started": time.Now().UnixMilli()})
-	go p.run(ctx, cancel, sess, prompt)
+	p.emit("state", map[string]any{"running": true, "started": started})
+	go p.run(ctx, cancel, done, sess, prompt)
 	return nil
 }
 
-func (p *project) stop() {
+func (p *project) stop() { _ = p.stopAndDone() }
+
+func (p *project) stopAndDone() <-chan struct{} {
 	p.mu.Lock()
-	cancel, ask := p.cancel, p.live.Ask
+	cancel, ask, done := p.cancel, p.live.Ask, p.done
 	p.live.Ask = nil
 	p.mu.Unlock()
 	if ask != nil {
@@ -418,6 +508,7 @@ func (p *project) stop() {
 	if cancel != nil {
 		cancel()
 	}
+	return done
 }
 
 func (p *project) answer(id, choice string) error {
@@ -455,8 +546,10 @@ func (p *project) inbox() []string {
 	if len(items) > 0 {
 		flushed = p.flushStreamLocked()
 	}
-	for _, t := range items {
-		blocks = append(blocks, p.appendLocked(Block{Kind: "user", Text: t}))
+	prompts := make([]string, len(items))
+	for i, it := range items {
+		prompts[i] = it.prompt
+		blocks = append(blocks, p.appendLocked(it.block))
 	}
 	p.mu.Unlock()
 	if flushed != nil {
@@ -465,7 +558,7 @@ func (p *project) inbox() []string {
 	for _, b := range blocks {
 		p.emit("user", map[string]any{"block": b, "taken": true})
 	}
-	return items
+	return prompts
 }
 
 func (p *project) signal() <-chan struct{} {
@@ -522,6 +615,7 @@ func (p *project) listener() *agent.EventListener {
 			flushed := p.flushStreamLocked()
 			p.toolSeq++
 			t := &liveTool{ID: p.toolSeq, Name: name, Label: label, Arg: arg, Started: time.Now().UnixMilli(), args: args}
+			snap := *t
 			p.live.Tools = append(p.live.Tools, t)
 			p.live.Thought = ""
 			p.live.Draft = nil
@@ -529,7 +623,10 @@ func (p *project) listener() *agent.EventListener {
 			if flushed != nil {
 				p.emit("block", map[string]any{"block": *flushed})
 			}
-			p.emit("tool_start", map[string]any{"tool": t})
+			p.emit("tool_start", map[string]any{"tool": snap})
+			if name == "browser" || name == "browser_agent" {
+				p.emit("browser", map[string]any{"browser": p.srv.browserState(p)})
+			}
 		},
 		OnToolDraft: func(name string, size int, head string) {
 			if name == agent.ToolPlan {
@@ -537,10 +634,11 @@ func (p *project) listener() *agent.EventListener {
 			}
 			label, _ := tui.ToolHeading(name, "{}")
 			d := &liveDraft{Name: name, Label: label, Arg: draftArg(head), Size: size}
+			snap := *d
 			p.mu.Lock()
 			p.live.Draft = d
 			p.mu.Unlock()
-			p.emit("tool_draft", map[string]any{"draft": d})
+			p.emit("tool_draft", map[string]any{"draft": snap})
 		},
 		OnToolProgress: func(name, text string, _ bool) {
 			line := lastLine(text)
@@ -559,6 +657,9 @@ func (p *project) listener() *agent.EventListener {
 			if id != 0 {
 				p.emit("tool_progress", map[string]any{"id": id, "line": line})
 			}
+			if name == "browser" || name == "browser_agent" {
+				p.emit("browser", map[string]any{"browser": p.srv.browserState(p)})
+			}
 		},
 		OnToolEnd: func(name, args, result string, took time.Duration) {
 			if name == agent.ToolPlan {
@@ -574,16 +675,31 @@ func (p *project) listener() *agent.EventListener {
 			}
 			p.mu.Lock()
 			id := 0
+			matchIdx := -1
 			for i, t := range p.live.Tools {
 				if t.Name == name && t.args == args {
-					id = t.ID
-					p.live.Tools = append(p.live.Tools[:i], p.live.Tools[i+1:]...)
+					matchIdx = i
 					break
 				}
+			}
+			if matchIdx < 0 {
+				for i, t := range p.live.Tools {
+					if t.Name == name {
+						matchIdx = i
+						break
+					}
+				}
+			}
+			if matchIdx >= 0 {
+				id = p.live.Tools[matchIdx].ID
+				p.live.Tools = append(p.live.Tools[:matchIdx], p.live.Tools[matchIdx+1:]...)
 			}
 			b = p.appendLocked(b)
 			p.mu.Unlock()
 			p.emit("tool_end", map[string]any{"id": id, "block": b, "took": took.Milliseconds()})
+			if name == "browser" || name == "browser_agent" {
+				p.emit("browser", map[string]any{"browser": p.srv.browserState(p)})
+			}
 		},
 		OnPlan: func(items []agent.PlanItem) {
 			items = append([]agent.PlanItem(nil), items...)
@@ -662,8 +778,9 @@ func (p *project) asker() cmdgate.Asker {
 	}
 }
 
-func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Session, text string) {
+func (p *project) run(ctx context.Context, cancel context.CancelFunc, done chan struct{}, sess Session, text string) {
 	defer cancel()
+	defer close(done)
 	started := time.Now()
 	var res *agent.Result
 	var err error
@@ -676,6 +793,13 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 		res, err = sess.Turn(cmdgate.WithAsker(ctx, p.asker()), text, p.listener(), p.inbox, p.signal)
 	}()
 	stopped := errors.Is(err, context.Canceled) || ctx.Err() != nil
+	var modelName string
+	var cost float64
+	var hasCost bool
+	if res != nil {
+		modelName = p.srv.host.Info().Model
+		cost, hasCost = llm.EstimateCost(modelName, res.Usage)
+	}
 	p.mu.Lock()
 	var out []Block
 	partial := stripInternalNotes(p.stream)
@@ -685,8 +809,8 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 		answer = stripInternalNotes(res.Answer)
 		p.usageIn += res.Usage.PromptTokens
 		p.usageOut += res.Usage.CompletionTokens
-		if usd, ok := llm.EstimateCost(p.srv.host.Info().Model, res.Usage); ok {
-			p.usageCost += usd
+		if hasCost {
+			p.usageCost += cost
 			p.usageKnown = true
 		}
 	}
@@ -714,20 +838,66 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 	lastCtx := p.live.Context
 	uv := &UsageView{In: p.usageIn, Out: p.usageOut, Cost: p.usageCost, CostKnown: p.usageKnown}
 	p.live = Live{Context: lastCtx, Usage: uv}
-	p.cancel = nil
+	p.cancel, p.done = nil, nil
 	p.mu.Unlock()
 	took := time.Since(started)
-	done := map[string]any{"blocks": out, "took": took.Milliseconds(), "stopped": stopped, "context": lastCtx, "usage": uv}
+	doneEv := map[string]any{"blocks": out, "took": took.Milliseconds(), "stopped": stopped, "context": lastCtx, "usage": uv}
 	if stopped && len(queued) > 0 {
-		done["requeue"] = queued
+		doneEv["requeue"] = queuedTexts(queued)
 	}
-	p.emit("done", done)
+	p.emit("done", doneEv)
 	if took > 30*time.Second && !stopped {
 		p.srv.notify("Macron finished", filepath.Base(p.path))
 	}
 	if len(queued) > 0 && !stopped {
-		_ = p.send(strings.Join(queued, "\n\n"))
+		_ = p.startQueued(queued)
 	}
+}
+
+func (p *project) startQueued(items []queuedPrompt) error {
+	if len(items) == 0 {
+		return nil
+	}
+	prompts := make([]string, len(items))
+	for i, it := range items {
+		prompts[i] = it.prompt
+	}
+	joined := strings.Join(prompts, "\n\n")
+	p.mu.Lock()
+	p.loadLocked()
+	if p.live.Running || p.starting {
+		p.queue = append(p.queue, items...)
+		q := queuedTexts(p.queue)
+		p.mu.Unlock()
+		p.emit("queued", map[string]any{"queued": q})
+		return nil
+	}
+	p.starting = true
+	p.mu.Unlock()
+	sess, err := p.session()
+	p.mu.Lock()
+	p.starting = false
+	if err != nil {
+		p.mu.Unlock()
+		return err
+	}
+	var added []Block
+	for _, it := range items {
+		added = append(added, p.appendLocked(it.block))
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	nextDone := make(chan struct{})
+	started := time.Now().UnixMilli()
+	p.cancel, p.done = cancel, nextDone
+	p.live = Live{Running: true, Started: started}
+	p.stream, p.toolSeq = "", 0
+	p.mu.Unlock()
+	for _, u := range added {
+		p.emit("user", map[string]any{"block": u})
+	}
+	p.emit("state", map[string]any{"running": true, "started": started})
+	go p.run(ctx, cancel, nextDone, sess, joined)
+	return nil
 }
 
 func lastLine(s string) string {

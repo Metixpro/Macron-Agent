@@ -2,9 +2,12 @@ package telegram
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
 func EscapeHTML(s string) string {
@@ -12,7 +15,6 @@ func EscapeHTML(s string) string {
 }
 
 var (
-	fenceRe      = regexp.MustCompile("(?s)```([A-Za-z0-9_+#.-]*)[ \\t]*\\n?(.*?)(?:```|\\z)")
 	inlineCodeRe = regexp.MustCompile("`([^`\\n]+)`")
 	headerRe     = regexp.MustCompile(`(?m)^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 	hrRe         = regexp.MustCompile(`(?m)^[ \t]*(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$`)
@@ -21,12 +23,34 @@ var (
 	boldUnderRe  = regexp.MustCompile(`(^|[^\w_])__([^\s_][^\n]*?)__($|[^\w_])`)
 	italicRe     = regexp.MustCompile(`(^|[^\w*])\*([^\s*][^*\n]*?)\*($|[^\w*])`)
 	strikeRe     = regexp.MustCompile(`~~([^\n]+?)~~`)
-	linkRe       = regexp.MustCompile(`\[([^\]\n]+)\]\((https?://[^\s)]+)\)`)
+	spoilerRe    = regexp.MustCompile(`\|\|([^\n]+?)\|\|`)
+	linkRe       = regexp.MustCompile(`\[([^\]\n]+)\]\(([^\s<>()]+(?:\([^\s<>()]*\)[^\s<>()]*)*)\)`)
 	langRe       = regexp.MustCompile(`^[A-Za-z0-9_+#.-]{1,30}$`)
 	tableSepRe   = regexp.MustCompile(`^\|?[\s:|-]*-[\s:|-]*\|?$`)
 	manyNLRe     = regexp.MustCompile(`\n{3,}`)
 	htmlTagRe    = regexp.MustCompile(`</?([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?>`)
 )
+
+func safeLinkURL(raw string) (string, bool) {
+	u := strings.TrimSpace(raw)
+	low := strings.ToLower(u)
+	for _, p := range []string{"http://", "https://", "mailto:", "tg://"} {
+		if strings.HasPrefix(low, p) && len(u) > len(p) {
+			return u, true
+		}
+	}
+	return "", false
+}
+
+func formatInline(s string) string {
+	s = EscapeHTML(s)
+	s = spoilerRe.ReplaceAllString(s, "<tg-spoiler>$1</tg-spoiler>")
+	s = boldRe.ReplaceAllString(s, "<b>$1</b>")
+	s = boldUnderRe.ReplaceAllString(s, "$1<b>$2</b>$3")
+	s = italicRe.ReplaceAllString(s, "$1<i>$2</i>$3")
+	s = strikeRe.ReplaceAllString(s, "<s>$1</s>")
+	return s
+}
 
 func MarkdownToHTML(md string) string {
 	md = strings.ReplaceAll(md, "\r\n", "\n")
@@ -37,33 +61,32 @@ func MarkdownToHTML(md string) string {
 		return fmt.Sprintf("\x00%d\x00", len(stash)-1)
 	}
 
-	md = fenceRe.ReplaceAllStringFunc(md, func(m string) string {
-		sub := fenceRe.FindStringSubmatch(m)
-		code := EscapeHTML(strings.Trim(sub[2], "\n"))
-		if langRe.MatchString(sub[1]) {
-			return hold(fmt.Sprintf("<pre><code class=\"language-%s\">%s</code></pre>", sub[1], code))
-		}
-		return hold("<pre>" + code + "</pre>")
-	})
-
+	md = replaceFencedCode(md, hold)
 	md = replaceTables(md, hold)
 
 	md = inlineCodeRe.ReplaceAllStringFunc(md, func(m string) string {
 		return hold("<code>" + EscapeHTML(inlineCodeRe.FindStringSubmatch(m)[1]) + "</code>")
 	})
 
+	md = linkRe.ReplaceAllStringFunc(md, func(m string) string {
+		sub := linkRe.FindStringSubmatch(m)
+		u, ok := safeLinkURL(sub[2])
+		if !ok {
+			return m
+		}
+		href := EscapeHTML(strings.ReplaceAll(u, `"`, "%22"))
+		return hold(fmt.Sprintf(`<a href="%s">%s</a>`, href, formatInline(sub[1])))
+	})
+
 	md = EscapeHTML(md)
 	md = hrRe.ReplaceAllString(md, "──────────")
 	md = headerRe.ReplaceAllString(md, "<b>$1</b>")
 	md = bulletRe.ReplaceAllString(md, "$1• ")
+	md = spoilerRe.ReplaceAllString(md, "<tg-spoiler>$1</tg-spoiler>")
 	md = boldRe.ReplaceAllString(md, "<b>$1</b>")
 	md = boldUnderRe.ReplaceAllString(md, "$1<b>$2</b>$3")
 	md = italicRe.ReplaceAllString(md, "$1<i>$2</i>$3")
 	md = strikeRe.ReplaceAllString(md, "<s>$1</s>")
-	md = linkRe.ReplaceAllStringFunc(md, func(m string) string {
-		sub := linkRe.FindStringSubmatch(m)
-		return fmt.Sprintf(`<a href="%s">%s</a>`, strings.ReplaceAll(sub[2], `"`, "%22"), sub[1])
-	})
 	md = quoteBlocks(md)
 
 	for i := len(stash) - 1; i >= 0; i-- {
@@ -71,6 +94,28 @@ func MarkdownToHTML(md string) string {
 	}
 	md = strings.NewReplacer(quoteOpen, "<blockquote expandable>", quoteClose, "</blockquote>").Replace(md)
 	return strings.TrimSpace(manyNLRe.ReplaceAllString(md, "\n\n"))
+}
+
+func replaceFencedCode(md string, hold func(string) string) string {
+	lines := strings.Split(md, "\n")
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		sub := fenceLineRe.FindStringSubmatch(lines[i])
+		if sub == nil {
+			out = append(out, lines[i])
+			continue
+		}
+		start := i + 1
+		for i++; i < len(lines) && !closesFence(lines[i], sub[1]); i++ {
+		}
+		code := EscapeHTML(strings.Join(lines[start:i], "\n"))
+		info := strings.Fields(sub[2])
+		if len(info) > 0 && langRe.MatchString(info[0]) {
+			code = fmt.Sprintf("<code class=\"language-%s\">%s</code>", info[0], code)
+		}
+		out = append(out, hold("<pre>"+code+"</pre>"))
+	}
+	return strings.Join(out, "\n")
 }
 
 func replaceTables(md string, hold func(string) string) string {
@@ -145,6 +190,83 @@ func ValidHTML(s string) bool {
 
 type openTag struct{ name, full string }
 
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		if r > 0xFFFF {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
+// Entity escapes occupy one text character even when their wire encoding is
+// longer. Keep the entire entity together when splitting formatted text.
+func htmlTextStep(s string) (size, units int) {
+	if s[0] == '&' {
+		if end := strings.IndexByte(s[:min(len(s), 16)], ';'); end > 0 {
+			escape := s[:end+1]
+			decoded := html.UnescapeString(escape)
+			if utf8.RuneCountInString(decoded) == 1 {
+				return len(escape), utf16Len(decoded)
+			}
+		}
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if r > 0xFFFF {
+		return size, 2
+	}
+	return size, 1
+}
+
+func htmlTextPrefix(s string, maxUnits int) (size, units int) {
+	for size < len(s) {
+		n, step := htmlTextStep(s[size:])
+		if units+step > maxUnits {
+			break
+		}
+		size += n
+		units += step
+	}
+	return size, units
+}
+
+func visibleUTF16Len(s string) int {
+	n := 0
+	pos := 0
+	for _, loc := range htmlTagRe.FindAllStringSubmatchIndex(s, -1) {
+		_, visible := htmlTextPrefix(s[pos:loc[0]], loc[0]-pos)
+		n += visible
+		pos = loc[1]
+	}
+	_, visible := htmlTextPrefix(s[pos:], len(s)-pos)
+	return n + visible
+}
+
+// SafeHTMLCaption truncates HTML so visible text never exceeds maxUTF16 UTF-16 code units,
+// without splitting inside HTML tags, entities, or UTF-16 surrogate pairs.
+func SafeHTMLCaption(s string, maxUTF16 int) string {
+	if s == "" || maxUTF16 <= 0 {
+		return ""
+	}
+	if !ValidHTML(s) {
+		s = EscapeHTML(textutil.StripHTML(s))
+	}
+	if visibleUTF16Len(s) <= maxUTF16 {
+		return s
+	}
+	if maxUTF16 == 1 {
+		return "…"
+	}
+	head := SplitHTML(s, maxUTF16-1)[0]
+	if visibleUTF16Len(head) > maxUTF16-1 {
+		return "…"
+	}
+	return head + "…"
+}
+
 func SplitHTML(s string, limit int) []string {
 	if limit <= 0 {
 		limit = 3800
@@ -177,28 +299,32 @@ func SplitHTML(s string, limit int) []string {
 				flush()
 				room = limit
 			}
-			n := utf8.RuneCountInString(t)
-			if n <= room {
+			cut, n := htmlTextPrefix(t, room)
+			if cut == len(t) {
 				cur.WriteString(t)
 				visible += n
 				return
 			}
-			cut := byteOffsetOfRune(t, room)
-			piece := t[:cut]
-			if i := strings.LastIndex(piece, "\n"); i > len(piece)/3 {
-				cut = i + 1
-			} else if i := strings.LastIndexByte(piece, ' '); i > len(piece)/3 {
-				cut = i + 1
+			if cut > 0 {
+				piece := t[:cut]
+				if i := strings.LastIndex(piece, "\n"); i > len(piece)/3 {
+					cut = i + 1
+				} else if i := strings.LastIndexByte(piece, ' '); i > len(piece)/3 {
+					cut = i + 1
+				}
+				if cut != len(piece) {
+					_, n = htmlTextPrefix(t[:cut], room)
+				}
 			}
-			if i := strings.LastIndexByte(t[:cut], '&'); i >= 0 && !strings.Contains(t[i:cut], ";") {
-				cut = i
-			}
-			if cut <= 0 {
-				_, size := utf8.DecodeRuneInString(t)
-				cut = size
+			if cut == 0 {
+				if visible > 0 {
+					flush()
+					continue
+				}
+				cut, n = htmlTextStep(t)
 			}
 			cur.WriteString(t[:cut])
-			visible += utf8.RuneCountInString(t[:cut])
+			visible += n
 			t = t[cut:]
 			flush()
 		}
@@ -230,17 +356,19 @@ func SplitHTML(s string, limit int) []string {
 	return chunks
 }
 
-func byteOffsetOfRune(s string, n int) int {
-	for i := range s {
-		if n == 0 {
-			return i
-		}
-		n--
+var fenceLineRe = regexp.MustCompile("^[ \\t]*(`{3,}|~{3,})(.*)$")
+
+func fenceMarker(line string) string {
+	if m := fenceLineRe.FindStringSubmatch(line); m != nil {
+		return m[1]
 	}
-	return len(s)
+	return ""
 }
 
-var fenceLineRe = regexp.MustCompile("^\\s*(```|~~~)")
+func closesFence(line, marker string) bool {
+	sub := fenceLineRe.FindStringSubmatch(line)
+	return sub != nil && len(sub[1]) >= len(marker) && sub[1][0] == marker[0] && strings.TrimSpace(sub[2]) == ""
+}
 
 func SplitMarkdown(md string, limit int) []string {
 	md = strings.TrimSpace(strings.ReplaceAll(md, "\r\n", "\n"))
@@ -250,7 +378,7 @@ func SplitMarkdown(md string, limit int) []string {
 
 	var blocks []string
 	var cur []string
-	inFence, fence := false, ""
+	fence := ""
 	flush := func() {
 		if len(cur) > 0 {
 			blocks = append(blocks, strings.Join(cur, "\n"))
@@ -258,26 +386,27 @@ func SplitMarkdown(md string, limit int) []string {
 		}
 	}
 	for _, line := range strings.Split(md, "\n") {
-		if m := fenceLineRe.FindStringSubmatch(line); m != nil {
-			if !inFence {
-				flush()
-				inFence, fence = true, line
-				cur = append(cur, line)
-				continue
-			}
+		if fence != "" {
 			cur = append(cur, line)
-			inFence = false
-			flush()
+			if closesFence(line, fence) {
+				fence = ""
+				flush()
+			}
 			continue
 		}
-		if !inFence && strings.TrimSpace(line) == "" {
+		if marker := fenceMarker(line); marker != "" {
+			flush()
+			fence = marker
+			cur = append(cur, line)
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
 			flush()
 			continue
 		}
 		cur = append(cur, line)
 	}
 	flush()
-	_ = fence
 
 	var parts []string
 	var b strings.Builder
@@ -312,15 +441,19 @@ func SplitMarkdown(md string, limit int) []string {
 
 func splitBigBlock(blk string, limit int) []string {
 	lines := strings.Split(blk, "\n")
-	open, closeFence := "", ""
-	if fenceLineRe.MatchString(lines[0]) {
-		open = strings.TrimSpace(lines[0])
-		closeFence = open[:3]
-		lines = lines[1:]
-		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == closeFence {
-			lines = lines[:len(lines)-1]
+	open, closeFence := "", fenceMarker(lines[0])
+	if closeFence != "" {
+		if 2*len(closeFence)+2 < limit {
+			open = strings.TrimSpace(lines[0])
+			if utf8.RuneCountInString(open)+len(closeFence)+2 >= limit {
+				open = closeFence
+			}
+			limit -= utf8.RuneCountInString(open) + len(closeFence) + 2
+			lines = lines[1:]
+			if len(lines) > 0 && closesFence(lines[len(lines)-1], closeFence) {
+				lines = lines[:len(lines)-1]
+			}
 		}
-		limit -= utf8.RuneCountInString(open) + 8
 	}
 	var parts []string
 	var b strings.Builder
@@ -329,7 +462,7 @@ func splitBigBlock(blk string, limit int) []string {
 		if b.Len() == 0 {
 			return
 		}
-		body := strings.TrimRight(b.String(), "\n")
+		body := strings.TrimSuffix(b.String(), "\n")
 		if open != "" {
 			body = open + "\n" + body + "\n" + closeFence
 		}
@@ -338,18 +471,18 @@ func splitBigBlock(blk string, limit int) []string {
 		size = 0
 	}
 	for _, line := range lines {
-		for utf8.RuneCountInString(line) > limit {
-			r := []rune(line)
+		runes := []rune(line)
+		for len(runes) > limit {
 			emit()
-			b.WriteString(string(r[:limit]))
+			b.WriteString(string(runes[:limit]))
 			emit()
-			line = string(r[limit:])
+			runes = runes[limit:]
 		}
-		n := utf8.RuneCountInString(line) + 1
-		if size+n > limit {
+		n := len(runes) + 1
+		if size+n-1 > limit {
 			emit()
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(string(runes) + "\n")
 		size += n
 	}
 	emit()
@@ -357,14 +490,16 @@ func splitBigBlock(blk string, limit int) []string {
 }
 
 func CloseOpenMarkdown(md string) string {
-	open := false
+	fence := ""
 	for _, line := range strings.Split(md, "\n") {
-		if fenceLineRe.MatchString(line) {
-			open = !open
+		if fence == "" {
+			fence = fenceMarker(line)
+		} else if closesFence(line, fence) {
+			fence = ""
 		}
 	}
-	if open {
-		return md + "\n```"
+	if fence != "" {
+		return md + "\n" + fence
 	}
 	return md
 }

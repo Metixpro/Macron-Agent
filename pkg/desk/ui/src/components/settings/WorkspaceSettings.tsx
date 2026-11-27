@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { setDensity, setLang, setMotion, setTheme } from "../../actions";
-import { useMod } from "../../hooks";
+import { useHomePath, useMod } from "../../hooks";
 import { useT } from "../../i18n";
 import type { Lang } from "../../i18n";
 import { Icon } from "../../icons";
@@ -83,6 +83,7 @@ const PREVIEW_MOODS: StarBuddyMood[] = ["idle", "typing", "working", "streaming"
 
 export function AppearanceSettingsPage() {
   const t = useT();
+  const themesDirHint = useHomePath(".macron/themes/*.json");
   const theme = useStore((s) => s.theme);
   const density = useStore((s) => s.density);
   const motion = useStore((s) => s.motion);
@@ -220,7 +221,7 @@ export function AppearanceSettingsPage() {
           <div className="stg-block-head">
             <h2>{t("Color palettes")}</h2>
             <span className="stg-mono-hint" dir="ltr">
-              ~/.macron/themes/*.json
+              {themesDirHint}
             </span>
           </div>
           <div className="stg-palette-grid" role="radiogroup" aria-label={t("Color palettes")}>

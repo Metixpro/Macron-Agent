@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -134,15 +135,34 @@ func (r *Registry) registerProjectTools() {
 
 func cleanPath(p string) (string, error) {
 	p = strings.TrimSpace(p)
-	p = strings.TrimPrefix(p, "/workspace")
-	p = strings.Trim(path.Clean("/"+strings.ReplaceAll(p, "\\", "/")), "/")
-	if p == "" {
-		return ".", nil
-	}
-	if !fs.ValidPath(p) {
+	if strings.ContainsRune(p, 0) {
 		return "", fmt.Errorf("path must stay inside the workspace")
 	}
-	return p, nil
+	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) || strings.HasPrefix(p, `\\`) || strings.HasPrefix(p, "//") {
+		return "", fmt.Errorf("path must stay inside the workspace")
+	}
+	slash := strings.ReplaceAll(p, "\\", "/")
+	if len(slash) >= 2 && ((slash[0] >= 'A' && slash[0] <= 'Z') || (slash[0] >= 'a' && slash[0] <= 'z')) && slash[1] == ':' {
+		return "", fmt.Errorf("path must stay inside the workspace")
+	}
+	if slash == machine.MountPoint || strings.HasPrefix(slash, machine.MountPoint+"/") {
+		slash = strings.TrimPrefix(slash, machine.MountPoint)
+	} else if strings.HasPrefix(slash, "/") {
+		return "", fmt.Errorf("path must stay inside the workspace")
+	}
+	for _, seg := range strings.Split(slash, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("path must stay inside the workspace")
+		}
+	}
+	c := strings.Trim(path.Clean("/"+slash), "/")
+	if c == "" {
+		return ".", nil
+	}
+	if !fs.ValidPath(c) {
+		return "", fmt.Errorf("path must stay inside the workspace")
+	}
+	return c, nil
 }
 
 func walk(fsys fs.FS, start string, includeSkipped bool, fn func(p string, d fs.DirEntry, skipped bool) error) error {
@@ -1154,7 +1174,21 @@ func (x *extractor) write(name string, src io.Reader) error {
 	if x.files++; x.files > maxArchiveFiles {
 		return fmt.Errorf("the archive has more than %d files", maxArchiveFiles)
 	}
-	f, err := x.r.Machine.Create(x.session, name)
+	clean, err := cleanPath(name)
+	if err != nil || clean == "." {
+		return fmt.Errorf("unsafe archive path %q", name)
+	}
+	root, err := x.r.Machine.OpenRoot(x.session)
+	if err != nil {
+		return fmt.Errorf("%s: %s", name, friendlyFSError(err))
+	}
+	defer root.Close()
+	if dir := path.Dir(clean); dir != "." {
+		if err := root.MkdirAll(filepath.FromSlash(dir), 0o755); err != nil {
+			return fmt.Errorf("%s: %s", name, friendlyFSError(err))
+		}
+	}
+	f, err := root.OpenFile(filepath.FromSlash(clean), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("%s: %s", name, friendlyFSError(err))
 	}
@@ -1168,16 +1202,20 @@ func (x *extractor) write(name string, src io.Reader) error {
 }
 
 func (x *extractor) mkdir(name string) {
+	clean, err := cleanPath(name)
+	if err != nil || clean == "." {
+		return
+	}
 	if root, err := x.r.Machine.OpenRoot(x.session); err == nil {
-		_ = root.MkdirAll(name, 0o700)
+		_ = root.MkdirAll(filepath.FromSlash(clean), 0o700)
 		root.Close()
 	}
 }
 
 func (r *Registry) extractArchive(ctx context.Context, sessionID string, args map[string]any) (string, error) {
-	name := strArg(args, "filename")
-	if name == "" {
-		return "error: filename is required", nil
+	name, err := r.ensureWorkspaceRel(sessionID, strArg(args, "filename"))
+	if err != nil || name == "." {
+		return "error: valid workspace archive filename is required", nil
 	}
 	password := rawStrArg(args, "password")
 	if boolArg(args, "list") {
@@ -1357,7 +1395,7 @@ func (r *Registry) importRepo(ctx context.Context, sessionID string, args map[st
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
 			return "error: give a GitHub/GitLab repository link or a direct https link to a .zip/.tar.gz archive", nil
 		}
-		archiveName = path.Base(u.Path)
+		archiveName = sanitizeBase(path.Base(strings.ReplaceAll(u.Path, "\\", "/")))
 		if archiveBase(archiveName) == archiveName+"_files" {
 			return "error: this link is not a repository or an archive (.zip, .tar.gz, .tgz, .tar.bz2, .tar)", nil
 		}
@@ -1366,6 +1404,11 @@ func (r *Registry) importRepo(ctx context.Context, sessionID string, args map[st
 	if dest == "" {
 		dest = repoName
 	}
+	cleanDest, err := cleanPath(dest)
+	if err != nil {
+		return "error: " + err.Error(), nil
+	}
+	dest = cleanDest
 	tmp := fmt.Sprintf(".import-%d-%s", time.Now().UnixNano(), archiveName)
 	defer r.Machine.Remove(sessionID, tmp)
 

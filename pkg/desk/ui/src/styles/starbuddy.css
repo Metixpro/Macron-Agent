@@ -104,6 +104,10 @@
   filter: drop-shadow(0 6px 16px rgba(130, 158, 235, 0.34));
 }
 
+.box-stage:has(.box.busy) .starbuddy-peek {
+  bottom: calc(100% - 7px);
+}
+
 .starbuddy-peek.tucked {
   opacity: 0;
   transform: translateY(14px) scale(0.84);
@@ -266,7 +270,7 @@
     transform: translateY(0) scale(1.02, 0.97);
   }
   45% {
-    transform: translateY(-5.5px) scale(0.97, 1.04);
+    transform: translateY(-2.5px) scale(0.97, 1.04);
   }
 }
 

@@ -74,6 +74,7 @@ func (r *Registry) registerBrowserAgent() {
 			"domains":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Only these sites (a.com, *.a.com)"},
 			"files":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Workspace files it may upload"},
 			"new_session": prop("boolean", "Forget cookies first"),
+			"keep_open":   prop("boolean", "Keep the live browser preview open after finishing (default false: closes automatically)"),
 		}, []string{"task"}, r.browserAgent)
 }
 
@@ -143,7 +144,7 @@ func (r *Registry) browserAgent(ctx context.Context, sessionID string, args map[
 		return "", err
 	}
 	cfg := map[string]any{"task": task, "url": url, "max_steps": steps, "vision": vision, "domains": domains, "files": files,
-		"new_session": boolArg(args, "new_session"), "timeout_s": int(timeout.Seconds()), "screenshot": true}
+		"new_session": boolArg(args, "new_session"), "keep_open": boolArg(args, "keep_open"), "timeout_s": int(timeout.Seconds()), "screenshot": true}
 	var rep agentReport
 	run := browserRun{online: true, timeout: timeout + 2*time.Minute, bridge: bridge, slots: r.browser.agents, python: r.browser.agentPython}
 	if err := r.runBrowserWith(ctx, sessionID, "browser_agent.py", cfg, run, &rep); err != nil {

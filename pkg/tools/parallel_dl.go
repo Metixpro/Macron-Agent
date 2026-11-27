@@ -128,7 +128,7 @@ func (r *Registry) getRange(ctx context.Context, f *os.File, rawURL string, star
 			if ifRange != "" {
 				req.Header.Set("If-Range", ifRange)
 			}
-			resp, err := r.HTTP.Do(req)
+			resp, err := r.downloadHTTP().Do(req)
 			if err != nil {
 				if ctx.Err() != nil {
 					return context.Cause(ctx)

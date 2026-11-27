@@ -247,9 +247,11 @@ func joinWithin(wg *sync.WaitGroup, d time.Duration) {
 		wg.Wait()
 		close(done)
 	}()
+	timer := time.NewTimer(d)
+	defer timer.Stop()
 	select {
 	case <-done:
-	case <-time.After(d):
+	case <-timer.C:
 	}
 }
 
@@ -335,6 +337,9 @@ func (g *goShell) run(m supMsg) {
 	t.close()
 	g.mu.Lock()
 	delete(g.runs, id)
+	if moved {
+		delete(g.jobs, r.job)
+	}
 	g.mu.Unlock()
 	if moved {
 		r.lk.Lock()
@@ -403,6 +408,9 @@ func (g *goShell) bg(m supMsg) {
 		t.kill()
 		t.close()
 		cleanup()
+		g.mu.Lock()
+		delete(g.jobs, m.Job)
+		g.mu.Unlock()
 		g.send(map[string]any{"op": "jobexit", "job": m.Job, "code": exitCode(err)})
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -53,7 +54,15 @@ func (r *Registry) openDatabase(sessionID, engine, target string) (*sql.DB, stri
 			abs = real
 		}
 		for _, own := range append(config.SecretFiles(), config.HomePath(config.FileDB)) {
-			if filepath.Clean(own) == abs {
+			ownAbs := filepath.Clean(own)
+			if realOwn, err := filepath.EvalSymlinks(ownAbs); err == nil {
+				ownAbs = realOwn
+			}
+			same := ownAbs == abs
+			if runtime.GOOS == "windows" {
+				same = strings.EqualFold(ownAbs, abs)
+			}
+			if same {
 				return nil, "", fmt.Errorf("%s is the agent's own database or settings; it is not opened here", path)
 			}
 		}
@@ -80,6 +89,13 @@ func (r *Registry) ExecuteReadOnlyQuery(ctx context.Context, sessionID, engine, 
 		return nil, fmt.Errorf("one statement at a time")
 	case !readQueryRe.MatchString(q) || writeQueryRe.MatchString(q):
 		return nil, fmt.Errorf("this tool only reads (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE); run changes with bash_execute and the database's own client, where they are checked first")
+	}
+	if eng := strings.ToLower(strings.TrimSpace(engine)); eng == "" || eng == "sqlite" || eng == "sqlite3" {
+		if _, err := r.ensureWorkspaceRel(sessionID, strings.TrimPrefix(target, "file:")); err != nil {
+			if refused := r.gateRead(ctx, sessionID, ToolDatabaseQuery, target); refused != "" {
+				return nil, fmt.Errorf("%s", refused)
+			}
+		}
 	}
 	db, kind, err := r.openDatabase(sessionID, engine, target)
 	if err != nil {

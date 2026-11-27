@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import {
+  clearError,
   compact,
   composer,
   draftFor,
@@ -28,6 +29,7 @@ import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { setState, useStore } from "../store";
 import type { FileRef } from "../types";
+import { LiveCard } from "./Live";
 import { StarBuddy, useStarBuddyMood } from "./StarBuddy";
 
 type Command = { name: string; hint: string; run: () => void };
@@ -94,7 +96,7 @@ function SendStop({
   );
 }
 
-function Meter() {
+function Meter({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const tr = useT();
   const ctx = useStore((s) => s.live.context);
   const usage = useStore((s) => s.live.usage);
@@ -103,6 +105,11 @@ function Meter() {
   const moaActive = useStore((s) => s.info.moaActive);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+    return () => onOpenChange?.(false);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -243,11 +250,16 @@ function Gauge({ level }: { level: number }) {
   );
 }
 
-function EffortMenu() {
+function EffortMenu({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const tr = useT();
   const t = useStore((s) => s.tuning);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+    return () => onOpenChange?.(false);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -363,6 +375,8 @@ export function Composer() {
   const [uploading, setUploading] = useState(0);
   const [fly, setFly] = useState(0);
   const [focused, setFocused] = useState(false);
+  const [meterOpen, setMeterOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
 
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -639,6 +653,7 @@ export function Composer() {
   const autoMood = useStarBuddyMood();
   const buddyMood = autoMood === "idle" && (focused || text.trim().length > 0) ? "typing" : autoMood;
   const menuOpen = matches.length > 0 || Boolean(atMatch && atFiles.length > 0);
+  const popoverOpen = meterOpen || effortOpen;
   const isOffline = online === false;
   const hasContent = text.trim().length > 0 || attachments.length > 0;
 
@@ -729,8 +744,20 @@ export function Composer() {
       )}
 
       <div className="box-stage">
-        <StarBuddy variant="peek" mood={buddyMood} tucked={menuOpen} interactive trackPointer title={`Macron · ${buddyTip}`} />
+        <StarBuddy variant="peek" mood={buddyMood} tucked={menuOpen || popoverOpen} interactive trackPointer title={`Macron · ${buddyTip}`} />
         <div className={boxClass}>
+          <LiveCard />
+          {errorAlert && (
+            <div className="err-dock" role="alert">
+              <Icon name="alert" size={14} />
+              <span className="grow" dir="auto">
+                {errorAlert}
+              </span>
+              <button type="button" className="icon-btn sm" title={tr("Dismiss")} aria-label={tr("Dismiss")} onClick={clearError}>
+                <Icon name="x" size={13} />
+              </button>
+            </div>
+          )}
           {queuedItems.length > 0 && (
             <div className="queue-strip">
               <span className="queue-pill">
@@ -820,9 +847,9 @@ export function Composer() {
               <Icon name="paperclip" size={14} />
             </button>
             <ModelButton />
-            <EffortMenu />
+            <EffortMenu onOpenChange={setEffortOpen} />
             <span className="grow" />
-            <Meter />
+            <Meter onOpenChange={setMeterOpen} />
             <SendStop running={running} hasContent={hasContent} disabled={isOffline} fly={fly} onSend={() => void submit()} />
           </div>
         </div>

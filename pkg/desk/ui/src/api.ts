@@ -1,4 +1,6 @@
 import type {
+  BrowserInputPayload,
+  BrowserState,
   ChangesResponse,
   ConnectResult,
   Connection,
@@ -103,7 +105,22 @@ export function fileURL(project: string, name: string, download = false): string
   return `${p(project)}/file?name=${encodeURIComponent(name)}${download ? "&download=1" : ""}`;
 }
 
+export function browserShotURL(project: string, updated = 0): string {
+  return `${p(project)}/browser/screenshot?v=${updated}`;
+}
+
+export function browserStreamURL(project: string, updated = 0): string {
+  return `${p(project)}/browser/stream?v=${updated}`;
+}
+
 export const server = {
+  browserState: (id: string) => call<BrowserState>("GET", p(id) + "/browser"),
+  browserAction: (id: string, body: { action: string; url?: string; text?: string; key?: string; submit?: boolean; x?: number; y?: number; deltaY?: number; index?: number }) =>
+    call<BrowserState>("POST", p(id) + "/browser/action", body),
+  browserInput: (id: string, body: BrowserInputPayload) =>
+    call<Ok>("POST", p(id) + "/browser/input", body),
+  browserTakeover: (id: string, active: boolean, reason = "user") =>
+    call<BrowserState>("POST", p(id) + "/browser/takeover", { active, reason }),
   reveal: (id: string, name: string, folder: boolean) => call<Ok>("POST", p(id) + "/reveal", { name, folder }),
   state: () => call<StateResponse>("GET", r("/api/state")),
   project: (id: string) => call<Snapshot>("GET", p(id)),

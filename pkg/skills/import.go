@@ -226,6 +226,7 @@ func (s *Store) importFolder(files map[string]entry, dir string) (string, error)
 	if dir == "." {
 		prefix = ""
 	}
+	var unpackedBytes uint64 = uint64(len(raw))
 	for zname, f := range files {
 		if !strings.HasPrefix(zname, prefix) {
 			continue
@@ -241,6 +242,10 @@ func (s *Store) importFolder(files map[string]entry, dir string) (string, error)
 		data, err := f.read()
 		if err != nil {
 			return "", err
+		}
+		unpackedBytes += uint64(len(data))
+		if unpackedBytes > maxZipBytes {
+			return "", fmt.Errorf("the archive is larger than %d MB unpacked", maxZipBytes>>20)
 		}
 		target := filepath.Join(tmp, filepath.FromSlash(rel))
 		if !strings.HasPrefix(target, tmp+string(filepath.Separator)) {
@@ -266,12 +271,18 @@ func (s *Store) importFolder(files map[string]entry, dir string) (string, error)
 		_ = os.Rename(old.Dir, filepath.Join(trash, "other"))
 		removeIfEmpty(filepath.Dir(old.Dir), s.dir)
 	}
+	oldBackup := filepath.Join(trash, "old")
+	backedUp := false
 	if _, err := os.Lstat(final); err == nil {
-		if err := os.Rename(final, filepath.Join(trash, "old")); err != nil {
+		if err := os.Rename(final, oldBackup); err != nil {
 			return "", err
 		}
+		backedUp = true
 	}
 	if err := os.Rename(tmp, final); err != nil {
+		if backedUp {
+			_ = os.Rename(oldBackup, final)
+		}
 		return "", err
 	}
 	if err := os.Chmod(final, 0o755); err != nil {

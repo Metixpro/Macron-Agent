@@ -19,7 +19,6 @@ func main() {
 	env := strings.Split(os.Getenv("REMOTE_ENV"), "|")
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := ssh.NewSignerFromKey(priv)
-	fmt.Println(ssh.FingerprintSHA256(signer.PublicKey()))
 	cfg := &ssh.ServerConfig{PasswordCallback: func(c ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
 		if string(pw) == "pw" {
 			return nil, nil
@@ -27,10 +26,11 @@ func main() {
 		return nil, errors.New("denied")
 	}}
 	cfg.AddHostKey(signer)
-	ln, err := net.Listen("tcp", "127.0.0.1:2222")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Printf("%d %s\n", ln.Addr().(*net.TCPAddr).Port, ssh.FingerprintSHA256(signer.PublicKey()))
 	for {
 		c, err := ln.Accept()
 		if err != nil {

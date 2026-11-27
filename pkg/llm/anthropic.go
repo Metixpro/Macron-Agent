@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,13 +41,18 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 		msgs = append(msgs, anthropicMsg{Role: role, Content: blocks})
 	}
 	leading := true
-	markLast := func() {
-		if n := len(msgs); n > 0 {
-			if blocks := msgs[n-1].Content; len(blocks) > 0 {
-				blocks[len(blocks)-1]["cache_control"] = ephemeral
-			}
+	sysCached := false
+	var msgCacheIdx []int
+	emptyIDSeq := 0
+	nextToolID := func(id string) string {
+		if clean := toolID(id); clean != "" {
+			return clean
 		}
+		emptyIDSeq++
+		return fmt.Sprintf("call_%d", emptyIDSeq)
 	}
+	toolCallIDs := map[int]string{}
+	_ = toolCallIDs
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
@@ -57,9 +63,11 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 			text := m.Text()
 			if m.Stable > 0 && m.Stable < len(text) && len(system) == 0 {
 				system = append(system, map[string]any{"type": "text", "text": text[:m.Stable], "cache_control": ephemeral})
+				sysCached = true
 				text = text[m.Stable:]
 			} else if m.Stable >= len(text) && len(system) == 0 {
 				system = append(system, map[string]any{"type": "text", "text": text, "cache_control": ephemeral})
+				sysCached = true
 				continue
 			}
 			if strings.TrimSpace(text) != "" {
@@ -72,11 +80,11 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 				blocks = append(blocks, textBlock(t))
 			}
 			for _, tc := range m.ToolCalls {
-				blocks = append(blocks, map[string]any{"type": "tool_use", "id": toolID(tc.ID), "name": tc.Function.Name, "input": toolInput(tc.Function.Arguments)})
+				blocks = append(blocks, map[string]any{"type": "tool_use", "id": nextToolID(tc.ID), "name": tc.Function.Name, "input": toolInput(tc.Function.Arguments)})
 			}
 			add("assistant", blocks...)
-			if m.Cache {
-				markLast()
+			if m.Cache && len(msgs) > 0 && len(msgs[len(msgs)-1].Content) > 0 {
+				msgCacheIdx = append(msgCacheIdx, len(msgs)-1)
 			}
 		case "tool":
 			leading = false
@@ -84,22 +92,29 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 			if strings.TrimSpace(content) == "" {
 				content = "(no output)"
 			}
-			add("user", map[string]any{"type": "tool_result", "tool_use_id": toolID(m.ToolCallID), "content": content})
+			add("user", map[string]any{"type": "tool_result", "tool_use_id": nextToolID(m.ToolCallID), "content": content})
 		default:
 			leading = false
 			add("user", userBlocks(m)...)
-			if m.Cache {
-				markLast()
+			if m.Cache && len(msgs) > 0 && len(msgs[len(msgs)-1].Content) > 0 {
+				msgCacheIdx = append(msgCacheIdx, len(msgs)-1)
 			}
 		}
 	}
 	if len(msgs) == 0 || msgs[0].Role != "user" {
+		for i := range msgCacheIdx {
+			msgCacheIdx[i]++
+		}
 		msgs = append([]anthropicMsg{{Role: "user", Content: []map[string]any{textBlock("(continuing)")}}}, msgs...)
 	}
 
 	body := map[string]any{"model": c.Model, "max_tokens": c.anthropicMaxTokens(req), "messages": msgs}
 	if len(system) > 0 {
 		body["system"] = system
+	}
+	cacheMarks := 0
+	if sysCached {
+		cacheMarks++
 	}
 	if len(req.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(req.Tools))
@@ -110,11 +125,33 @@ func (c *Client) anthropicBody(req Request) map[string]any {
 			}
 			tools = append(tools, map[string]any{"name": t.Function.Name, "description": t.Function.Description, "input_schema": schema})
 		}
-		tools[len(tools)-1]["cache_control"] = ephemeral
+		if cacheMarks < 4 {
+			tools[len(tools)-1]["cache_control"] = ephemeral
+			cacheMarks++
+		}
 		body["tools"] = tools
 
-		last := msgs[len(msgs)-1].Content
-		last[len(last)-1]["cache_control"] = ephemeral
+		if last := msgs[len(msgs)-1].Content; len(last) > 0 && cacheMarks < 4 {
+			last[len(last)-1]["cache_control"] = ephemeral
+			cacheMarks++
+		}
+	}
+	// Apply m.Cache from newest to oldest without exceeding Anthropic's 4 cache_control block limit.
+	for i := len(msgCacheIdx) - 1; i >= 0 && cacheMarks < 4; i-- {
+		idx := msgCacheIdx[i]
+		if idx < 0 || idx >= len(msgs) {
+			continue
+		}
+		blocks := msgs[idx].Content
+		if len(blocks) == 0 {
+			continue
+		}
+		lastBlk := blocks[len(blocks)-1]
+		if _, already := lastBlk["cache_control"]; already {
+			continue
+		}
+		lastBlk["cache_control"] = ephemeral
+		cacheMarks++
 	}
 
 	if c.TemperatureSet && !c.noTemperature.Load() {
@@ -165,16 +202,12 @@ func imageBlock(src string) map[string]any {
 }
 
 func toolID(id string) string {
-	clean := strings.Map(func(r rune) rune {
+	return strings.Map(func(r rune) rune {
 		if r == '_' || r == '-' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
 			return r
 		}
 		return '_'
 	}, id)
-	if clean == "" {
-		clean = "call"
-	}
-	return clean
 }
 
 func toolInput(args string) map[string]any {
@@ -187,6 +220,9 @@ func toolInput(args string) map[string]any {
 
 func (c *Client) anthropicMaxTokens(req Request) int {
 	if req.MaxTokens > 0 {
+		if n := c.maxOutput.Load(); n > 0 && req.MaxTokens > int(n) {
+			return int(n)
+		}
 		return req.MaxTokens
 	}
 	if n := c.maxOutput.Load(); n > 0 {
@@ -295,6 +331,10 @@ func readAnthropic(resp *http.Response, onDelta func(string), tools *toolGate, i
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: read response body: %w", errTransport, err)
 	}
+	if t := bytes.TrimSpace(data); bytes.HasPrefix(t, []byte("event:")) || bytes.HasPrefix(t, []byte("data:")) {
+		out, err := readAnthropicStream(bytes.NewReader(data), onDelta, tools)
+		return out, 0, err
+	}
 	if ae := envelopeError(data); ae != nil {
 		return nil, 0, ae
 	}
@@ -373,7 +413,7 @@ func readAnthropicStream(body io.Reader, onDelta func(string), tools *toolGate) 
 	sc := bufio.NewScanner(capped(body))
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
 	argBytes := 0
-	for sc.Scan() && !completed {
+	for !completed && sc.Scan() {
 		if text.Len()+thought.Len()+argBytes > maxStreamText {
 			return fail(ErrTooLarge)
 		}
@@ -418,7 +458,18 @@ func readAnthropicStream(body io.Reader, onDelta func(string), tools *toolGate) 
 				out.FinishReason = stopReason(ev.Delta.StopReason)
 			}
 			if ev.Usage != nil {
-				usage.OutputTokens = ev.Usage.OutputTokens
+				if ev.Usage.OutputTokens > 0 {
+					usage.OutputTokens = ev.Usage.OutputTokens
+				}
+				if ev.Usage.InputTokens > 0 {
+					usage.InputTokens = ev.Usage.InputTokens
+				}
+				if ev.Usage.CacheCreationInputTokens > 0 {
+					usage.CacheCreationInputTokens = ev.Usage.CacheCreationInputTokens
+				}
+				if ev.Usage.CacheReadInputTokens > 0 {
+					usage.CacheReadInputTokens = ev.Usage.CacheReadInputTokens
+				}
 			}
 		case "message_stop":
 			completed = true
@@ -435,6 +486,7 @@ func readAnthropicStream(body io.Reader, onDelta func(string), tools *toolGate) 
 	}
 	out.Usage = usage.usage()
 	out.Message.Content, out.Message.ReasoningContent = text.String(), thought.String()
+	gate.flush(out.Message.Content)
 	idx := make([]int, 0, len(calls))
 	for i := range calls {
 		idx = append(idx, i)

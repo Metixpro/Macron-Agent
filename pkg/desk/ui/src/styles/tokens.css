@@ -16,10 +16,10 @@
 
   /* Layout Dimensions */
   --side-w: 256px;
-  --comp-w: 328px;
+  --comp-w: 336px;
   --col: 740px;
-  --header-h: 46px;
-  --frame-gap: 8px;
+  --header-h: 44px;
+  --frame-gap: 0px;
 
   /* Radii */
   --r-xs: 6px;
@@ -49,7 +49,7 @@
   --bubble-py: 10px;
   --bubble-px: 15px;
   --tool-py: 6px;
-  --composer-pt: 26px;
+  --composer-pt: 36px;
   --composer-pb: 16px;
   --composer-input-h: 44px;
   --composer-input-pt: 12px;
@@ -80,7 +80,7 @@
   --bubble-py: 7px;
   --bubble-px: 12px;
   --tool-py: 4px;
-  --composer-pt: 18px;
+  --composer-pt: 32px;
   --composer-pb: 10px;
   --composer-input-h: 38px;
   --composer-input-pt: 9px;
@@ -111,7 +111,7 @@
   --bubble-py: 14px;
   --bubble-px: 19px;
   --tool-py: 9px;
-  --composer-pt: 32px;
+  --composer-pt: 42px;
   --composer-pb: 22px;
   --composer-input-h: 50px;
   --composer-input-pt: 14px;
@@ -139,41 +139,43 @@
   --leading-base: 1.92;
 }
 
-/* Signature Macron Graphite Dark Theme */
+/* Signature Macron Obsidian Dark Theme (OpenBot-inspired deep neutral carbon) */
 [data-theme="dark"] {
-  --frame: #141416;
-  --side: #171719;
-  --bg: #1b1b1e;
-  --raised: #242429;
-  --elevated: #26262c;
-  --sunk: #131316;
-  --glass: rgba(27, 27, 30, 0.82);
-  --glass-strong: rgba(24, 24, 28, 0.94);
-  --glass-line: rgba(255, 255, 255, 0.075);
-  --chrome-hi: rgba(255, 255, 255, 0.055);
-  --chrome-lo: rgba(0, 0, 0, 0.36);
-  --hover: rgba(255, 255, 255, 0.048);
-  --active: rgba(255, 255, 255, 0.082);
-  --line: #28282f;
-  --line-2: #34343b;
-  --text: #eaeaef;
-  --text-2: #c4c4cf;
-  --dim: #9696a0;
-  --faint: #64646f;
-  --ink: #eaeaef;
-  --on-ink: #141416;
-  --accent: #cbd4eb;
-  --on-accent: #141418;
-  --link: #9bb6f4;
-  --user: #24242b;
-  --ok: #46b884;
-  --warn: #e2a340;
-  --amber: #e2a340;
-  --fail: #e6645c;
-  --focus: rgba(203, 212, 235, 0.34);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.42), 0 20px 48px -14px rgba(0, 0, 0, 0.68);
-  --scrim: rgba(10, 10, 13, 0.62);
+  --frame: #09090b;
+  --side: #0e0e11;
+  --bg: #131316;
+  --raised: #1a1a1f;
+  --elevated: #222228;
+  --sunk: #0b0b0e;
+  --glass: rgba(19, 19, 22, 0.86);
+  --glass-strong: rgba(22, 22, 27, 0.96);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --chrome-hi: rgba(255, 255, 255, 0.06);
+  --chrome-lo: rgba(0, 0, 0, 0.45);
+  --hover: rgba(255, 255, 255, 0.05);
+  --hover-2: rgba(255, 255, 255, 0.09);
+  --active: rgba(255, 255, 255, 0.085);
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.12);
+  --text: #f3f3f6;
+  --text-2: #c9c9d2;
+  --dim: #8d8d99;
+  --faint: #5b5b66;
+  --ink: #f3f3f6;
+  --on-ink: #0e0e10;
+  --accent: #eceef4;
+  --on-accent: #101014;
+  --brand-blue: #38bdf8;
+  --link: #8eb2ff;
+  --user: #202026;
+  --ok: #3fcf8e;
+  --warn: #e5a93c;
+  --amber: #e5a93c;
+  --fail: #ef6b64;
+  --focus: rgba(236, 238, 244, 0.28);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.34);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.48), 0 24px 56px -14px rgba(0, 0, 0, 0.76);
+  --scrim: rgba(6, 6, 8, 0.68);
   color-scheme: dark;
 }
 
@@ -185,12 +187,13 @@
   --raised: #ffffff;
   --elevated: #ffffff;
   --sunk: #f0f0ec;
-  --glass: rgba(250, 249, 247, 0.84);
-  --glass-strong: rgba(255, 255, 255, 0.94);
+  --glass: rgba(250, 249, 247, 0.86);
+  --glass-strong: rgba(255, 255, 255, 0.96);
   --glass-line: rgba(20, 20, 24, 0.085);
   --chrome-hi: rgba(255, 255, 255, 0.92);
   --chrome-lo: rgba(20, 20, 24, 0.05);
   --hover: rgba(20, 20, 24, 0.044);
+  --hover-2: rgba(20, 20, 24, 0.085);
   --active: rgba(20, 20, 24, 0.075);
   --line: #e5e5e0;
   --line-2: #d3d3cc;
@@ -202,6 +205,7 @@
   --on-ink: #faf9f7;
   --accent: #2d3d63;
   --on-accent: #f8f9fc;
+  --brand-blue: #0284c7;
   --link: #2554c7;
   --user: #efefe9;
   --ok: #1d8058;

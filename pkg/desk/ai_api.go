@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type RoutingConfig struct {
@@ -341,7 +342,7 @@ func excerptMatch(text, term string, maxRunes int) string {
 	if idx < 0 {
 		return string(runes[:maxRunes]) + "…"
 	}
-	runeIdx := len([]rune(flat[:idx]))
+	runeIdx := min(utf8.RuneCountInString(low[:idx]), len(runes))
 	start := runeIdx - maxRunes/3
 	if start < 0 {
 		start = 0

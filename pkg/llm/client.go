@@ -455,14 +455,18 @@ type deltaGate struct {
 }
 
 func (g *deltaGate) push(text string) {
-	if errorPrefix(text) {
-		return
-	}
 	if g.on == nil {
 		return
 	}
 	g.n++
 	if g.n > 500 && len(text)-g.last < 256 {
+		return
+	}
+	g.flush(text)
+}
+
+func (g *deltaGate) flush(text string) {
+	if g.on == nil || len(text) == g.last || errorPrefix(text) {
 		return
 	}
 	g.last = len(text)
@@ -517,6 +521,7 @@ type idleBody struct {
 	idle    time.Duration
 	timer   *time.Timer
 	stalled atomic.Bool
+	closed  atomic.Bool
 }
 
 func newIdleBody(rc io.ReadCloser, idle time.Duration) *idleBody {
@@ -527,7 +532,7 @@ func newIdleBody(rc io.ReadCloser, idle time.Duration) *idleBody {
 
 func (b *idleBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
-	if n > 0 {
+	if n > 0 && !b.closed.Load() {
 		b.timer.Reset(b.idle)
 	}
 	if err != nil && b.stalled.Load() {
@@ -537,6 +542,7 @@ func (b *idleBody) Read(p []byte) (int, error) {
 }
 
 func (b *idleBody) Close() error {
+	b.closed.Store(true)
 	b.timer.Stop()
 	return b.ReadCloser.Close()
 }
@@ -629,6 +635,7 @@ func (c *Client) complete(ctx context.Context, req Request) (*Response, error) {
 		maxRetries = 0
 	}
 	var lastErr error
+	adaptRetries := 0
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		payload, err := c.encode(body, req)
 		if err != nil {
@@ -643,16 +650,18 @@ func (c *Client) complete(ctx context.Context, req Request) (*Response, error) {
 		}
 
 		var api *APIError
-		if body.StreamOptions != nil && errors.As(err, &api) && api.Status == http.StatusBadRequest && strings.Contains(api.Body, "stream_options") {
+		if adaptRetries < 6 && body.StreamOptions != nil && errors.As(err, &api) && api.Status == http.StatusBadRequest && strings.Contains(api.Body, "stream_options") {
 			body.StreamOptions = nil
 			c.noStreamOptions.Store(true)
+			adaptRetries++
 			attempt--
 			continue
 		}
 
-		if errors.As(err, &api) && api.Status == http.StatusBadRequest && (c.learnEffort(api.Body, c.wireEffort(req)) ||
+		if adaptRetries < 6 && errors.As(err, &api) && api.Status == http.StatusBadRequest && (c.learnEffort(api.Body, c.wireEffort(req)) ||
 			(c.api() == APIOpenAI && c.learn(api.Body)) || (c.api() == APIAnthropic && c.learnAnthropic(api.Body)) ||
 			(c.api() == APIResponses && c.learnResponses(api.Body))) {
+			adaptRetries++
 			attempt--
 			continue
 		}
@@ -940,6 +949,10 @@ func (c *Client) once(ctx context.Context, payload []byte, onDelta func(string))
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: read response body: %w", errTransport, err)
 	}
+	if t := bytes.TrimSpace(body); bytes.HasPrefix(t, []byte("event:")) || bytes.HasPrefix(t, []byte("data:")) {
+		out, err := readStream(bytes.NewReader(body), onDelta, tools)
+		return out, 0, err
+	}
 	if ae := envelopeError(body); ae != nil {
 		return nil, 0, ae
 	}
@@ -1032,14 +1045,18 @@ func readStream(body io.Reader, onDelta func(string), tools *toolGate) (*Respons
 		if ch.Model != "" {
 			out.Model = ch.Model
 		}
-		if ch.Usage != nil {
+		if ch.Usage != nil && (ch.Usage.PromptTokens > 0 || ch.Usage.CompletionTokens > 0 || ch.Usage.TotalTokens > 0 || ch.Usage.CachedTokens > 0) {
 			out.Usage = *ch.Usage
 		}
 		for _, c := range ch.Choices {
 			if c.FinishReason != "" {
 				out.FinishReason = c.FinishReason
 			}
-			reasoning.WriteString(c.Delta.ReasoningContent + c.Delta.Reasoning)
+			if c.Delta.ReasoningContent != "" {
+				reasoning.WriteString(c.Delta.ReasoningContent)
+			} else if c.Delta.Reasoning != "" {
+				reasoning.WriteString(c.Delta.Reasoning)
+			}
 			for _, td := range c.Delta.ToolCalls {
 
 				key, ok := slot[td.Index]
@@ -1054,8 +1071,12 @@ func readStream(body io.Reader, onDelta func(string), tools *toolGate) (*Respons
 				if td.Type != "" {
 					tc.Type = td.Type
 				}
-				if td.Function.Name != tc.Function.Name {
-					tc.Function.Name += td.Function.Name
+				if td.Function.Name != "" && td.Function.Name != tc.Function.Name {
+					if tc.Function.Name != "" && strings.HasPrefix(td.Function.Name, tc.Function.Name) {
+						tc.Function.Name = td.Function.Name
+					} else {
+						tc.Function.Name += td.Function.Name
+					}
 				}
 				tc.Function.Arguments += td.Function.Arguments
 				argBytes += len(td.Function.Arguments)
@@ -1079,6 +1100,7 @@ func readStream(body io.Reader, onDelta func(string), tools *toolGate) (*Respons
 	}
 
 	out.Message.Content = text.String()
+	gate.flush(out.Message.Content)
 	out.Message.ReasoningContent = reasoning.String()
 	idx := make([]int, 0, len(calls))
 	for i := range calls {
@@ -1092,8 +1114,20 @@ func readStream(body io.Reader, onDelta func(string), tools *toolGate) (*Respons
 }
 
 func parseRetryAfter(v string) time.Duration {
-	if secs, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && secs > 0 {
-		return time.Duration(min(secs, 86400)) * time.Second
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.ParseFloat(v, 64); err == nil && secs > 0 {
+		if secs > 86400 {
+			secs = 86400
+		}
+		return time.Duration(secs * float64(time.Second))
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return min(d, 86400*time.Second)
+		}
 	}
 	return 0
 }

@@ -45,7 +45,13 @@ func PowerShell() string {
 	return ""
 }
 
-func prepare(*exec.Cmd, bool) {}
+func prepare(cmd *exec.Cmd, _ bool) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	} else {
+		cmd.SysProcAttr.Setpgid = true
+	}
+}
 
 func setWindowsSandboxHardening(bool) {}
 
@@ -62,7 +68,10 @@ type tree struct {
 }
 
 func startTracked(cmd *exec.Cmd) (*tree, error) {
-	return nil, cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return &tree{pid: cmd.Process.Pid}, nil
 }
 
 func startGroup(cmd *exec.Cmd) (*tree, error) {

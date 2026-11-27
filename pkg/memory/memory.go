@@ -116,6 +116,8 @@ func (m *Manager) Tidy(ctx context.Context, userID int64) (bool, error) {
 }
 
 func (m *Manager) Append(ctx context.Context, userID int64, userText, assistantText string) error {
+	unlock := m.lock(userID)
+	defer unlock()
 
 	maxRunes := max(m.budgetFor(ctx, userID), 1000)
 	origUser, origAssistant := userText, assistantText

@@ -98,7 +98,10 @@ func estimateText(s string) int {
 }
 
 func estimateMessage(m llm.Message) int {
-	n := 4 + estimateText(m.Content)
+	n := 4
+	if len(m.Parts) == 0 {
+		n += estimateText(m.Content)
+	}
 	for _, p := range m.Parts {
 		if p.Type == "image_url" {
 			n += imageTokens
@@ -438,7 +441,7 @@ func (a *Agent) compact(ctx context.Context, messages []llm.Message, lay layout,
 	input := lay.input
 	summary := ""
 	sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	resp, err := a.LLM.Complete(sctx, llm.Request{Messages: []llm.Message{
+	resp, err := a.client(sctx).Complete(sctx, llm.Request{Messages: []llm.Message{
 		{Role: "system", Content: fmt.Sprintf(compactSystem, summaryWords)},
 		{Role: "user", Content: "The user's request:\n" + textutil.TruncateRunes(messages[input].Text(), 4000, "…") +
 			"\n\nThe steps to summarize:\n" + transcript},

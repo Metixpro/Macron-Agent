@@ -37,17 +37,18 @@ type Env struct {
 const maxDepth = 6
 
 func Analyze(command string, env Env) []Finding {
+	clean := Clean(command)
 	var out []Finding
-	analyze(command, env, 0, &out)
+	analyze(clean, env, 0, &out)
 	if runtime.GOOS == "windows" {
-		out = append(out, analyzePowerShell(command, env)...)
+		out = append(out, analyzePowerShell(clean, env)...)
 	}
 
-	masked := maskQuotes(Clean(command))
+	masked := maskQuotes(clean)
 	if forkBombRe.MatchString(strings.Join(strings.Fields(masked), "")) || forkBombRe.MatchString(masked) {
 		out = append(out, Finding{Level: Hardline, Rule: "fork-bomb", Reason: "a fork bomb"})
 	}
-	if env.secretText(Clean(command)) {
+	if env.secretText(clean) {
 		out = append(out, Finding{Level: Dangerous, Rule: "self-keys", Reason: "touching the agent's own keys and settings file"})
 	}
 	if blockDevRedirRe.MatchString(masked) {
@@ -140,7 +141,8 @@ func unwrap(words []string) (name string, args []string, sudoS bool) {
 					i++
 
 					if (wr == "sudo" || wr == "doas") && (a == "-u" || a == "-g" || a == "-C" || a == "-p" || a == "-U" || a == "-h" || a == "-D") ||
-						wr == "nice" && a == "-n" || wr == "ionice" && (a == "-c" || a == "-n") || wr == "timeout" && (a == "-s" || a == "-k") ||
+						wr == "env" && (a == "-C" || a == "-u" || a == "-S" || a == "--chdir" || a == "--unset") ||
+						wr == "nice" && a == "-n" || wr == "ionice" && (a == "-c" || a == "-n") || wr == "timeout" && (a == "-s" || a == "--signal" || a == "-k" || a == "--kill-after") ||
 						wr == "chrt" && a == "-p" || wr == "taskset" && a == "-c" || wr == "watch" && (a == "-n" || a == "-d") {
 						i++
 					}
@@ -290,6 +292,7 @@ func (env Env) selfDB(t string) bool {
 
 func analyze(command string, env Env, depth int, out *[]Finding) {
 	if depth > maxDepth {
+		*out = append(*out, Finding{Level: Dangerous, Rule: "nested-depth", Reason: "deeply nested shell command beyond safe analysis depth"})
 		return
 	}
 	sc := Parse(command)
@@ -530,8 +533,10 @@ func analyze(command string, env Env, depth int, out *[]Finding) {
 			case shells[low]:
 				script := ""
 				for i, a := range args {
-					if a == "-c" && i+1 < len(args) {
+					isC := a == "-c" || (strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.ContainsRune(a[1:], 'c'))
+					if isC && i+1 < len(args) {
 						script = args[i+1]
+						break
 					}
 				}
 				switch {

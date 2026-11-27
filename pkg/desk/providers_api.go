@@ -298,6 +298,13 @@ func (s *Server) shellAPI(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, errors.New("unknown project"))
 		return
 	}
+	p.mu.Lock()
+	busy := p.live.Running || p.starting
+	p.mu.Unlock()
+	if busy {
+		writeErr(w, http.StatusConflict, errors.New("stop the current job before running a shell command"))
+		return
+	}
 	var in struct {
 		Command string `json:"command"`
 	}

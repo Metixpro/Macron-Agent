@@ -1,5 +1,6 @@
 import hashlib
 import subprocess
+import threading
 
 from playwright.sync_api import sync_playwright
 
@@ -74,6 +75,14 @@ with sync_playwright() as pw:
         fail(f"the page did not load: {e}")
     cdp = ctx.new_cdp_session(page)
     ff = subprocess.Popen(encode, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    err_chunks = []
+    def drain_err():
+        try:
+            err_chunks.append(ff.stderr.read().decode(errors="replace"))
+        except Exception:
+            pass
+    err_thread = threading.Thread(target=drain_err, daemon=True)
+    err_thread.start()
     hashes, every = set(), max(1, frames // 10)
     for i in range(frames):
         page.evaluate("t => window.__macronTick(t)", i * 1000.0 / FPS)
@@ -85,7 +94,8 @@ with sync_playwright() as pw:
         except BrokenPipeError:
             break
     ff.stdin.close()
-    err = ff.stderr.read().decode(errors="replace")
+    err_thread.join(timeout=5)
+    err = "".join(err_chunks)
     if ff.wait() != 0:
         fail("ffmpeg could not encode the frames: " + err[-400:])
     browser.close()

@@ -6,6 +6,7 @@ import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { setState, useStore } from "../store";
 import type { Block, PlanItem } from "../types";
+import { BrowserBody } from "./BrowserPanel";
 import { ChangesBody } from "./ChangesPanel";
 import { StarBuddy, useStarBuddyMood } from "./StarBuddy";
 
@@ -233,7 +234,9 @@ export function PlanPanel() {
   const plan = usePanelPlan();
   const visible = useRightPanelVisible();
   const rightTab = useStore((s) => s.rightTab);
+  const browserWorkspace = useStore((s) => `${s.machine}:${s.current}`);
   const changes = useStore((s) => s.changes);
+  const browserView = useStore((s) => s.browserView);
   const live = useStore((s) => s.live);
   const info = useStore((s) => s.info);
   const mood = useStarBuddyMood();
@@ -247,13 +250,15 @@ export function PlanPanel() {
   const activeTab =
     rightTab === "changes"
       ? "changes"
-      : rightTab === "plan" && hasPlan
-        ? "plan"
-        : rightTab === "activity"
-          ? "activity"
-          : hasPlan
-            ? "plan"
-            : "activity";
+      : rightTab === "browser"
+        ? "browser"
+        : rightTab === "plan" && hasPlan
+          ? "plan"
+          : rightTab === "activity"
+            ? "activity"
+            : hasPlan
+              ? "plan"
+              : "activity";
 
   const done = plan.filter((i) => i.status === "done").length;
   const current = plan.find((i) => i.status === "in_progress");
@@ -340,7 +345,8 @@ export function PlanPanel() {
           className={"ps-tab" + (activeTab === "activity" ? " on" : "")}
           onClick={() => setRightTab("activity")}
         >
-          {t("Activity")}
+          <Icon name="activity" size={12} />
+          <span>{t("Activity")}</span>
         </button>
         {hasPlan && (
           <button
@@ -350,7 +356,8 @@ export function PlanPanel() {
             className={"ps-tab" + (activeTab === "plan" ? " on" : "")}
             onClick={() => setRightTab("plan")}
           >
-            {t("Plan")}
+            <Icon name="steps" size={12} />
+            <span>{t("Plan")}</span>
             <span className="ps-badge" dir="ltr">
               {done}/{plan.length}
             </span>
@@ -359,11 +366,23 @@ export function PlanPanel() {
         <button
           type="button"
           role="tab"
+          aria-selected={activeTab === "browser"}
+          className={"ps-tab" + (activeTab === "browser" ? " on" : "")}
+          onClick={() => setRightTab("browser")}
+        >
+          <Icon name="globe" size={12} />
+          <span>{t("Browser")}</span>
+          {browserView?.open && <span className={"br-live-dot" + (browserView.agentActive ? " active" : "")} aria-hidden="true" />}
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeTab === "changes"}
           className={"ps-tab" + (activeTab === "changes" ? " on" : "")}
           onClick={() => setRightTab("changes")}
         >
-          {t("Changes")}
+          <Icon name="gitBranch" size={12} />
+          <span>{t("Changes")}</span>
           {dirtyCount > 0 && (
             <span className="ps-badge" dir="ltr">
               {dirtyCount}
@@ -403,6 +422,8 @@ export function PlanPanel() {
                 : done + " of " + plan.length + " steps done"}
           </div>
         </div>
+      ) : activeTab === "browser" ? (
+        <BrowserBody key={browserWorkspace} />
       ) : activeTab === "changes" ? (
         <ChangesBody />
       ) : (

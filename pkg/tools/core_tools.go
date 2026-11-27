@@ -243,12 +243,12 @@ func (r *Registry) registerCoreTools() {
 				}
 				return report, nil
 			case "delete":
-				id := strArg(args, "watch_id")
+				id := sanitizeBase(strArg(args, "watch_id"))
 				if id == "" {
 					return "error: watch_id is required for delete", nil
 				}
-				path := fmt.Sprintf("%s/%s.json", pageWatchDir, id)
-				_ = r.Machine.Remove(sessionID, path)
+				p := fmt.Sprintf("%s/%s.json", pageWatchDir, id)
+				_ = r.Machine.Remove(sessionID, p)
 				return fmt.Sprintf("Page monitor %s deleted.", id), nil
 			default:
 				list, err := r.ListPageWatches(sessionID)
@@ -630,7 +630,7 @@ func (r *Registry) streamAgain(ctx context.Context, f *os.File, rawURL string, l
 	if err != nil {
 		return 0, 1, err
 	}
-	resp, err := r.HTTP.Do(req)
+	resp, err := r.downloadHTTP().Do(req)
 	if err != nil {
 		return 0, 1, err
 	}

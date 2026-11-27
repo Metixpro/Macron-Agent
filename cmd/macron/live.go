@@ -475,7 +475,7 @@ func (l *liveView) flushPrivateMessage(ctx context.Context) {
 	l.dirty, l.urgent, l.lastEdit = false, false, time.Now()
 	stopData := l.stopData
 	l.mu.Unlock()
-	html := telegram.MarkdownToHTML(body)
+	html := telegram.SafeHTMLCaption(telegram.MarkdownToHTML(body), 4096)
 	var kb *telegram.InlineKeyboardMarkup
 	if withStop {
 		kb = l.b.stopKeyboard(l.lng, stopData)
@@ -502,7 +502,7 @@ func (l *liveView) flushPrivateMessage(ctx context.Context) {
 		l.dirty = !l.gone
 		return
 	}
-	l.traceMsg, l.shown, l.shownKB = id, body, withStop
+	l.traceMsg, l.shown, l.shownKB, l.lastFlush = id, body, withStop, time.Now()
 }
 
 func (l *liveView) flushGroup(ctx context.Context) {

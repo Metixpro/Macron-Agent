@@ -15,7 +15,6 @@ import {
   closeDialog,
   compact,
   errorText,
-  fail,
   initProject,
   newChat,
   openDialog,
@@ -30,7 +29,8 @@ import {
 } from "../actions";
 import { server } from "../api";
 import { shortPath } from "../format";
-import { useMod, useProjectName } from "../hooks";
+import { useHomePath, useMod, useProjectName } from "../hooks";
+import { useT } from "../i18n";
 import { Icon } from "../icons";
 import type { IconName } from "../icons";
 import { getState, setState, useStore } from "../store";
@@ -463,6 +463,7 @@ const addressRe = /^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:@\s]+)(?::(\d{1,5}))?$/;
 
 function ServerAdd() {
   const wsl = useStore((s) => s.wsl);
+  const sshKeyDefault = useHomePath(".ssh/id_ed25519");
   const [kind, setKind] = useState<"ssh" | "wsl">("ssh");
   const [address, setAddress] = useState("");
   const [name, setName] = useState("");
@@ -538,7 +539,7 @@ function ServerAdd() {
         (more ? (
           <label className="field">
             <span>Private key file</span>
-            <input spellCheck={false} dir="ltr" placeholder="Default: your SSH agent, then ~/.ssh/id_ed25519, id_ecdsa, id_rsa" value={key} onChange={(e) => setKey(e.target.value)} />
+            <input spellCheck={false} dir="ltr" placeholder={`Default: your SSH agent, then ${sshKeyDefault}, id_ecdsa, id_rsa`} value={key} onChange={(e) => setKey(e.target.value)} />
           </label>
         ) : (
           <button type="button" className="link-btn" onClick={() => setMore(true)}>
@@ -563,6 +564,7 @@ function ServerAdd() {
 
 function ServerAuth({ id, need, fingerprint, install }: { id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; install?: boolean }) {
   const srv = useStore((s) => s.servers.find((x) => x.id === id));
+  const knownHostsPath = useHomePath(".ssh/known_hosts");
   const [value, setValue] = useState("");
   const where = srv ? (srv.user ? srv.user + "@" : "") + (srv.host || "") : "the server";
   const submit = () => {
@@ -585,8 +587,8 @@ function ServerAuth({ id, need, fingerprint, install }: { id: string; need: "tru
           </div>
           <pre className="command">{fingerprint}</pre>
           <div className="hint">
-            Compare it with what <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> prints on the server, or with your hosting panel. Macron remembers it in
-            ~/.ssh/known_hosts and warns you if it ever changes.
+            Compare it with what <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> prints on the server, or with your hosting panel. Macron remembers it in{" "}
+            <code dir="ltr">{knownHostsPath}</code> and warns you if it ever changes.
           </div>
         </>
       ) : (
@@ -702,6 +704,7 @@ function useList(count: number) {
 let modelCache: { key: string; models: string[] } | null = null;
 
 function Palette({ mode }: { mode: "root" | "models" }) {
+  const t = useT();
   const projects = useStore((s) => s.projects);
   const current = useStore((s) => s.current);
   const defaultId = useStore((s) => s.defaultId);
@@ -746,47 +749,47 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       const ordered = all.includes(active) ? [active, ...all.filter((m) => m !== active)] : all;
       const list = ordered.map<Entry>((m) => ({ id: "m:" + m, group: "Models", label: m, icon: "chip", on: m === active, run: () => chooseModel(m) }));
       const typed = q.trim();
-      if (typed && !(models || []).includes(typed)) list.push({ id: "custom", group: "Models", label: `Use “${typed}”`, icon: "chip", run: () => chooseModel(typed) });
+      if (typed && !(models || []).includes(typed)) list.push({ id: "custom", group: "Models", label: `${t("Use")} “${typed}”`, icon: "chip", run: () => chooseModel(typed) });
       return list;
     }
     const themes: [Theme, string, IconName][] = [
-      ["system", "Match the system", "monitor"],
-      ["dark", "Dark", "moon"],
-      ["light", "Light", "sun"],
+      ["system", t("Match the system"), "monitor"],
+      ["dark", t("Dark"), "moon"],
+      ["light", t("Light"), "sun"],
     ];
     const list: Entry[] = [
-      { id: "new", group: "Actions", label: "New conversation", icon: "edit", keys: [mod, "N"], run: () => newChat() },
-      { id: "search", group: "Actions", label: "Search conversations…", hint: "Across all workspaces & threads", icon: "search", keys: [mod, "Shift", "F"], run: () => openDialog({ kind: "search" }) },
+      { id: "new", group: "Actions", label: t("New conversation"), icon: "edit", keys: [mod, "N"], run: () => newChat() },
+      { id: "search", group: "Actions", label: t("Search conversations…"), hint: t("Across all workspaces & threads"), icon: "search", keys: [mod, "Shift", "F"], run: () => openDialog({ kind: "search" }) },
       appMode === "plan"
-        ? { id: "mode", group: "Actions", label: "Switch to Build mode", hint: "Let Macron make changes", icon: "code", keys: [mod, "Shift", "P"], run: () => toggleMode() }
-        : { id: "mode", group: "Actions", label: "Switch to Plan mode", hint: "Plan first, change nothing", icon: "map", keys: [mod, "Shift", "P"], run: () => toggleMode() },
+        ? { id: "mode", group: "Actions", label: t("Switch to Build mode"), hint: t("Let Macron make changes"), icon: "code", keys: [mod, "Shift", "P"], run: () => toggleMode() }
+        : { id: "mode", group: "Actions", label: t("Switch to Plan mode"), hint: t("Plan first, change nothing"), icon: "map", keys: [mod, "Shift", "P"], run: () => toggleMode() },
       info.model
-        ? { id: "model", group: "Actions", label: "Change model…", hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) }
-        : { id: "model", group: "Actions", label: "Connect a model…", icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
-      { id: "connect", group: "Actions", label: "Add or customize provider…", icon: "plus", run: () => openDialog({ kind: "provider-edit" }) },
-      { id: "folder", group: "Actions", label: "Open folder…", icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
-      { id: "changes", group: "Actions", label: "Show git changes & diff", icon: "gitBranch", run: () => toggleChanges(true) },
-      { id: "status", group: "Actions", label: "System & session status", hint: "Model, sandbox, SpectorDev", icon: "info", run: () => openDialog({ kind: "status" }) },
-      { id: "export", group: "Actions", label: "Export conversation as Markdown", icon: "download", run: () => exportConversation() },
-      { id: "init", group: "Actions", label: "Initialize MACRON.md", hint: "Generate project instructions", icon: "file", run: () => void initProject() },
-      { id: "mcp", group: "Actions", label: "Add an MCP server…", icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
-      { id: "compact", group: "Actions", label: "Compact the conversation", hint: "Summarise to free room", icon: "layers", run: () => compact() },
-      { id: "update", group: "Actions", label: "Check for updates (GitHub)", icon: "download", run: () => void checkUpdate(true) },
+        ? { id: "model", group: "Actions", label: t("Change model…"), hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) }
+        : { id: "model", group: "Actions", label: t("Connect a model…"), icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
+      { id: "connect", group: "Actions", label: t("Add or customize provider…"), icon: "plus", run: () => openDialog({ kind: "provider-edit" }) },
+      { id: "folder", group: "Actions", label: t("Open folder…"), icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
+      { id: "changes", group: "Actions", label: t("Show git changes & diff"), icon: "gitBranch", run: () => toggleChanges(true) },
+      { id: "status", group: "Actions", label: t("System & session status"), hint: t("Model, sandbox, SpectorDev"), icon: "info", run: () => openDialog({ kind: "status" }) },
+      { id: "export", group: "Actions", label: t("Export conversation as Markdown"), icon: "download", run: () => exportConversation() },
+      { id: "init", group: "Actions", label: t("Initialize MACRON.md"), hint: t("Generate project instructions"), icon: "file", run: () => void initProject() },
+      { id: "mcp", group: "Actions", label: t("Add an MCP server…"), icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
+      { id: "compact", group: "Actions", label: t("Compact the conversation"), hint: t("Summarise to free room"), icon: "layers", run: () => compact() },
+      { id: "update", group: "Actions", label: t("Check for updates (GitHub)"), icon: "download", run: () => void checkUpdate(true) },
       { id: "lang", group: "Actions", label: getState().lang === "fa" ? "Switch language to English" : "تغییر زبان به فارسی (Persian)", icon: "globe", run: () => setLang(getState().lang === "fa" ? "en" : "fa") },
-      { id: "settings", group: "Actions", label: "Settings", icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
+      { id: "settings", group: "Actions", label: t("Settings"), icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
     ];
-    if (running) list.unshift({ id: "stop", group: "Actions", label: "Stop the current job", icon: "square", keys: ["Esc"], run: () => stop() });
-    for (const [t, label, icon] of themes) list.push({ id: "t:" + t, group: "Theme", label, icon, on: theme === t, run: () => setTheme(t) });
+    if (running) list.unshift({ id: "stop", group: "Actions", label: t("Stop the current job"), icon: "square", keys: ["Esc"], run: () => stop() });
+    for (const [th, label, icon] of themes) list.push({ id: "t:" + th, group: "Theme", label, icon, on: theme === th, run: () => setTheme(th) });
     if (tuning && tuning.model) {
       for (const l of effortLevels) {
-        list.push({ id: "e:" + (l || "auto"), group: "Effort", label: effortName(l), hint: effortAbout[l], icon: "gauge", on: tuning.effort === l, run: () => setTuning("effort", l || "auto", "Effort: " + effortName(l)) });
+        list.push({ id: "e:" + (l || "auto"), group: "Effort", label: t(effortName(l)), hint: t(effortAbout[l]), icon: "gauge", on: tuning.effort === l, run: () => setTuning("effort", l || "auto", "Effort: " + effortName(l)) });
       }
     }
     for (const p of projects) {
       list.push({
         id: "p:" + p.id,
         group: "Workspaces",
-        label: p.id === defaultId ? "Home" : p.name,
+        label: p.id === defaultId ? t("Home") : p.name,
         hint: shortPath(p.path, home),
         icon: p.id === defaultId ? "home" : "folder",
         on: p.id === current,
@@ -794,13 +797,13 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       });
     }
     return list;
-  }, [mode, models, active, q, mod, appMode, info.model, running, theme, projects, defaultId, current, home, tuning]);
+  }, [mode, models, active, q, mod, appMode, info.model, running, theme, projects, defaultId, current, home, tuning, t]);
 
   const shown = useMemo(() => {
     const f = q.trim().toLowerCase();
     if (!f || mode === "models") return mode === "models" && f ? entries.filter((e) => e.id === "custom" || e.label.toLowerCase().includes(f)) : entries;
-    return entries.filter((e) => (e.label + " " + (e.hint || "") + " " + e.group).toLowerCase().includes(f));
-  }, [entries, q, mode]);
+    return entries.filter((e) => (e.label + " " + (e.hint || "") + " " + e.group + " " + t(e.group)).toLowerCase().includes(f));
+  }, [entries, q, mode, t]);
 
   const { sel, setSel, listRef, move } = useList(shown.length);
 
@@ -829,7 +832,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
           autoFocus
           spellCheck={false}
           value={q}
-          placeholder={mode === "models" ? "Search models, or type any model name" : "Type a command or a workspace"}
+          placeholder={mode === "models" ? t("Search models, or type any model name") : t("Type a command or a workspace")}
           onChange={(e) => {
             setQ(e.target.value);
             setSel(0);
@@ -839,20 +842,20 @@ function Palette({ mode }: { mode: "root" | "models" }) {
         {mode === "models" && info.provider && <span className="scope">{info.provider}</span>}
       </div>
       <div className="palette-list" ref={listRef}>
-        {mode === "models" && models === null && <div className="empty-row">Loading models…</div>}
+        {mode === "models" && models === null && <div className="empty-row">{t("Loading models…")}</div>}
         {error && <div className="empty-row">{error}</div>}
-        {models !== null && !shown.length && !error && <div className="empty-row">Nothing matches</div>}
+        {models !== null && !shown.length && !error && <div className="empty-row">{t("Nothing matches")}</div>}
         {shown.map((e, i) => {
           const head = e.group !== lastGroup ? e.group : "";
           lastGroup = e.group;
           return (
             <div key={e.id}>
-              {head && mode !== "models" && <div className="group">{head}</div>}
+              {head && mode !== "models" && <div className="group">{t(head)}</div>}
               <button type="button" className={"entry" + (i === sel ? " sel" : "")} onMouseMove={() => i !== sel && setSel(i)} onClick={() => pick(e)}>
                 <Icon name={e.icon} size={15} />
-                <span className="label">{e.label}</span>
-                {e.hint && <span className="hint">{e.hint}</span>}
-                <span className="end">
+                <span className="label" dir="auto">{e.label}</span>
+                {e.hint && <span className="hint" dir="auto">{e.hint}</span>}
+                <span className="end" dir="ltr">
                   {e.on && <Icon name="check" size={14} className="tick" />}
                   {e.keys && e.keys.map((k) => <kbd key={k}>{k}</kbd>)}
                 </span>
@@ -863,14 +866,13 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       </div>
       <div className="palette-foot">
         <span>
-          <kbd>↑</kbd>
-          <kbd>↓</kbd> move
+          <span dir="ltr"><kbd>↑</kbd><kbd>↓</kbd></span> {t("move")}
         </span>
         <span>
-          <kbd>Enter</kbd> choose
+          <kbd dir="ltr">Enter</kbd> {t("choose")}
         </span>
         <span>
-          <kbd>Esc</kbd> close
+          <kbd dir="ltr">Esc</kbd> {t("close")}
         </span>
       </div>
     </>
@@ -879,29 +881,40 @@ function Palette({ mode }: { mode: "root" | "models" }) {
 
 function crumbs(path: string, sep: string): { label: string; path: string }[] {
   const out: { label: string; path: string }[] = [];
-  const parts = path.split(/[\\/]+/).filter(Boolean);
   if (sep === "/") {
     out.push({ label: "/", path: "/" });
     let acc = "";
-    for (const p of parts) {
+    for (const p of path.split("/").filter(Boolean)) {
       acc += "/" + p;
       out.push({ label: p, path: acc });
     }
     return out;
   }
-  let acc = "";
-  parts.forEach((p, i) => {
-    acc = i === 0 ? p + "\\" : acc.replace(/\\$/, "") + "\\" + p;
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  const unc = /^[\\/]{2}/.test(path);
+  const root = (unc ? "\\\\" : "") + parts.splice(0, unc ? 2 : 1).join("\\");
+  let acc = root + "\\";
+  out.push({ label: root, path: acc });
+  for (const p of parts) {
+    acc = acc.replace(/\\$/, "") + "\\" + p;
     out.push({ label: p, path: acc });
-  });
+  }
   return out;
 }
 
 function FolderPicker() {
+  const t = useT();
   const [listing, setListing] = useState<Listing | null>(null);
   const [input, setInput] = useState("");
+  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [openingFolder, setOpeningFolder] = useState(false);
   const [error, setError] = useState("");
-  const dirs = listing?.dirs || [];
+  const allDirs = listing?.dirs || [];
+  const dirs = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? allDirs.filter((d) => d.toLowerCase().includes(q)) : allDirs;
+  }, [allDirs, filter]);
   const { sel, setSel, listRef, move } = useList(dirs.length);
   const [moved, setMoved] = useState(false);
   const pathRef = useRef<HTMLInputElement>(null);
@@ -911,23 +924,31 @@ function FolderPicker() {
     if (el) el.scrollLeft = el.scrollWidth;
   }, [listing]);
 
+  useEffect(() => {
+    if (!moved) return;
+    const row = listRef.current?.children[sel] as HTMLElement | undefined;
+    row?.scrollIntoView({ block: "nearest" });
+  }, [sel, moved, listRef]);
+
   const latest = useRef(0);
-  const typed = useRef(false);
+  const editVersion = useRef(0);
   const go = async (path: string) => {
     const ticket = ++latest.current;
+    const edit = editVersion.current;
+    setLoading(true);
+    setError("");
     try {
       const r = await server.fs(path);
       if (ticket !== latest.current) return;
       setListing(r);
-      if (path !== "" || !typed.current) {
-        typed.current = false;
-        setInput(r.path);
-      }
+      setFilter("");
+      if (edit === editVersion.current) setInput(r.path);
       setSel(0);
       setMoved(false);
-      setError("");
     } catch (e) {
       if (ticket === latest.current) setError(errorText(e));
+    } finally {
+      if (ticket === latest.current) setLoading(false);
     }
   };
 
@@ -935,18 +956,25 @@ function FolderPicker() {
     go("");
   }, []);
 
-  const join = (name: string) => (listing ? listing.path.replace(/[\\/]+$/, "") + listing.sep + name : name);
+  const join = (name: string) => (listing ? (listing.path.endsWith(listing.sep) ? listing.path : listing.path + listing.sep) + name : name);
 
   const choose = async (path: string) => {
-    closeDialog();
+    if (loading || openingFolder) return;
+    const dialog = getState().dialog;
+    setOpeningFolder(true);
     try {
-      await addFolder(path);
+      if (await addFolder(path)) {
+        if (getState().dialog === dialog) closeDialog();
+      } else setError(getState().errorAlert || t("Could not open folder"));
     } catch (e) {
-      fail(e);
+      setError(errorText(e));
+    } finally {
+      setOpeningFolder(false);
     }
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || openingFolder) return;
     if (move(e)) {
       setMoved(true);
       return;
@@ -963,12 +991,12 @@ function FolderPicker() {
     choose(listing.path);
   };
 
-  const name = listing ? listing.path.split(/[\\/]+/).filter(Boolean).pop() || listing.path : "";
+  const name = listing ? listing.path.split(listing.sep).filter(Boolean).pop() || listing.path : "";
   return (
     <>
-      <h3>Open a folder</h3>
-      <div className="sub">Macron works inside the folder you choose. Each folder keeps its own conversation.</div>
-      <div className="path-input">
+      <h3>{t("Open a folder")}</h3>
+      <div className="sub">{t("Macron works inside the folder you choose. Each folder keeps its own conversation.")}</div>
+      <div className="path-input" dir="ltr">
         <Icon name="folder" size={15} />
         <input
           ref={pathRef}
@@ -976,74 +1004,107 @@ function FolderPicker() {
           spellCheck={false}
           dir="ltr"
           value={input}
+          disabled={openingFolder}
           onChange={(e) => {
-            typed.current = true;
+            editVersion.current++;
             setInput(e.target.value);
           }}
           onKeyDown={onKey}
-          placeholder="Type or paste a path"
+          placeholder={t("Type or paste a path")}
+          aria-label={t("Type or paste a path")}
         />
+        {loading && <span className="spin" />}
       </div>
       {listing && (
-        <div className="crumbs">
+        <div className="crumbs" dir="ltr">
           {crumbs(listing.path, listing.sep).map((c, i, all) => (
             <span key={c.path}>
-              <button type="button" className={i === all.length - 1 ? "here" : ""} onClick={() => go(c.path)}>
+              <button type="button" className={i === all.length - 1 ? "here" : ""} disabled={openingFolder} onClick={() => go(c.path)}>
                 {c.label}
               </button>
-              {i < all.length - 1 && c.label !== "/" && <span className="slash-sep">/</span>}
+              {i < all.length - 1 && c.label !== "/" && <span className="slash-sep">{listing.sep}</span>}
             </span>
           ))}
         </div>
       )}
+      <div className="folder-toolbar">
+        <div className="folder-nav">
+          {listing?.home && (
+            <button type="button" className="folder-chip" disabled={openingFolder} onClick={() => go(listing.home)}>
+              <Icon name="home" size={12} />
+              <span>{t("Home")}</span>
+            </button>
+          )}
+          {listing?.parent && (
+            <button type="button" className="folder-chip" disabled={openingFolder} onClick={() => go(listing.parent)}>
+              <Icon name="arrowUp" size={12} />
+              <span>{t("Up")}</span>
+            </button>
+          )}
+          {(listing?.roots || [])
+            .filter((r) => r !== "/" && r !== listing?.path)
+            .map((r) => (
+              <button key={r} type="button" className="folder-chip" dir="ltr" disabled={openingFolder} onClick={() => go(r)}>
+                <Icon name="drive" size={12} />
+                <span>{r}</span>
+              </button>
+            ))}
+        </div>
+        <div className="folder-filter">
+          <Icon name="search" size={12} />
+          <input
+            type="text"
+            value={filter}
+            spellCheck={false}
+            placeholder={t("Filter folders…")}
+            aria-label={t("Filter folders…")}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setSel(0);
+              setMoved(false);
+            }}
+          />
+          {filter && (
+            <button
+              type="button"
+              className="folder-filter-x"
+              aria-label={t("Clear")}
+              onClick={() => setFilter("")}
+            >
+              <Icon name="x" size={11} />
+            </button>
+          )}
+        </div>
+      </div>
       <div className="folder-list" ref={listRef}>
-        {error && <div className="empty-row">{error}</div>}
-        {listing && !dirs.length && !error && <div className="empty-row">No folders inside</div>}
+        {error && <div className="empty-row" role="alert" dir="auto">{error}</div>}
+        {listing && !dirs.length && !error && <div className="empty-row">{t("No folders inside")}</div>}
         {dirs.map((d, i) => (
           <button
             key={d}
             type="button"
             className={"entry" + (moved && i === sel ? " sel" : "")}
+            disabled={loading || openingFolder}
             onClick={() => go(join(d))}
-            onDoubleClick={() => choose(join(d))}
           >
             <Icon name="folder" size={15} />
-            <span className="label">{d}</span>
+            <span className="label" dir="ltr">{d}</span>
             <span className="end">
               <Icon name="right" size={12} />
             </span>
           </button>
         ))}
       </div>
-      <div className="bar">
-        <div className="left">
-          {listing?.home && (
-            <button type="button" className="btn ghost" onClick={() => go(listing.home)}>
-              <Icon name="home" size={14} />
-              Home
-            </button>
-          )}
-          {listing?.parent && (
-            <button type="button" className="btn ghost" onClick={() => go(listing.parent)}>
-              <Icon name="arrowUp" size={14} />
-              Up
-            </button>
-          )}
-          {(listing?.roots || [])
-            .filter((r) => r !== "/" && r !== listing?.path)
-            .map((r) => (
-              <button key={r} type="button" className="btn ghost" onClick={() => go(r)}>
-                <Icon name="drive" size={14} />
-                {r}
-              </button>
-            ))}
-        </div>
-        <div className="left">
-          <button type="button" className="btn" onClick={closeDialog}>
-            Cancel
+      <div className="bar folder-bar">
+        <span className="folder-selected" dir="ltr" title={listing?.path || ""}>
+          {listing?.path || ""}
+        </span>
+        <div className="left folder-actions">
+          <button type="button" className="btn" disabled={openingFolder} onClick={closeDialog}>
+            {t("Cancel")}
           </button>
-          <button type="button" className="btn primary" disabled={!listing} onClick={() => listing && choose(listing.path)}>
-            Open {name ? `“${name}”` : ""}
+          <button type="button" className="btn primary folder-open-btn" disabled={!listing || loading || openingFolder || Boolean(error)} onClick={() => listing && choose(listing.path)}>
+            <span>{name ? <>{t("Open")} “<bdi>{name}</bdi>”</> : t("Open")}</span>
           </button>
         </div>
       </div>

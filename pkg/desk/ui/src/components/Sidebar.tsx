@@ -259,7 +259,9 @@ const Row = memo(function Row({ p, on, isHome, home }: { p: Summary; on: boolean
             className="ctx-row"
             onClick={() => {
               setCtxOpen(false);
-              if (!on) void openProject(p.id).then(() => newChat());
+              if (!on) void openProject(p.id).then((opened) => {
+                if (opened) void newChat();
+              });
               else newChat();
             }}
           >
@@ -425,18 +427,14 @@ export function Sidebar() {
       <MachineMenu />
 
       <div className="side-quick">
-        <button type="button" className="quick-primary" title={`${t("New conversation")} (${mod}+N)`} onClick={newChat}>
-          <Icon name="edit" size={14} />
-          <span>{t("New conversation")}</span>
-        </button>
         <button
           type="button"
-          className="icon-btn sm quick-ico"
+          className="quick-search-pill"
           title={`${t("Search chats")} (${mod}+Shift+F)`}
-          aria-label={t("Search chats")}
           onClick={() => openDialog({ kind: "search" })}
         >
-          <Icon name="search" size={14} />
+          <Icon name="search" size={13} />
+          <span>{t("Search")}</span>
         </button>
         <button
           type="button"
@@ -445,7 +443,16 @@ export function Sidebar() {
           aria-label={t("Open folder")}
           onClick={() => openDialog({ kind: "folder" })}
         >
-          <Icon name="plus" size={14} />
+          <Icon name="folder" size={14} />
+        </button>
+        <button
+          type="button"
+          className="quick-add-btn"
+          title={`${t("New conversation")} (${mod}+N)`}
+          aria-label={t("New conversation")}
+          onClick={newChat}
+        >
+          <Icon name="plus" size={15} />
         </button>
       </div>
 
@@ -465,7 +472,6 @@ export function Sidebar() {
         <button type="button" className="nav" onClick={() => openSettings("general")}>
           <Icon name="sliders" size={15} />
           <span>{t("Settings")}</span>
-          <kbd>{mod} ,</kbd>
         </button>
         <div className="side-meta-row">
           <div className={"engine" + (online === true ? " ok" : online === false ? " bad" : "")}>

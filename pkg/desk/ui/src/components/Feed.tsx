@@ -1,9 +1,9 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { composer, follow, onServer, openDialog, openFile, saveFile } from "../actions";
+import { follow, onServer, openDialog, openFile, saveFile } from "../actions";
 import { fileURL } from "../api";
 import { bidi, bytes, clock, copyText, prettyArgs, shortPath, took } from "../format";
-import { useMod, useProjectName } from "../hooks";
+import { useProjectName } from "../hooks";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
@@ -405,8 +405,28 @@ function group(blocks: Block[]): Item[] {
 }
 
 function Stream() {
+  const t = useT();
   const html = useStore((s) => s.live.html);
-  if (!html) return null;
+  const running = useStore((s) => s.live.running);
+  const tools = useStore((s) => s.live.tools);
+  const activeTool = tools && tools.length > 0 ? tools[tools.length - 1] : null;
+  if (!html && !running) return null;
+  if (!html) {
+    return (
+      <div className="msg assistant live-stream">
+        <div className="stream-thinking">
+          <span className="wave-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="shimmer-text" dir="auto">
+            {activeTool ? `${activeTool.label || activeTool.name}…` : t("Working") + "…"}
+          </span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="msg assistant live-stream">
       <Prose html={html} streaming />
@@ -417,109 +437,51 @@ function Stream() {
 function Intro() {
   const t = useT();
   const name = useProjectName();
-  const isHome = useStore((s) => s.current === s.defaultId);
+  const fullPath = useStore((s) => s.projects.find((p) => p.id === s.current)?.path || "");
   const path = useStore((s) => shortPath(s.projects.find((p) => p.id === s.current)?.path || "", s.home));
-  const mod = useMod();
   const noModel = useStore((s) => s.online === true && !s.info.model);
+  const [copiedPath, setCopiedPath] = useState(false);
 
-  const starters: { icon: "shield" | "code" | "globe" | "steps"; title: string; desc: string; prompt: string }[] = [
-    {
-      icon: "code",
-      title: t("Code & Git Review"),
-      desc: t("Map files, inspect git changes, find bugs & run tests"),
-      prompt: "Map this workspace structure, check git status, and highlight any bugs or improvements.",
-    },
-    {
-      icon: "shield",
-      title: t("Security & DFIR Audit"),
-      desc: t("Wazuh, Wireshark, Suricata, Zeek, Lynis, Trivy, Semgrep & Autopsy"),
-      prompt: "Check security toolkit status (trivy, semgrep, wireshark, wazuh, suricata, zeek, lynis, autopsy) and audit this workspace.",
-    },
-    {
-      icon: "globe",
-      title: t("Browser & Web Research"),
-      desc: t("Open websites, interact with forms, and capture screenshots"),
-      prompt: "Search the web and open the top result in the browser with a clean summary.",
-    },
-    {
-      icon: "steps",
-      title: t("Data & Docs Studio"),
-      desc: t("Query CSV/SQLite data, build charts, or export reports"),
-      prompt: "Inspect the data and documents in this folder and summarize the key insights.",
-    },
-  ];
-
-  const keys: [string, string[]][] = [
-    [t("Command palette"), [mod, "K"]],
-    [t("Search chats"), [mod, "Shift", "F"]],
-    [t("Plan mode"), [mod, "Shift", "P"]],
-    [t("New conversation"), [mod, "N"]],
-  ];
+  const displayName = name === "Home" ? t("Home") : name;
 
   return (
     <div className="intro">
       <div className="intro-hero">
         <StarBuddy variant="stage" size="lg" interactive trackPointer title="Macron StarBuddy" />
-        <div className="intro-head">
-          <div className="intro-name">{name === "Home" ? t("Home") : name}</div>
-          <div className="intro-path" dir="ltr">
-            {"\u200E" + path}
-          </div>
-        </div>
+        <p className="intro-ready">
+          {displayName} {t("is ready.")}
+        </p>
+        <h2 className="intro-headline">
+          {t("Ask, then watch it")} <span className="intro-accent">{t("work.")}</span>
+        </h2>
+        {path && (
+          <button
+            type="button"
+            className={"intro-path" + (copiedPath ? " copied" : "")}
+            title={copiedPath ? t("Copied") : `${fullPath || path} · ${t("Copy path")}`}
+            dir="ltr"
+            onClick={() => {
+              void copyText(fullPath || path).then(() => {
+                setCopiedPath(true);
+                window.setTimeout(() => setCopiedPath(false), 1400);
+              });
+            }}
+          >
+            <Icon name={copiedPath ? "check" : "folder"} size={11} />
+            <span>{copiedPath ? t("Copied") : "\u200E" + path}</span>
+          </button>
+        )}
       </div>
 
       {noModel && (
-        <div className="setup-card">
-          <div>
-            <div className="setup-title">{t("Connect a model to start")}</div>
-            <div className="setup-text">{t("Macron needs a language model: OpenAI, Anthropic, Gemini, OpenRouter, a local Ollama, or any compatible provider.")}</div>
-          </div>
-          <button type="button" className="btn primary" onClick={() => openDialog({ kind: "model-connect" })}>
-            {t("Connect a model")}
+        <div className="intro-connect">
+          <button type="button" className="btn primary intro-connect-btn" onClick={() => openDialog({ kind: "model-connect" })}>
+            <Icon name="key" size={14} />
+            <span>{t("Connect a model")}</span>
           </button>
+          <span className="intro-connect-hint">{t("OpenAI, Anthropic, Gemini, OpenRouter, or local Ollama")}</span>
         </div>
       )}
-
-      <p className="intro-lead">
-        {isHome
-          ? t("Conversations that don't belong to a project live here. Open a folder to give Macron a project to work in.")
-          : t("Macron reads and changes files in this folder, runs commands here, and looks things up when it needs to.")}
-      </p>
-
-      <div className="starter-grid">
-        {starters.map((st) => (
-          <button
-            key={st.title}
-            type="button"
-            className="starter-card"
-            onClick={() => {
-              composer.prepend(st.prompt);
-              composer.focus();
-            }}
-          >
-            <span className="starter-ico">
-              <Icon name={st.icon} size={15} />
-            </span>
-            <span className="starter-body">
-              <span className="starter-title">{st.title}</span>
-              <span className="starter-desc">{st.desc}</span>
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="intro-keys">
-        {keys.map(([label, combo]) => (
-          <span key={label} className="ikey">
-            <span>{label}</span>
-            <span className="ikey-kbd" dir="ltr">
-              {combo.map((k) => (
-                <kbd key={k}>{k}</kbd>
-              ))}
-            </span>
-          </span>
-        ))}
-      </div>
     </div>
   );
 }

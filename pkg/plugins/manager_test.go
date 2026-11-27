@@ -76,10 +76,23 @@ func TestMCPToggleReconnectsAndPreservesActiveSession(t *testing.T) {
 	if !m.Wait(key, 5*time.Second).Ready() || starts.Load() != 4 {
 		t.Fatalf("expected four connections, got %d", starts.Load())
 	}
+	info := m.Wait(key, time.Second)
+	results, err := m.Test(context.Background(), key)
+	if err != nil || len(results) != 1 || !results[0].OK || results[0].Output != "1 tools" {
+		t.Fatalf("MCP test: %+v, %v", results, err)
+	}
+	if out, err := m.Call(context.Background(), "owner", info.Tools[0].Name, nil); err != nil || out != "MCP_RECONNECTED_141" || starts.Load() != 5 {
+		t.Fatalf("active session after test: %q, %v, %d connections", out, err, starts.Load())
+	}
 	if err := m.Delete(context.Background(), key); err != nil {
 		t.Fatal(err)
 	}
 	if len(m.Tools()) != 0 {
 		t.Fatal("deleted server tools remain")
+	}
+	m.Close()
+	m.Reload(context.Background())
+	if _, err := m.Test(context.Background(), key); err == nil {
+		t.Fatal("closed manager accepted an MCP test")
 	}
 }

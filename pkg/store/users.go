@@ -113,7 +113,7 @@ func (s *Store) FindUsers(ctx context.Context, query string, limit int) ([]User,
 	if strings.HasPrefix(q, "@") {
 		return s.queryUsers(ctx, `SELECT `+userColumns+` FROM users WHERE username = ? LIMIT ?`, strings.TrimPrefix(q, "@"), limit)
 	}
-	esc := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(q)
+	esc := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(q)
 
 	found, err := s.queryUsers(ctx, `SELECT `+userColumns+` FROM users WHERE username LIKE ? ESCAPE '\' ORDER BY last_seen_at DESC LIMIT ?`, esc+"%", limit)
 	if err != nil || len(found) >= limit {

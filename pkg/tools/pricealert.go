@@ -162,6 +162,10 @@ func (r *Registry) fetchMarketQuotes(ctx context.Context) (map[string]float64, e
 }
 
 func (r *Registry) DeletePriceAlert(sessionID, alertID string) error {
-	path := fmt.Sprintf("%s/%s.json", priceAlertsDir, alertID)
+	cleanID := sanitizeBase(alertID)
+	if cleanID == "" {
+		return fmt.Errorf("invalid alert id")
+	}
+	path := fmt.Sprintf("%s/%s.json", priceAlertsDir, cleanID)
 	return r.Machine.Remove(sessionID, path)
 }

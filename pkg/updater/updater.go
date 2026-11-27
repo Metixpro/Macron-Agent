@@ -373,64 +373,34 @@ func InstallWithProgress(ctx context.Context, rel *Release, onProgress func(Prog
 	if err != nil {
 		return err
 	}
-	if runtime.GOOS == "windows" && strings.Contains(strings.ToLower(filepath.Base(self)), "desktop") {
-		emit(Progress{Phase: "installing", Label: "Installing desktop app", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 95})
-		data, err := extractFile(archive, "macron-desktop.exe")
-		if err != nil {
-			return err
-		}
-		if err := replace(self, data); err != nil {
-			return err
-		}
-		emit(Progress{Phase: "done", Label: "Ready to restart", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 100})
-		return nil
+	reportInstall := func(phase, label string, percent int) {
+		size := int64(len(archive))
+		emit(Progress{Phase: phase, Label: label, Downloaded: size, Total: size, Percent: percent})
 	}
-
-	emit(Progress{Phase: "preflight", Label: "Verifying new binary", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 93})
-	if err := Swap(self, bin, rel.Version()); err != nil {
+	if err := installBinaries(ctx, self, bin, archive, rel.Version(), reportInstall); err != nil {
 		return err
 	}
-	if runtime.GOOS == "windows" {
-		desktop := filepath.Join(filepath.Dir(self), "macron-desktop.exe")
-		if _, err := os.Stat(desktop); err == nil {
-			emit(Progress{Phase: "installing", Label: "Updating desktop app", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 97})
-			data, err := extractFile(archive, "macron-desktop.exe")
-			if err != nil {
-				return err
-			}
-			if err := replace(desktop, data); err != nil {
-				return err
-			}
-		}
-	}
-	emit(Progress{Phase: "done", Label: "Ready to restart", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 100})
+	reportInstall("done", "Ready to restart", 100)
 	return nil
 }
 
-func replace(target string, data []byte) error {
-	next := target + ".new"
-	if err := os.WriteFile(next, data, 0o755); err != nil {
-		return err
+var verifyVersion = func(path, version string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	versionCmd := exec.CommandContext(ctx, path, "version")
+	if runtime.GOOS == "windows" {
+		versionCmd.SysProcAttr = detached()
 	}
-	old := target + ".old"
-	_ = os.Remove(old)
-	if err := os.Rename(target, old); err != nil {
-		_ = os.Remove(next)
-		return err
-	}
-	if err := os.Rename(next, target); err != nil {
-		_ = os.Rename(old, target)
-		return err
+	out, err := versionCmd.Output()
+	if err != nil || strings.TrimSpace(string(out)) != "macron "+version {
+		return fmt.Errorf("the new program does not start as version %s (%v %q): it is NOT installed", version, err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
 
 var Preflight = func(path, version string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "version").Output()
-	if err != nil || !strings.Contains(string(out), version) {
-		return fmt.Errorf("the new program does not start as version %s (%v %q): it is NOT installed", version, err, strings.TrimSpace(string(out)))
+	if err := verifyVersion(path, version); err != nil {
+		return err
 	}
 	if _, err := os.Stat(config.EnvFilePath()); err != nil {
 		return nil
@@ -438,8 +408,11 @@ var Preflight = func(path, version string) error {
 	cctx, ccancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer ccancel()
 	check := exec.CommandContext(cctx, path, "--check")
+	if runtime.GOOS == "windows" {
+		check.SysProcAttr = detached()
+	}
 	check.Env = append(os.Environ(), "MACRON_HOME="+config.Home(), "MACRON_ENV_FILE="+config.EnvFilePath())
-	out, err = check.CombinedOutput()
+	out, err := check.CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "ok "+version) {
 		return fmt.Errorf("the new program does not pass «macron --check» (%v): it is NOT installed\n%s", err, lastLines(string(out), 5))
 	}
@@ -455,10 +428,9 @@ func lastLines(s string, n int) string {
 }
 
 func Swap(self string, bin []byte, version string) error {
-	dir := filepath.Dir(self)
-	stage, err := os.MkdirTemp(dir, ".macron-update-")
+	stage, err := makeStage(filepath.Dir(self))
 	if err != nil {
-		return fmt.Errorf("cannot write next to the program (%s): %w — run the update as the user who owns it", dir, err)
+		return err
 	}
 	defer os.RemoveAll(stage)
 	next := filepath.Join(stage, exeName("macron"))
@@ -468,26 +440,13 @@ func Swap(self string, bin []byte, version string) error {
 	if err := Preflight(next, version); err != nil {
 		return err
 	}
-	old := self + ".old"
-	if runtime.GOOS == "windows" {
-		_ = os.Remove(old)
-		if err := os.Rename(self, old); err != nil {
-			return err
-		}
-		if err := os.Rename(next, self); err != nil {
-			_ = os.Rename(old, self)
-			return err
-		}
-		return nil
+	return swapBinary(self, next)
+}
+
+func makeStage(dir string) (string, error) {
+	stage, err := os.MkdirTemp(dir, ".macron-update-")
+	if err != nil {
+		return "", fmt.Errorf("cannot write next to the program (%s): %w — run the update as the user who owns it", dir, err)
 	}
-	_ = os.Remove(old)
-	if err := os.Link(self, old); err != nil {
-		if data, rerr := os.ReadFile(self); rerr == nil {
-			_ = os.WriteFile(old, data, 0o755)
-		}
-	}
-	if err := os.Rename(next, self); err != nil {
-		return err
-	}
-	return nil
+	return stage, nil
 }

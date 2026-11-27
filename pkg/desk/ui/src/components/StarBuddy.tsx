@@ -408,6 +408,8 @@ export const StarBuddy = memo(function StarBuddy({
         className={`starbuddy-peek mood-${mood}${tucked ? " tucked" : ""}${poked ? " poked" : ""}${pausedClass}${streamPulseClass}${className ? " " + className : ""}`}
         title={title || "Macron StarBuddy"}
         aria-label={title || "Macron StarBuddy"}
+        tabIndex={tucked ? -1 : undefined}
+        aria-hidden={tucked || undefined}
         onClick={triggerPoke}
       >
         <svg viewBox="0 0 120 76" width="68" height="44" fill="none" xmlns="http://www.w3.org/2000/svg">

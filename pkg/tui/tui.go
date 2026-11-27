@@ -22,6 +22,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/cmdgate"
+	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
 
 type Info struct {
@@ -124,6 +125,16 @@ type askState struct {
 	sel   int
 }
 
+func (a *askState) answer(c cmdgate.Choice) {
+	if a == nil || a.reply == nil {
+		return
+	}
+	select {
+	case a.reply <- c:
+	default:
+	}
+}
+
 type picker struct {
 	title   string
 	items   []string
@@ -204,42 +215,46 @@ type model struct {
 	histAt int
 	draft  string
 
-	running     bool
-	busy        string
-	cancel      context.CancelFunc
-	started     time.Time
-	stream      string
-	streamView  string
-	streamAt    time.Time
-	dirty       bool
-	tools       []*liveTool
-	preparing   *draftMsg
-	subs        []*liveSub
-	lastPlan    string
-	plan        []agent.PlanItem
-	queue       *queue
-	ctxUsed     int
-	ctxWindow   int
-	tokIn       int
-	tokOut      int
-	ask         *askState
-	pick        *picker
-	sugg        []command
-	suggAt      int
-	quitAt      time.Time
-	notice      string
-	noticeAt    time.Time
-	interrupted bool
-	quitting    bool
-	lastAnswer  string
-	theme       string
-	rtlChosen   bool
-	suggKind    string
-	files       []string
-	filesAt     time.Time
-	notes       []string
-	thought     string
-	avatarFrame int
+	running       bool
+	busy          string
+	cancel        context.CancelFunc
+	started       time.Time
+	stream        string
+	streamView    string
+	streamAt      time.Time
+	dirty         bool
+	tools         []*liveTool
+	preparing     *draftMsg
+	subs          []*liveSub
+	lastPlan      string
+	plan          []agent.PlanItem
+	queue         *queue
+	ctxUsed       int
+	ctxWindow     int
+	tokIn         int
+	tokOut        int
+	ask           *askState
+	pick          *picker
+	sugg          []command
+	suggAt        int
+	quitAt        time.Time
+	notice        string
+	noticeAt      time.Time
+	interrupted   bool
+	quitting      bool
+	lastAnswer    string
+	theme         string
+	rtlChosen     bool
+	suggKind      string
+	files         []string
+	filesAt       time.Time
+	notes         []string
+	thought       string
+	avatarFrame   int
+	avatarActive  bool
+	histCache     *historyCache
+	inputProbe    *textarea.Model
+	inputOverflow bool
 }
 
 func Run(e Engine, opt Options) error {
@@ -281,7 +296,7 @@ func Run(e Engine, opt Options) error {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: []string{"✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳"}, FPS: time.Second / 8}), spinner.WithStyle(stAccent))
 
 	br := &bridge{}
-	m := model{log: &transcript{}, history: newViewport(), follow: true, home: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1, theme: theme, rtlChosen: rtlChosen}
+	m := model{log: &transcript{}, history: newViewport(), histCache: &historyCache{}, follow: true, home: true, avatarActive: true, e: e, opt: opt, br: br, info: e.Info(), md: md, input: ta, spin: sp, queue: &queue{}, histAt: -1, theme: theme, rtlChosen: rtlChosen}
 	m.ctxWindow = m.info.ContextWindow
 	con := newConsole()
 	m.con = con
@@ -297,12 +312,38 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(textarea.Blink, tea.WindowSize(), avatarTick())
 }
 
+func (m model) shouldAnimateAvatar() bool {
+	return m.home || m.running || m.busy != "" || m.ask != nil
+}
+
 func (m *model) print(s string) { m.addBlock(transcriptBlock{text: s}) }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	nm, ok := next.(model)
+	if !ok {
+		return next, cmd
+	}
+	if nm.shouldAnimateAvatar() && !nm.avatarActive && !nm.quitting {
+		nm.avatarActive = true
+		if cmd != nil {
+			cmd = tea.Batch(cmd, avatarTick())
+		} else {
+			cmd = avatarTick()
+		}
+	}
+	return nm, cmd
+}
+
+func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case avatarTickMsg:
+		if !m.shouldAnimateAvatar() || m.quitting {
+			m.avatarActive = false
+			return m, nil
+		}
 		m.avatarFrame = (m.avatarFrame + 1) % 64
+		m.avatarActive = true
 		return m, avatarTick()
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -480,7 +521,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	var cmd tea.Cmd
+	before := m.input.Length()
 	m.input, cmd = m.input.Update(msg)
+	if m.input.Length() != before {
+		m.suggest()
+		m.fitInput()
+	}
 	return m, cmd
 }
 
@@ -584,7 +630,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input.Reset()
 			m.sugg = nil
 			m.fitInput()
-		case m.running:
+		case m.running, m.busy != "" && m.cancel != nil:
 			m.interrupt()
 		case time.Since(m.quitAt) < 2*time.Second:
 			m.quitting = true
@@ -656,7 +702,6 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.submit()
 	}
-	m.input.SetHeight(min(m.input.Height()+1, 10))
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.suggest()
@@ -676,7 +721,7 @@ func (m *model) interrupt() {
 	}
 	m.interrupted = true
 	if m.ask != nil {
-		m.ask.reply <- cmdgate.Deny
+		m.ask.answer(cmdgate.Deny)
 		m.ask = nil
 	}
 }
@@ -708,30 +753,45 @@ func (m *model) browse(up bool) {
 
 func (m *model) fitInput() {
 	limit := max(1, min(6, m.height/4))
-	value := m.input.Value()
-	probe := textarea.New()
-	probe.Prompt = ""
-	probe.ShowLineNumbers = false
-	probe.SetWidth(max(m.input.Width(), 1))
+	w := max(m.input.Width(), 1)
+	if m.inputProbe == nil {
+		probe := textarea.New()
+		probe.Prompt = ""
+		probe.ShowLineNumbers = false
+		probe.MaxWidth = 0
+		probe.CharLimit = 0
+		m.inputProbe = &probe
+	}
+	m.inputProbe.SetWidth(w)
 	rows := 0
-	for _, line := range strings.Split(value, "\n") {
-		probe.SetValue(line)
-		rows += max(1, probe.LineInfo().Height)
+	for i, line := range strings.Split(m.input.Value(), "\n") {
+		if i == m.input.Line() {
+			rows += max(1, m.input.LineInfo().Height)
+		} else {
+			m.inputProbe.SetValue(line)
+			rows += max(1, m.inputProbe.LineInfo().Height)
+		}
 		if rows > limit {
 			break
 		}
 	}
-	m.input.SetHeight(max(1, min(rows, limit)))
-	if value != "" && rows <= limit {
+	wasOverflowing := m.inputOverflow
+	m.inputOverflow = rows > limit
+	target := max(1, min(rows, limit))
+	m.input.SetHeight(target)
+	if wasOverflowing && !m.inputOverflow && m.input.Focused() {
+		// Bubble Tea's textarea keeps its old scroll offset when it grows.
+		// Scroll to the start, then restore the caret now that all rows fit.
 		row := m.input.Line()
 		info := m.input.LineInfo()
 		column := info.StartColumn + info.ColumnOffset
-		m.input.SetValue(value)
-		for m.input.Line() > row {
-			m.input.CursorUp()
+		m.input, _ = m.input.Update(tea.KeyMsg{Type: tea.KeyCtrlHome})
+		for i := 0; i < rows && m.input.Line() < row; i++ {
+			m.input.CursorDown()
 		}
 		m.input.SetCursor(column)
 	}
+	m.input, _ = m.input.Update(nil)
 }
 
 func (m model) submit() (tea.Model, tea.Cmd) {
@@ -853,7 +913,7 @@ func (m model) done(msg doneMsg) (tea.Model, tea.Cmd) {
 	m.running, m.cancel = false, nil
 	m.input.Placeholder = placeholderIdle
 	if m.ask != nil {
-		m.ask.reply <- cmdgate.Deny
+		m.ask.answer(cmdgate.Deny)
 		m.ask = nil
 	}
 	if partial := strings.TrimSpace(m.stream); partial != "" && (m.interrupted || errors.Is(msg.err, context.Canceled)) {
@@ -913,7 +973,7 @@ func (m model) done(msg doneMsg) (tea.Model, tea.Cmd) {
 func (m model) askKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	choices := []cmdgate.Choice{cmdgate.Once, cmdgate.Session, cmdgate.Always, cmdgate.Deny}
 	answer := func(c cmdgate.Choice) (tea.Model, tea.Cmd) {
-		m.ask.reply <- c
+		m.ask.answer(c)
 		m.ask = nil
 		if c == cmdgate.Deny {
 			m.interrupt()
@@ -1161,10 +1221,7 @@ func userBlock(text string, width int) string {
 }
 
 func cleanStream(s string) string {
-	if i := strings.LastIndex(s, "<work_notes"); i >= 0 {
-		s = s[:i]
-	}
-	return s
+	return textutil.StripInternalNotes(s)
 }
 
 func lastLine(s string) string {

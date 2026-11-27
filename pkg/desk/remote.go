@@ -123,6 +123,10 @@ func (r *remote) set(state, msg string) {
 }
 
 func (r *remote) shutdown() {
+	r.shutdownWithWait(false)
+}
+
+func (r *remote) shutdownWithWait(wait bool) {
 	r.mu.Lock()
 	tr, stdin := r.tr, r.stdin
 	r.tr, r.stdin, r.proxy, r.addr, r.token = nil, nil, nil, "", ""
@@ -130,15 +134,21 @@ func (r *remote) shutdown() {
 	if stdin != nil {
 		_ = stdin.Close()
 	}
-	if tr != nil {
-		go func() {
-			select {
-			case <-tr.done():
-			case <-time.After(3 * time.Second):
-			}
-			tr.close()
-		}()
+	if tr == nil {
+		return
 	}
+	finish := func() {
+		select {
+		case <-tr.done():
+		case <-time.After(3 * time.Second):
+		}
+		tr.close()
+	}
+	if wait {
+		finish()
+		return
+	}
+	go finish()
 }
 
 func (rs *remotes) connect(ctx context.Context, r *remote, sec Secrets) error {
@@ -296,6 +306,10 @@ func (rs *remotes) proxyFor(id, addr, token string, tr transport) *httputil.Reve
 			pr.Out.URL.Path = strings.TrimPrefix(pr.In.URL.Path, prefix)
 			pr.Out.URL.RawPath = ""
 			pr.Out.Host = addr
+			if pr.In.Header.Get("Origin") != "" {
+				// Handler's guard already validated the browser's local origin.
+				pr.Out.Header.Set("Origin", "http://"+addr)
+			}
 			pr.Out.Header.Del("Cookie")
 			pr.Out.Header.Set("Authorization", "Bearer "+token)
 		},
@@ -514,6 +528,38 @@ func (s *Server) remoteProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Close() {
+	s.mu.Lock()
+	projs := make([]*project, 0, len(s.projects))
+	for _, p := range s.projects {
+		projs = append(projs, p)
+	}
+	s.mu.Unlock()
+	var waits []<-chan struct{}
+	for _, p := range projs {
+		if ch := p.stopAndDone(); ch != nil {
+			waits = append(waits, ch)
+		}
+	}
+	if len(waits) > 0 {
+		deadline := time.NewTimer(3 * time.Second)
+		for _, ch := range waits {
+			select {
+			case <-ch:
+			case <-deadline.C:
+			}
+		}
+		deadline.Stop()
+	}
+
+	for _, p := range projs {
+		p.mu.Lock()
+		sess := p.sess
+		p.mu.Unlock()
+		if lbs, ok := sess.(LiveBrowserSession); ok {
+			lbs.CloseBrowser()
+		}
+	}
+
 	s.remotes.mu.Lock()
 	list := make([]*remote, 0, len(s.remotes.list))
 	for _, r := range s.remotes.list {
@@ -521,6 +567,6 @@ func (s *Server) Close() {
 	}
 	s.remotes.mu.Unlock()
 	for _, r := range list {
-		r.shutdown()
+		r.shutdownWithWait(true)
 	}
 }

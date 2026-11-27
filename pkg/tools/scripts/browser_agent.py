@@ -36,6 +36,8 @@ except Exception as e:
 
 STATE = inside(".browser/state.json")
 LAST = inside(".browser/url")
+META = inside(".browser/meta.json")
+PREVIEW = inside(".browser/preview.png")
 FS = inside(".browser/agent")
 DL = inside(".browser/downloads")
 os.makedirs(os.path.dirname(STATE), exist_ok=True)
@@ -117,19 +119,42 @@ async def main():
                      frequency_penalty=None, max_completion_tokens=None, max_retries=1, timeout=300)
     profile = BrowserProfile(
         executable_path=CFG["chrome"], headless=True, chromium_sandbox=False, proxy=proxy(),
-        args=["--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-background-networking",
+        args=["--disable-blink-features=AutomationControlled", "--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-background-networking",
               "--disable-component-update", "--js-flags=--max-old-space-size=1024", "--font-render-hinting=none",
               "--lang=" + (CFG.get("locale") or "en-US")],
         enable_default_extensions=False, captcha_solver=False, highlight_elements=False, demo_mode=False,
         user_data_dir=os.path.join(CONF, "profile"), storage_state=STATE if os.path.exists(STATE) else None,
         downloads_path=DL, accept_downloads=True, auto_download_pdfs=True, keep_alive=True,
-        viewport={"width": 1366, "height": 860}, allowed_domains=CFG.get("domains") or None,
+        viewport={"width": 1366, "height": 860}, user_agent=DESKTOP_UA, allowed_domains=CFG.get("domains") or None,
     )
     session = BrowserSession(browser_profile=profile)
     files = [p for p in (inside(f) for f in CFG.get("files") or []) if p and os.path.isfile(p)]
 
+    async def update_live_preview():
+        try:
+            u = await session.get_current_page_url()
+            if u and u.startswith("http"):
+                await session.take_screenshot(path=PREVIEW)
+                title = ""
+                try:
+                    title = await session.get_current_page_title()
+                except Exception:
+                    pass
+                with open(META, "w", encoding="utf-8") as mf:
+                    json.dump({"url": u, "title": str(title or ""), "updated": int(time.time() * 1000)}, mf, ensure_ascii=False)
+                with open(LAST, "w", encoding="utf-8") as lf:
+                    lf.write(u)
+        except Exception:
+            pass
+
+    last_preview = [0.0]
+
     async def time_is_up():
-        return time.monotonic() > deadline
+        now = time.monotonic()
+        if now - last_preview[0] >= 1.5:
+            last_preview[0] = now
+            await update_live_preview()
+        return now > deadline
 
     task = CFG["task"]
     if CFG.get("url"):
@@ -174,6 +199,8 @@ async def main():
         await session.kill()
     except Exception:
         pass
+    if not CFG.get("keep_open"):
+        clear_live_preview(PREVIEW, META, LAST)
     result["files"] = files_out + keep_downloads()
     answer(result)
 

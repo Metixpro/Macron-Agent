@@ -67,6 +67,8 @@ type Registry struct {
 	userCookies func(sessionID string) []Cookie
 	rotations   rotationLimiter
 	browser     *browserRuntime
+	browserPool *browserPool
+	poolOnce    sync.Once
 	piper       piperVoice
 	skills      *skills.Store
 	skillWrite  func(string) bool

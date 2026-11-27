@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { local } from "./format";
 import type { Lang } from "./i18n";
-import type { Ask, Block, ChangesResponse, Info, Live, Mode, ProviderDetail, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
+import type { Ask, Block, BrowserState, ChangesResponse, Info, Live, Mode, ProviderDetail, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
 
 export type Theme = "system" | "dark" | "light";
 export type Density = "compact" | "comfortable" | "spacious";
 export type MotionPref = "full" | "reduced";
-export type RightTab = "plan" | "changes" | "activity";
+export type RightTab = "plan" | "changes" | "activity" | "browser";
 
 export type SettingsSectionId =
   | "general"
@@ -74,6 +74,7 @@ export interface State {
   companionOpen: boolean;
   rightTab: RightTab;
   changes: ChangesResponse | null;
+  browserView: BrowserState | null;
   activeThread: string;
   threads: ThreadSummary[];
   update: UpdateStatus | null;
@@ -133,6 +134,7 @@ let state: State = {
   companionOpen: local.get("companionOpen", false),
   rightTab: "plan",
   changes: null,
+  browserView: null,
   activeThread: "default",
   threads: [],
   update: null,

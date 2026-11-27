@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/machine"
+	"github.com/Metixpro/macron-agent/pkg/netclient"
 	"github.com/Metixpro/macron-agent/pkg/search"
 )
 
@@ -322,20 +323,24 @@ func (r *Registry) registerBrowserTools() {
 		r.Search.Render = r.renderPage
 	}
 	r.add(ToolBrowser,
-		"A real browser (headless Chromium): open, click, fill forms, log in, scroll, read, run JS, screenshot, PDF, upload, "+
-			"download; logins stay. One call runs a list of actions and returns the page text, clickable elements with selectors "+
-			"and a screenshot. Plain reading: web_fetch.",
+		"A real live browser (persistent headless Chromium): open, click, fill forms, sign up, log in, drag/hold/move mouse, switch tabs, handle iframes, scroll, read, run JS, screenshot, PDF, upload, "+
+			"download; logins and tabs stay live so the user can watch or take over at any time. One call runs a list of actions and returns the page text, clickable elements with selectors "+
+			"and a screenshot. Only set close_after=true (or run {\"action\":\"close\"}) when the user asks to close the browser. Plain reading: web_fetch.",
 		map[string]any{
 			"url": prop("string", "https://… or a workspace .html; empty = the last page"),
 			"actions": map[string]any{"type": "array", "description": `e.g. [{"action":"goto","url":"…"},{"action":"click","selector":"…"}]: ` +
-				"goto{url} click{selector} fill{selector,text} type{selector?,text} " +
-				"press{key} select{selector,value} check|uncheck|hover{selector} scroll{selector|to|y} wait{ms|selector|text} " +
-				"screenshot{name?,full_page?,selector?} pdf{name?} extract{selector,attribute?,limit?} eval{script} back forward reload " +
-				"upload{selector,files} download{selector,name?}. Selectors: CSS, text=\"…\", role=button[name=\"…\"], or ones listed before",
+				"goto{url} click{selector,frame?,button?,count?} click_at{x,y,button?,count?} move_at{x,y,steps?} " +
+				"drag{selector|x,y, to_selector|to_x,to_y, steps?} hold{selector|x,y,ms?} " +
+				"fill{selector,text,frame?} type{selector?,text,clear?,delay_ms?,frame?} press{key,frame?} " +
+				"select{selector,value,frame?} check|uncheck|hover{selector,frame?} scroll{selector|to|y,frame?} wait{ms|selector|text,frame?} " +
+				"tabs switch_tab{index|url|title} close_tab " +
+				"screenshot{name?,full_page?,selector?} pdf{name?} extract{selector,attribute?,limit?,frame?} eval{script,frame?} back forward reload close " +
+				"upload{selector,files,frame?} download{selector,name?,frame?}. Selectors: CSS, text=\"…\", role=button[name=\"…\"], or ones listed before",
 				"items": map[string]any{"type": "object"}},
 			"mobile":          prop("boolean", "Phone viewport"),
 			"full_page":       prop("boolean", "Whole page in the final screenshot"),
 			"screenshot":      prop("boolean", "Final screenshot (default true)"),
+			"close_after":     prop("boolean", "Close the live browser preview when this call finishes (use when task is done)"),
 			"locale":          prop("string", "e.g. fa-IR (default en-US)"),
 			"new_session":     prop("boolean", "Forget cookies and the last page"),
 			"timeout_seconds": prop("integer", "Page/action timeout in seconds (default 60, max 180)"),
@@ -344,13 +349,33 @@ func (r *Registry) registerBrowserTools() {
 	r.registerMotionTool()
 }
 
+func validateBrowserTarget(raw string) error {
+	u := strings.TrimSpace(raw)
+	if u == "" {
+		return nil
+	}
+	if schemeRe.FindStringSubmatch(u) != nil || strings.HasPrefix(u, "//") {
+		if _, err := netclient.ValidateURL(u); err != nil {
+			return err
+		}
+		return nil
+	}
+	if _, err := netclient.ValidateURL("https://" + u); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *Registry) renderPage(ctx context.Context, url string) (*search.Page, error) {
+	if err := validateBrowserTarget(url); err != nil {
+		return nil, err
+	}
 	var res struct {
 		Page  browserPage `json:"page"`
 		Error string      `json:"error"`
 	}
 	sess := fmt.Sprintf("%s-%d", renderSession, renderSeq.Add(1))
-	defer func() { _ = r.Machine.Remove(sess, ".browser") }()
+	defer func() { _ = r.Machine.RemoveAll(sess, ".browser") }()
 	cfg := map[string]any{"url": url, "screenshot": false, "new_session": true, "max_text": 60000, "nav_timeout_ms": 35000}
 	if err := r.runBrowser(ctx, sess, "browser.py", cfg, true, browserTimeout, &res); err != nil {
 		return nil, err
@@ -375,7 +400,19 @@ type browserPage struct {
 		Type    string   `json:"type"`
 		Href    string   `json:"href"`
 		Options []string `json:"options"`
+		Frame   int      `json:"frame"`
 	} `json:"items"`
+}
+
+func (r *Registry) HasBrowser() bool {
+	return r != nil && r.browser != nil
+}
+
+func (r *Registry) Browse(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+	if r == nil || r.browser == nil {
+		return "", errors.New("browser runtime is not available")
+	}
+	return r.browse(ctx, sessionID, args)
 }
 
 func (r *Registry) browse(ctx context.Context, sessionID string, args map[string]any) (string, error) {
@@ -387,6 +424,7 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 		"mobile":         strArg(args, "mobile") == "true",
 		"full_page":      strArg(args, "full_page") == "true",
 		"screenshot":     strArg(args, "screenshot") != "false",
+		"close_after":    strArg(args, "close_after") == "true",
 		"locale":         strArg(args, "locale"),
 		"new_session":    strArg(args, "new_session") == "true",
 		"timeout_ms":     actionTimeoutMS,
@@ -405,35 +443,59 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 		}
 		cfg["actions"] = normalizeActions(acts)
 	}
-	if m := schemeRe.FindStringSubmatch(cfg["url"].(string)); m != nil && !strings.EqualFold(m[1], "http") && !strings.EqualFold(m[1], "https") {
-		return "error: only http(s) pages or workspace files can be opened", nil
+	if err := validateBrowserTarget(cfg["url"].(string)); err != nil {
+		return "error: " + err.Error(), nil
 	}
 	acts, _ := cfg["actions"].([]any)
+	for _, a := range acts {
+		if m, ok := a.(map[string]any); ok {
+			if kind, _ := m["action"].(string); strings.EqualFold(kind, "goto") {
+				if u, _ := m["url"].(string); u != "" {
+					if err := validateBrowserTarget(u); err != nil {
+						return "error: " + err.Error(), nil
+					}
+				}
+			}
+		}
+	}
 	if refused := r.gateBrowser(ctx, sessionID, cfg["url"].(string), acts); refused != "" {
 		return refused, nil
 	}
-	var res struct {
-		Page    browserPage `json:"page"`
-		Error   string      `json:"error"`
-		Files   []string    `json:"files"`
-		Errors  []string    `json:"errors"`
-		Dialogs []string    `json:"dialogs"`
-		Log     []struct {
-			Step   int    `json:"step"`
-			What   string `json:"what"`
-			OK     bool   `json:"ok"`
-			Detail string `json:"detail"`
-		} `json:"log"`
-	}
+	var res browserToolOutput
 	runTimeout := time.Duration(timeoutSec)*time.Second + 15*time.Second
 	if runTimeout > browserTimeout {
 		runTimeout = browserTimeout
 	}
-	if err := r.runBrowser(ctx, sessionID, "browser.py", cfg, true, runTimeout, &res); err != nil {
-		return "error: " + err.Error(), nil
+	res, err := r.browseViaDaemon(ctx, sessionID, cfg, runTimeout)
+	if err != nil {
+		if errors.Is(err, errDaemonUnsupported) {
+			if err2 := r.runBrowser(ctx, sessionID, "browser.py", cfg, true, runTimeout, &res); err2 != nil {
+				return "error: " + err2.Error(), nil
+			}
+		} else {
+			return "error: " + err.Error(), nil
+		}
 	}
+	return formatBrowserToolOutput(cfg, &res), nil
+}
+
+type browserToolOutput struct {
+	Page    browserPage `json:"page"`
+	Error   string      `json:"error"`
+	Files   []string    `json:"files"`
+	Errors  []string    `json:"errors"`
+	Dialogs []string    `json:"dialogs"`
+	Log     []struct {
+		Step   int    `json:"step"`
+		What   string `json:"what"`
+		OK     bool   `json:"ok"`
+		Detail string `json:"detail"`
+	} `json:"log"`
+}
+
+func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput) string {
 	if res.Error != "" {
-		return "error: " + res.Error, nil
+		return "error: " + res.Error
 	}
 	var sb strings.Builder
 	if res.Page.URL == "" {
@@ -478,6 +540,9 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 			if len(it.Options) > 0 {
 				desc += " options: " + strings.Join(it.Options, " / ")
 			}
+			if it.Frame > 0 {
+				desc += fmt.Sprintf(" [frame:%d]", it.Frame)
+			}
 			fmt.Fprintf(&sb, "- %s ← %s\n", it.Sel, desc)
 		}
 	}
@@ -487,13 +552,13 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 			fmt.Fprintf(&sb, "… %d more characters (scroll, or extract a selector)\n", res.Page.More)
 		}
 	}
-	return strings.TrimSpace(sb.String()), nil
+	return strings.TrimSpace(sb.String())
 }
 
-var browserActions = map[string]string{"goto": "url", "click": "selector", "fill": "text", "type": "text", "press": "key",
-	"select": "value", "check": "selector", "uncheck": "selector", "hover": "selector", "scroll": "to", "wait": "ms",
-	"screenshot": "name", "pdf": "name", "extract": "selector", "eval": "script", "back": "", "forward": "", "reload": "",
-	"upload": "selector", "download": "selector"}
+var browserActions = map[string]string{"goto": "url", "click": "selector", "click_at": "x", "move_at": "x", "drag": "selector", "drag_at": "x", "hold": "selector",
+	"fill": "text", "type": "text", "press": "key", "select": "value", "check": "selector", "uncheck": "selector", "hover": "selector", "scroll": "to",
+	"wait": "ms", "tabs": "", "switch_tab": "index", "close_tab": "", "screenshot": "name", "pdf": "name", "extract": "selector", "eval": "script",
+	"back": "", "forward": "", "reload": "", "close": "", "upload": "selector", "download": "selector"}
 
 func normalizeActions(acts []any) []any {
 	out := make([]any, 0, len(acts))
