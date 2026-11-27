@@ -39,12 +39,8 @@ func TestSecretKeyPreservesExistingAndErrorsOnInvalid(t *testing.T) {
 	}
 }
 
-func TestSecretKeyConcurrentCreationMatches(t *testing.T) {
-	t.Setenv(EnvSecretKey, "")
-	home := t.TempDir()
-	t.Setenv(EnvHome, home)
-
-	const workers = 16
+func runConcurrentSecretKey(t *testing.T, workers int, fn func() (string, error)) {
+	t.Helper()
 	results := make(chan string, workers)
 	errs := make(chan error, workers)
 	start := make(chan struct{})
@@ -54,7 +50,7 @@ func TestSecretKeyConcurrentCreationMatches(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			k, err := SecretKey()
+			k, err := fn()
 			if err != nil {
 				errs <- err
 				return
@@ -82,5 +78,32 @@ func TestSecretKeyConcurrentCreationMatches(t *testing.T) {
 	}
 	if count != workers || len(first) != 64 {
 		t.Fatalf("count=%d len=%d", count, len(first))
+	}
+}
+
+func TestSecretKeyConcurrentCreationMatches(t *testing.T) {
+	t.Setenv(EnvSecretKey, "")
+	home := t.TempDir()
+	t.Setenv(EnvHome, home)
+	runConcurrentSecretKey(t, 16, SecretKey)
+}
+
+func TestSecretKeyAtomicCreateNoEmptyWindow(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, FileSecret)
+	runConcurrentSecretKey(t, 16, func() (string, error) {
+		return secretKeyFromPath(path)
+	})
+
+	entries, err := os.ReadDir(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != FileSecret {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Fatalf("unexpected files in home after atomic secret key creation: %v", names)
 	}
 }
