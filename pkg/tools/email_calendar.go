@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"github.com/Metixpro/macron-agent/pkg/config"
 	"mime"
 	"mime/quotedprintable"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
 const (
@@ -107,9 +110,11 @@ func smtpSession(ctx context.Context, host string, port int, user, pass string, 
 	defer cancel()
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	dialer := &net.Dialer{Timeout: 15 * time.Second}
+	tlsConfig, err := smtpTLSConfig(host)
+	if err != nil {
+		return err
+	}
 	var conn net.Conn
-	var err error
-	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 	if port == 465 || config.ToolEnvValue("MACRON_SMTP_TLS") == "implicit" {
 		conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsConfig}).DialContext(ctx, "tcp", addr)
 	} else {
@@ -158,6 +163,27 @@ func smtpSession(ctx context.Context, host string, port int, user, pass string, 
 		}
 	}
 	return err
+}
+
+func smtpTLSConfig(host string) (*tls.Config, error) {
+	cfg := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+	caFile := strings.TrimSpace(os.Getenv("SSL_CERT_FILE"))
+	if caFile == "" {
+		return cfg, nil
+	}
+	data, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("read SSL_CERT_FILE: %w", err)
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(data) {
+		return nil, fmt.Errorf("SSL_CERT_FILE %q contains no valid certificates", caFile)
+	}
+	cfg.RootCAs = pool
+	return cfg, nil
 }
 
 func TestSMTP(ctx context.Context) error {
