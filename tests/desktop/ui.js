@@ -79,6 +79,10 @@ const bad = (s) => { out.problems.push(s); console.log("PROBLEM " + s); };
     if (await p.locator(".meter-btn").count()) {
       await p.locator(".meter-btn").click();
       await p.waitForSelector(".meter-popover", { timeout: 5000 });
+      // The tuck is a state change in the parent, not part of the popover's
+      // own render; wait for it instead of snapshotting whatever frame the
+      // popover happened to appear in (racy on loaded CI runners).
+      await p.waitForFunction(() => document.querySelector(".box-stage > .starbuddy-peek")?.classList.contains("tucked"), null, { timeout: 5000 }).catch(() => {});
       const overlap = await p.evaluate(() => {
         const pop = document.querySelector(".meter-popover");
         const buddy = document.querySelector(".box-stage > .starbuddy-peek");

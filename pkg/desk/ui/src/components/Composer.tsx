@@ -105,21 +105,25 @@ function Meter({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const moaActive = useStore((s) => s.info.moaActive);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // Notify the parent in the same event handler so the StarBuddy tuck and the
+  // popover land in one render batch; an effect would only report the change
+  // a render later, leaving a frame where the popover overlaps the buddy.
+  const applyOpen = (v: boolean) => {
+    setOpen(v);
+    onOpenChange?.(v);
+  };
 
-  useEffect(() => {
-    onOpenChange?.(open);
-    return () => onOpenChange?.(false);
-  }, [open, onOpenChange]);
+  useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      if (!ref.current?.contains(e.target as Node)) applyOpen(false);
     };
     const esc = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        setOpen(false);
+        applyOpen(false);
       }
     };
     window.addEventListener("mousedown", away);
@@ -160,7 +164,7 @@ function Meter({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
             className={"meter-btn" + (pct > 0.8 ? " high" : "") + (open ? " open" : "")}
             aria-expanded={open}
             title={tr("Context & tokens")}
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => applyOpen(!open)}
           >
             {hasCtx && (
               <svg className="ctx-ring" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
@@ -255,21 +259,25 @@ function EffortMenu({ onOpenChange }: { onOpenChange?: (open: boolean) => void }
   const t = useStore((s) => s.tuning);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // Notify the parent in the same event handler so the StarBuddy tuck and the
+  // popover land in one render batch; an effect would only report the change
+  // a render later, leaving a frame where the popover overlaps the buddy.
+  const applyOpen = (v: boolean) => {
+    setOpen(v);
+    onOpenChange?.(v);
+  };
 
-  useEffect(() => {
-    onOpenChange?.(open);
-    return () => onOpenChange?.(false);
-  }, [open, onOpenChange]);
+  useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      if (!ref.current?.contains(e.target as Node)) applyOpen(false);
     };
     const esc = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        setOpen(false);
+        applyOpen(false);
       }
     };
     window.addEventListener("mousedown", away);
@@ -289,7 +297,7 @@ function EffortMenu({ onOpenChange }: { onOpenChange?: (open: boolean) => void }
         type="button"
         className={"effort-btn" + (t.effort ? " set" : "") + (open ? " open" : "")}
         title={"Effort: " + effortNote(t)}
-        onClick={() => setOpen(!open)}
+        onClick={() => applyOpen(!open)}
         aria-expanded={open}
       >
         <Gauge level={level} />
@@ -306,7 +314,7 @@ function EffortMenu({ onOpenChange }: { onOpenChange?: (open: boolean) => void }
               aria-checked={l === t.effort}
               className={"em-row" + (l === t.effort ? " on" : "")}
               onClick={() => {
-                setOpen(false);
+                applyOpen(false);
                 if (l !== t.effort) setTuning("effort", l || "auto");
               }}
             >
