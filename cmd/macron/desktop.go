@@ -256,6 +256,81 @@ func (h *deskHost) DeleteMemory(scope string, id int) error {
 	return nil
 }
 
+func (h *deskHost) SiteMemories() []desk.MemoryEntry {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return nil
+	}
+	list := h.w.app.Registry.ListSiteMemories()
+	out := make([]desk.MemoryEntry, 0, len(list))
+	for _, m := range list {
+		out = append(out, desk.MemoryEntry{ID: m.ID, Scope: "site", Host: m.Host, Text: m.Text})
+	}
+	return out
+}
+
+func (h *deskHost) AddSiteMemory(host, text string) (desk.MemoryEntry, error) {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return desk.MemoryEntry{}, errors.New("tool registry is not initialized")
+	}
+	m, err := h.w.app.Registry.AddSiteMemory(host, text)
+	if err != nil {
+		return desk.MemoryEntry{}, err
+	}
+	return desk.MemoryEntry{ID: m.ID, Scope: "site", Host: m.Host, Text: m.Text}, nil
+}
+
+func (h *deskHost) DeleteSiteMemory(id int) error {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return errors.New("tool registry is not initialized")
+	}
+	return h.w.app.Registry.DeleteSiteMemory(id)
+}
+
+func (h *deskHost) BrowserProfiles() []desk.BrowserProfileView {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return nil
+	}
+	list := h.w.app.Registry.ListBrowserProfiles()
+	out := make([]desk.BrowserProfileView, len(list))
+	for i, p := range list {
+		out[i] = convertProfileView(p)
+	}
+	return out
+}
+
+func (h *deskHost) SaveBrowserProfile(in desk.BrowserProfileUpsert) (desk.BrowserProfileView, error) {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return desk.BrowserProfileView{}, errors.New("tool registry is not initialized")
+	}
+	prof := tools.BrowserProfile{
+		ID:    in.ID,
+		Name:  in.Name,
+		Color: in.Color,
+	}
+	if in.Proxy != nil {
+		prof.Proxy = &tools.BrowserProxyConfig{
+			Scheme:   in.Proxy.Scheme,
+			Host:     in.Proxy.Host,
+			Port:     in.Proxy.Port,
+			Username: in.Proxy.Username,
+			Password: in.Proxy.Password,
+			Bypass:   in.Proxy.Bypass,
+		}
+	}
+	saved, err := h.w.app.Registry.SaveBrowserProfile(prof, in.KeepExistingPassword)
+	if err != nil {
+		return desk.BrowserProfileView{}, err
+	}
+	return convertProfileView(saved), nil
+}
+
+func (h *deskHost) DeleteBrowserProfile(id string) error {
+	if h.w.app == nil || h.w.app.Registry == nil {
+		return errors.New("tool registry is not initialized")
+	}
+	return h.w.app.Registry.DeleteBrowserProfile(id)
+}
+
 func (h *deskHost) Skills() []desk.SkillView {
 	if h.w.app == nil || h.w.app.Skills == nil {
 		return []desk.SkillView{}

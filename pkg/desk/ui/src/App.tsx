@@ -14,6 +14,7 @@ import {
   toggleMode,
   toggleSidebarCollapsed,
 } from "./actions";
+import { BrowserDock } from "./components/BrowserDock";
 import { Composer } from "./components/Composer";
 import { Dialogs } from "./components/Dialogs";
 import { Feed } from "./components/Feed";
@@ -226,6 +227,7 @@ export function App() {
         )}
       </main>
       <PlanPanel />
+      <BrowserDock />
       <Dialogs />
       <Welcome />
     </div>

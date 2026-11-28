@@ -5,6 +5,7 @@ import { Icon } from "../../icons";
 import type { IconName } from "../../icons";
 import { setState } from "../../store";
 import type { SettingsSectionId } from "../../store";
+import { BrowserSettingsPage } from "./BrowserSettings";
 import { ConnectionsSettingsPage, McpSettingsPage, ServersSettingsPage, SkillsSettingsPage } from "./CapabilitiesSettings";
 import {
   MemorySettingsPage,
@@ -37,10 +38,11 @@ const NAV_ITEMS: NavItem[] = [
   { id: "moa", group: "Intelligence", label: "Mixture of Agents", icon: "network", keywords: "moa voting council aggregator advisors ترکیب مدل رأی‌گیری" },
   { id: "parameters", group: "Intelligence", label: "Model Parameters", icon: "gauge", keywords: "effort reasoning context window temperature پارامتر دقت دما کانتکست" },
   { id: "soul", group: "Intelligence", label: "Personality & SOUL.md", icon: "sparkles", keywords: "soul personality prompt tone identity شخصیت هویت" },
-  { id: "memory", group: "Intelligence", label: "Memory", icon: "brain", keywords: "memory notes user facts حافظه یادداشت" },
+  { id: "memory", group: "Intelligence", label: "Memory", icon: "brain", keywords: "memory notes user facts site domain حافظه یادداشت سایت" },
   // Capabilities
   { id: "mcp", group: "Capabilities", label: "Tools & MCP", icon: "plug", keywords: "mcp servers plugins tools ابزار پلاگین" },
   { id: "skills", group: "Capabilities", label: "Skills", icon: "book", keywords: "skills capabilities مهارت" },
+  { id: "browser", group: "Capabilities", label: "Browser & Profiles", icon: "globe", keywords: "browser profiles proxy socks5 chrome extension مرورگر پروفایل پروکسی افزونه" },
   { id: "connections", group: "Capabilities", label: "Connected Services", icon: "link", keywords: "connections telegram github services سرویس اتصال" },
   { id: "servers", group: "Capabilities", label: "SSH & Remote", icon: "server", keywords: "ssh remote vps wsl server سرور ریموت" },
   // Security
@@ -112,6 +114,8 @@ export function SettingsWorkspace({ initialSection = "general" }: { initialSecti
         return <McpSettingsPage />;
       case "skills":
         return <SkillsSettingsPage />;
+      case "browser":
+        return <BrowserSettingsPage />;
       case "connections":
         return <ConnectionsSettingsPage />;
       case "servers":

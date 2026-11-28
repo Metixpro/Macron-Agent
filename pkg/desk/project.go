@@ -413,6 +413,11 @@ func (p *project) session() (Session, error) {
 			p.emit("browser", map[string]any{"browser": p.srv.browserState(p)})
 		})
 	}
+	if ebs, ok := s.(ExtendedBrowserSession); ok {
+		ebs.SetBrowserEventObserver(func(event string, payload map[string]any) {
+			p.emit(event, payload)
+		})
+	}
 	return s, nil
 }
 

@@ -44,6 +44,8 @@ type Server struct {
 	addr     string
 	remotes  *remotes
 	upd      updateState
+	extOnce  sync.Once
+	ext      *extensionBridge
 }
 
 func New(host Host) *Server {
@@ -148,6 +150,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/browser/action", s.browserActionAPI)
 	mux.HandleFunc("POST /api/projects/{id}/browser/input", s.browserInputAPI)
 	mux.HandleFunc("POST /api/projects/{id}/browser/takeover", s.browserTakeoverAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/dialog", s.browserDialogAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/context-menu", s.browserContextMenuAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/resize", s.browserResizeAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/teach", s.browserTeachAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/profile", s.setProjectBrowserProfileAPI)
+	mux.HandleFunc("GET /api/browser/profiles", s.browserProfilesAPI)
+	mux.HandleFunc("POST /api/browser/profiles", s.saveBrowserProfileAPI)
+	mux.HandleFunc("PUT /api/browser/profiles/{id}", s.saveBrowserProfileAPI)
+	mux.HandleFunc("DELETE /api/browser/profiles/{id}", s.deleteBrowserProfileAPI)
+	mux.HandleFunc("GET /api/browser/extension", s.extensionStatusAPI)
+	mux.HandleFunc("POST /api/browser/extension/rotate", s.extensionRotateTokenAPI)
+	mux.HandleFunc("POST /api/browser/extension/command", s.extensionCommandAPI)
 	mux.HandleFunc("POST /api/projects/{id}/reveal", s.revealAPI)
 	mux.HandleFunc("POST /api/projects/{id}/shell", s.shellAPI)
 	mux.HandleFunc("GET /api/projects/{id}/status", s.projectStatusAPI)
@@ -217,6 +231,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		}
 		if host != "127.0.0.1" && host != "localhost" && host != "::1" {
 			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if r.URL.Path == "/api/browser/extension/ws" {
+			s.extensionWSAPI(w, r)
 			return
 		}
 		if sfs := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); sfs != "" && sfs != "same-origin" && sfs != "none" {

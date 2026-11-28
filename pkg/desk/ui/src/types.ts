@@ -238,7 +238,8 @@ export interface ConnectionDetail {
 
 export interface MemoryEntry {
   id: number;
-  scope: "memory" | "user";
+  scope: "memory" | "user" | "site";
+  host?: string;
   text: string;
 }
 
@@ -426,11 +427,88 @@ export interface BrowserTab {
   url: string;
   title: string;
   active: boolean;
+  frozen?: boolean;
+  sleeping?: boolean;
+  crashed?: boolean;
 }
 
 export interface BrowserViewport {
   width: number;
   height: number;
+}
+
+export interface BrowserChallenge {
+  status: "none" | "checking" | "needs-user" | "blocked";
+  reason?: string;
+}
+
+export interface BrowserDialog {
+  id: string;
+  type: "alert" | "confirm" | "prompt" | "beforeunload";
+  message: string;
+  defaultValue?: string;
+}
+
+export interface BrowserProfileBadge {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface BrowserTeachStep {
+  index: number;
+  kind: string;
+  description: string;
+  url?: string;
+  sensitive?: boolean;
+  at?: number;
+}
+
+export interface BrowserProxyConfig {
+  scheme: "http" | "https" | "socks5";
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  bypass?: string;
+}
+
+export interface BrowserProfileView {
+  id: string;
+  name: string;
+  color: string;
+  scope: "workspace" | "shared" | "named";
+  builtIn?: boolean;
+  hasProxy?: boolean;
+  proxyPasswordSet?: boolean;
+  proxy?: BrowserProxyConfig;
+}
+
+export interface BrowserProfileUpsert {
+  id?: string;
+  name: string;
+  color?: string;
+  proxy?: BrowserProxyConfig | null;
+  keepExistingPassword?: boolean;
+}
+
+export interface BrowserContextMenuInfo {
+  linkUrl?: string;
+  srcUrl?: string;
+  selectedText?: string;
+  isEditable?: boolean;
+  pageUrl?: string;
+}
+
+export interface ExtensionStatus {
+  connected: boolean;
+  browserName?: string;
+  extensionVersion?: string;
+  approvedOrigins?: string[];
+  tabs?: { id: number; url: string; title: string; active: boolean }[];
+  pairingToken: string;
+  endpoint: string;
+  connectedAt?: number;
 }
 
 export interface BrowserInputPayload {
@@ -458,6 +536,13 @@ export interface BrowserState {
   updated?: number;
   hasScreenshot: boolean;
   output?: string;
+  cursor?: string;
+  challenge?: BrowserChallenge | null;
+  dialog?: BrowserDialog | null;
+  profile?: BrowserProfileBadge | null;
+  teaching?: boolean;
+  teachStartedAt?: number;
+  teachSteps?: BrowserTeachStep[];
   tabs?: BrowserTab[];
   viewport?: BrowserViewport;
 }

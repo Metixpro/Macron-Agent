@@ -11,7 +11,8 @@ import (
 
 type MemoryEntry struct {
 	ID    int    `json:"id"`
-	Scope string `json:"scope"` // "memory" or "user"
+	Scope string `json:"scope"` // "memory", "user", or "site"
+	Host  string `json:"host,omitempty"`
 	Text  string `json:"text"`
 }
 
@@ -49,6 +50,12 @@ type memoryHost interface {
 	DeleteMemory(scope string, id int) error
 }
 
+type siteMemoryHost interface {
+	SiteMemories() []MemoryEntry
+	AddSiteMemory(host, text string) (MemoryEntry, error)
+	DeleteSiteMemory(id int) error
+}
+
 type skillHost interface {
 	Skills() []SkillView
 	SetSkillEnabled(name string, on bool) error
@@ -65,15 +72,17 @@ type connectionTestHost interface {
 }
 
 func (s *Server) memoriesAPI(w http.ResponseWriter, _ *http.Request) {
-	mh, ok := s.host.(memoryHost)
-	if !ok {
-		writeJSON(w, map[string]any{"memories": []MemoryEntry{}})
-		return
+	var list []MemoryEntry
+	if mh, ok := s.host.(memoryHost); ok {
+		got, err := mh.Memories()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		list = append(list, got...)
 	}
-	list, err := mh.Memories()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
+	if smh, ok := s.host.(siteMemoryHost); ok {
+		list = append(list, smh.SiteMemories()...)
 	}
 	if list == nil {
 		list = []MemoryEntry{}
@@ -82,13 +91,9 @@ func (s *Server) memoriesAPI(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) addMemoryAPI(w http.ResponseWriter, r *http.Request) {
-	mh, ok := s.host.(memoryHost)
-	if !ok {
-		writeErr(w, http.StatusNotImplemented, errors.New("memory management is not supported"))
-		return
-	}
 	var in struct {
 		Scope string `json:"scope"`
+		Host  string `json:"host"`
 		Text  string `json:"text"`
 	}
 	if err := readJSON(r, &in); err != nil {
@@ -98,6 +103,25 @@ func (s *Server) addMemoryAPI(w http.ResponseWriter, r *http.Request) {
 	in.Text = strings.TrimSpace(in.Text)
 	if in.Text == "" {
 		writeErr(w, http.StatusBadRequest, errors.New("memory text is required"))
+		return
+	}
+	if in.Scope == "site" {
+		smh, ok := s.host.(siteMemoryHost)
+		if !ok {
+			writeErr(w, http.StatusNotImplemented, errors.New("site memories are not supported"))
+			return
+		}
+		entry, err := smh.AddSiteMemory(in.Host, in.Text)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, entry)
+		return
+	}
+	mh, ok := s.host.(memoryHost)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("memory management is not supported"))
 		return
 	}
 	if in.Scope != "user" {
@@ -112,17 +136,30 @@ func (s *Server) addMemoryAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteMemoryAPI(w http.ResponseWriter, r *http.Request) {
-	mh, ok := s.host.(memoryHost)
-	if !ok {
-		writeErr(w, http.StatusNotImplemented, errors.New("memory management is not supported"))
-		return
-	}
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil || id <= 0 {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid memory id"))
 		return
 	}
 	scope := r.URL.Query().Get("scope")
+	if scope == "site" {
+		smh, ok := s.host.(siteMemoryHost)
+		if !ok {
+			writeErr(w, http.StatusNotImplemented, errors.New("site memories are not supported"))
+			return
+		}
+		if err := smh.DeleteSiteMemory(id); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+		return
+	}
+	mh, ok := s.host.(memoryHost)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("memory management is not supported"))
+		return
+	}
 	if scope != "user" {
 		scope = "memory"
 	}

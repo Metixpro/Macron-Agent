@@ -787,20 +787,70 @@ func convertBrowserState(s tools.BrowserLiveState) desk.BrowserState {
 		URL:            s.URL,
 		Title:          s.Title,
 		Updated:        s.Updated,
+		Cursor:         s.Cursor,
+		Teaching:       s.Teaching,
+		TeachStartedAt: s.TeachStartedAt,
+	}
+	if s.Challenge != nil {
+		out.Challenge = &desk.BrowserChallenge{Status: s.Challenge.Status, Reason: s.Challenge.Reason}
+	}
+	if s.Dialog != nil {
+		out.Dialog = &desk.BrowserDialog{ID: s.Dialog.ID, Type: s.Dialog.Type, Message: s.Dialog.Message, DefaultValue: s.Dialog.DefaultValue}
+	}
+	if s.Profile != nil {
+		out.Profile = &desk.BrowserProfileBadge{ID: s.Profile.ID, Name: s.Profile.Name, Color: s.Profile.Color}
+	}
+	if len(s.TeachSteps) > 0 {
+		out.TeachSteps = make([]desk.BrowserTeachStep, len(s.TeachSteps))
+		for i, st := range s.TeachSteps {
+			out.TeachSteps[i] = desk.BrowserTeachStep{
+				Index:       st.Index,
+				Kind:        st.Kind,
+				Description: st.Description,
+				URL:         st.URL,
+				Sensitive:   st.Sensitive,
+				At:          st.At,
+			}
+		}
 	}
 	if len(s.Tabs) > 0 {
 		out.Tabs = make([]desk.BrowserTab, len(s.Tabs))
 		for i, tab := range s.Tabs {
 			out.Tabs[i] = desk.BrowserTab{
-				Index:  tab.Index,
-				URL:    tab.URL,
-				Title:  tab.Title,
-				Active: tab.Active,
+				Index:    tab.Index,
+				URL:      tab.URL,
+				Title:    tab.Title,
+				Active:   tab.Active,
+				Frozen:   tab.Frozen,
+				Sleeping: tab.Sleeping,
+				Crashed:  tab.Crashed,
 			}
 		}
 	}
 	if s.Viewport != nil {
 		out.Viewport = &desk.BrowserViewport{Width: s.Viewport.Width, Height: s.Viewport.Height}
+	}
+	return out
+}
+
+func convertProfileView(v tools.BrowserProfileView) desk.BrowserProfileView {
+	out := desk.BrowserProfileView{
+		ID:            v.ID,
+		Name:          v.Name,
+		Color:         v.Color,
+		Scope:         v.Scope,
+		BuiltIn:       v.BuiltIn,
+		HasProxy:      v.HasProxy,
+		ProxyPassword: v.ProxyPassword,
+	}
+	if v.Proxy != nil {
+		out.Proxy = &desk.BrowserProxyConfig{
+			Scheme:   v.Proxy.Scheme,
+			Host:     v.Proxy.Host,
+			Port:     v.Proxy.Port,
+			Username: v.Proxy.Username,
+			Bypass:   v.Proxy.Bypass,
+		}
 	}
 	return out
 }
@@ -844,6 +894,63 @@ func (t *terminal) SetBrowserTakeover(ctx context.Context, active bool, reason s
 	}
 	st, err := t.app.Registry.SetBrowserTakeover(ctx, t.session, active, reason)
 	return convertBrowserState(st), err
+}
+
+func (t *terminal) BrowserResize(ctx context.Context, width, height int) (desk.BrowserState, error) {
+	if !t.HasBrowser() {
+		return desk.BrowserState{}, errors.New("browser runtime is not available")
+	}
+	st, err := t.app.Registry.BrowserResize(ctx, t.session, width, height)
+	return convertBrowserState(st), err
+}
+
+func (t *terminal) BrowserHandleDialog(ctx context.Context, accept bool, promptText, dialogID string) (desk.BrowserState, error) {
+	if !t.HasBrowser() {
+		return desk.BrowserState{}, errors.New("browser runtime is not available")
+	}
+	st, err := t.app.Registry.BrowserHandleDialog(ctx, t.session, accept, promptText, dialogID)
+	return convertBrowserState(st), err
+}
+
+func (t *terminal) BrowserContextMenu(ctx context.Context, params map[string]any) (map[string]any, error) {
+	if !t.HasBrowser() {
+		return nil, errors.New("browser runtime is not available")
+	}
+	return t.app.Registry.BrowserContextMenu(ctx, t.session, params)
+}
+
+func (t *terminal) BrowserTeach(ctx context.Context, action string) (desk.BrowserState, []desk.BrowserTeachStep, error) {
+	if !t.HasBrowser() {
+		return desk.BrowserState{}, nil, errors.New("browser runtime is not available")
+	}
+	st, steps, err := t.app.Registry.BrowserTeach(ctx, t.session, action)
+	outSteps := make([]desk.BrowserTeachStep, len(steps))
+	for i, s := range steps {
+		outSteps[i] = desk.BrowserTeachStep{
+			Index:       s.Index,
+			Kind:        s.Kind,
+			Description: s.Description,
+			URL:         s.URL,
+			Sensitive:   s.Sensitive,
+			At:          s.At,
+		}
+	}
+	return convertBrowserState(st), outSteps, err
+}
+
+func (t *terminal) SetBrowserProfile(profileID string) (desk.BrowserProfileView, error) {
+	if !t.HasBrowser() {
+		return desk.BrowserProfileView{}, errors.New("browser runtime is not available")
+	}
+	v, err := t.app.Registry.SetSessionBrowserProfile(t.session, profileID)
+	return convertProfileView(v), err
+}
+
+func (t *terminal) SetBrowserEventObserver(fn func(event string, payload map[string]any)) {
+	if !t.HasBrowser() {
+		return
+	}
+	t.app.Registry.SetBrowserEventObserver(t.session, fn)
 }
 
 func (t *terminal) SubscribeBrowserFrames() ([]byte, <-chan []byte, func()) {

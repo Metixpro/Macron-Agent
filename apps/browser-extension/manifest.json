@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Macron Browser Bridge",
+  "version": "2.1.0",
+  "description": "Connects your local Chrome browser to Macron Desktop inside a dedicated 'Macron' Tab Group with per-site approval.",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "scripting",
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Macron Browser Bridge",
+    "default_popup": "popup.html"
+  }
+}

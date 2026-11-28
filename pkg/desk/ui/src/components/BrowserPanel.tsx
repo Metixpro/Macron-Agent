@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClipboardEvent, CompositionEvent, KeyboardEvent, MouseEvent, WheelEvent } from "react";
-import { errorText, loadBrowser, noteBrowserVisit, openBrowserOnFirstVisit, send, stop } from "../actions";
+import { errorText, loadBrowser, noteBrowserVisit, openBrowserOnFirstVisit, openSettings, send, stop } from "../actions";
 import { browserShotURL, browserStreamURL, server } from "../api";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { getState, setState, useStore } from "../store";
-import type { BrowserInputPayload } from "../types";
+import type { BrowserInputPayload, BrowserProfileView } from "../types";
+import { BrowserContextMenu, type ContextMenuState } from "./BrowserContextMenu";
+import { BrowserDialogSheet } from "./BrowserDialogSheet";
+import { BrowserTeachBar } from "./BrowserTeachBar";
 import { StarBuddy, useStarBuddyMood } from "./StarBuddy";
 
 const DEFAULT_W = 1366;
@@ -58,22 +61,31 @@ export function BrowserBody() {
   const current = useStore((s) => s.current);
   const machine = useStore((s) => s.machine);
   const view = useStore((s) => s.browserView);
+  const expanded = useStore((s) => s.browserExpanded);
+  const browserCursor = useStore((s) => s.browserCursor);
   const running = useStore((s) => s.live.running);
   const hasModel = useStore((s) => Boolean(s.info.model));
   const mood = useStarBuddyMood();
+
+  const setExpanded = useCallback((next: boolean) => setState({ browserExpanded: next }), []);
 
   const [addr, setAddr] = useState("");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [takeoverBusy, setTakeoverBusy] = useState(false);
+  const [dialogBusy, setDialogBusy] = useState(false);
+  const [teachBusy, setTeachBusy] = useState(false);
   const [error, setError] = useState("");
-  const [expanded, setExpanded] = useState(false);
   const [pillHidden, setPillHidden] = useState(false);
   const [sending, setSending] = useState(false);
   const [streamNonce, setStreamNonce] = useState(1);
   const [pulseTakeover, setPulseTakeover] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [profiles, setProfiles] = useState<BrowserProfileView[]>([]);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const imgRef = useRef<HTMLImageElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -92,6 +104,8 @@ export function BrowserBody() {
   const isLive = Boolean(view?.live && view?.open);
   const agentActive = Boolean(view?.agentActive);
   const takeover = Boolean(view?.takeover);
+  const teaching = Boolean(view?.teaching);
+  const challengeNeedsUser = view?.challenge?.status === "needs-user";
   const canInteract = !agentActive || takeover;
   const vpW = view?.viewport?.width || DEFAULT_W;
   const vpH = view?.viewport?.height || DEFAULT_H;
@@ -396,6 +410,144 @@ export function BrowserBody() {
     setSending(false);
   };
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    server
+      .browserProfiles()
+      .then((r) => setProfiles(r.profiles || []))
+      .catch(() => undefined);
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (!dialogOpen || !isLive || !current) return;
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let timer: number | undefined;
+    const obs = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect || rect.width < 360 || rect.height < 260) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const w = Math.min(1920, Math.max(640, Math.round(rect.width)));
+        const h = Math.min(1200, Math.max(420, Math.round(rect.height)));
+        if (Math.abs(w - vpW) >= 48 || Math.abs(h - vpH) >= 48) {
+          server.browserResize(current, w, h).catch(() => undefined);
+        }
+      }, 320);
+    });
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [dialogOpen, isLive, current, vpW, vpH]);
+
+  const resolvePageDialog = async (accept: boolean, promptText = "") => {
+    if (!current || !view?.dialog || dialogBusy) return;
+    setDialogBusy(true);
+    try {
+      const next = await server.browserDialog(current, accept, promptText, view.dialog.id);
+      setState({ browserView: next });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setDialogBusy(false);
+    }
+  };
+
+  const onCanvasContextMenu = async (e: MouseEvent<HTMLImageElement>) => {
+    e.preventDefault();
+    if (!isLive || !current) return;
+    if (!canInteract) {
+      nudgeTakeover();
+      return;
+    }
+    const pt = toViewport(e.clientX, e.clientY);
+    try {
+      const info = await server.browserContextMenu(current, { action: "query", x: pt.x, y: pt.y });
+      setCtxMenu({ clientX: e.clientX, clientY: e.clientY, info });
+    } catch {
+      setCtxMenu({ clientX: e.clientX, clientY: e.clientY, info: { pageUrl: view?.url } });
+    }
+  };
+
+  const onContextMenuAction = async (action: string, payload?: Record<string, unknown>) => {
+    if (!current) return;
+    if (action === "copy_text") {
+      const txt = String(payload?.text || "");
+      if (txt) navigator.clipboard?.writeText(txt).catch(() => undefined);
+      return;
+    }
+    if (action === "paste") {
+      try {
+        const txt = await navigator.clipboard.readText();
+        if (txt) queueInput({ type: "insert_text", text: txt });
+      } catch {
+        // Clipboard permission denied — ignore gracefully
+      }
+      return;
+    }
+    try {
+      await server.browserContextMenu(current, { action, ...(payload || {}) });
+      if (action === "open_new_tab" || action === "back" || action === "forward" || action === "reload") {
+        void loadBrowser(current);
+      }
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const startTeach = async () => {
+    if (!current || teachBusy || !isLive) return;
+    setTeachBusy(true);
+    setError("");
+    try {
+      const res = await server.browserTeach(current, "start");
+      setState({ browserView: res.browser });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setTeachBusy(false);
+    }
+  };
+
+  const finishTeach = async (save: boolean) => {
+    if (!current || teachBusy) return;
+    setTeachBusy(true);
+    setError("");
+    try {
+      const res = await server.browserTeach(current, save ? "stop" : "cancel");
+      setState({ browserView: res.browser });
+      if (save && res.steps?.length) {
+        const lines = res.steps.map((s) => `${s.index}. ${s.description}`).join("\n");
+        const skillPrompt =
+          `I just demonstrated a browser workflow using Teach a Task. Turn these recorded steps into a clean, reusable Macron Skill (using create_skill) and confirm when saved. Note: typed inputs and sensitive fields were intentionally omitted for privacy — parameterize them clearly:\n\n${lines}`;
+        setExpanded(false);
+        await send(skillPrompt);
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setTeachBusy(false);
+    }
+  };
+
+  const switchProfile = async (profileId: string) => {
+    setProfileMenuOpen(false);
+    if (!current || profileId === view?.profile?.id) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await server.setProjectBrowserProfile(current, profileId);
+      setState({ browserView: res.browser });
+      setStreamNonce((n) => n + 1);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const shotSrc = current && view?.hasScreenshot ? browserShotURL(current, view.updated || 0) : "";
   const streamSrc = current && isLive ? browserStreamURL(current, streamNonce) : "";
   const cardImgSrc = !dialogOpen ? streamSrc || shotSrc : shotSrc;
@@ -552,7 +704,18 @@ export function BrowserBody() {
             <div className="br-tab-strip" dir="ltr">
               <div className="br-tabs-left">
                 {tabs.map((tab) => (
-                  <div key={tab.index} className={"br-chrome-tab" + (tab.active ? " on" : "")} title={tab.url || ""}>
+                  <div
+                    key={tab.index}
+                    className={
+                      "br-chrome-tab" +
+                      (tab.active ? " on" : "") +
+                      (tab.sleeping ? " sleeping" : tab.frozen ? " frozen" : "")
+                    }
+                    title={
+                      (tab.url || "") +
+                      (tab.sleeping ? " · Sleeping (click to wake)" : tab.frozen ? " · Frozen (low RAM)" : "")
+                    }
+                  >
                     <button
                       type="button"
                       className="br-tab-hit"
@@ -561,7 +724,13 @@ export function BrowserBody() {
                         if (!tab.active) void run("switch_tab", { index: tab.index });
                       }}
                     >
-                      <span className={"br-tab-dot" + (tab.active && (busy || agentActive) ? " busy" : "")} aria-hidden="true" />
+                      <span
+                        className={
+                          "br-tab-dot" +
+                          (tab.active && (busy || agentActive) ? " busy" : tab.sleeping ? " sleep" : tab.frozen ? " freeze" : "")
+                        }
+                        aria-hidden="true"
+                      />
                       <span className="br-tab-label" dir="auto">
                         {tab.title || tab.url || t("Browser")}
                       </span>
@@ -622,16 +791,100 @@ export function BrowserBody() {
                 <input type="text" value={addr} disabled={busy} placeholder={DEFAULT_URL} aria-label={t("Browser address")} spellCheck={false} onChange={(e) => setAddr(e.target.value)} />
                 {isLive && <span className="br-live-badge">LIVE</span>}
               </form>
+
+              <div className="br-nav-tools">
+                {isLive && !teaching && (
+                  <button
+                    type="button"
+                    className="br-tool-pill"
+                    disabled={teachBusy || busy}
+                    title={t("Record your clicks to teach Macron a reusable Skill")}
+                    onClick={() => void startTeach()}
+                  >
+                    <Icon name="sparkles" size={12} />
+                    <span>{t("Teach")}</span>
+                  </button>
+                )}
+
+                <div className="br-prof-wrap">
+                  <button
+                    type="button"
+                    className="br-prof-pill"
+                    title={t("Switch browser profile")}
+                    onClick={() => setProfileMenuOpen((v) => !v)}
+                  >
+                    <span
+                      className="br-prof-dot"
+                      style={{ background: view.profile?.color || "#60a5fa" }}
+                      aria-hidden="true"
+                    />
+                    <span>{view.profile?.name || "Workspace"}</span>
+                    <Icon name="down" size={11} />
+                  </button>
+                  {profileMenuOpen && (
+                    <div className="br-prof-menu" role="menu">
+                      {(profiles.length ? profiles : [{ id: "workspace", name: "Workspace", color: "#60a5fa", scope: "workspace" as const }]).map((pr) => (
+                        <button
+                          key={pr.id}
+                          type="button"
+                          className={"br-ctx-item" + (pr.id === (view.profile?.id || "workspace") ? " on" : "")}
+                          role="menuitem"
+                          onClick={() => void switchProfile(pr.id)}
+                        >
+                          <span className="br-prof-dot" style={{ background: pr.color }} />
+                          <span>{pr.name}</span>
+                          {pr.hasProxy && <span className="br-prof-px">PROXY</span>}
+                        </button>
+                      ))}
+                      <div className="br-ctx-sep" />
+                      <button
+                        type="button"
+                        className="br-ctx-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setExpanded(false);
+                          openSettings("browser");
+                        }}
+                      >
+                        <Icon name="sliders" size={12} />
+                        <span>{t("Manage profiles & proxies…")}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {isLive && (agentActive || takeover) && (
-              <div className={"br-takeover-bar " + (takeover ? "user" : "agent") + (pulseTakeover ? " pulse" : "")} dir="auto">
+            {isLive && teaching && (
+              <BrowserTeachBar
+                startedAt={view.teachStartedAt || Date.now()}
+                steps={view.teachSteps || []}
+                busy={teachBusy}
+                onSave={() => void finishTeach(true)}
+                onCancel={() => void finishTeach(false)}
+              />
+            )}
+
+            {isLive && !teaching && (agentActive || takeover || challengeNeedsUser) && (
+              <div
+                className={
+                  "br-takeover-bar " +
+                  (challengeNeedsUser ? "alert" : takeover ? "user" : "agent") +
+                  (pulseTakeover ? " pulse" : "")
+                }
+                dir="auto"
+              >
                 <span className="br-takeover-msg">
                   <span className="br-tab-dot busy" aria-hidden="true" />
                   <span>
-                    {takeover
-                      ? t("You have control — scroll, click, or type directly")
-                      : t("Macron is browsing this page")}
+                    {challengeNeedsUser
+                      ? `${view.challenge?.reason || t("Verification required")} — ${t("Complete it below, then hand back to Macron")}`
+                      : takeover
+                        ? view.takeoverReason && view.takeoverReason !== "user"
+                          ? `${view.takeoverReason} — ${t("You have control")}`
+                          : t("You have control — scroll, click, or type directly")
+                        : t("Macron is browsing this page")}
                   </span>
                 </span>
                 {takeover ? (
@@ -648,7 +901,7 @@ export function BrowserBody() {
 
             {error && <div className="br-err" role="alert" dir="auto">{error}</div>}
 
-            <div className="br-modal-stage br-full-stage">
+            <div ref={stageRef} className="br-modal-stage br-full-stage">
               {(busy || agentActive) && <div className="br-progress" aria-hidden="true" />}
               {modalImgSrc ? (
                 <div
@@ -668,17 +921,33 @@ export function BrowserBody() {
                     src={modalImgSrc}
                     alt={view.title || view.url || t("Browser preview")}
                     className={"br-modal-img" + (busy ? " busy" : "")}
+                    style={{ cursor: isLive && canInteract ? browserCursor || "default" : undefined }}
                     draggable={false}
                     onMouseDown={isLive ? onCanvasMouseDown : undefined}
                     onMouseMove={isLive ? onCanvasMouseMove : undefined}
                     onMouseUp={isLive ? onCanvasMouseUp : undefined}
                     onClick={!isLive ? onLegacyClick : undefined}
                     onWheel={!isLive ? onLegacyWheel : undefined}
-                    onContextMenu={isLive ? (e) => e.preventDefault() : undefined}
+                    onContextMenu={isLive ? (e) => void onCanvasContextMenu(e) : undefined}
                   />
+                  {view.dialog && (
+                    <BrowserDialogSheet
+                      dialog={view.dialog}
+                      busy={dialogBusy}
+                      onResolve={(accept, promptText) => void resolvePageDialog(accept, promptText)}
+                    />
+                  )}
                 </div>
               ) : (
                 <div className="empty-row">{t("Loading…")}</div>
+              )}
+
+              {ctxMenu && (
+                <BrowserContextMenu
+                  menu={ctxMenu}
+                  onClose={() => setCtxMenu(null)}
+                  onAction={(action, payload) => void onContextMenuAction(action, payload)}
+                />
               )}
 
               {pillHidden ? (
