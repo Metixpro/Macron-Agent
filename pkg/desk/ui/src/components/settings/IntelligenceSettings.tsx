@@ -1092,7 +1092,8 @@ export function SoulSettingsPage() {
 export function MemorySettingsPage() {
   const t = useT();
   const [items, setItems] = useState<MemoryEntry[] | null>(null);
-  const [scope, setScope] = useState<"memory" | "user">("memory");
+  const [scope, setScope] = useState<"memory" | "user" | "site">("memory");
+  const [host, setHost] = useState("");
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1110,14 +1111,17 @@ export function MemorySettingsPage() {
   const filtered = useMemo(() => (items || []).filter((m) => m.scope === scope), [items, scope]);
   const agentCount = (items || []).filter((m) => m.scope === "memory").length;
   const userCount = (items || []).filter((m) => m.scope === "user").length;
+  const siteCount = (items || []).filter((m) => m.scope === "site").length;
 
   const add = async () => {
     const text = draft.trim();
     if (!text) return;
+    if (scope === "site" && !host.trim()) return;
     setSaving(true);
     try {
-      await server.addMemory(scope, text);
+      await server.addMemory(scope, text, scope === "site" ? host.trim() : undefined);
       setDraft("");
+      if (scope === "site") setHost("");
       load();
     } catch (e) {
       fail(e);
@@ -1139,7 +1143,7 @@ export function MemorySettingsPage() {
     <div className="stg-page">
       <header className="stg-head">
         <h1>{t("Memory")}</h1>
-        <p>{t("Agent memory")} · {t("About you")}</p>
+        <p>{t("Agent memory")} · {t("About you")} · {t("Site memories")}</p>
       </header>
 
       <div className="mem-tabs">
@@ -1149,14 +1153,27 @@ export function MemorySettingsPage() {
         <button type="button" className={"mem-tab" + (scope === "user" ? " on" : "")} onClick={() => setScope("user")}>
           {t("About you")} <span className="ps-badge">{userCount}</span>
         </button>
+        <button type="button" className={"mem-tab" + (scope === "site" ? " on" : "")} onClick={() => setScope("site")}>
+          {t("Site memories")} <span className="ps-badge">{siteCount}</span>
+        </button>
       </div>
 
       <div className="mem-add">
+        {scope === "site" && (
+          <input
+            type="text"
+            dir="ltr"
+            style={{ maxWidth: 190 }}
+            value={host}
+            placeholder="github.com"
+            onChange={(e) => setHost(e.target.value)}
+          />
+        )}
         <input
           type="text"
           dir="auto"
           value={draft}
-          placeholder={t("Add a memory note…")}
+          placeholder={scope === "site" ? t("Site note auto-loaded when browsing this domain…") : t("Add a memory note…")}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -1165,7 +1182,12 @@ export function MemorySettingsPage() {
             }
           }}
         />
-        <button type="button" className="btn primary sm" disabled={saving || !draft.trim()} onClick={() => void add()}>
+        <button
+          type="button"
+          className="btn primary sm"
+          disabled={saving || !draft.trim() || (scope === "site" && !host.trim())}
+          onClick={() => void add()}
+        >
           {t("Add")}
         </button>
       </div>
@@ -1176,6 +1198,11 @@ export function MemorySettingsPage() {
         {filtered.map((m) => (
           <div key={m.scope + ":" + m.id} className="set-row static">
             <span className="grow">
+              {m.host && (
+                <span className="ps-badge" dir="ltr" style={{ marginInlineEnd: 8 }}>
+                  {m.host}
+                </span>
+              )}
               <span className="mem-text" dir="auto">
                 {m.text}
               </span>

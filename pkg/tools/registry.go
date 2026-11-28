@@ -64,14 +64,19 @@ type Registry struct {
 	dl         downloader
 	cookiePool CookiePool
 
-	userCookies func(sessionID string) []Cookie
-	rotations   rotationLimiter
-	browser     *browserRuntime
-	browserPool *browserPool
-	poolOnce    sync.Once
-	piper       piperVoice
-	skills      *skills.Store
-	skillWrite  func(string) bool
+	userCookies     func(sessionID string) []Cookie
+	rotations       rotationLimiter
+	browser         *browserRuntime
+	browserPool     *browserPool
+	poolOnce        sync.Once
+	BrowserDataDir  string
+	siteMemories    *siteMemoryStore
+	siteMemOnce     sync.Once
+	browserProfiles *browserProfileStore
+	profilesOnce    sync.Once
+	piper           piperVoice
+	skills          *skills.Store
+	skillWrite      func(string) bool
 
 	plugins atomic.Pointer[pluginSource]
 }

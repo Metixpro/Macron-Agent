@@ -1,11 +1,16 @@
 import type {
+  BrowserContextMenuInfo,
   BrowserInputPayload,
+  BrowserProfileUpsert,
+  BrowserProfileView,
   BrowserState,
+  BrowserTeachStep,
   ChangesResponse,
   ConnectResult,
   Connection,
   ConnectionDetail,
   DiffResponse,
+  ExtensionStatus,
   FileRef,
   Info,
   Listing,
@@ -121,6 +126,27 @@ export const server = {
     call<Ok>("POST", p(id) + "/browser/input", body),
   browserTakeover: (id: string, active: boolean, reason = "user") =>
     call<BrowserState>("POST", p(id) + "/browser/takeover", { active, reason }),
+  browserDialog: (id: string, accept: boolean, promptText = "", dialogId = "") =>
+    call<BrowserState>("POST", p(id) + "/browser/dialog", { accept, promptText, dialogId }),
+  browserContextMenu: (id: string, body: Record<string, unknown>) =>
+    call<BrowserContextMenuInfo & { ok?: boolean }>("POST", p(id) + "/browser/context-menu", body),
+  browserResize: (id: string, width: number, height: number) =>
+    call<BrowserState>("POST", p(id) + "/browser/resize", { width, height }),
+  browserTeach: (id: string, action: "start" | "stop" | "cancel") =>
+    call<{ browser: BrowserState; steps: BrowserTeachStep[] }>("POST", p(id) + "/browser/teach", { action }),
+  setProjectBrowserProfile: (id: string, profileId: string) =>
+    call<{ profile: BrowserProfileView; browser: BrowserState }>("POST", p(id) + "/browser/profile", { profileId }),
+  browserProfiles: () => call<{ profiles: BrowserProfileView[] }>("GET", r("/api/browser/profiles")),
+  saveBrowserProfile: (body: BrowserProfileUpsert) =>
+    call<{ profile: BrowserProfileView; profiles: BrowserProfileView[] }>(
+      body.id ? "PUT" : "POST",
+      body.id ? r("/api/browser/profiles/") + encodeURIComponent(body.id) : r("/api/browser/profiles"),
+      body
+    ),
+  deleteBrowserProfile: (id: string) =>
+    call<{ ok: boolean; profiles: BrowserProfileView[] }>("DELETE", r("/api/browser/profiles/") + encodeURIComponent(id)),
+  extensionStatus: () => call<ExtensionStatus>("GET", r("/api/browser/extension")),
+  extensionRotateToken: () => call<ExtensionStatus>("POST", r("/api/browser/extension/rotate"), {}),
   reveal: (id: string, name: string, folder: boolean) => call<Ok>("POST", p(id) + "/reveal", { name, folder }),
   state: () => call<StateResponse>("GET", r("/api/state")),
   project: (id: string) => call<Snapshot>("GET", p(id)),
@@ -171,8 +197,10 @@ export const server = {
   saveConnections: (values: Record<string, string>) => call<{ connections: ConnectionDetail[]; info: Info }>("POST", r("/api/connections"), { values }),
   testConnection: (service: string, resource?: string) => call<{ ok: boolean; message: string }>("POST", r("/api/connections/test"), { service, resource }),
   memories: () => call<{ memories: MemoryEntry[] }>("GET", r("/api/memories")),
-  addMemory: (scope: "memory" | "user", text: string) => call<MemoryEntry>("POST", r("/api/memories"), { scope, text }),
-  deleteMemory: (scope: "memory" | "user", id: number) => call<Ok>("DELETE", r("/api/memories/") + id + "?scope=" + scope),
+  addMemory: (scope: "memory" | "user" | "site", text: string, host?: string) =>
+    call<MemoryEntry>("POST", r("/api/memories"), host ? { scope, host, text } : { scope, text }),
+  deleteMemory: (scope: "memory" | "user" | "site", id: number) =>
+    call<Ok>("DELETE", r("/api/memories/") + id + "?scope=" + scope),
   skills: () => call<{ skills: SkillView[] }>("GET", r("/api/skills")),
   enableSkill: (name: string, on: boolean) => call<{ ok: boolean; skills: SkillView[] }>("POST", r("/api/skills/") + encodeURIComponent(name) + "/enable", { on }),
   deleteSkill: (name: string) => call<{ ok: boolean; skills: SkillView[] }>("DELETE", r("/api/skills/") + encodeURIComponent(name)),

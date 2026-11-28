@@ -20,15 +20,73 @@ type BrowserSession interface {
 }
 
 type BrowserTab struct {
-	Index  int    `json:"index"`
-	URL    string `json:"url"`
-	Title  string `json:"title"`
-	Active bool   `json:"active"`
+	Index    int    `json:"index"`
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	Active   bool   `json:"active"`
+	Frozen   bool   `json:"frozen,omitempty"`
+	Sleeping bool   `json:"sleeping,omitempty"`
+	Crashed  bool   `json:"crashed,omitempty"`
 }
 
 type BrowserViewport struct {
 	Width  int `json:"width"`
 	Height int `json:"height"`
+}
+
+type BrowserChallenge struct {
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type BrowserDialog struct {
+	ID           string `json:"id"`
+	Type         string `json:"type"`
+	Message      string `json:"message"`
+	DefaultValue string `json:"defaultValue,omitempty"`
+}
+
+type BrowserProfileBadge struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+type BrowserTeachStep struct {
+	Index       int    `json:"index"`
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	URL         string `json:"url,omitempty"`
+	Sensitive   bool   `json:"sensitive,omitempty"`
+	At          int64  `json:"at,omitempty"`
+}
+
+type BrowserProxyConfig struct {
+	Scheme   string `json:"scheme"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Bypass   string `json:"bypass,omitempty"`
+}
+
+type BrowserProfileView struct {
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
+	Color         string              `json:"color"`
+	Scope         string              `json:"scope"`
+	BuiltIn       bool                `json:"builtIn,omitempty"`
+	HasProxy      bool                `json:"hasProxy,omitempty"`
+	ProxyPassword bool                `json:"proxyPasswordSet,omitempty"`
+	Proxy         *BrowserProxyConfig `json:"proxy,omitempty"`
+}
+
+type BrowserProfileUpsert struct {
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name"`
+	Color                string              `json:"color"`
+	Proxy                *BrowserProxyConfig `json:"proxy,omitempty"`
+	KeepExistingPassword bool                `json:"keepExistingPassword,omitempty"`
 }
 
 type BrowserInput struct {
@@ -55,20 +113,42 @@ type LiveBrowserSession interface {
 	CloseBrowser()
 }
 
+type ExtendedBrowserSession interface {
+	BrowserResize(ctx context.Context, width, height int) (BrowserState, error)
+	BrowserHandleDialog(ctx context.Context, accept bool, promptText, dialogID string) (BrowserState, error)
+	BrowserContextMenu(ctx context.Context, params map[string]any) (map[string]any, error)
+	BrowserTeach(ctx context.Context, action string) (BrowserState, []BrowserTeachStep, error)
+	SetBrowserProfile(profileID string) (BrowserProfileView, error)
+	SetBrowserEventObserver(fn func(event string, payload map[string]any))
+}
+
+type browserProfilesHost interface {
+	BrowserProfiles() []BrowserProfileView
+	SaveBrowserProfile(in BrowserProfileUpsert) (BrowserProfileView, error)
+	DeleteBrowserProfile(id string) error
+}
+
 type BrowserState struct {
-	Available      bool             `json:"available"`
-	Open           bool             `json:"open"`
-	Live           bool             `json:"live,omitempty"`
-	AgentActive    bool             `json:"agentActive,omitempty"`
-	Takeover       bool             `json:"takeover,omitempty"`
-	TakeoverReason string           `json:"takeoverReason,omitempty"`
-	URL            string           `json:"url,omitempty"`
-	Title          string           `json:"title,omitempty"`
-	Updated        int64            `json:"updated,omitempty"`
-	HasScreenshot  bool             `json:"hasScreenshot"`
-	Output         string           `json:"output,omitempty"`
-	Tabs           []BrowserTab     `json:"tabs,omitempty"`
-	Viewport       *BrowserViewport `json:"viewport,omitempty"`
+	Available      bool                 `json:"available"`
+	Open           bool                 `json:"open"`
+	Live           bool                 `json:"live,omitempty"`
+	AgentActive    bool                 `json:"agentActive,omitempty"`
+	Takeover       bool                 `json:"takeover,omitempty"`
+	TakeoverReason string               `json:"takeoverReason,omitempty"`
+	URL            string               `json:"url,omitempty"`
+	Title          string               `json:"title,omitempty"`
+	Updated        int64                `json:"updated,omitempty"`
+	HasScreenshot  bool                 `json:"hasScreenshot"`
+	Output         string               `json:"output,omitempty"`
+	Cursor         string               `json:"cursor,omitempty"`
+	Challenge      *BrowserChallenge    `json:"challenge,omitempty"`
+	Dialog         *BrowserDialog       `json:"dialog,omitempty"`
+	Profile        *BrowserProfileBadge `json:"profile,omitempty"`
+	Teaching       bool                 `json:"teaching,omitempty"`
+	TeachStartedAt int64                `json:"teachStartedAt,omitempty"`
+	TeachSteps     []BrowserTeachStep   `json:"teachSteps,omitempty"`
+	Tabs           []BrowserTab         `json:"tabs,omitempty"`
+	Viewport       *BrowserViewport     `json:"viewport,omitempty"`
 }
 
 func (s *Server) browserDir(p *project) (string, bool) {
@@ -116,6 +196,7 @@ func (s *Server) browserState(p *project) BrowserState {
 		st.Available = lst.Available
 		st.Takeover = lst.Takeover
 		st.TakeoverReason = lst.TakeoverReason
+		st.Profile = lst.Profile
 		if lst.Live {
 			st.Live = true
 			st.Open = lst.Open
@@ -125,6 +206,12 @@ func (s *Server) browserState(p *project) BrowserState {
 			if lst.Updated != 0 {
 				st.Updated = lst.Updated
 			}
+			st.Cursor = lst.Cursor
+			st.Challenge = lst.Challenge
+			st.Dialog = lst.Dialog
+			st.Teaching = lst.Teaching
+			st.TeachStartedAt = lst.TeachStartedAt
+			st.TeachSteps = lst.TeachSteps
 			st.Tabs = lst.Tabs
 			st.Viewport = lst.Viewport
 			return st
@@ -548,4 +635,226 @@ func (s *Server) browserTakeoverAPI(w http.ResponseWriter, r *http.Request) {
 	st := s.browserState(p)
 	p.emit("browser", map[string]any{"browser": st})
 	writeJSON(w, st)
+}
+
+func (s *Server) browserDialogAPI(w http.ResponseWriter, r *http.Request) {
+	p := s.withProject(w, r)
+	if p == nil {
+		return
+	}
+	var in struct {
+		Accept     bool   `json:"accept"`
+		PromptText string `json:"promptText"`
+		DialogID   string `json:"dialogId"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.session()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	ebs, ok := sess.(ExtendedBrowserSession)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("browser dialog handling is not available"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if _, err := ebs.BrowserHandleDialog(ctx, in.Accept, in.PromptText, in.DialogID); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	st := s.browserState(p)
+	p.emit("browser", map[string]any{"browser": st})
+	writeJSON(w, st)
+}
+
+func (s *Server) browserContextMenuAPI(w http.ResponseWriter, r *http.Request) {
+	p := s.withProject(w, r)
+	if p == nil {
+		return
+	}
+	var in map[string]any
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.session()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	ebs, ok := sess.(ExtendedBrowserSession)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("browser context menu is not available"))
+		return
+	}
+	if act, _ := in["action"].(string); strings.EqualFold(act, "open_new_tab") {
+		if rawURL, _ := in["url"].(string); rawURL != "" {
+			u, err := normalizeActionURL(rawURL)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, err)
+				return
+			}
+			in["url"] = u
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	res, err := ebs.BrowserContextMenu(ctx, in)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func (s *Server) browserResizeAPI(w http.ResponseWriter, r *http.Request) {
+	p := s.withProject(w, r)
+	if p == nil {
+		return
+	}
+	var in struct {
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.session()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	ebs, ok := sess.(ExtendedBrowserSession)
+	if !ok {
+		writeJSON(w, s.browserState(p))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if _, err := ebs.BrowserResize(ctx, in.Width, in.Height); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, s.browserState(p))
+}
+
+func (s *Server) browserTeachAPI(w http.ResponseWriter, r *http.Request) {
+	p := s.withProject(w, r)
+	if p == nil {
+		return
+	}
+	var in struct {
+		Action string `json:"action"` // "start" | "stop" | "cancel"
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.session()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	ebs, ok := sess.(ExtendedBrowserSession)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("Teach a Task is not available"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	_, steps, err := ebs.BrowserTeach(ctx, in.Action)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	st := s.browserState(p)
+	p.emit("browser", map[string]any{"browser": st})
+	writeJSON(w, map[string]any{"browser": st, "steps": steps})
+}
+
+func (s *Server) browserProfilesAPI(w http.ResponseWriter, _ *http.Request) {
+	ph, ok := s.host.(browserProfilesHost)
+	if !ok {
+		writeJSON(w, map[string]any{"profiles": []BrowserProfileView{}})
+		return
+	}
+	list := ph.BrowserProfiles()
+	if list == nil {
+		list = []BrowserProfileView{}
+	}
+	writeJSON(w, map[string]any{"profiles": list})
+}
+
+func (s *Server) saveBrowserProfileAPI(w http.ResponseWriter, r *http.Request) {
+	ph, ok := s.host.(browserProfilesHost)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("browser profiles are not supported"))
+		return
+	}
+	var in BrowserProfileUpsert
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if pid := r.PathValue("id"); pid != "" && in.ID == "" {
+		in.ID = pid
+	}
+	prof, err := ph.SaveBrowserProfile(in)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, map[string]any{"profile": prof, "profiles": ph.BrowserProfiles()})
+}
+
+func (s *Server) deleteBrowserProfileAPI(w http.ResponseWriter, r *http.Request) {
+	ph, ok := s.host.(browserProfilesHost)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("browser profiles are not supported"))
+		return
+	}
+	id := r.PathValue("id")
+	if err := ph.DeleteBrowserProfile(id); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "profiles": ph.BrowserProfiles()})
+}
+
+func (s *Server) setProjectBrowserProfileAPI(w http.ResponseWriter, r *http.Request) {
+	p := s.withProject(w, r)
+	if p == nil {
+		return
+	}
+	var in struct {
+		ProfileID string `json:"profileId"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.session()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	ebs, ok := sess.(ExtendedBrowserSession)
+	if !ok {
+		writeErr(w, http.StatusNotImplemented, errors.New("browser profiles are not available"))
+		return
+	}
+	prof, err := ebs.SetBrowserProfile(in.ProfileID)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	st := s.browserState(p)
+	p.emit("browser", map[string]any{"browser": st})
+	writeJSON(w, map[string]any{"profile": prof, "browser": st})
 }

@@ -20,6 +20,7 @@ export type SettingsSectionId =
   | "memory"
   | "mcp"
   | "skills"
+  | "browser"
   | "connections"
   | "servers"
   | "execution"
@@ -75,6 +76,8 @@ export interface State {
   rightTab: RightTab;
   changes: ChangesResponse | null;
   browserView: BrowserState | null;
+  browserExpanded: boolean;
+  browserCursor: string;
   activeThread: string;
   threads: ThreadSummary[];
   update: UpdateStatus | null;
@@ -135,6 +138,8 @@ let state: State = {
   rightTab: "plan",
   changes: null,
   browserView: null,
+  browserExpanded: false,
+  browserCursor: "default",
   activeThread: "default",
   threads: [],
   update: null,

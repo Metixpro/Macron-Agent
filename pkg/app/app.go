@@ -17,7 +17,7 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-const Version = "2.0.0"
+const Version = "2.1.0"
 
 const (
 	Name          = "Macron Agent"

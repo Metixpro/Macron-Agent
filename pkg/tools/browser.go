@@ -323,23 +323,29 @@ func (r *Registry) registerBrowserTools() {
 		r.Search.Render = r.renderPage
 	}
 	r.add(ToolBrowser,
-		"A real live browser (persistent headless Chromium): open, click, fill forms, sign up, log in, drag/hold/move mouse, switch tabs, handle iframes, scroll, read, run JS, screenshot, PDF, upload, "+
-			"download; logins and tabs stay live so the user can watch or take over at any time. One call runs a list of actions and returns the page text, clickable elements with selectors "+
-			"and a screenshot. Only set close_after=true (or run {\"action\":\"close\"}) when the user asks to close the browser. Plain reading: web_fetch.",
+		"A real live browser (persistent Chromium with revisioned semantic snapshots, smart SPA settling, cookie-banner auto-refusal, profiles, and live user Takeover). "+
+			"Each snapshot returns revisioned refs (`rev:frame:idx`, e.g. `3:main:12`) with ARIA roles and states — pass those refs to `click`, `fill`, `fill_fields`, `select`, etc. "+
+			"Prefer `fill_fields` for multi-field non-sensitive forms and `script` (`run_script`) for multi-step loops/filtering to save turns. "+
+			"If a page shows a CAPTCHA/verification challenge or asks for sensitive credentials (password/OTP/card), call `request_takeover` and let the user handle it. "+
+			"Screenshots are opt-in (`screenshot: true`) to save tokens; live preview stays active for the user. Plain reading: web_fetch.",
 		map[string]any{
-			"url": prop("string", "https://… or a workspace .html; empty = the last page"),
-			"actions": map[string]any{"type": "array", "description": `e.g. [{"action":"goto","url":"…"},{"action":"click","selector":"…"}]: ` +
-				"goto{url} click{selector,frame?,button?,count?} click_at{x,y,button?,count?} move_at{x,y,steps?} " +
+			"url": prop("string", "https://… or a workspace .html; empty = current page"),
+			"actions": map[string]any{"type": "array", "description": `e.g. [{"action":"goto","url":"…"},{"action":"click","selector":"3:main:12"}]: ` +
+				"goto{url,until?} click{selector,frame?,button?,count?,until?} click_at{x,y,button?,count?} move_at{x,y,steps?} " +
 				"drag{selector|x,y, to_selector|to_x,to_y, steps?} hold{selector|x,y,ms?} " +
-				"fill{selector,text,frame?} type{selector?,text,clear?,delay_ms?,frame?} press{key,frame?} " +
+				"fill{selector,text,mode?,submit?,frame?} fill_fields{fields:[{selector,value,mode?}]} type{selector?,text,clear?,delay_ms?,submit?,frame?} press{key,frame?} " +
 				"select{selector,value,frame?} check|uncheck|hover{selector,frame?} scroll{selector|to|y,frame?} wait{ms|selector|text,frame?} " +
-				"tabs switch_tab{index|url|title} close_tab " +
+				"handle_dialog{accept?,prompt_text?} request_takeover{reason} save_site_memory{host?,text} delete_site_memory{id} " +
+				"tabs new_tab{url?} switch_tab{index|url|title} close_tab " +
 				"screenshot{name?,full_page?,selector?} pdf{name?} extract{selector,attribute?,limit?,frame?} eval{script,frame?} back forward reload close " +
-				"upload{selector,files,frame?} download{selector,name?,frame?}. Selectors: CSS, text=\"…\", role=button[name=\"…\"], or ones listed before",
+				"upload{selector,files,frame?} download{selector,name?,frame?}. Targets: revisioned ref (`3:main:12`), CSS, `text=\"…\"`, or `role=button[name=\"…\"]`.",
 				"items": map[string]any{"type": "object"}},
+			"script":          prop("string", "Sandboxed JS multi-step script (`run_script`) with click(), fill(), fillFields(), waitFor(), evaluate(), snapshot(), navigate(), press(), select(), scroll(), sleep(), log(). Returns summary + 1 final snapshot."),
+			"until":           prop("string", "Settle mode: dom-quiet (default, SPA/skeleton-aware), load, or none"),
+			"profile":         prop("string", "Browser profile ID (default: active session profile, e.g. workspace, shared, or a named profile)"),
 			"mobile":          prop("boolean", "Phone viewport"),
 			"full_page":       prop("boolean", "Whole page in the final screenshot"),
-			"screenshot":      prop("boolean", "Final screenshot (default true)"),
+			"screenshot":      prop("boolean", "Save final PNG screenshot to workspace (default false to save tokens; set true when visual inspection is needed)"),
 			"close_after":     prop("boolean", "Close the live browser preview when this call finishes (use when task is done)"),
 			"locale":          prop("string", "e.g. fa-IR (default en-US)"),
 			"new_session":     prop("boolean", "Forget cookies and the last page"),
@@ -388,20 +394,29 @@ func (r *Registry) renderPage(ctx context.Context, url string) (*search.Page, er
 
 const renderSession = "macron-render"
 
+type browserPageItem struct {
+	Ref     string   `json:"ref"`
+	Tag     string   `json:"tag"`
+	Role    string   `json:"role"`
+	Sel     string   `json:"sel"`
+	Text    string   `json:"text"`
+	Type    string   `json:"type"`
+	Value   string   `json:"value"`
+	States  []string `json:"states"`
+	Href    string   `json:"href"`
+	Options []string `json:"options"`
+	Frame   int      `json:"frame"`
+}
+
 type browserPage struct {
-	Title string `json:"title"`
-	URL   string `json:"url"`
-	Text  string `json:"text"`
-	More  int    `json:"more"`
-	Items []struct {
-		Tag     string   `json:"tag"`
-		Sel     string   `json:"sel"`
-		Text    string   `json:"text"`
-		Type    string   `json:"type"`
-		Href    string   `json:"href"`
-		Options []string `json:"options"`
-		Frame   int      `json:"frame"`
-	} `json:"items"`
+	Rev       int               `json:"rev"`
+	Title     string            `json:"title"`
+	URL       string            `json:"url"`
+	Text      string            `json:"text"`
+	More      int               `json:"more"`
+	Challenge *BrowserChallenge `json:"challenge"`
+	Dialog    *BrowserDialog    `json:"dialog"`
+	Items     []browserPageItem `json:"items"`
 }
 
 func (r *Registry) HasBrowser() bool {
@@ -415,41 +430,120 @@ func (r *Registry) Browse(ctx context.Context, sessionID string, args map[string
 	return r.browse(ctx, sessionID, args)
 }
 
-func (r *Registry) browse(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+func (r *Registry) browse(ctx context.Context, sessionID string, rawArgs map[string]any) (string, error) {
+	args, _ := repairBrowserToolArgs(rawArgs)
+
 	timeoutSec := intArg(args, "timeout_seconds", 60, 5, 180)
 	navTimeoutMS := min(timeoutSec*1000, 90000)
 	actionTimeoutMS := min(max(timeoutSec*500, 5000), 30000)
+
+	// Opt-in screenshots by default when using live daemon (saves tokens!).
+	wantShot := strArg(args, "screenshot") == "true"
+
 	cfg := map[string]any{
 		"url":            strArg(args, "url"),
+		"until":          normalizeWaitUntil(strArg(args, "until")),
+		"profile":        strArg(args, "profile"),
 		"mobile":         strArg(args, "mobile") == "true",
 		"full_page":      strArg(args, "full_page") == "true",
-		"screenshot":     strArg(args, "screenshot") != "false",
+		"screenshot":     wantShot,
 		"close_after":    strArg(args, "close_after") == "true",
 		"locale":         strArg(args, "locale"),
 		"new_session":    strArg(args, "new_session") == "true",
 		"timeout_ms":     actionTimeoutMS,
 		"nav_timeout_ms": navTimeoutMS,
 	}
+
 	if raw, ok := args["actions"].(string); ok && strings.TrimSpace(raw) != "" {
 		var acts []any
 		if json.Unmarshal([]byte(raw), &acts) != nil {
 			return "error: actions must be a list of objects", nil
 		}
-		args["actions"] = acts
+		// Re-run repair on parsed JSON action list.
+		repaired := make([]any, 0, len(acts))
+		for _, it := range acts {
+			if m, ok := it.(map[string]any); ok {
+				rm, _ := repairBrowserAction(m)
+				repaired = append(repaired, rm)
+			} else {
+				repaired = append(repaired, it)
+			}
+		}
+		args["actions"] = repaired
 	}
+
+	// Check for top-level `script` or a `run_script` action.
+	scriptCode := strings.TrimSpace(strArg(args, "script"))
 	if acts, ok := args["actions"].([]any); ok {
 		if len(acts) > 40 {
 			return "error: at most 40 actions per call", nil
 		}
-		cfg["actions"] = normalizeActions(acts)
+		norm := normalizeActions(acts)
+		// Intercept Go-side site memory actions and run_script cleanly.
+		var filtered []any
+		var memLogs []string
+		for _, item := range norm {
+			m, ok := item.(map[string]any)
+			if !ok {
+				filtered = append(filtered, item)
+				continue
+			}
+			verb := strings.ToLower(strings.TrimSpace(fmt.Sprint(m["action"])))
+			switch verb {
+			case "save_site_memory":
+				host := strings.TrimSpace(fmt.Sprint(m["host"]))
+				if host == "" || host == "<nil>" {
+					host = cfg["url"].(string)
+					if host == "" {
+						host = r.BrowserState(sessionID).URL
+					}
+				}
+				txt := strings.TrimSpace(fmt.Sprint(m["text"]))
+				if txt == "<nil>" {
+					txt = ""
+				}
+				entry, err := r.AddSiteMemory(host, txt)
+				if err != nil {
+					memLogs = append(memLogs, "✗ save_site_memory → "+err.Error())
+				} else {
+					memLogs = append(memLogs, fmt.Sprintf("✓ saved site memory #%d for %s", entry.ID, entry.Host))
+				}
+			case "delete_site_memory":
+				idVal := 0
+				switch x := m["id"].(type) {
+				case float64:
+					idVal = int(x)
+				case int:
+					idVal = x
+				case string:
+					idVal, _ = strconv.Atoi(x)
+				}
+				if err := r.DeleteSiteMemory(idVal); err != nil {
+					memLogs = append(memLogs, "✗ delete_site_memory → "+err.Error())
+				} else {
+					memLogs = append(memLogs, fmt.Sprintf("✓ deleted site memory #%d", idVal))
+				}
+			case "run_script":
+				if sc, ok := m["script"].(string); ok && strings.TrimSpace(sc) != "" {
+					scriptCode = strings.TrimSpace(sc)
+				}
+			default:
+				filtered = append(filtered, m)
+			}
+		}
+		if len(memLogs) > 0 && len(filtered) == 0 && scriptCode == "" && cfg["url"].(string) == "" {
+			return strings.Join(memLogs, "\n"), nil
+		}
+		cfg["actions"] = filtered
 	}
+
 	if err := validateBrowserTarget(cfg["url"].(string)); err != nil {
 		return "error: " + err.Error(), nil
 	}
 	acts, _ := cfg["actions"].([]any)
 	for _, a := range acts {
 		if m, ok := a.(map[string]any); ok {
-			if kind, _ := m["action"].(string); strings.EqualFold(kind, "goto") {
+			if kind, _ := m["action"].(string); strings.EqualFold(kind, "goto") || strings.EqualFold(kind, "new_tab") {
 				if u, _ := m["url"].(string); u != "" {
 					if err := validateBrowserTarget(u); err != nil {
 						return "error: " + err.Error(), nil
@@ -461,6 +555,25 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 	if refused := r.gateBrowser(ctx, sessionID, cfg["url"].(string), acts); refused != "" {
 		return refused, nil
 	}
+
+	// Sandboxed JS run_script execution path.
+	if scriptCode != "" {
+		if cfg["url"].(string) != "" {
+			if _, err := r.BrowserNav(ctx, sessionID, "goto", map[string]any{"url": cfg["url"].(string)}); err != nil {
+				return "error: " + err.Error(), nil
+			}
+		}
+		if prof := cfg["profile"].(string); prof != "" {
+			_, _ = r.SetSessionBrowserProfile(sessionID, prof)
+		}
+		scriptTimeout := time.Duration(timeoutSec) * time.Second
+		sres, err := r.BrowserRunScript(ctx, sessionID, scriptCode, scriptTimeout)
+		if err != nil {
+			return "error: " + err.Error(), nil
+		}
+		return r.formatScriptOutput(sessionID, sres), nil
+	}
+
 	var res browserToolOutput
 	runTimeout := time.Duration(timeoutSec)*time.Second + 15*time.Second
 	if runTimeout > browserTimeout {
@@ -476,16 +589,55 @@ func (r *Registry) browse(ctx context.Context, sessionID string, args map[string
 			return "error: " + err.Error(), nil
 		}
 	}
-	return formatBrowserToolOutput(cfg, &res), nil
+	var siteNotes []SiteMemory
+	if res.Page.URL != "" {
+		siteNotes = r.siteMem().claimForTurn(browserSessionKey(sessionID), res.Page.URL)
+	}
+	return formatBrowserToolOutput(cfg, &res, siteNotes), nil
+}
+
+func (r *Registry) formatScriptOutput(sessionID string, sres browserScriptResult) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Script completed (%d steps).\n", sres.Steps)
+	if sres.Interrupted != "" {
+		fmt.Fprintf(&sb, "Interrupted: %s\n", sres.Interrupted)
+	}
+	if len(sres.Logs) > 0 {
+		sb.WriteString("Logs:\n")
+		for _, ln := range sres.Logs {
+			sb.WriteString("  " + ln + "\n")
+		}
+	}
+	if sres.Value != nil {
+		if raw, err := json.MarshalIndent(sres.Value, "", "  "); err == nil {
+			sb.WriteString("Result:\n" + string(raw) + "\n")
+		}
+	}
+	if len(sres.Page) > 0 {
+		raw, err := json.Marshal(sres.Page)
+		if err == nil {
+			var page browserPage
+			if json.Unmarshal(raw, &page) == nil {
+				out := browserToolOutput{Page: page}
+				var siteNotes []SiteMemory
+				if page.URL != "" {
+					siteNotes = r.siteMem().claimForTurn(browserSessionKey(sessionID), page.URL)
+				}
+				sb.WriteString("\n" + formatBrowserToolOutput(map[string]any{}, &out, siteNotes))
+			}
+		}
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 type browserToolOutput struct {
-	Page    browserPage `json:"page"`
-	Error   string      `json:"error"`
-	Files   []string    `json:"files"`
-	Errors  []string    `json:"errors"`
-	Dialogs []string    `json:"dialogs"`
-	Log     []struct {
+	Page      browserPage       `json:"page"`
+	Error     string            `json:"error"`
+	Files     []string          `json:"files"`
+	Errors    []string          `json:"errors"`
+	Dialogs   []string          `json:"dialogs"`
+	Challenge *BrowserChallenge `json:"challenge"`
+	Log       []struct {
 		Step   int    `json:"step"`
 		What   string `json:"what"`
 		OK     bool   `json:"ok"`
@@ -493,7 +645,7 @@ type browserToolOutput struct {
 	} `json:"log"`
 }
 
-func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput) string {
+func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput, siteNotes []SiteMemory) string {
 	if res.Error != "" {
 		return "error: " + res.Error
 	}
@@ -505,8 +657,39 @@ func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput) string 
 		}
 		sb.WriteString("\n")
 	} else {
-		fmt.Fprintf(&sb, "Page: %s — %s\n", res.Page.Title, res.Page.URL)
+		if res.Page.Rev > 0 {
+			fmt.Fprintf(&sb, "Page [rev:%d]: %s — %s\n", res.Page.Rev, res.Page.Title, res.Page.URL)
+		} else {
+			fmt.Fprintf(&sb, "Page: %s — %s\n", res.Page.Title, res.Page.URL)
+		}
 	}
+
+	ch := res.Challenge
+	if ch == nil {
+		ch = res.Page.Challenge
+	}
+	if ch != nil && ch.Status != "" && ch.Status != "none" {
+		switch ch.Status {
+		case "needs-user":
+			fmt.Fprintf(&sb, "⚠ Challenge [needs-user]: %s — User Takeover has been triggered. Wait for the user to complete verification before continuing.\n", ch.Reason)
+		case "blocked":
+			fmt.Fprintf(&sb, "⚠ Challenge [blocked]: %s — Access blocked by site security policy.\n", ch.Reason)
+		default:
+			fmt.Fprintf(&sb, "⚠ Challenge [%s]: %s\n", ch.Status, ch.Reason)
+		}
+	}
+
+	if res.Page.Dialog != nil {
+		fmt.Fprintf(&sb, "Open JS Dialog [%s]: %q (respond with handle_dialog or let the user answer in Live View)\n", res.Page.Dialog.Type, res.Page.Dialog.Message)
+	}
+
+	if len(siteNotes) > 0 {
+		sb.WriteString("\nSite Memories (auto-loaded for this domain):\n")
+		for _, m := range siteNotes {
+			fmt.Fprintf(&sb, "- [%s] %s\n", m.Host, m.Text)
+		}
+	}
+
 	for _, l := range res.Log {
 		mark := "✓"
 		if !l.OK {
@@ -522,20 +705,33 @@ func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput) string 
 		fmt.Fprintf(&sb, "Files: %s (look with view_image, deliver with send_file)\n", strings.Join(res.Files, ", "))
 	}
 	if len(res.Dialogs) > 0 {
-		sb.WriteString("Dialogs (accepted): " + strings.Join(res.Dialogs, " | ") + "\n")
+		sb.WriteString("Dialogs: " + strings.Join(res.Dialogs, " | ") + "\n")
 	}
 	if len(res.Errors) > 0 {
 		sb.WriteString("Page script errors: " + strings.Join(res.Errors, " | ") + "\n")
 	}
 	if len(res.Page.Items) > 0 {
-		sb.WriteString("\nElements (selector ← what):\n")
+		sb.WriteString("\nInteractive Elements (ref ← role \"label\" [states]):\n")
 		for _, it := range res.Page.Items {
-			desc := it.Tag
-			if it.Type != "" {
+			id := it.Ref
+			if id == "" {
+				id = it.Sel
+			}
+			desc := it.Role
+			if desc == "" {
+				desc = it.Tag
+			}
+			if it.Type != "" && it.Type != "text" {
 				desc += "[" + it.Type + "]"
 			}
 			if it.Text != "" {
 				desc += " " + strconv.Quote(it.Text)
+			}
+			if it.Value != "" {
+				desc += " value=" + strconv.Quote(it.Value)
+			}
+			if len(it.States) > 0 {
+				desc += " (" + strings.Join(it.States, ", ") + ")"
 			}
 			if len(it.Options) > 0 {
 				desc += " options: " + strings.Join(it.Options, " / ")
@@ -543,7 +739,7 @@ func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput) string 
 			if it.Frame > 0 {
 				desc += fmt.Sprintf(" [frame:%d]", it.Frame)
 			}
-			fmt.Fprintf(&sb, "- %s ← %s\n", it.Sel, desc)
+			fmt.Fprintf(&sb, "- %s ← %s\n", id, desc)
 		}
 	}
 	if res.Page.Text != "" {
@@ -555,10 +751,17 @@ func formatBrowserToolOutput(cfg map[string]any, res *browserToolOutput) string 
 	return strings.TrimSpace(sb.String())
 }
 
-var browserActions = map[string]string{"goto": "url", "click": "selector", "click_at": "x", "move_at": "x", "drag": "selector", "drag_at": "x", "hold": "selector",
-	"fill": "text", "type": "text", "press": "key", "select": "value", "check": "selector", "uncheck": "selector", "hover": "selector", "scroll": "to",
-	"wait": "ms", "tabs": "", "switch_tab": "index", "close_tab": "", "screenshot": "name", "pdf": "name", "extract": "selector", "eval": "script",
-	"back": "", "forward": "", "reload": "", "close": "", "upload": "selector", "download": "selector"}
+var browserActions = map[string]string{
+	"goto": "url", "new_tab": "url", "click": "selector", "click_at": "x", "move_at": "x",
+	"drag": "selector", "drag_at": "x", "hold": "selector",
+	"fill": "text", "fill_fields": "fields", "type": "text", "press": "key", "select": "value",
+	"check": "selector", "uncheck": "selector", "hover": "selector", "scroll": "to",
+	"wait": "ms", "tabs": "", "switch_tab": "index", "close_tab": "",
+	"screenshot": "name", "pdf": "name", "extract": "selector", "eval": "script",
+	"run_script": "script", "handle_dialog": "accept", "request_takeover": "reason",
+	"save_site_memory": "text", "delete_site_memory": "id",
+	"back": "", "forward": "", "reload": "", "close": "", "upload": "selector", "download": "selector",
+}
 
 func normalizeActions(acts []any) []any {
 	out := make([]any, 0, len(acts))
@@ -614,6 +817,8 @@ func normalizeActions(acts []any) []any {
 					act["action"] = "eval"
 				case act["key"] != nil:
 					act["action"] = "press"
+				case act["fields"] != nil:
+					act["action"] = "fill_fields"
 				case act["selector"] != nil && act["text"] != nil:
 					act["action"] = "fill"
 				case act["selector"] != nil:

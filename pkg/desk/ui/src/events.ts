@@ -165,8 +165,26 @@ function onProjectEvent(ev: ServerEvent) {
       patchLive(() => ({ plan: (ev.items as PlanItem[]) || [] }));
       return;
     case "browser":
-      if (ev.browser) setState({ browserView: ev.browser as BrowserState });
-      else if (ev.project) void loadBrowser(ev.project);
+      if (ev.browser) {
+        const bv = ev.browser as BrowserState;
+        setState((s) => ({
+          browserView: bv,
+          browserCursor: bv.cursor || s.browserCursor,
+          browserExpanded: bv.open ? s.browserExpanded : false,
+        }));
+      } else if (ev.project) {
+        void loadBrowser(ev.project);
+      }
+      return;
+    case "browser_cursor":
+      if (typeof ev.cursor === "string" && ev.cursor) {
+        setState({ browserCursor: ev.cursor });
+      }
+      return;
+    case "browser_clipboard":
+      if (typeof ev.text === "string" && ev.text && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(ev.text).catch(() => undefined);
+      }
       return;
     case "sub": {
       const sub = ev.sub as LiveSub;

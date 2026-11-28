@@ -30,10 +30,13 @@ const (
 var errDaemonUnsupported = errors.New("persistent browser daemon unavailable")
 
 type BrowserTab struct {
-	Index  int    `json:"index"`
-	URL    string `json:"url"`
-	Title  string `json:"title"`
-	Active bool   `json:"active"`
+	Index    int    `json:"index"`
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	Active   bool   `json:"active"`
+	Frozen   bool   `json:"frozen,omitempty"`
+	Sleeping bool   `json:"sleeping,omitempty"`
+	Crashed  bool   `json:"crashed,omitempty"`
 }
 
 type BrowserViewport struct {
@@ -41,18 +44,52 @@ type BrowserViewport struct {
 	Height int `json:"height"`
 }
 
+type BrowserChallenge struct {
+	Status string `json:"status"` // "none" | "checking" | "needs-user" | "blocked"
+	Reason string `json:"reason,omitempty"`
+}
+
+type BrowserDialog struct {
+	ID           string `json:"id"`
+	Type         string `json:"type"` // "alert" | "confirm" | "prompt" | "beforeunload"
+	Message      string `json:"message"`
+	DefaultValue string `json:"defaultValue,omitempty"`
+}
+
+type BrowserProfileBadge struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+type TeachStep struct {
+	Index       int    `json:"index"`
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	URL         string `json:"url,omitempty"`
+	Sensitive   bool   `json:"sensitive,omitempty"`
+	At          int64  `json:"at,omitempty"`
+}
+
 type BrowserLiveState struct {
-	Available      bool             `json:"available"`
-	Open           bool             `json:"open"`
-	Live           bool             `json:"live"`
-	AgentActive    bool             `json:"agentActive"`
-	Takeover       bool             `json:"takeover"`
-	TakeoverReason string           `json:"takeoverReason,omitempty"`
-	URL            string           `json:"url,omitempty"`
-	Title          string           `json:"title,omitempty"`
-	Updated        int64            `json:"updated,omitempty"`
-	Tabs           []BrowserTab     `json:"tabs,omitempty"`
-	Viewport       *BrowserViewport `json:"viewport,omitempty"`
+	Available      bool                 `json:"available"`
+	Open           bool                 `json:"open"`
+	Live           bool                 `json:"live"`
+	AgentActive    bool                 `json:"agentActive"`
+	Takeover       bool                 `json:"takeover"`
+	TakeoverReason string               `json:"takeoverReason,omitempty"`
+	URL            string               `json:"url,omitempty"`
+	Title          string               `json:"title,omitempty"`
+	Updated        int64                `json:"updated,omitempty"`
+	Cursor         string               `json:"cursor,omitempty"`
+	Challenge      *BrowserChallenge    `json:"challenge,omitempty"`
+	Dialog         *BrowserDialog       `json:"dialog,omitempty"`
+	Profile        *BrowserProfileBadge `json:"profile,omitempty"`
+	Teaching       bool                 `json:"teaching,omitempty"`
+	TeachStartedAt int64                `json:"teachStartedAt,omitempty"`
+	TeachSteps     []TeachStep          `json:"teachSteps,omitempty"`
+	Tabs           []BrowserTab         `json:"tabs,omitempty"`
+	Viewport       *BrowserViewport     `json:"viewport,omitempty"`
 }
 
 type BrowserInputEvent struct {
@@ -79,24 +116,26 @@ type browserPool struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mu        sync.Mutex
-	daemons   map[string]*browserDaemon
-	starting  map[string]chan struct{}
-	takeover  map[string]*takeoverSlot
-	observers map[string]func(BrowserLiveState)
+	mu             sync.Mutex
+	daemons        map[string]*browserDaemon
+	starting       map[string]chan struct{}
+	takeover       map[string]*takeoverSlot
+	observers      map[string]func(BrowserLiveState)
+	eventObservers map[string]func(event string, payload map[string]any)
 }
 
 func (r *Registry) daemonPool() *browserPool {
 	r.poolOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		r.browserPool = &browserPool{
-			reg:       r,
-			ctx:       ctx,
-			cancel:    cancel,
-			daemons:   map[string]*browserDaemon{},
-			starting:  map[string]chan struct{}{},
-			takeover:  map[string]*takeoverSlot{},
-			observers: map[string]func(BrowserLiveState){},
+			reg:            r,
+			ctx:            ctx,
+			cancel:         cancel,
+			daemons:        map[string]*browserDaemon{},
+			starting:       map[string]chan struct{}{},
+			takeover:       map[string]*takeoverSlot{},
+			observers:      map[string]func(BrowserLiveState){},
+			eventObservers: map[string]func(event string, payload map[string]any){},
 		}
 		go r.browserPool.reapLoop()
 	})
@@ -145,8 +184,21 @@ func (p *browserPool) notifyObserver(key string) {
 	}
 }
 
+func (p *browserPool) notifyEvent(key, event string, payload map[string]any) {
+	p.mu.Lock()
+	fn := p.eventObservers[key]
+	p.mu.Unlock()
+	if fn != nil {
+		fn(event, payload)
+	}
+}
+
 func (p *browserPool) stateLocked(key string) BrowserLiveState {
 	st := BrowserLiveState{Available: p.reg.HasBrowser()}
+	if ps := p.reg.profileStore(); ps != nil {
+		prof, _ := ps.get(ps.activeProfileID(key))
+		st.Profile = &BrowserProfileBadge{ID: prof.ID, Name: prof.Name, Color: prof.Color}
+	}
 	if slot := p.takeover[key]; slot != nil {
 		st.Takeover = slot.active
 		st.TakeoverReason = slot.reason
@@ -156,7 +208,12 @@ func (p *browserPool) stateLocked(key string) BrowserLiveState {
 		ds.Available = st.Available
 		ds.Live = true
 		ds.Takeover = st.Takeover
-		ds.TakeoverReason = st.TakeoverReason
+		if st.TakeoverReason != "" {
+			ds.TakeoverReason = st.TakeoverReason
+		}
+		if ds.Profile == nil {
+			ds.Profile = st.Profile
+		}
 		return ds
 	}
 	return st
@@ -317,8 +374,22 @@ func (p *browserPool) startDaemon(ctx context.Context, sessionID, key string, in
 		"mobile":  false,
 		"locale":  "en-US",
 	}
+	if ps := p.reg.profileStore(); ps != nil {
+		profID := ps.activeProfileID(key)
+		if reqProf, ok := initCfg["profile"].(string); ok && strings.TrimSpace(reqProf) != "" {
+			profID = strings.TrimSpace(strings.ToLower(reqProf))
+		}
+		if _, pcfg, err := ps.resolveLaunchConfig(profID); err == nil {
+			for k, v := range pcfg {
+				cfg[k] = v
+			}
+		} else {
+			_ = os.RemoveAll(scriptDir)
+			return nil, err
+		}
+	}
 	for k, v := range initCfg {
-		if v != nil {
+		if v != nil && k != "profile" {
 			cfg[k] = v
 		}
 	}
@@ -396,25 +467,38 @@ type daemonReply struct {
 }
 
 type daemonStateMsg struct {
-	Open        bool             `json:"open"`
-	URL         string           `json:"url"`
-	Title       string           `json:"title"`
-	Updated     int64            `json:"updated"`
-	Paused      bool             `json:"paused"`
-	AgentActive bool             `json:"agent_active"`
-	Tabs        []BrowserTab     `json:"tabs"`
-	Viewport    *BrowserViewport `json:"viewport"`
+	Open           bool                 `json:"open"`
+	URL            string               `json:"url"`
+	Title          string               `json:"title"`
+	Updated        int64                `json:"updated"`
+	Paused         bool                 `json:"paused"`
+	TakeoverReason string               `json:"takeover_reason"`
+	AgentActive    bool                 `json:"agent_active"`
+	Cursor         string               `json:"cursor"`
+	Challenge      *BrowserChallenge    `json:"challenge"`
+	Dialog         *BrowserDialog       `json:"dialog"`
+	Profile        *BrowserProfileBadge `json:"profile"`
+	Teaching       bool                 `json:"teaching"`
+	TeachStartedAt int64                `json:"teach_started_at"`
+	TeachSteps     []TeachStep          `json:"teach_steps"`
+	Tabs           []BrowserTab         `json:"tabs"`
+	Viewport       *BrowserViewport     `json:"viewport"`
 }
 
 type daemonWireMsg struct {
-	ID     int64           `json:"id"`
-	Event  string          `json:"event"`
-	OK     bool            `json:"ok"`
-	Error  string          `json:"error"`
-	Result json.RawMessage `json:"result"`
-	State  *daemonStateMsg `json:"state"`
-	Closed bool            `json:"closed"`
-	JPEG   string          `json:"jpeg"`
+	ID        int64             `json:"id"`
+	Event     string            `json:"event"`
+	OK        bool              `json:"ok"`
+	Error     string            `json:"error"`
+	Result    json.RawMessage   `json:"result"`
+	State     *daemonStateMsg   `json:"state"`
+	Closed    bool              `json:"closed"`
+	JPEG      string            `json:"jpeg"`
+	Cursor    string            `json:"cursor"`
+	Text      string            `json:"text"`
+	Reason    string            `json:"reason"`
+	Dialog    *BrowserDialog    `json:"dialog"`
+	Challenge *BrowserChallenge `json:"challenge"`
 }
 
 type browserDaemon struct {
@@ -460,9 +544,24 @@ func (d *browserDaemon) getState() BrowserLiveState {
 	if len(d.state.Tabs) > 0 {
 		cp.Tabs = append([]BrowserTab(nil), d.state.Tabs...)
 	}
+	if len(d.state.TeachSteps) > 0 {
+		cp.TeachSteps = append([]TeachStep(nil), d.state.TeachSteps...)
+	}
 	if d.state.Viewport != nil {
 		vp := *d.state.Viewport
 		cp.Viewport = &vp
+	}
+	if d.state.Challenge != nil {
+		ch := *d.state.Challenge
+		cp.Challenge = &ch
+	}
+	if d.state.Dialog != nil {
+		dl := *d.state.Dialog
+		cp.Dialog = &dl
+	}
+	if d.state.Profile != nil {
+		pr := *d.state.Profile
+		cp.Profile = &pr
 	}
 	return cp
 }
@@ -487,6 +586,31 @@ func (d *browserDaemon) applyState(sm *daemonStateMsg) {
 	d.state.URL = sm.URL
 	d.state.Title = sm.Title
 	d.state.Updated = sm.Updated
+	if sm.Cursor != "" {
+		d.state.Cursor = sm.Cursor
+	}
+	if sm.TakeoverReason != "" {
+		d.state.TakeoverReason = sm.TakeoverReason
+	}
+	if sm.Challenge != nil {
+		ch := *sm.Challenge
+		d.state.Challenge = &ch
+	} else {
+		d.state.Challenge = nil
+	}
+	if sm.Dialog != nil {
+		dl := *sm.Dialog
+		d.state.Dialog = &dl
+	} else {
+		d.state.Dialog = nil
+	}
+	if sm.Profile != nil {
+		pr := *sm.Profile
+		d.state.Profile = &pr
+	}
+	d.state.Teaching = sm.Teaching
+	d.state.TeachStartedAt = sm.TeachStartedAt
+	d.state.TeachSteps = append([]TeachStep(nil), sm.TeachSteps...)
 	d.state.Tabs = append([]BrowserTab(nil), sm.Tabs...)
 	if sm.Viewport != nil {
 		vp := *sm.Viewport
@@ -613,6 +737,55 @@ func (d *browserDaemon) handleWireMsg(msg *daemonWireMsg) {
 			d.pool.notifyObserver(d.key)
 		}
 	case "state":
+		d.pool.notifyObserver(d.key)
+	case "cursor":
+		if msg.Cursor != "" {
+			d.mu.Lock()
+			d.state.Cursor = msg.Cursor
+			d.mu.Unlock()
+			d.pool.notifyEvent(d.key, "browser_cursor", map[string]any{"cursor": msg.Cursor})
+		}
+	case "dialog":
+		d.mu.Lock()
+		if msg.Dialog != nil {
+			dl := *msg.Dialog
+			d.state.Dialog = &dl
+		} else {
+			d.state.Dialog = nil
+		}
+		d.mu.Unlock()
+		d.pool.notifyObserver(d.key)
+	case "clipboard":
+		if msg.Text != "" {
+			d.pool.notifyEvent(d.key, "browser_clipboard", map[string]any{"text": msg.Text})
+		}
+	case "challenge":
+		if msg.Challenge != nil {
+			d.mu.Lock()
+			ch := *msg.Challenge
+			d.state.Challenge = &ch
+			d.mu.Unlock()
+			if msg.Challenge.Status == "needs-user" {
+				reason := msg.Challenge.Reason
+				if reason == "" {
+					reason = "Human verification required"
+				}
+				d.pool.setTakeover(d.key, true, reason)
+				go func() {
+					_, _, _ = d.send(map[string]any{"op": "pause", "paused": true, "reason": reason}, false)
+				}()
+			}
+			d.pool.notifyObserver(d.key)
+		}
+	case "takeover_request":
+		reason := strings.TrimSpace(msg.Reason)
+		if reason == "" {
+			reason = "User action required in browser"
+		}
+		d.pool.setTakeover(d.key, true, reason)
+		go func() {
+			_, _, _ = d.send(map[string]any{"op": "pause", "paused": true, "reason": reason}, false)
+		}()
 		d.pool.notifyObserver(d.key)
 	case "frame":
 		if msg.JPEG == "" {
@@ -913,6 +1086,146 @@ func (r *Registry) BrowserNav(ctx context.Context, sessionID, action string, par
 	return r.BrowserState(sessionID), nil
 }
 
+func (r *Registry) SetBrowserEventObserver(sessionID string, fn func(event string, payload map[string]any)) {
+	if r == nil || r.browser == nil {
+		return
+	}
+	p := r.daemonPool()
+	key := browserSessionKey(sessionID)
+	p.mu.Lock()
+	if fn == nil {
+		delete(p.eventObservers, key)
+	} else {
+		p.eventObservers[key] = fn
+	}
+	p.mu.Unlock()
+}
+
+func (r *Registry) BrowserResize(ctx context.Context, sessionID string, width, height int) (BrowserLiveState, error) {
+	if !r.HasBrowser() {
+		return BrowserLiveState{Available: false}, errors.New("browser runtime is not available")
+	}
+	d := r.daemonPool().getDaemon(browserSessionKey(sessionID))
+	if d == nil {
+		return r.BrowserState(sessionID), nil
+	}
+	rep, err := d.call(ctx, map[string]any{"op": "resize", "width": width, "height": height})
+	if err != nil {
+		return r.BrowserState(sessionID), err
+	}
+	if !rep.OK {
+		return r.BrowserState(sessionID), errors.New(rep.Error)
+	}
+	return r.BrowserState(sessionID), nil
+}
+
+func (r *Registry) BrowserHandleDialog(ctx context.Context, sessionID string, accept bool, promptText, dialogID string) (BrowserLiveState, error) {
+	if !r.HasBrowser() {
+		return BrowserLiveState{Available: false}, errors.New("browser runtime is not available")
+	}
+	d := r.daemonPool().getDaemon(browserSessionKey(sessionID))
+	if d == nil {
+		return r.BrowserState(sessionID), errors.New("no active browser session")
+	}
+	rep, err := d.call(ctx, map[string]any{
+		"op":          "handle_dialog",
+		"accept":      accept,
+		"prompt_text": promptText,
+		"dialog_id":   dialogID,
+	})
+	if err != nil {
+		return r.BrowserState(sessionID), err
+	}
+	if !rep.OK {
+		return r.BrowserState(sessionID), errors.New(rep.Error)
+	}
+	return r.BrowserState(sessionID), nil
+}
+
+func (r *Registry) BrowserContextMenu(ctx context.Context, sessionID string, params map[string]any) (map[string]any, error) {
+	if !r.HasBrowser() {
+		return nil, errors.New("browser runtime is not available")
+	}
+	d := r.daemonPool().getDaemon(browserSessionKey(sessionID))
+	if d == nil {
+		return nil, errors.New("no active browser session")
+	}
+	payload := map[string]any{"op": "context_menu"}
+	for k, v := range params {
+		payload[k] = v
+	}
+	rep, err := d.call(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	if !rep.OK {
+		return nil, errors.New(rep.Error)
+	}
+	var out map[string]any
+	if len(rep.Result) > 0 {
+		_ = json.Unmarshal(rep.Result, &out)
+	}
+	if out == nil {
+		out = map[string]any{"ok": true}
+	}
+	return out, nil
+}
+
+func (r *Registry) BrowserTeach(ctx context.Context, sessionID, action string) (BrowserLiveState, []TeachStep, error) {
+	if !r.HasBrowser() {
+		return BrowserLiveState{Available: false}, nil, errors.New("browser runtime is not available")
+	}
+	p := r.daemonPool()
+	key := browserSessionKey(sessionID)
+	d := p.getDaemon(key)
+	if d == nil {
+		return r.BrowserState(sessionID), nil, errors.New("open a page in the browser before starting Teach mode")
+	}
+	act := strings.ToLower(strings.TrimSpace(action))
+	if act == "start" && !p.isTakeover(key) {
+		// Teach mode automatically activates Takeover so the user drives cleanly.
+		_, _ = r.SetBrowserTakeover(ctx, sessionID, true, "teach")
+	}
+	rep, err := d.call(ctx, map[string]any{"op": "teach", "action": act})
+	if err != nil {
+		return r.BrowserState(sessionID), nil, err
+	}
+	if !rep.OK {
+		return r.BrowserState(sessionID), nil, errors.New(rep.Error)
+	}
+	var res struct {
+		Teaching bool        `json:"teaching"`
+		Steps    []TeachStep `json:"steps"`
+	}
+	if len(rep.Result) > 0 {
+		_ = json.Unmarshal(rep.Result, &res)
+	}
+	if (act == "stop" || act == "cancel") && p.isTakeover(key) {
+		st := r.BrowserState(sessionID)
+		if st.TakeoverReason == "teach" {
+			_, _ = r.SetBrowserTakeover(ctx, sessionID, false, "")
+		}
+	}
+	return r.BrowserState(sessionID), res.Steps, nil
+}
+
+func (r *Registry) BrowserRunScript(ctx context.Context, sessionID, script string, timeout time.Duration) (browserScriptResult, error) {
+	if !r.HasBrowser() {
+		return browserScriptResult{}, errors.New("browser runtime is not available")
+	}
+	p := r.daemonPool()
+	key := browserSessionKey(sessionID)
+	if err := p.waitIfTakeover(ctx, key); err != nil {
+		return browserScriptResult{}, err
+	}
+	d, err := p.ensureDaemon(ctx, sessionID, nil)
+	if err != nil {
+		return browserScriptResult{}, err
+	}
+	host := &daemonScriptHost{pool: p, key: key, d: d}
+	return runBrowserScript(ctx, host, script, timeout)
+}
+
 func (r *Registry) SetBrowserTakeover(ctx context.Context, sessionID string, active bool, reason string) (BrowserLiveState, error) {
 	if !r.HasBrowser() {
 		return BrowserLiveState{Available: false}, errors.New("browser runtime is not available")
@@ -922,7 +1235,7 @@ func (r *Registry) SetBrowserTakeover(ctx context.Context, sessionID string, act
 	d := p.setTakeover(key, active, reason)
 	if d != nil && !d.isClosed() {
 		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		rep, err := d.call(pctx, map[string]any{"op": "pause", "paused": active})
+		rep, err := d.call(pctx, map[string]any{"op": "pause", "paused": active, "reason": reason})
 		cancel()
 		if err != nil {
 			return r.BrowserState(sessionID), err
@@ -949,7 +1262,13 @@ func (r *Registry) CloseBrowser(sessionID string) {
 }
 
 func (r *Registry) CloseAllBrowsers() {
-	if r == nil || r.browserPool == nil {
+	if r == nil {
+		return
+	}
+	if r.browserProfiles != nil {
+		r.browserProfiles.closeAllRelays()
+	}
+	if r.browserPool == nil {
 		return
 	}
 	p := r.browserPool
@@ -1011,11 +1330,16 @@ func (r *Registry) browseViaDaemon(ctx context.Context, sessionID string, cfg ma
 		return out, err
 	}
 
+	if reqProf, ok := cfg["profile"].(string); ok && strings.TrimSpace(reqProf) != "" {
+		_, _ = r.SetSessionBrowserProfile(sessionID, reqProf)
+	}
+
 	initCfg := map[string]any{
 		"mobile":         cfg["mobile"],
 		"locale":         cfg["locale"],
 		"timeout_ms":     cfg["timeout_ms"],
 		"nav_timeout_ms": cfg["nav_timeout_ms"],
+		"profile":        cfg["profile"],
 	}
 	d, err := p.ensureDaemon(ctx, sessionID, initCfg)
 	if err != nil {
