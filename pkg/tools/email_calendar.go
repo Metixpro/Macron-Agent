@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"github.com/Metixpro/macron-agent/pkg/config"
 	"mime"
 	"mime/quotedprintable"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
 const (
@@ -107,9 +110,11 @@ func smtpSession(ctx context.Context, host string, port int, user, pass string, 
 	defer cancel()
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	dialer := &net.Dialer{Timeout: 15 * time.Second}
+	tlsConfig, err := smtpTLSConfig(host)
+	if err != nil {
+		return err
+	}
 	var conn net.Conn
-	var err error
-	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 	if port == 465 || config.ToolEnvValue("MACRON_SMTP_TLS") == "implicit" {
 		conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsConfig}).DialContext(ctx, "tcp", addr)
 	} else {
@@ -160,6 +165,27 @@ func smtpSession(ctx context.Context, host string, port int, user, pass string, 
 	return err
 }
 
+func smtpTLSConfig(host string) (*tls.Config, error) {
+	cfg := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+	caFile := strings.TrimSpace(os.Getenv("SSL_CERT_FILE"))
+	if caFile == "" {
+		return cfg, nil
+	}
+	data, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("read SSL_CERT_FILE: %w", err)
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(data) {
+		return nil, fmt.Errorf("SSL_CERT_FILE %q contains no valid certificates", caFile)
+	}
+	cfg.RootCAs = pool
+	return cfg, nil
+}
+
 func TestSMTP(ctx context.Context) error {
 	host, user, pass := firstEnv("MACRON_SMTP_HOST"), firstEnv("MACRON_SMTP_USER"), firstEnv("MACRON_SMTP_PASS")
 	if host == "" || user == "" || pass == "" {
@@ -174,6 +200,15 @@ func TestSMTP(ctx context.Context) error {
 		port = n
 	}
 	return smtpSession(ctx, host, port, user, pass, func(*smtp.Client) error { return nil })
+}
+
+func cleanICalText(s string, keepNewlines bool) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "")
+	if keepNewlines {
+		return strings.ReplaceAll(s, "\n", `\n`)
+	}
+	return strings.ReplaceAll(s, "\n", " ")
 }
 
 func GenerateICalendar(title, description, location string, start, end time.Time) string {
@@ -192,12 +227,12 @@ func GenerateICalendar(title, description, location string, start, end time.Time
 	sb.WriteString(fmt.Sprintf("DTSTAMP:%s\r\n", now))
 	sb.WriteString(fmt.Sprintf("DTSTART:%s\r\n", startStr))
 	sb.WriteString(fmt.Sprintf("DTEND:%s\r\n", endStr))
-	sb.WriteString(fmt.Sprintf("SUMMARY:%s\r\n", title))
+	sb.WriteString(fmt.Sprintf("SUMMARY:%s\r\n", cleanICalText(title, false)))
 	if description != "" {
-		sb.WriteString(fmt.Sprintf("DESCRIPTION:%s\r\n", strings.ReplaceAll(description, "\n", "\\n")))
+		sb.WriteString(fmt.Sprintf("DESCRIPTION:%s\r\n", cleanICalText(description, true)))
 	}
 	if location != "" {
-		sb.WriteString(fmt.Sprintf("LOCATION:%s\r\n", location))
+		sb.WriteString(fmt.Sprintf("LOCATION:%s\r\n", cleanICalText(location, false)))
 	}
 	sb.WriteString("STATUS:CONFIRMED\r\n")
 	sb.WriteString("END:VEVENT\r\n")

@@ -1,16 +1,26 @@
-param([Parameter(Mandatory)][string]$Exe, [string]$Gui)
+﻿param([Parameter(Mandatory)][string]$Exe, [string]$Gui)
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
-$root = Join-Path $temp ("macron-engine-" + [IO.Path]::GetFileNameWithoutExtension($Exe))
+$root = Join-Path $temp ("macron-engine-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $root | Out-Null
 $env:MACRON_HOME = Join-Path $root "home dir"
-$work = Join-Path $root "پروژه من"
+$work = Join-Path $root (-join [char[]]@(0x067E,0x0631,0x0648,0x0698,0x0647,0x0020,0x0645,0x0646))
 New-Item -ItemType Directory -Force $work | Out-Null
 Write-Host "== $Exe version"
 & $Exe version
-$fake = Start-Process python -ArgumentList @("$PSScriptRoot\fake_model.py", "18941", "$root\fake.log") -PassThru -NoNewWindow
-Start-Sleep 2
+$fakeOut = Join-Path $root 'fake-port.out'
+$fake = Start-Process python -ArgumentList @("`"$PSScriptRoot\fake_model.py`"", "0", "`"$root\fake.log`"") -PassThru -WindowStyle Hidden -RedirectStandardOutput $fakeOut
+$p = $null
+$g = $null
+try {
+$modelPort = $null
+for ($i = 0; $i -lt 40 -and -not $modelPort -and -not $fake.HasExited; $i++) {
+  Start-Sleep -Milliseconds 250
+  $match = Select-String -Path $fakeOut -Pattern '^([0-9]+)$' | Select-Object -First 1
+  if ($match) { $modelPort = [int]$match.Matches[0].Groups[1].Value }
+}
+if (-not $modelPort) { throw "The test model did not report a loopback port" }
 $psi = [System.Diagnostics.ProcessStartInfo]::new($Exe, "desktop --serve --json")
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
@@ -19,9 +29,9 @@ $psi.UseShellExecute = $false
 $p = [System.Diagnostics.Process]::Start($psi)
 $line = $p.StandardOutput.ReadLine()
 if (-not $line) { Write-Host $p.StandardError.ReadToEnd(); throw "the engine did not start" }
-Write-Host "== engine: $line"
 $j = $line | ConvertFrom-Json
 $base = "http://$($j.addr)"
+Write-Host "== engine at $base"
 $h = @{ Authorization = "Bearer $($j.token)"; "X-Macron" = "1" }
 function Api($method, $path, $body) {
   $params = @{ Method = $method; Uri = "$base$path"; Headers = $h }
@@ -33,7 +43,7 @@ function Api($method, $path, $body) {
 }
 $state = Api GET "/api/state"
 Write-Host "== state: version $($state.info.version) platform $($state.info.platform) projects $($state.projects.Count)"
-Api POST "/api/providers/connect" @{ name = "fake"; url = "http://127.0.0.1:18941/v1"; key = "x"; model = "fake-model" } | Out-Null
+Api POST "/api/providers/connect" @{ name = "fake"; url = "http://127.0.0.1:$modelPort/v1"; key = "x"; model = "fake-model" } | Out-Null
 Write-Host "== model connected"
 $proj = Api POST "/api/projects" @{ path = $work }
 Write-Host "== project $($proj.id) $($proj.path)"
@@ -51,7 +61,7 @@ do {
 } while ($snap.live.running -and (Get-Date) -lt $deadline)
 $bad = 0
 $expect = @(
-  @("bash_execute", "ps ok"), @("bash_execute", "سلام دنیا"), @("write_file", "saved"), @("apply_patch", "Applied"),
+  @("bash_execute", "ps ok"), @("bash_execute", (-join [char[]]@(0x0633,0x0644,0x0627,0x0645,0x0020,0x062F,0x0646,0x06CC,0x0627))), @("write_file", "saved"), @("apply_patch", "Applied"),
   @("edit_file", "Edited"), @("bash_execute", "sum 5 Macron"), @("bash_execute", "slept"), @("bash_execute", "exit 3"),
   @("run_code", "42"), @("shell_jobs", "bgdone"), @("bash_execute", "probe="), @("read_file", "return a + b")
 )
@@ -99,15 +109,21 @@ if ($Gui) {
   $deadline = (Get-Date).AddSeconds(40)
   while (-not (Test-Path $lock) -and (Get-Date) -lt $deadline -and -not $g.HasExited) { Start-Sleep -Milliseconds 500 }
   if (Test-Path $lock) {
-    $info = Get-Content $lock -Raw
-    Write-Host "== desktop lock: $info"
+    $info = Get-Content $lock -Raw | ConvertFrom-Json
+    Write-Host "== desktop lock PID: $($info.pid)"
     Start-Sleep 5
     if ($g.HasExited) { Write-Host "DESKTOP EXITED $($g.ExitCode)"; $bad++ } else { Write-Host "PASS the desktop app is running" }
   } else {
     Write-Host "DESKTOP DID NOT START (exited: $($g.HasExited) code $($g.ExitCode))"; $bad++
   }
   Get-Content (Join-Path $env:MACRON_HOME "desktop.log") -ErrorAction SilentlyContinue | Select-Object -Last 15
-  Get-Process | Where-Object { $_.Path -eq $gui } | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 if ($bad -gt 0) { throw "$bad problems" }
 Write-Host "SMOKE OK $Exe"
+} finally {
+  foreach ($proc in @($g, $p, $fake)) {
+    if ($proc -and -not $proc.HasExited) {
+      Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+  }
+}

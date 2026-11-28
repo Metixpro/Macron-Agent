@@ -150,7 +150,21 @@ func (r *Registry) registerConnections() {
 			}
 			sort.Strings(keys)
 			if r.Gate != nil {
-				v := r.Gate.CheckAction(ctx, session, cmdgate.Action{Key: "[connections] " + s.ID, Detail: "Configure " + s.ID + ": " + strings.Join(keys, ", "), Level: cmdgate.Dangerous, Rule: "service-config", Reason: "changing service settings"})
+				rule := "service-config"
+				var desc []string
+				for _, key := range keys {
+					if strings.HasSuffix(key, "_OWNERS") || strings.HasSuffix(key, "_API") {
+						rule = "self-config"
+					}
+					if connectionFields[key].Secret {
+						desc = append(desc, key+"=••••")
+					} else if values[key] == "" {
+						desc = append(desc, key+"=(cleared)")
+					} else {
+						desc = append(desc, key+"="+values[key])
+					}
+				}
+				v := r.Gate.CheckAction(ctx, session, cmdgate.Action{Key: "[connections] " + s.ID + " " + strings.Join(keys, ","), Detail: "Configure " + s.ID + ": " + strings.Join(desc, ", "), Level: cmdgate.Dangerous, Rule: rule, Reason: "changing service settings"})
 				if !v.Allow {
 					return v.Message, nil
 				}

@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/netclient"
 )
 
 const ToolOpenAPICall = "openapi_call"
@@ -30,7 +32,14 @@ type OpenAPISpec struct {
 }
 
 func (r *Registry) CallOpenAPIEndpoint(ctx context.Context, sessionID, specFile, opID, endpoint, method, baseURL, authEnv string, params, body map[string]any) (string, error) {
-	specBytes, _, err := r.Machine.ReadFile(sessionID, specFile, 1<<20)
+	relSpec, err := r.ensureWorkspaceRel(sessionID, specFile)
+	if err != nil || relSpec == "." {
+		if refused := r.gateRead(ctx, sessionID, ToolOpenAPICall, specFile); refused != "" {
+			return refused, nil
+		}
+		relSpec = specFile
+	}
+	specBytes, _, err := r.Machine.ReadFile(sessionID, relSpec, 1<<20)
 	if err != nil {
 		return "", fmt.Errorf("read openapi spec %s: %w", specFile, err)
 	}
@@ -40,6 +49,7 @@ func (r *Registry) CallOpenAPIEndpoint(ctx context.Context, sessionID, specFile,
 		return "", fmt.Errorf("parse openapi spec JSON: %w", err)
 	}
 
+	customBaseURL := strings.TrimSpace(baseURL) != ""
 	if baseURL == "" {
 		if len(spec.Servers) > 0 && spec.Servers[0].URL != "" {
 			baseURL = strings.TrimRight(spec.Servers[0].URL, "/")
@@ -95,13 +105,20 @@ func (r *Registry) CallOpenAPIEndpoint(ctx context.Context, sessionID, specFile,
 	if baseURL == "" || !strings.HasPrefix(fullURL, "http") {
 		return "", fmt.Errorf("no server URL: the spec names none, so pass base_url")
 	}
+	if _, err := netclient.ValidateURL(fullURL); err != nil {
+		return "", err
+	}
+	authEnv = strings.TrimSpace(authEnv)
+	if authEnv != "" && isBlockedSecretEnv(authEnv) {
+		return "", fmt.Errorf("%s is a protected agent or provider credential and cannot be used with openapi_call", authEnv)
+	}
 	var reqBody io.Reader
 	var bData []byte
 	if body != nil && (targetMethod == "POST" || targetMethod == "PUT" || targetMethod == "PATCH") {
 		bData, _ = json.Marshal(body)
 		reqBody = bytes.NewReader(bData)
 	}
-	if targetMethod != "GET" && targetMethod != "HEAD" {
+	if (targetMethod != "GET" && targetMethod != "HEAD") || authEnv != "" || customBaseURL {
 		host := fullURL
 		if u, err := url.Parse(fullURL); err == nil {
 			host = u.Host
@@ -117,7 +134,7 @@ func (r *Registry) CallOpenAPIEndpoint(ctx context.Context, sessionID, specFile,
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Macron-Agent (OpenAPI)")
-	if authEnv = strings.TrimSpace(authEnv); authEnv != "" {
+	if authEnv != "" {
 		token := os.Getenv(authEnv)
 		if token == "" {
 			return "", fmt.Errorf("%s is not set: put the API token in config.env as %s=...", authEnv, authEnv)

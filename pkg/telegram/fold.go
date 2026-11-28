@@ -58,7 +58,12 @@ func foldBlocks(md string) []foldBlock {
 			out = append(out, b)
 		case strings.HasPrefix(trim, "<tg-") || strings.HasPrefix(trim, "<table") || strings.HasPrefix(trim, "<figure"):
 			b := foldBlock{lines: []string{line}}
-			tag := strings.FieldsFunc(trim[1:], func(r rune) bool { return r == ' ' || r == '>' || r == '/' })[0]
+			parts := strings.FieldsFunc(trim[1:], func(r rune) bool { return r == ' ' || r == '>' || r == '/' })
+			if len(parts) == 0 {
+				out = append(out, b)
+				continue
+			}
+			tag := parts[0]
 			for !strings.Contains(strings.Join(b.lines, "\n"), "</"+tag+">") && i+1 < len(lines) && strings.TrimSpace(lines[i+1]) != "" {
 				i++
 				b.lines = append(b.lines, lines[i])

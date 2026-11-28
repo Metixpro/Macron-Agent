@@ -1,6 +1,26 @@
 import { useEffect, useState } from "react";
 import { projectName } from "./format";
-import { useStore } from "./store";
+import { getState, useStore } from "./store";
+
+function isWindowsPlatform(platform: string, home: string): boolean {
+  if (platform === "windows") return true;
+  if (platform && platform !== "windows") return false;
+  if (/^[A-Za-z]:(?:[\\/]|$)|^\\\\/.test(home)) return true;
+  if (typeof navigator !== "undefined" && /Win/i.test(navigator.platform || navigator.userAgent)) return true;
+  return false;
+}
+
+// A path under the user's home folder, written the way this platform writes it.
+export function homePath(rel: string): string {
+  const s = getState();
+  return isWindowsPlatform(s.info.platform, s.home) ? "%USERPROFILE%\\" + rel.replace(/\//g, "\\") : "~/" + rel;
+}
+
+export function useHomePath(rel: string): string {
+  const platform = useStore((s) => s.info.platform);
+  const home = useStore((s) => s.home);
+  return isWindowsPlatform(platform, home) ? "%USERPROFILE%\\" + rel.replace(/\//g, "\\") : "~/" + rel;
+}
 
 export function useNow(active: boolean, every = 1000): number {
   const [now, setNow] = useState(Date.now());

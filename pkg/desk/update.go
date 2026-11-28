@@ -37,6 +37,7 @@ type updateState struct {
 	status     UpdateStatus
 	checkedAt  time.Time
 	installing bool
+	revision   uint64
 }
 
 const updateCacheTTL = 30 * time.Minute
@@ -55,8 +56,12 @@ func releaseAssetSize(rel *updater.Release) int64 {
 }
 
 func (s *Server) checkUpdate(ctx context.Context, force bool) UpdateStatus {
+	return s.checkUpdateWith(ctx, force, updater.Latest)
+}
+
+func (s *Server) checkUpdateWith(ctx context.Context, force bool, latest func(context.Context, string) (*updater.Release, error)) UpdateStatus {
 	s.upd.mu.Lock()
-	if s.upd.installing {
+	if s.upd.installing || s.upd.status.Installed {
 		st := s.upd.status
 		s.upd.mu.Unlock()
 		return st
@@ -66,14 +71,19 @@ func (s *Server) checkUpdate(ctx context.Context, force bool) UpdateStatus {
 		s.upd.mu.Unlock()
 		return st
 	}
+	s.upd.revision++
+	revision := s.upd.revision
 	s.upd.mu.Unlock()
 
 	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	rel, err := updater.Latest(cctx, "")
+	rel, err := latest(cctx, "")
 
 	s.upd.mu.Lock()
 	defer s.upd.mu.Unlock()
+	if s.upd.revision != revision {
+		return s.upd.status
+	}
 	now := time.Now()
 	st := UpdateStatus{
 		Current:   app.Version,
@@ -84,13 +94,13 @@ func (s *Server) checkUpdate(ctx context.Context, force bool) UpdateStatus {
 		s.upd.status = st
 		return st
 	}
-	latest := rel.Version()
-	st.Latest = latest
+	version := rel.Version()
+	st.Latest = version
 	st.Tag = rel.TagName
 	st.URL = rel.HTMLURL
 	st.Notes = clipRunes(strings.TrimSpace(rel.Body), 2000)
 	st.AssetSize = releaseAssetSize(rel)
-	st.Available = updater.Newer(latest, app.Version)
+	st.Available = updater.Newer(version, app.Version)
 	s.upd.rel = rel
 	s.upd.status = st
 	s.upd.checkedAt = now
@@ -105,13 +115,14 @@ func (s *Server) updateStatusAPI(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 	s.upd.mu.Lock()
-	if s.upd.installing {
+	if s.upd.installing || s.upd.status.Installed {
 		st := s.upd.status
 		s.upd.mu.Unlock()
 		writeJSON(w, st)
 		return
 	}
 	rel := s.upd.rel
+	s.upd.revision++
 	s.upd.installing = true
 	s.upd.status.Installing = true
 	s.upd.status.Error = ""

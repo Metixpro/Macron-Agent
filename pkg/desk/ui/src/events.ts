@@ -1,7 +1,7 @@
 import { apiBase, server } from "./api";
-import { checkUpdate, composer, fail, loadChanges, loadServers, loadState, openProject, refreshState, showError, stream, switchMachine } from "./actions";
+import { checkUpdate, composer, fail, loadBrowser, loadChanges, loadServers, loadState, noteBrowserVisit, openProject, refreshState, showError, stream, switchMachine } from "./actions";
 import { getState, patchLive, setState } from "./store";
-import type { Ask, Block, LiveDraft, LiveSub, LiveTool, PlanItem, ServerEvent, UpdateStatus, Usage } from "./types";
+import type { Ask, Block, BrowserState, LiveDraft, LiveSub, LiveTool, PlanItem, ServerEvent, UpdateStatus, Usage } from "./types";
 
 let source: EventSource | null = null;
 let seq = 0;
@@ -85,6 +85,7 @@ function onEvent(ev: ServerEvent) {
     return;
   }
   if (!ev.project) return;
+  if (ev.type === "browser") noteBrowserVisit(ev.project);
   const s = getState();
   if (ev.project === s.current) onProjectEvent(ev);
   if (touches.has(ev.type)) refreshState();
@@ -163,6 +164,10 @@ function onProjectEvent(ev: ServerEvent) {
     case "plan":
       patchLive(() => ({ plan: (ev.items as PlanItem[]) || [] }));
       return;
+    case "browser":
+      if (ev.browser) setState({ browserView: ev.browser as BrowserState });
+      else if (ev.project) void loadBrowser(ev.project);
+      return;
     case "sub": {
       const sub = ev.sub as LiveSub;
       patchLive((l) => {
@@ -191,10 +196,12 @@ function onProjectEvent(ev: ServerEvent) {
     case "done": {
       const blocks = (ev.blocks as Block[] | null) || [];
       const ctx = (ev.context as { used: number; window: number } | undefined) || undefined;
+      const hadError = blocks.some((b) => b.kind === "error");
       setState((s) => ({
         blocks: [...s.blocks, ...blocks],
         live: { running: false, usage: ev.usage as Usage, context: ctx ?? s.live.context },
         lastTook: (ev.took as number) || 0,
+        lastTurnResult: { ok: !hadError, at: Date.now() },
         dialog: s.dialog?.kind === "ask" ? null : s.dialog,
         unseen: document.hasFocus() ? s.unseen : true,
       }));

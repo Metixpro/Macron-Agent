@@ -79,6 +79,9 @@ func (t *terminal) AddMCP(name, target string, args []string, env map[string]str
 	if err != nil {
 		return tui.Plugin{}, err
 	}
+	if len(keys) == 0 {
+		return tui.Plugin{}, errors.New("server could not be registered")
+	}
 	return pluginView(t.pm.Wait(keys[0], 25*time.Second)), nil
 }
 

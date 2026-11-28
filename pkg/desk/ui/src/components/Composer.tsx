@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import {
+  clearError,
   compact,
   composer,
   draftFor,
@@ -13,6 +14,7 @@ import {
   initProject,
   newChat,
   openDialog,
+  openSettings,
   runShell,
   saveDraft,
   send,
@@ -25,8 +27,9 @@ import { fileURL, server } from "../api";
 import { bytes, formatCost, tokens, took } from "../format";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
-import { useStore } from "../store";
+import { setState, useStore } from "../store";
 import type { FileRef } from "../types";
+import { LiveCard } from "./Live";
 import { StarBuddy, useStarBuddyMood } from "./StarBuddy";
 
 type Command = { name: string; hint: string; run: () => void };
@@ -40,31 +43,50 @@ const COMMANDS: Command[] = [
   { name: "/init", hint: "Write or update MACRON.md for this project", run: () => void initProject() },
   { name: "/model", hint: "Pick the model", run: () => openDialog({ kind: "palette", mode: "models" }) },
   { name: "/provider", hint: "Add or customize models & providers", run: () => openDialog({ kind: "provider-edit" }) },
-  { name: "/routing", hint: "Configure smart light/strong model routing", run: () => openDialog({ kind: "settings" }) },
-  { name: "/moa", hint: "Configure multi-model voting (or type /moa <prompt>)", run: () => openDialog({ kind: "settings" }) },
+  { name: "/routing", hint: "Configure smart light/strong model routing", run: () => openSettings("routing") },
+  { name: "/moa", hint: "Configure multi-model voting (or type /moa <prompt>)", run: () => openSettings("moa") },
   { name: "/plan", hint: "Plan first and change nothing", run: () => setMode("plan") },
   { name: "/build", hint: "Let Macron make changes", run: () => setMode("build") },
   { name: "/changes", hint: "View git changes and diff", run: () => toggleChanges(true) },
-  { name: "/execution", hint: "Switch execution isolation mode", run: () => openDialog({ kind: "settings" }) },
+  { name: "/execution", hint: "Switch execution isolation mode", run: () => openSettings("execution") },
   { name: "/open", hint: "Open another folder", run: () => openDialog({ kind: "folder" }) },
-  { name: "/settings", hint: "Approvals, providers and theme", run: () => openDialog({ kind: "settings" }) },
+  { name: "/settings", hint: "Approvals, providers and theme", run: () => openSettings("general") },
   { name: "/stop", hint: "Stop the current job", run: () => stop() },
 ];
 
-function SendStop({ running, hasContent, fly, onSend }: { running: boolean; hasContent: boolean; fly: number; onSend: () => void }) {
-  const state = running ? (hasContent ? "queue" : "stop") : hasContent ? "ready" : "idle";
-  const title = state === "stop" ? "Stop (Esc)" : state === "queue" ? "Send now; Macron reads it at its next step (Enter)" : "Send (Enter)";
+function SendStop({
+  running,
+  hasContent,
+  disabled,
+  fly,
+  onSend,
+}: {
+  running: boolean;
+  hasContent: boolean;
+  disabled: boolean;
+  fly: number;
+  onSend: () => void;
+}) {
+  const state = running ? (hasContent ? "queue" : "stop") : hasContent && !disabled ? "ready" : "idle";
+  const title = state === "stop" ? "Stop (Esc)" : state === "queue" ? "Queue message for Macron's next step (Enter)" : "Send (Enter)";
   return (
     <div className={"actions " + state}>
       <button type="button" className="mini-stop" title="Stop (Esc)" aria-label="Stop" tabIndex={state === "queue" ? 0 : -1} onClick={stop}>
         <span className="sq" />
       </button>
-      <button type="button" className="go" disabled={state === "idle"} title={title} aria-label={state === "stop" ? "Stop" : "Send"} onClick={state === "stop" ? stop : onSend}>
+      <button
+        type="button"
+        className="go"
+        disabled={state === "idle" || (disabled && state !== "stop")}
+        title={title}
+        aria-label={state === "stop" ? "Stop" : "Send"}
+        onClick={state === "stop" ? stop : onSend}
+      >
         <svg className="ring" viewBox="0 0 44 44" aria-hidden="true">
           <circle cx="22" cy="22" r="20" />
         </svg>
         <span key={fly} className={"glyph send" + (fly ? " fly" : "")}>
-          <Icon name="arrowUp" size={16} />
+          <Icon name="arrowUp" size={15} />
         </span>
         <span className="glyph stop">
           <span className="sq" />
@@ -74,56 +96,129 @@ function SendStop({ running, hasContent, fly, onSend }: { running: boolean; hasC
   );
 }
 
-function Meter() {
+function Meter({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+  const tr = useT();
   const ctx = useStore((s) => s.live.context);
   const usage = useStore((s) => s.live.usage);
   const last = useStore((s) => s.lastTook);
   const routingActive = useStore((s) => s.info.routingActive);
   const moaActive = useStore((s) => s.info.moaActive);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  // Notify the parent in the same event handler so the StarBuddy tuck and the
+  // popover land in one render batch; an effect would only report the change
+  // a render later, leaving a frame where the popover overlaps the buddy.
+  const applyOpen = (v: boolean) => {
+    setOpen(v);
+    onOpenChange?.(v);
+  };
+
+  useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) applyOpen(false);
+    };
+    const esc = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        applyOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", away);
+    window.addEventListener("keydown", esc, true);
+    return () => {
+      window.removeEventListener("mousedown", away);
+      window.removeEventListener("keydown", esc, true);
+    };
+  }, [open]);
+
   const hasCtx = Boolean(ctx && ctx.window);
   const hasUsage = Boolean(usage && (usage.in || usage.out));
   if (!hasCtx && !hasUsage && !routingActive && !moaActive) return null;
+
   const pct = hasCtx && ctx ? Math.min(1, ctx.used / ctx.window) : 0;
-  const parts: string[] = [];
-  if (hasCtx && ctx) parts.push(`Context used: ${Math.round(pct * 100)}% of ${tokens(ctx.window)} tokens`);
-  if (hasUsage && usage) {
-    parts.push(`${tokens(usage.in)} in, ${tokens(usage.out)} out`);
-    if (usage.costKnown && typeof usage.cost === "number") parts.push(`Est. cost: ~${formatCost(usage.cost)}`);
-  }
-  if (last) parts.push(`last reply took ${took(last)}`);
+  const pctNum = Math.round(pct * 100);
+  const dash = 44;
+  const offset = dash - dash * pct;
+
   return (
-    <span className="meter-group" dir="ltr">
+    <div className="meter-group" dir="ltr" ref={ref}>
       {moaActive && (
-        <button type="button" className="ai-badge moa" title={`MoA active: ${moaActive}`} onClick={() => openDialog({ kind: "settings" })}>
+        <button type="button" className="ai-badge moa" title={`MoA active: ${moaActive}`} onClick={() => openSettings("moa")}>
           <span className="ai-dot" aria-hidden="true" />
           MoA · {moaActive}
         </button>
       )}
       {!moaActive && routingActive && (
-        <button type="button" className="ai-badge route" title="Smart light/strong model routing active" onClick={() => openDialog({ kind: "settings" })}>
+        <button type="button" className="ai-badge route" title="Smart light/strong model routing active" onClick={() => openSettings("routing")}>
           <span className="ai-dot" aria-hidden="true" />
           Auto-Route
         </button>
       )}
       {(hasCtx || hasUsage) && (
-        <span className={"meter" + (pct > 0.8 ? " high" : "")} title={parts.join(" · ")}>
-          {hasCtx && (
-            <>
-              <span className="meter-bar">
-                <span style={{ width: `${Math.round(pct * 100)}%` }} />
-              </span>
-              <span>{Math.round(pct * 100)}%</span>
-            </>
+        <div className="meter-pop-wrap">
+          <button
+            type="button"
+            className={"meter-btn" + (pct > 0.8 ? " high" : "") + (open ? " open" : "")}
+            aria-expanded={open}
+            title={tr("Context & tokens")}
+            onClick={() => applyOpen(!open)}
+          >
+            {hasCtx && (
+              <svg className="ctx-ring" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+                <circle className="ctx-track" cx="9" cy="9" r="7" />
+                <circle className="ctx-fill" cx="9" cy="9" r="7" strokeDasharray={dash} strokeDashoffset={offset} />
+              </svg>
+            )}
+            <span>{hasCtx ? `${pctNum}%` : `↑${tokens(usage?.in)}`}</span>
+          </button>
+          {open && (
+            <div className="meter-popover" role="dialog" aria-label={tr("Context & tokens")}>
+              <div className="mp-head">{tr("Context & tokens")}</div>
+              {hasCtx && ctx && (
+                <div className="mp-block">
+                  <div className="mp-row">
+                    <span>{tr("Context")}</span>
+                    <strong>
+                      {tokens(ctx.used)} / {tokens(ctx.window)} ({pctNum}%)
+                    </strong>
+                  </div>
+                  <div className="mp-bar">
+                    <span className={pct > 0.8 ? "high" : ""} style={{ width: `${pctNum}%` }} />
+                  </div>
+                </div>
+              )}
+              {hasUsage && usage && (
+                <div className="mp-stats">
+                  <div className="mp-row">
+                    <span>{tr("Input")}</span>
+                    <span>{tokens(usage.in)}</span>
+                  </div>
+                  <div className="mp-row">
+                    <span>{tr("Output")}</span>
+                    <span>{tokens(usage.out)}</span>
+                  </div>
+                  {usage.costKnown && typeof usage.cost === "number" && (
+                    <div className="mp-row">
+                      <span>{tr("Est. cost")}</span>
+                      <span>~{formatCost(usage.cost)}</span>
+                    </div>
+                  )}
+                  {last > 0 && (
+                    <div className="mp-row">
+                      <span>{tr("Last turn")}</span>
+                      <span>{took(last)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
-          {hasUsage && usage && (
-            <span className="meter-tok">
-              ↑{tokens(usage.in)} ↓{tokens(usage.out)}
-              {usage.costKnown && typeof usage.cost === "number" && <span className="meter-cost">~{formatCost(usage.cost)}</span>}
-            </span>
-          )}
-        </span>
+        </div>
       )}
-    </span>
+    </div>
   );
 }
 
@@ -159,19 +254,30 @@ function Gauge({ level }: { level: number }) {
   );
 }
 
-function EffortMenu() {
+function EffortMenu({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+  const tr = useT();
   const t = useStore((s) => s.tuning);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // Notify the parent in the same event handler so the StarBuddy tuck and the
+  // popover land in one render batch; an effect would only report the change
+  // a render later, leaving a frame where the popover overlaps the buddy.
+  const applyOpen = (v: boolean) => {
+    setOpen(v);
+    onOpenChange?.(v);
+  };
+
+  useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
+
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      if (!ref.current?.contains(e.target as Node)) applyOpen(false);
     };
     const esc = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        setOpen(false);
+        applyOpen(false);
       }
     };
     window.addEventListener("mousedown", away);
@@ -181,17 +287,25 @@ function EffortMenu() {
       window.removeEventListener("keydown", esc, true);
     };
   }, [open]);
+
   if (!t || !t.model) return null;
   const level = effortLevels.indexOf(t.effort);
+
   return (
     <div className="effort" ref={ref}>
-      <button type="button" className={"effort-btn" + (t.effort ? " set" : "")} title={"Effort: " + effortNote(t)} onClick={() => setOpen(!open)} aria-expanded={open}>
+      <button
+        type="button"
+        className={"effort-btn" + (t.effort ? " set" : "") + (open ? " open" : "")}
+        title={"Effort: " + effortNote(t)}
+        onClick={() => applyOpen(!open)}
+        aria-expanded={open}
+      >
         <Gauge level={level} />
         <span>{effortName(t.effort)}</span>
       </button>
       {open && (
         <div className="effort-menu" role="menu">
-          <div className="em-head">How hard the model thinks</div>
+          <div className="em-head">{tr("Reasoning effort")}</div>
           {effortLevels.map((l, i) => (
             <button
               key={l || "auto"}
@@ -200,7 +314,7 @@ function EffortMenu() {
               aria-checked={l === t.effort}
               className={"em-row" + (l === t.effort ? " on" : "")}
               onClick={() => {
-                setOpen(false);
+                applyOpen(false);
                 if (l !== t.effort) setTuning("effort", l || "auto");
               }}
             >
@@ -209,7 +323,7 @@ function EffortMenu() {
                 <span className="name">{effortName(l)}</span>
                 <span className="meta">{effortAbout[l]}</span>
               </span>
-              {l === t.effort && <Icon name="check" size={14} />}
+              {l === t.effort && <Icon name="check" size={13} />}
             </button>
           ))}
           <div className="em-foot">{effortNote(t)}</div>
@@ -227,11 +341,14 @@ function ModelButton() {
     <button
       type="button"
       className={"model" + (model ? "" : " missing")}
-      title={provider ? `${provider} · change the model` : tr("Connect a model")}
+      title={provider ? `${provider} · ${model}` : tr("Connect a model")}
       onClick={() => openDialog(model ? { kind: "palette", mode: "models" } : { kind: "model-connect" })}
     >
-      <span>{model || tr("Connect a model")}</span>
-      <Icon name="down" size={12} />
+      <Icon name="chip" size={12} className="model-ico" />
+      <span className="model-name" dir="ltr">
+        {model || tr("Connect a model")}
+      </span>
+      <Icon name="down" size={11} />
     </button>
   );
 }
@@ -245,12 +362,17 @@ function activeAtToken(text: string, caret: number): { start: number; query: str
   return { start, query };
 }
 
+const EMPTY_QUEUED: string[] = [];
+
 export function Composer() {
   const tr = useT();
   const current = useStore((s) => s.current);
+  const online = useStore((s) => s.online);
+  const errorAlert = useStore((s) => s.errorAlert);
   const running = useStore((s) => s.live.running);
-  const queued = useStore((s) => s.live.queued?.length || 0);
+  const queuedItems = useStore((s) => s.live.queued || EMPTY_QUEUED);
   const mode = useStore((s) => s.mode);
+
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [sel, setSel] = useState(0);
@@ -260,9 +382,14 @@ export function Composer() {
   const [attachments, setAttachments] = useState<FileRef[]>([]);
   const [uploading, setUploading] = useState(0);
   const [fly, setFly] = useState(0);
+  const [focused, setFocused] = useState(false);
+  const [meterOpen, setMeterOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
+
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const idRef = useRef(current);
+  const typingTimerRef = useRef<number>(0);
 
   useEffect(() => {
     idRef.current = current;
@@ -270,6 +397,26 @@ export function Composer() {
     setAttachments([]);
     setAtFiles([]);
   }, [current]);
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(typingTimerRef.current);
+      setState({ composerTyping: false });
+    };
+  }, []);
+
+  const syncTyping = (val: string, pos: number) => {
+    const ratio = val.length > 0 ? Math.max(0.1, Math.min(0.9, pos / Math.max(24, val.length))) : 0.5;
+    window.clearTimeout(typingTimerRef.current);
+    if (val.trim().length > 0) {
+      setState({ composerTyping: true, composerCaretRatio: ratio });
+      typingTimerRef.current = window.setTimeout(() => {
+        setState({ composerTyping: false });
+      }, 2400);
+    } else {
+      setState({ composerTyping: false, composerCaretRatio: 0.5 });
+    }
+  };
 
   const uploadFiles = async (files: File[]) => {
     const pid = idRef.current;
@@ -307,11 +454,18 @@ export function Composer() {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (!text) {
+      el.style.height = "";
+      return;
+    }
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 260) + "px";
+    el.style.height = Math.min(el.scrollHeight, 240) + "px";
   }, [text]);
 
-  const matches = useMemo(() => (!slashDismissed && text.startsWith("/") && !/\s/.test(text) ? COMMANDS.filter((c) => c.name.startsWith(text.toLowerCase())) : []), [text, slashDismissed]);
+  const matches = useMemo(
+    () => (!slashDismissed && text.startsWith("/") && !/\s/.test(text) ? COMMANDS.filter((c) => c.name.startsWith(text.toLowerCase())) : []),
+    [text, slashDismissed],
+  );
 
   const atMatch = useMemo(() => {
     if (atDismissed || matches.length > 0) return null;
@@ -344,12 +498,14 @@ export function Composer() {
   }, [current, atMatch?.query, atMatch !== null]);
 
   const change = (v: string, pos?: number) => {
+    const nextPos = pos ?? v.length;
     setSlashDismissed(false);
     setAtDismissed(false);
     setText(v);
-    setCaret(pos ?? v.length);
+    setCaret(nextPos);
     setSel(0);
     saveDraft(current, v);
+    syncTyping(v, nextPos);
   };
 
   const insertFileMention = (file: string) => {
@@ -364,6 +520,7 @@ export function Composer() {
     setText(next);
     setCaret(nextPos);
     saveDraft(current, next);
+    syncTyping(next, nextPos);
     window.requestAnimationFrame(() => {
       if (ref.current) {
         ref.current.focus();
@@ -383,7 +540,7 @@ export function Composer() {
 
   const submit = async () => {
     const t = text.trim();
-    if (!t && attachments.length === 0) return;
+    if ((!t && attachments.length === 0) || online === false) return;
     if (attachments.length === 0) {
       const cmd = COMMANDS.find((c) => c.name === t.toLowerCase());
       if (cmd) return run(cmd);
@@ -497,14 +654,17 @@ export function Composer() {
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      submit();
+      void submit();
     }
   };
 
-  const [focused, setFocused] = useState(false);
   const autoMood = useStarBuddyMood();
   const buddyMood = autoMood === "idle" && (focused || text.trim().length > 0) ? "typing" : autoMood;
   const menuOpen = matches.length > 0 || Boolean(atMatch && atFiles.length > 0);
+  const popoverOpen = meterOpen || effortOpen;
+  const isOffline = online === false;
+  const hasContent = text.trim().length > 0 || attachments.length > 0;
+
   const buddyTip =
     buddyMood === "working"
       ? tr("Working")
@@ -512,15 +672,37 @@ export function Composer() {
         ? tr("Writing…")
         : buddyMood === "asking"
           ? tr("Waiting for your approval")
-          : buddyMood === "typing"
-            ? tr("Listening…")
-            : tr("Ready");
+          : buddyMood === "success"
+            ? tr("Success")
+            : buddyMood === "error"
+              ? tr("Error")
+              : buddyMood === "offline"
+                ? tr("Offline")
+                : buddyMood === "typing"
+                  ? tr("Listening…")
+                  : tr("Ready");
 
-  const placeholder = running
-    ? tr("Add to what Macron is doing, or press Esc to stop")
-    : mode === "plan"
-      ? tr("Describe the goal; Macron plans first and changes nothing")
-      : tr("Ask Macron to build, fix, research or automate something");
+  const placeholder = isOffline
+    ? tr("Engine offline — attempting to reconnect…")
+    : running
+      ? tr("Add to what Macron is doing, or press Esc to stop")
+      : mode === "plan"
+        ? tr("Describe the goal; Macron plans first and changes nothing")
+        : tr("Ask Macron to build, fix, research or automate something");
+
+  const boxClass = [
+    "box",
+    mode === "plan" ? "plan" : "",
+    running ? "busy" : "",
+    focused ? "focused" : "",
+    hasContent ? "typing" : "",
+    uploading > 0 ? "uploading" : "",
+    queuedItems.length > 0 ? "has-queue" : "",
+    isOffline ? "disabled" : "",
+    errorAlert ? "has-error" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <footer className="composer">
@@ -538,7 +720,9 @@ export function Composer() {
                 run(c);
               }}
             >
-              <span className="cmd">{c.name}</span>
+              <span className="cmd" dir="ltr">
+                {c.name}
+              </span>
               <span className="meta">{tr(c.hint)}</span>
             </button>
           ))}
@@ -566,9 +750,34 @@ export function Composer() {
           ))}
         </div>
       )}
+
       <div className="box-stage">
-        <StarBuddy variant="peek" mood={buddyMood} tucked={menuOpen} interactive title={`Macron · ${buddyTip}`} />
-        <div className={"box" + (mode === "plan" ? " plan" : "") + (running ? " busy" : "")}>
+        <StarBuddy variant="peek" mood={buddyMood} tucked={menuOpen || popoverOpen} interactive trackPointer title={`Macron · ${buddyTip}`} />
+        <div className={boxClass}>
+          <LiveCard />
+          {errorAlert && (
+            <div className="err-dock" role="alert">
+              <Icon name="alert" size={14} />
+              <span className="grow" dir="auto">
+                {errorAlert}
+              </span>
+              <button type="button" className="icon-btn sm" title={tr("Dismiss")} aria-label={tr("Dismiss")} onClick={clearError}>
+                <Icon name="x" size={13} />
+              </button>
+            </div>
+          )}
+          {queuedItems.length > 0 && (
+            <div className="queue-strip">
+              <span className="queue-pill">
+                <Icon name="layers" size={11} />
+                {queuedItems.length} {tr("waiting")}
+              </span>
+              <span className="queue-preview" dir="auto">
+                {queuedItems[queuedItems.length - 1]}
+              </span>
+            </div>
+          )}
+
           {(attachments.length > 0 || uploading > 0) && (
             <div className="att-bar">
               {attachments.map((a) => {
@@ -579,7 +788,9 @@ export function Composer() {
                     <span className="att-name" dir="ltr">
                       {a.base}
                     </span>
-                    <span className="att-size">{bytes(a.size)}</span>
+                    <span className="att-size" dir="ltr">
+                      {bytes(a.size)}
+                    </span>
                     <button
                       type="button"
                       className="att-rm"
@@ -599,20 +810,26 @@ export function Composer() {
               )}
             </div>
           )}
+
           <textarea
             ref={ref}
             rows={1}
             dir="auto"
+            disabled={isOffline}
             value={text}
             placeholder={placeholder}
             onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onBlur={() => {
+              setFocused(false);
+              setState({ composerTyping: false });
+            }}
             onPaste={onPaste}
             onClick={(e) => setCaret(e.currentTarget.selectionStart || 0)}
             onKeyUp={(e) => setCaret(e.currentTarget.selectionStart || 0)}
             onChange={(e) => change(e.target.value, e.target.selectionStart || 0)}
             onKeyDown={onKey}
           />
+
           <input
             ref={fileInputRef}
             type="file"
@@ -624,27 +841,24 @@ export function Composer() {
               if (files.length) void uploadFiles(files);
             }}
           />
+
           <div className="toolbar">
             <ModeSwitch />
             <button
               type="button"
               className="icon-btn sm attach-btn"
+              disabled={isOffline}
               title={tr("Attach files or images")}
               aria-label={tr("Attach files or images")}
               onClick={() => fileInputRef.current?.click()}
             >
-              <Icon name="paperclip" size={15} />
+              <Icon name="paperclip" size={14} />
             </button>
             <ModelButton />
-            <EffortMenu />
+            <EffortMenu onOpenChange={setEffortOpen} />
             <span className="grow" />
-            {queued > 0 && (
-              <span className="queued">
-                {queued} {tr("waiting")}
-              </span>
-            )}
-            <Meter />
-            <SendStop running={running} hasContent={text.trim().length > 0 || attachments.length > 0} fly={fly} onSend={submit} />
+            <Meter onOpenChange={setMeterOpen} />
+            <SendStop running={running} hasContent={hasContent} disabled={isOffline} fly={fly} onSend={() => void submit()} />
           </div>
         </div>
       </div>

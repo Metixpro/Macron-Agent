@@ -5,22 +5,16 @@ import {
   addServer,
   answer,
   authServer,
-  connectServer,
-  disconnectServer,
   installOnServer,
-  removeServer,
   effortAbout,
   effortLevels,
   effortName,
-  effortNote,
   exportConversation,
   setTuning,
-  windowName,
   chooseModel,
   closeDialog,
   compact,
   errorText,
-  fail,
   initProject,
   newChat,
   openDialog,
@@ -35,19 +29,18 @@ import {
 } from "../actions";
 import { server } from "../api";
 import { shortPath } from "../format";
-import { useMod, useProjectName } from "../hooks";
+import { useHomePath, useMod, useProjectName } from "../hooks";
 import { useT } from "../i18n";
-import type { Lang } from "../i18n";
 import { Icon } from "../icons";
 import type { IconName } from "../icons";
-import { applyPalette, clearPaletteOverrides, getSavedPaletteId, loadPalettes } from "../palettes";
 import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
-import type { Ask, Listing, Plugin, ThemePalette } from "../types";
-import { ProviderEditor, ProvidersSection } from "./ProviderManager";
-import { RoutingMoaSection } from "./RoutingMoaSection";
+import type { Ask, Listing, Plugin } from "../types";
+import { ProviderEditor } from "./ProviderManager";
 import { SessionSearch } from "./SessionSearch";
-import { AboutCard, ConnectionsSection, MemorySection, SkillsSection, SoulSection, StatusDialog, UpdatesSection } from "./SettingsExtras";
+import { StatusDialog } from "./SettingsExtras";
+import { SettingsWorkspace } from "./settings/SettingsWorkspace";
+import { StarBuddy } from "./StarBuddy";
 
 function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; children: ReactNode }) {
   return (
@@ -66,81 +59,102 @@ function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; ch
 
 export function Dialogs() {
   const d = useStore((s) => s.dialog);
+  const settingsBg = useStore((s) => s.settingsBg);
   if (!d) return null;
+  if (d.kind === "settings") {
+    return <SettingsWorkspace initialSection={d.section || "general"} />;
+  }
+
+  let modal: ReactNode = null;
   switch (d.kind) {
     case "ask":
-      return (
+      modal = (
         <Modal kind="ask" dismiss={false}>
           <AskDialog ask={d.ask} />
         </Modal>
       );
+      break;
     case "palette":
-      return (
+      modal = (
         <Modal kind="palette" dismiss>
           <Palette key={d.mode} mode={d.mode} />
         </Modal>
       );
+      break;
     case "search":
-      return (
+      modal = (
         <Modal kind="palette" dismiss>
           <SessionSearch />
         </Modal>
       );
+      break;
     case "folder":
-      return (
+      modal = (
         <Modal kind="folder" dismiss>
           <FolderPicker />
         </Modal>
       );
-    case "settings":
-      return (
-        <Modal kind="settings" dismiss>
-          <Settings />
-        </Modal>
-      );
+      break;
     case "status":
-      return (
+      modal = (
         <Modal kind="settings" dismiss>
           <StatusDialog onClose={closeDialog} />
         </Modal>
       );
+      break;
     case "provider-edit":
-      return (
+      modal = (
         <Modal kind="settings provider-modal" dismiss>
           <ProviderEditor key={d.provider ? String(d.provider.id) : "new"} provider={d.provider} />
         </Modal>
       );
+      break;
     case "mcp-add":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <McpAdd />
         </Modal>
       );
+      break;
     case "model-connect":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <ModelConnect />
         </Modal>
       );
+      break;
     case "server-add":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <ServerAdd />
         </Modal>
       );
+      break;
     case "server-auth":
-      return (
+      modal = (
         <Modal kind="form" dismiss>
           <ServerAuth key={d.id + d.need} id={d.id} need={d.need} fingerprint={d.fingerprint} install={d.install} />
         </Modal>
       );
+      break;
     case "server-install":
-      return (
+      modal = (
         <Modal kind="form" dismiss={false}>
           <ServerInstall key={d.id + (d.secrets ? "+" : "")} id={d.id} update={d.update} secrets={d.secrets} />
         </Modal>
       );
+      break;
   }
+
+  if (settingsBg) {
+    return (
+      <>
+        <SettingsWorkspace initialSection={settingsBg} />
+        {modal}
+      </>
+    );
+  }
+  return modal;
 }
 
 function ServerInstall({ id, update, secrets }: { id: string; update: boolean; secrets?: { password?: string; passphrase?: string; trust?: string } }) {
@@ -449,6 +463,7 @@ const addressRe = /^(?:([^@\s]+)@)?(\[[^\]]+\]|[^:@\s]+)(?::(\d{1,5}))?$/;
 
 function ServerAdd() {
   const wsl = useStore((s) => s.wsl);
+  const sshKeyDefault = useHomePath(".ssh/id_ed25519");
   const [kind, setKind] = useState<"ssh" | "wsl">("ssh");
   const [address, setAddress] = useState("");
   const [name, setName] = useState("");
@@ -524,7 +539,7 @@ function ServerAdd() {
         (more ? (
           <label className="field">
             <span>Private key file</span>
-            <input spellCheck={false} dir="ltr" placeholder="Default: your SSH agent, then ~/.ssh/id_ed25519, id_ecdsa, id_rsa" value={key} onChange={(e) => setKey(e.target.value)} />
+            <input spellCheck={false} dir="ltr" placeholder={`Default: your SSH agent, then ${sshKeyDefault}, id_ecdsa, id_rsa`} value={key} onChange={(e) => setKey(e.target.value)} />
           </label>
         ) : (
           <button type="button" className="link-btn" onClick={() => setMore(true)}>
@@ -549,6 +564,7 @@ function ServerAdd() {
 
 function ServerAuth({ id, need, fingerprint, install }: { id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; install?: boolean }) {
   const srv = useStore((s) => s.servers.find((x) => x.id === id));
+  const knownHostsPath = useHomePath(".ssh/known_hosts");
   const [value, setValue] = useState("");
   const where = srv ? (srv.user ? srv.user + "@" : "") + (srv.host || "") : "the server";
   const submit = () => {
@@ -571,8 +587,8 @@ function ServerAuth({ id, need, fingerprint, install }: { id: string; need: "tru
           </div>
           <pre className="command">{fingerprint}</pre>
           <div className="hint">
-            Compare it with what <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> prints on the server, or with your hosting panel. Macron remembers it in
-            ~/.ssh/known_hosts and warns you if it ever changes.
+            Compare it with what <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> prints on the server, or with your hosting panel. Macron remembers it in{" "}
+            <code dir="ltr">{knownHostsPath}</code> and warns you if it ever changes.
           </div>
         </>
       ) : (
@@ -625,9 +641,7 @@ function AskDialog({ ask }: { ask: Ask }) {
   return (
     <>
       <div className="ask-head">
-        <span className="ask-icon">
-          <Icon name="alert" size={16} />
-        </span>
+        <StarBuddy variant="stage" size="md" mood="asking" interactive />
         <div>
           <h3>{ask.title || "Allow this?"}</h3>
           <div className="sub">Macron wants to run this in {name}.</div>
@@ -690,6 +704,7 @@ function useList(count: number) {
 let modelCache: { key: string; models: string[] } | null = null;
 
 function Palette({ mode }: { mode: "root" | "models" }) {
+  const t = useT();
   const projects = useStore((s) => s.projects);
   const current = useStore((s) => s.current);
   const defaultId = useStore((s) => s.defaultId);
@@ -734,47 +749,47 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       const ordered = all.includes(active) ? [active, ...all.filter((m) => m !== active)] : all;
       const list = ordered.map<Entry>((m) => ({ id: "m:" + m, group: "Models", label: m, icon: "chip", on: m === active, run: () => chooseModel(m) }));
       const typed = q.trim();
-      if (typed && !(models || []).includes(typed)) list.push({ id: "custom", group: "Models", label: `Use “${typed}”`, icon: "chip", run: () => chooseModel(typed) });
+      if (typed && !(models || []).includes(typed)) list.push({ id: "custom", group: "Models", label: `${t("Use")} “${typed}”`, icon: "chip", run: () => chooseModel(typed) });
       return list;
     }
     const themes: [Theme, string, IconName][] = [
-      ["system", "Match the system", "monitor"],
-      ["dark", "Dark", "moon"],
-      ["light", "Light", "sun"],
+      ["system", t("Match the system"), "monitor"],
+      ["dark", t("Dark"), "moon"],
+      ["light", t("Light"), "sun"],
     ];
     const list: Entry[] = [
-      { id: "new", group: "Actions", label: "New conversation", icon: "edit", keys: [mod, "N"], run: () => newChat() },
-      { id: "search", group: "Actions", label: "Search conversations…", hint: "Across all workspaces & threads", icon: "search", keys: [mod, "Shift", "F"], run: () => openDialog({ kind: "search" }) },
+      { id: "new", group: "Actions", label: t("New conversation"), icon: "edit", keys: [mod, "N"], run: () => newChat() },
+      { id: "search", group: "Actions", label: t("Search conversations…"), hint: t("Across all workspaces & threads"), icon: "search", keys: [mod, "Shift", "F"], run: () => openDialog({ kind: "search" }) },
       appMode === "plan"
-        ? { id: "mode", group: "Actions", label: "Switch to Build mode", hint: "Let Macron make changes", icon: "code", keys: [mod, "Shift", "P"], run: () => toggleMode() }
-        : { id: "mode", group: "Actions", label: "Switch to Plan mode", hint: "Plan first, change nothing", icon: "map", keys: [mod, "Shift", "P"], run: () => toggleMode() },
+        ? { id: "mode", group: "Actions", label: t("Switch to Build mode"), hint: t("Let Macron make changes"), icon: "code", keys: [mod, "Shift", "P"], run: () => toggleMode() }
+        : { id: "mode", group: "Actions", label: t("Switch to Plan mode"), hint: t("Plan first, change nothing"), icon: "map", keys: [mod, "Shift", "P"], run: () => toggleMode() },
       info.model
-        ? { id: "model", group: "Actions", label: "Change model…", hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) }
-        : { id: "model", group: "Actions", label: "Connect a model…", icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
-      { id: "connect", group: "Actions", label: "Add or customize provider…", icon: "plus", run: () => openDialog({ kind: "provider-edit" }) },
-      { id: "folder", group: "Actions", label: "Open folder…", icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
-      { id: "changes", group: "Actions", label: "Show git changes & diff", icon: "gitBranch", run: () => toggleChanges(true) },
-      { id: "status", group: "Actions", label: "System & session status", hint: "Model, sandbox, SpectorDev", icon: "info", run: () => openDialog({ kind: "status" }) },
-      { id: "export", group: "Actions", label: "Export conversation as Markdown", icon: "download", run: () => exportConversation() },
-      { id: "init", group: "Actions", label: "Initialize MACRON.md", hint: "Generate project instructions", icon: "file", run: () => void initProject() },
-      { id: "mcp", group: "Actions", label: "Add an MCP server…", icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
-      { id: "compact", group: "Actions", label: "Compact the conversation", hint: "Summarise to free room", icon: "layers", run: () => compact() },
-      { id: "update", group: "Actions", label: "Check for updates (GitHub)", icon: "download", run: () => void checkUpdate(true) },
+        ? { id: "model", group: "Actions", label: t("Change model…"), hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) }
+        : { id: "model", group: "Actions", label: t("Connect a model…"), icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
+      { id: "connect", group: "Actions", label: t("Add or customize provider…"), icon: "plus", run: () => openDialog({ kind: "provider-edit" }) },
+      { id: "folder", group: "Actions", label: t("Open folder…"), icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
+      { id: "changes", group: "Actions", label: t("Show git changes & diff"), icon: "gitBranch", run: () => toggleChanges(true) },
+      { id: "status", group: "Actions", label: t("System & session status"), hint: t("Model, sandbox, SpectorDev"), icon: "info", run: () => openDialog({ kind: "status" }) },
+      { id: "export", group: "Actions", label: t("Export conversation as Markdown"), icon: "download", run: () => exportConversation() },
+      { id: "init", group: "Actions", label: t("Initialize MACRON.md"), hint: t("Generate project instructions"), icon: "file", run: () => void initProject() },
+      { id: "mcp", group: "Actions", label: t("Add an MCP server…"), icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
+      { id: "compact", group: "Actions", label: t("Compact the conversation"), hint: t("Summarise to free room"), icon: "layers", run: () => compact() },
+      { id: "update", group: "Actions", label: t("Check for updates (GitHub)"), icon: "download", run: () => void checkUpdate(true) },
       { id: "lang", group: "Actions", label: getState().lang === "fa" ? "Switch language to English" : "تغییر زبان به فارسی (Persian)", icon: "globe", run: () => setLang(getState().lang === "fa" ? "en" : "fa") },
-      { id: "settings", group: "Actions", label: "Settings", icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
+      { id: "settings", group: "Actions", label: t("Settings"), icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
     ];
-    if (running) list.unshift({ id: "stop", group: "Actions", label: "Stop the current job", icon: "square", keys: ["Esc"], run: () => stop() });
-    for (const [t, label, icon] of themes) list.push({ id: "t:" + t, group: "Theme", label, icon, on: theme === t, run: () => setTheme(t) });
+    if (running) list.unshift({ id: "stop", group: "Actions", label: t("Stop the current job"), icon: "square", keys: ["Esc"], run: () => stop() });
+    for (const [th, label, icon] of themes) list.push({ id: "t:" + th, group: "Theme", label, icon, on: theme === th, run: () => setTheme(th) });
     if (tuning && tuning.model) {
       for (const l of effortLevels) {
-        list.push({ id: "e:" + (l || "auto"), group: "Effort", label: effortName(l), hint: effortAbout[l], icon: "gauge", on: tuning.effort === l, run: () => setTuning("effort", l || "auto", "Effort: " + effortName(l)) });
+        list.push({ id: "e:" + (l || "auto"), group: "Effort", label: t(effortName(l)), hint: t(effortAbout[l]), icon: "gauge", on: tuning.effort === l, run: () => setTuning("effort", l || "auto", "Effort: " + effortName(l)) });
       }
     }
     for (const p of projects) {
       list.push({
         id: "p:" + p.id,
         group: "Workspaces",
-        label: p.id === defaultId ? "Home" : p.name,
+        label: p.id === defaultId ? t("Home") : p.name,
         hint: shortPath(p.path, home),
         icon: p.id === defaultId ? "home" : "folder",
         on: p.id === current,
@@ -782,13 +797,13 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       });
     }
     return list;
-  }, [mode, models, active, q, mod, appMode, info.model, running, theme, projects, defaultId, current, home, tuning]);
+  }, [mode, models, active, q, mod, appMode, info.model, running, theme, projects, defaultId, current, home, tuning, t]);
 
   const shown = useMemo(() => {
     const f = q.trim().toLowerCase();
     if (!f || mode === "models") return mode === "models" && f ? entries.filter((e) => e.id === "custom" || e.label.toLowerCase().includes(f)) : entries;
-    return entries.filter((e) => (e.label + " " + (e.hint || "") + " " + e.group).toLowerCase().includes(f));
-  }, [entries, q, mode]);
+    return entries.filter((e) => (e.label + " " + (e.hint || "") + " " + e.group + " " + t(e.group)).toLowerCase().includes(f));
+  }, [entries, q, mode, t]);
 
   const { sel, setSel, listRef, move } = useList(shown.length);
 
@@ -817,7 +832,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
           autoFocus
           spellCheck={false}
           value={q}
-          placeholder={mode === "models" ? "Search models, or type any model name" : "Type a command or a workspace"}
+          placeholder={mode === "models" ? t("Search models, or type any model name") : t("Type a command or a workspace")}
           onChange={(e) => {
             setQ(e.target.value);
             setSel(0);
@@ -827,20 +842,20 @@ function Palette({ mode }: { mode: "root" | "models" }) {
         {mode === "models" && info.provider && <span className="scope">{info.provider}</span>}
       </div>
       <div className="palette-list" ref={listRef}>
-        {mode === "models" && models === null && <div className="empty-row">Loading models…</div>}
+        {mode === "models" && models === null && <div className="empty-row">{t("Loading models…")}</div>}
         {error && <div className="empty-row">{error}</div>}
-        {models !== null && !shown.length && !error && <div className="empty-row">Nothing matches</div>}
+        {models !== null && !shown.length && !error && <div className="empty-row">{t("Nothing matches")}</div>}
         {shown.map((e, i) => {
           const head = e.group !== lastGroup ? e.group : "";
           lastGroup = e.group;
           return (
             <div key={e.id}>
-              {head && mode !== "models" && <div className="group">{head}</div>}
+              {head && mode !== "models" && <div className="group">{t(head)}</div>}
               <button type="button" className={"entry" + (i === sel ? " sel" : "")} onMouseMove={() => i !== sel && setSel(i)} onClick={() => pick(e)}>
                 <Icon name={e.icon} size={15} />
-                <span className="label">{e.label}</span>
-                {e.hint && <span className="hint">{e.hint}</span>}
-                <span className="end">
+                <span className="label" dir="auto">{e.label}</span>
+                {e.hint && <span className="hint" dir="auto">{e.hint}</span>}
+                <span className="end" dir="ltr">
                   {e.on && <Icon name="check" size={14} className="tick" />}
                   {e.keys && e.keys.map((k) => <kbd key={k}>{k}</kbd>)}
                 </span>
@@ -851,14 +866,13 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       </div>
       <div className="palette-foot">
         <span>
-          <kbd>↑</kbd>
-          <kbd>↓</kbd> move
+          <span dir="ltr"><kbd>↑</kbd><kbd>↓</kbd></span> {t("move")}
         </span>
         <span>
-          <kbd>Enter</kbd> choose
+          <kbd dir="ltr">Enter</kbd> {t("choose")}
         </span>
         <span>
-          <kbd>Esc</kbd> close
+          <kbd dir="ltr">Esc</kbd> {t("close")}
         </span>
       </div>
     </>
@@ -867,29 +881,40 @@ function Palette({ mode }: { mode: "root" | "models" }) {
 
 function crumbs(path: string, sep: string): { label: string; path: string }[] {
   const out: { label: string; path: string }[] = [];
-  const parts = path.split(/[\\/]+/).filter(Boolean);
   if (sep === "/") {
     out.push({ label: "/", path: "/" });
     let acc = "";
-    for (const p of parts) {
+    for (const p of path.split("/").filter(Boolean)) {
       acc += "/" + p;
       out.push({ label: p, path: acc });
     }
     return out;
   }
-  let acc = "";
-  parts.forEach((p, i) => {
-    acc = i === 0 ? p + "\\" : acc.replace(/\\$/, "") + "\\" + p;
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  const unc = /^[\\/]{2}/.test(path);
+  const root = (unc ? "\\\\" : "") + parts.splice(0, unc ? 2 : 1).join("\\");
+  let acc = root + "\\";
+  out.push({ label: root, path: acc });
+  for (const p of parts) {
+    acc = acc.replace(/\\$/, "") + "\\" + p;
     out.push({ label: p, path: acc });
-  });
+  }
   return out;
 }
 
 function FolderPicker() {
+  const t = useT();
   const [listing, setListing] = useState<Listing | null>(null);
   const [input, setInput] = useState("");
+  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [openingFolder, setOpeningFolder] = useState(false);
   const [error, setError] = useState("");
-  const dirs = listing?.dirs || [];
+  const allDirs = listing?.dirs || [];
+  const dirs = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? allDirs.filter((d) => d.toLowerCase().includes(q)) : allDirs;
+  }, [allDirs, filter]);
   const { sel, setSel, listRef, move } = useList(dirs.length);
   const [moved, setMoved] = useState(false);
   const pathRef = useRef<HTMLInputElement>(null);
@@ -899,23 +924,31 @@ function FolderPicker() {
     if (el) el.scrollLeft = el.scrollWidth;
   }, [listing]);
 
+  useEffect(() => {
+    if (!moved) return;
+    const row = listRef.current?.children[sel] as HTMLElement | undefined;
+    row?.scrollIntoView({ block: "nearest" });
+  }, [sel, moved, listRef]);
+
   const latest = useRef(0);
-  const typed = useRef(false);
+  const editVersion = useRef(0);
   const go = async (path: string) => {
     const ticket = ++latest.current;
+    const edit = editVersion.current;
+    setLoading(true);
+    setError("");
     try {
       const r = await server.fs(path);
       if (ticket !== latest.current) return;
       setListing(r);
-      if (path !== "" || !typed.current) {
-        typed.current = false;
-        setInput(r.path);
-      }
+      setFilter("");
+      if (edit === editVersion.current) setInput(r.path);
       setSel(0);
       setMoved(false);
-      setError("");
     } catch (e) {
       if (ticket === latest.current) setError(errorText(e));
+    } finally {
+      if (ticket === latest.current) setLoading(false);
     }
   };
 
@@ -923,18 +956,25 @@ function FolderPicker() {
     go("");
   }, []);
 
-  const join = (name: string) => (listing ? listing.path.replace(/[\\/]+$/, "") + listing.sep + name : name);
+  const join = (name: string) => (listing ? (listing.path.endsWith(listing.sep) ? listing.path : listing.path + listing.sep) + name : name);
 
   const choose = async (path: string) => {
-    closeDialog();
+    if (loading || openingFolder) return;
+    const dialog = getState().dialog;
+    setOpeningFolder(true);
     try {
-      await addFolder(path);
+      if (await addFolder(path)) {
+        if (getState().dialog === dialog) closeDialog();
+      } else setError(getState().errorAlert || t("Could not open folder"));
     } catch (e) {
-      fail(e);
+      setError(errorText(e));
+    } finally {
+      setOpeningFolder(false);
     }
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || openingFolder) return;
     if (move(e)) {
       setMoved(true);
       return;
@@ -951,12 +991,12 @@ function FolderPicker() {
     choose(listing.path);
   };
 
-  const name = listing ? listing.path.split(/[\\/]+/).filter(Boolean).pop() || listing.path : "";
+  const name = listing ? listing.path.split(listing.sep).filter(Boolean).pop() || listing.path : "";
   return (
     <>
-      <h3>Open a folder</h3>
-      <div className="sub">Macron works inside the folder you choose. Each folder keeps its own conversation.</div>
-      <div className="path-input">
+      <h3>{t("Open a folder")}</h3>
+      <div className="sub">{t("Macron works inside the folder you choose. Each folder keeps its own conversation.")}</div>
+      <div className="path-input" dir="ltr">
         <Icon name="folder" size={15} />
         <input
           ref={pathRef}
@@ -964,74 +1004,107 @@ function FolderPicker() {
           spellCheck={false}
           dir="ltr"
           value={input}
+          disabled={openingFolder}
           onChange={(e) => {
-            typed.current = true;
+            editVersion.current++;
             setInput(e.target.value);
           }}
           onKeyDown={onKey}
-          placeholder="Type or paste a path"
+          placeholder={t("Type or paste a path")}
+          aria-label={t("Type or paste a path")}
         />
+        {loading && <span className="spin" />}
       </div>
       {listing && (
-        <div className="crumbs">
+        <div className="crumbs" dir="ltr">
           {crumbs(listing.path, listing.sep).map((c, i, all) => (
             <span key={c.path}>
-              <button type="button" className={i === all.length - 1 ? "here" : ""} onClick={() => go(c.path)}>
+              <button type="button" className={i === all.length - 1 ? "here" : ""} disabled={openingFolder} onClick={() => go(c.path)}>
                 {c.label}
               </button>
-              {i < all.length - 1 && c.label !== "/" && <span className="slash-sep">/</span>}
+              {i < all.length - 1 && c.label !== "/" && <span className="slash-sep">{listing.sep}</span>}
             </span>
           ))}
         </div>
       )}
+      <div className="folder-toolbar">
+        <div className="folder-nav">
+          {listing?.home && (
+            <button type="button" className="folder-chip" disabled={openingFolder} onClick={() => go(listing.home)}>
+              <Icon name="home" size={12} />
+              <span>{t("Home")}</span>
+            </button>
+          )}
+          {listing?.parent && (
+            <button type="button" className="folder-chip" disabled={openingFolder} onClick={() => go(listing.parent)}>
+              <Icon name="arrowUp" size={12} />
+              <span>{t("Up")}</span>
+            </button>
+          )}
+          {(listing?.roots || [])
+            .filter((r) => r !== "/" && r !== listing?.path)
+            .map((r) => (
+              <button key={r} type="button" className="folder-chip" dir="ltr" disabled={openingFolder} onClick={() => go(r)}>
+                <Icon name="drive" size={12} />
+                <span>{r}</span>
+              </button>
+            ))}
+        </div>
+        <div className="folder-filter">
+          <Icon name="search" size={12} />
+          <input
+            type="text"
+            value={filter}
+            spellCheck={false}
+            placeholder={t("Filter folders…")}
+            aria-label={t("Filter folders…")}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setSel(0);
+              setMoved(false);
+            }}
+          />
+          {filter && (
+            <button
+              type="button"
+              className="folder-filter-x"
+              aria-label={t("Clear")}
+              onClick={() => setFilter("")}
+            >
+              <Icon name="x" size={11} />
+            </button>
+          )}
+        </div>
+      </div>
       <div className="folder-list" ref={listRef}>
-        {error && <div className="empty-row">{error}</div>}
-        {listing && !dirs.length && !error && <div className="empty-row">No folders inside</div>}
+        {error && <div className="empty-row" role="alert" dir="auto">{error}</div>}
+        {listing && !dirs.length && !error && <div className="empty-row">{t("No folders inside")}</div>}
         {dirs.map((d, i) => (
           <button
             key={d}
             type="button"
             className={"entry" + (moved && i === sel ? " sel" : "")}
+            disabled={loading || openingFolder}
             onClick={() => go(join(d))}
-            onDoubleClick={() => choose(join(d))}
           >
             <Icon name="folder" size={15} />
-            <span className="label">{d}</span>
+            <span className="label" dir="ltr">{d}</span>
             <span className="end">
               <Icon name="right" size={12} />
             </span>
           </button>
         ))}
       </div>
-      <div className="bar">
-        <div className="left">
-          {listing?.home && (
-            <button type="button" className="btn ghost" onClick={() => go(listing.home)}>
-              <Icon name="home" size={14} />
-              Home
-            </button>
-          )}
-          {listing?.parent && (
-            <button type="button" className="btn ghost" onClick={() => go(listing.parent)}>
-              <Icon name="arrowUp" size={14} />
-              Up
-            </button>
-          )}
-          {(listing?.roots || [])
-            .filter((r) => r !== "/" && r !== listing?.path)
-            .map((r) => (
-              <button key={r} type="button" className="btn ghost" onClick={() => go(r)}>
-                <Icon name="drive" size={14} />
-                {r}
-              </button>
-            ))}
-        </div>
-        <div className="left">
-          <button type="button" className="btn" onClick={closeDialog}>
-            Cancel
+      <div className="bar folder-bar">
+        <span className="folder-selected" dir="ltr" title={listing?.path || ""}>
+          {listing?.path || ""}
+        </span>
+        <div className="left folder-actions">
+          <button type="button" className="btn" disabled={openingFolder} onClick={closeDialog}>
+            {t("Cancel")}
           </button>
-          <button type="button" className="btn primary" disabled={!listing} onClick={() => listing && choose(listing.path)}>
-            Open {name ? `“${name}”` : ""}
+          <button type="button" className="btn primary folder-open-btn" disabled={!listing || loading || openingFolder || Boolean(error)} onClick={() => listing && choose(listing.path)}>
+            <span>{name ? <>{t("Open")} “<bdi>{name}</bdi>”</> : t("Open")}</span>
           </button>
         </div>
       </div>
@@ -1051,352 +1124,3 @@ function Choice<T extends string>({ value, options, onPick }: { value: T; option
   );
 }
 
-function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
-  return (
-    <section className="set">
-      <div className="set-text">
-        <div className="set-title">{title}</div>
-        {help && <div className="set-help">{help}</div>}
-      </div>
-      <div className="set-control">{children}</div>
-    </section>
-  );
-}
-
-function Settings() {
-  const t = useT();
-  const info = useStore((s) => s.info);
-  const theme = useStore((s) => s.theme);
-  const lang = useStore((s) => s.lang);
-  const servers = useStore((s) => s.servers);
-  const tuning = useStore((s) => s.tuning);
-  const mod = useMod();
-  const [plugins, setPlugins] = useState<Plugin[] | null>(null);
-  const [palettes, setPalettes] = useState<ThemePalette[]>([]);
-  const [activePalette, setActivePalette] = useState<string>(() => getSavedPaletteId());
-  const dialog = useStore((s) => s.dialog);
-  const loadPlugins = () =>
-    server
-      .plugins()
-      .then((r) => setPlugins(r.plugins || []))
-      .catch(() => setPlugins([]));
-  useEffect(() => {
-    if (dialog?.kind === "settings") {
-      loadPlugins();
-      void loadPalettes().then((r) => setPalettes(r.themes || []));
-    }
-  }, [dialog?.kind]);
-  const togglePlugin = async (p: Plugin) => {
-    setPlugins((list) => (list || []).map((x) => (x.key === p.key ? { ...x, enabled: !p.enabled, status: p.enabled ? "off" : "connecting" } : x)));
-    try {
-      await server.enablePlugin(p.key, !p.enabled);
-    } catch (e) {
-      fail(e);
-    }
-    loadPlugins();
-  };
-  const dropPlugin = async (p: Plugin) => {
-    try {
-      await server.removePlugin(p.key);
-    } catch (e) {
-      fail(e);
-    }
-    loadPlugins();
-  };
-
-  const apply = async (fn: () => Promise<{ info: typeof info }>, _done?: string) => {
-    try {
-      const r = await fn();
-      setState({ info: r.info });
-    } catch (e) {
-      fail(e);
-    }
-  };
-
-  const pickThemeMode = (next: Theme) => {
-    clearPaletteOverrides();
-    applyPalette(null);
-    setActivePalette("");
-    setTheme(next);
-  };
-
-  const pickPalette = (p: ThemePalette) => {
-    setTheme(p.appearance);
-    applyPalette(p);
-    setActivePalette(p.id);
-  };
-
-  const isLinux = !info.platform || info.platform === "linux";
-  const isWindows = info.platform === "windows";
-  const backend = info.sandboxBackend || "";
-  const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
-  const executionHelp = t(
-    {
-      sandbox: info.sandboxed
-        ? isWindows || backend === "windows-job"
-          ? "Windows Job-Object sandbox is active (process, memory, clipboard & workspace temp isolation)."
-          : "Strict bubblewrap isolation is active (fail-closed)."
-        : isWindows
-          ? "Strict Windows Job-Object sandbox (process, memory, clipboard & secret-env isolation)."
-          : isLinux
-            ? "Strict bubblewrap isolation (fail-closed if unavailable)."
-            : "Strict sandbox isolation (Linux bubblewrap / Windows Job-Object).",
-      "best-effort": info.sandboxed
-        ? isWindows || backend === "windows-job"
-          ? "Windows Job-Object sandbox active; falls back to local if unavailable."
-          : "Sandbox active; falls back to local if unavailable."
-        : isWindows
-          ? "Uses native Windows Job-Object sandbox when enabled."
-          : isLinux
-            ? "Unsandboxed; uses bubblewrap when available."
-            : "Unsandboxed; uses platform sandbox when available.",
-      local: "Sandbox bypassed. Commands run directly on the host.",
-    }[executionMode],
-  );
-
-  const approvals = (info.approvals || "smart") as "smart" | "manual" | "off";
-  const approvalHelp = t(
-    {
-      smart: "Safe commands run on their own. Anything risky waits for you.",
-      manual: "Every command waits for your OK.",
-      off: "Nothing waits. Only for machines you can afford to break.",
-    }[approvals],
-  );
-
-  return (
-    <>
-      <div className="settings-head">
-        <h3>{t("Settings")}</h3>
-        <button type="button" className="icon-btn" title="Close (Esc)" onClick={closeDialog}>
-          <Icon name="x" />
-        </button>
-      </div>
-      <div className="settings-body">
-        <div className="set-group">{t("General")}</div>
-        <Section title={t("Appearance")}>
-          <Choice<Theme>
-            value={theme}
-            options={[
-              ["system", t("System")],
-              ["light", t("Light")],
-              ["dark", t("Dark")],
-            ]}
-            onPick={pickThemeMode}
-          />
-        </Section>
-        {palettes.length > 0 && (
-          <div className="palette-wrap">
-            <div className="palette-label">
-              <span>{t("Theme palette")}</span>
-              <span className="palette-hint" dir="ltr">
-                ~/.macron/themes/*.json
-              </span>
-            </div>
-            <div className="palette-row" role="radiogroup" aria-label={t("Theme palette")}>
-              {palettes.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={activePalette === p.id}
-                  className={"palette-pill" + (activePalette === p.id ? " on" : "")}
-                  onClick={() => pickPalette(p)}
-                >
-                  <span className="swatches" aria-hidden="true">
-                    {p.swatches.map((hex, i) => (
-                      <i key={i} style={{ background: hex }} />
-                    ))}
-                  </span>
-                  <span>{p.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <Section title={t("Language")}>
-          <Choice<Lang>
-            value={lang}
-            options={[
-              ["en", "English"],
-              ["fa", "فارسی"],
-            ]}
-            onPick={setLang}
-          />
-        </Section>
-        <UpdatesSection />
-        <div className="set-group">{t("Safety")}</div>
-        <Section title={t("Command approvals")} help={approvalHelp}>
-          <Choice
-            value={approvals}
-            options={[
-              ["smart", t("Smart")],
-              ["manual", t("Always ask")],
-              ["off", t("Never ask")],
-            ]}
-            onPick={(m) => apply(() => server.setApprovals(m))}
-          />
-        </Section>
-        <Section title={t("Execution mode")} help={executionHelp}>
-          <Choice
-            value={executionMode}
-            options={[
-              ["sandbox", t("Sandbox")],
-              ["best-effort", t("Best-effort")],
-              ["local", t("Local")],
-            ]}
-            onPick={(m) => apply(() => server.setExecutionMode(m))}
-          />
-        </Section>
-        <Section title={t("YOLO for 30 minutes")} help={t(info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while.")}>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={info.yolo}
-            className={"switch" + (info.yolo ? " on" : "")}
-            onClick={() => apply(() => server.setYolo(!getState().info.yolo))}
-          >
-            <span />
-          </button>
-        </Section>
-        <ProvidersSection />
-        <RoutingMoaSection />
-        {tuning && tuning.model && (
-          <>
-            <Section title={t("Effort")} help={effortNote(tuning)}>
-              <Choice
-                value={tuning.effort || "auto"}
-                options={effortLevels.map((l) => [l || "auto", l === "ultracode" ? "Ultra" : effortName(l)] as [string, string])}
-                onPick={(v) => setTuning("effort", v)}
-              />
-            </Section>
-            <Section
-              title={t("Context window")}
-              help={tuning.window ? "Set by you. A window larger than the model really has makes requests fail." : `Worked out from the model's name: ${windowName(tuning.autoWindow)} tokens.`}
-            >
-              <Choice
-                value={String(tuning.window)}
-                options={[
-                  ["0", "Auto"],
-                  ...(["128000", "200000", "400000", "1000000"].includes(String(tuning.window)) || !tuning.window ? [] : [[String(tuning.window), windowName(tuning.window)] as [string, string]]),
-                  ["128000", "128k"],
-                  ["200000", "200k"],
-                  ["400000", "400k"],
-                  ["1000000", "1M"],
-                ]}
-                onPick={(v) => setTuning("window", Number(v))}
-              />
-            </Section>
-            <Section title={t("Temperature")} help="Lower answers are exact and repeatable, higher ones are more varied.">
-              <Choice
-                value={tuning.temperature === null ? "auto" : String(tuning.temperature)}
-                options={[
-                  ["auto", "Auto"],
-                  ["0", "0"],
-                  ["0.2", "0.2"],
-                  ["0.5", "0.5"],
-                  ["0.7", "0.7"],
-                  ["1", "1"],
-                  ...(tuning.tempLimit >= 2 ? [["1.5", "1.5"] as [string, string]] : []),
-                ]}
-                onPick={(v) => setTuning("temperature", v === "auto" ? null : Number(v))}
-              />
-            </Section>
-          </>
-        )}
-        <SkillsSection />
-        <MemorySection />
-        <SoulSection />
-        <div className="set-group">{t("MCP servers and plugins")}</div>
-        <div className="set-list">
-          {plugins === null && <div className="empty-row">{t("Loading…")}</div>}
-          {plugins && !plugins.length && <div className="empty-row">None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.</div>}
-          {(plugins || []).map((p) => (
-            <div key={p.key} className="set-row static">
-              <span className={"state" + (p.enabled && p.status === "ready" && !p.error ? " ok" : p.enabled && p.error ? " bad" : "")} />
-              <span className="grow">
-                <span className="name">{p.name}</span>
-                <span className={"meta" + (p.error ? " bad-text" : "")} title={p.target}>
-                  {(p.kind === "mcp" ? "MCP" : "Plugin") + " · " + pluginStatus(p)}
-                </span>
-              </span>
-              <button type="button" role="switch" aria-checked={p.enabled} title={p.enabled ? "Turn off" : "Turn on"} className={"switch" + (p.enabled ? " on" : "")} onClick={() => togglePlugin(p)}>
-                <span />
-              </button>
-              {p.removable && (
-                <button type="button" className="icon-btn" title={t("Remove")} onClick={() => dropPlugin(p)}>
-                  <Icon name="x" size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button type="button" className="set-row" onClick={() => openDialog({ kind: "mcp-add" })}>
-            <Icon name="plus" size={14} />
-            <span className="grow">
-              <span className="name">{t("Add an MCP server…")}</span>
-            </span>
-          </button>
-        </div>
-        <div className="set-group">{t("Servers")}</div>
-        <div className="set-list">
-          {!servers.length && <div className="empty-row">No servers yet. Add one to let Macron work on a VPS or in WSL.</div>}
-          {servers.map((s) => (
-            <div key={s.id} className="set-row static">
-              <span className={"state" + (s.state === "ready" ? " ok" : s.state === "failed" ? " bad" : "")} />
-              <span className="grow">
-                <span className="name">{s.name}</span>
-                <span className="meta">
-                  {s.state === "failed" && s.error ? s.error : s.kind === "wsl" ? "WSL" + (s.host ? " · " + s.host : "") : (s.user ? s.user + "@" : "") + s.host}
-                  {s.version ? " · Macron " + s.version : ""}
-                </span>
-              </span>
-              {s.state === "ready" ? (
-                <button type="button" className="btn ghost" onClick={() => disconnectServer(s.id)}>
-                  {t("Disconnect")}
-                </button>
-              ) : (
-                <button type="button" className="btn ghost" disabled={s.state === "connecting" || s.state === "installing"} onClick={() => connectServer(s.id)}>
-                  {t("Connect")}
-                </button>
-              )}
-              <button type="button" className="icon-btn" title={t("Remove")} onClick={() => removeServer(s.id)}>
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-          ))}
-          <button type="button" className="set-row" onClick={() => openDialog({ kind: "server-add" })}>
-            <Icon name="plus" size={14} />
-            <span className="grow">
-              <span className="name">{t("Add a server…")}</span>
-            </span>
-          </button>
-        </div>
-        <ConnectionsSection />
-        <div className="set-group">{t("Keyboard")}</div>
-        <dl className="keys compact">
-          {(
-            [
-              [t("Send"), ["Enter"]],
-              [t("New line"), ["Shift", "Enter"]],
-              [t("Stop"), ["Esc"]],
-              [t("Command palette"), [mod, "K"]],
-              [t("Search chats"), [mod, "Shift", "F"]],
-              [t("New conversation"), [mod, "N"]],
-              [t("Plan mode"), [mod, "Shift", "P"]],
-              [t("Open folder"), [mod, "O"]],
-            ] as [string, string[]][]
-          ).map(([label, combo]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>
-                {combo.map((k) => (
-                  <kbd key={k}>{k}</kbd>
-                ))}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <AboutCard />
-      </div>
-    </>
-  );
-}

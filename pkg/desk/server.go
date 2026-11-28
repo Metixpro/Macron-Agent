@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -141,6 +142,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/threads/{tid}/switch", s.switchThreadAPI)
 	mux.HandleFunc("DELETE /api/projects/{id}/threads/{tid}", s.deleteThreadAPI)
 	mux.HandleFunc("GET /api/projects/{id}/file", s.fileAPI)
+	mux.HandleFunc("GET /api/projects/{id}/browser", s.browserStateAPI)
+	mux.HandleFunc("GET /api/projects/{id}/browser/screenshot", s.browserScreenshotAPI)
+	mux.HandleFunc("GET /api/projects/{id}/browser/stream", s.browserStreamAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/action", s.browserActionAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/input", s.browserInputAPI)
+	mux.HandleFunc("POST /api/projects/{id}/browser/takeover", s.browserTakeoverAPI)
 	mux.HandleFunc("POST /api/projects/{id}/reveal", s.revealAPI)
 	mux.HandleFunc("POST /api/projects/{id}/shell", s.shellAPI)
 	mux.HandleFunc("GET /api/projects/{id}/status", s.projectStatusAPI)
@@ -212,9 +219,24 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}
+		if sfs := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); sfs != "" && sfs != "same-origin" && sfs != "none" {
+			http.Error(w, "forbidden cross-site request", http.StatusForbidden)
+			return
+		}
+		if orig := strings.TrimSpace(r.Header.Get("Origin")); orig != "" {
+			ou, oerr := url.Parse(orig)
+			scheme := "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+			if oerr != nil || ou.Scheme != scheme || ou.User != nil || ou.Path != "" || ou.RawQuery != "" || ou.ForceQuery || ou.Fragment != "" || !strings.EqualFold(ou.Host, r.Host) {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'")
 		if r.URL.Path == "/" && r.URL.Query().Get("t") != "" {
 			if subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("t")), []byte(s.token)) == 1 {
 				http.SetCookie(w, &http.Cookie{Name: cookieName, Value: s.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
@@ -271,13 +293,13 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeErr(w http.ResponseWriter, code int, err error) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	title, hint := explain(err)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": title, "hint": hint, "detail": err.Error()})
@@ -607,6 +629,13 @@ func (s *Server) compactAPI(w http.ResponseWriter, r *http.Request) {
 	if p == nil {
 		return
 	}
+	p.mu.Lock()
+	running := p.live.Running || p.starting
+	p.mu.Unlock()
+	if running {
+		writeErr(w, http.StatusConflict, errors.New("stop the current job first"))
+		return
+	}
 	sess, err := p.session()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -801,7 +830,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	ch, drop := s.hub.subscribe()
 	defer drop()
-	_, _ = w.Write([]byte("retry: 1500\n\n"))
+	if _, err := w.Write([]byte("retry: 1500\n\n")); err != nil {
+		return
+	}
 	flusher.Flush()
 	ping := time.NewTicker(20 * time.Second)
 	defer ping.Stop()
@@ -810,12 +841,23 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ping.C:
-			_, _ = w.Write([]byte(": ping\n\n"))
+			if _, err := w.Write([]byte(": ping\n\n")); err != nil {
+				return
+			}
 			flusher.Flush()
-		case ev := <-ch:
-			_, _ = w.Write([]byte("data: "))
-			_, _ = w.Write(ev)
-			_, _ = w.Write([]byte("\n\n"))
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			if _, err := w.Write([]byte("data: ")); err != nil {
+				return
+			}
+			if _, err := w.Write(ev); err != nil {
+				return
+			}
+			if _, err := w.Write([]byte("\n\n")); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}
@@ -836,7 +878,10 @@ func (h *hub) subscribe() (chan []byte, func()) {
 	h.mu.Unlock()
 	return ch, func() {
 		h.mu.Lock()
-		delete(h.subs, ch)
+		if h.subs[ch] {
+			delete(h.subs, ch)
+			close(ch)
+		}
 		h.mu.Unlock()
 	}
 }
@@ -854,13 +899,19 @@ func (h *hub) publish(ev map[string]any) {
 		select {
 		case ch <- raw:
 		default:
+			delete(h.subs, ch)
+			close(ch)
 		}
 	}
 }
 
-var runsWhenOpened = map[string]bool{".exe": true, ".com": true, ".bat": true, ".cmd": true, ".ps1": true, ".psm1": true, ".vbs": true, ".vbe": true,
-	".js": true, ".jse": true, ".wsf": true, ".wsh": true, ".msi": true, ".msp": true, ".scr": true, ".lnk": true, ".url": true, ".reg": true, ".hta": true,
-	".cpl": true, ".jar": true, ".py": true, ".pyw": true, ".sh": true, ".command": true, ".app": true, ".appimage": true, ".run": true, ".desktop": true}
+var safeRevealExt = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".avif": true, ".ico": true,
+	".pdf": true, ".txt": true, ".md": true, ".csv": true, ".tsv": true, ".json": true, ".yaml": true, ".yml": true, ".toml": true, ".log": true,
+	".mp3": true, ".wav": true, ".ogg": true, ".m4a": true, ".flac": true, ".aac": true,
+	".mp4": true, ".webm": true, ".mov": true, ".mkv": true,
+	".docx": true, ".xlsx": true, ".pptx": true, ".odt": true, ".ods": true, ".odp": true, ".rtf": true,
+}
 
 var inlineTypes = []string{"image/png", "image/svg+xml", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/avif", "application/pdf", "text/plain", "audio/", "video/"}
 
@@ -879,7 +930,21 @@ func (s *Server) projectFile(w http.ResponseWriter, r *http.Request, name string
 		writeErr(w, http.StatusNotFound, fmt.Errorf("%s is not there any more", name))
 		return "", nil, false
 	}
-	return abs, info, true
+	baseReal, berr := filepath.EvalSymlinks(p.path)
+	if berr != nil {
+		baseReal, _ = filepath.Abs(p.path)
+	}
+	absReal, aerr := filepath.EvalSymlinks(abs)
+	if aerr != nil {
+		writeErr(w, http.StatusNotFound, fmt.Errorf("%s is not there any more", name))
+		return "", nil, false
+	}
+	rel, rerr := filepath.Rel(baseReal, absReal)
+	if rerr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		writeErr(w, http.StatusForbidden, errors.New("path must stay inside the project folder"))
+		return "", nil, false
+	}
+	return absReal, info, true
 }
 
 func (s *Server) fileAPI(w http.ResponseWriter, r *http.Request) {
@@ -927,7 +992,7 @@ func (s *Server) revealAPI(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if runsWhenOpened[strings.ToLower(filepath.Ext(abs))] {
+	if !safeRevealExt[strings.ToLower(filepath.Ext(abs))] {
 		in.Folder = true
 	}
 	if err := reveal(abs, in.Folder); err != nil {

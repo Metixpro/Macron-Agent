@@ -90,6 +90,7 @@ func (g *Gate) SetReserved(n int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.reserved = min(max(n, 0), max(g.max-1, 0))
+	g.wakeLocked()
 }
 
 type Reason int
@@ -147,7 +148,19 @@ func (g *Gate) Acquire(ctx context.Context, key string, prio Priority, wait time
 	g.busy[key] = struct{}{}
 	g.mu.Unlock()
 	if queued != nil {
-		queued(n)
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					g.mu.Lock()
+					g.drop(w)
+					delete(g.busy, key)
+					g.wakeLocked()
+					g.mu.Unlock()
+					panic(p)
+				}
+			}()
+			queued(n)
+		}()
 	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()

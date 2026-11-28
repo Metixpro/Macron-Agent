@@ -3,6 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -136,8 +139,7 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			if m.opt.Setup == nil {
 				return m, m.say("Run macron setup to connect a model")
 			}
-			m.con.pause()
-			return m, tea.ExecProcess(m.opt.Setup(), func(err error) tea.Msg { return execDoneMsg{err: err, setup: true} })
+			return m, m.execInteractive(m.opt.Setup(), true)
 		}
 		return m, m.startTurn("Connect the " + arg + " service. Discover connections with tool_search first, inspect its current status and describe its settings. Use existing settings; ask only for missing credentials. Save provided values with connections configure, then run a read-only test. Do not send a message or claim success before verification.")
 	case "/connections":
@@ -385,12 +387,48 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			m.print(stDim.Render("Run «macron telegram» in a shell to connect the bot"))
 			return m, nil
 		}
-		m.con.pause()
-		return m, tea.ExecProcess(m.opt.Telegram(), func(err error) tea.Msg { return execDoneMsg{err: err} })
+		return m, m.execInteractive(m.opt.Telegram(), false)
 	default:
 		m.print(stFail.Render(bullet) + " Unknown command " + name + stDim.Render(" · /help lists them; start with // to send a message that begins with /"))
 	}
 	return m, nil
+}
+
+func (m model) execInteractive(cmd *exec.Cmd, setup bool) tea.Cmd {
+	m.con.pause()
+	return tea.Exec(interactiveCommand{Cmd: cmd, con: m.con}, func(err error) tea.Msg {
+		m.con.resume()
+		return execDoneMsg{err: err, setup: setup}
+	})
+}
+
+type interactiveCommand struct {
+	*exec.Cmd
+	con *console
+}
+
+func (c interactiveCommand) SetStdin(io.Reader) {
+	if c.Stdin == nil {
+		// A pipe from the TUI's Windows reader disables interactive setup.
+		c.Stdin = os.Stdin
+	}
+}
+
+func (c interactiveCommand) SetStdout(w io.Writer) {
+	if c.Stdout == nil {
+		c.Stdout = w
+	}
+}
+
+func (c interactiveCommand) SetStderr(w io.Writer) {
+	if c.Stderr == nil {
+		c.Stderr = w
+	}
+}
+
+func (c interactiveCommand) Run() error {
+	defer c.con.resume()
+	return c.Cmd.Run()
 }
 
 func (m model) usage() string {

@@ -537,9 +537,27 @@ func runDesktop(args []string) int {
 	defer cancel()
 	_ = hs.Shutdown(sctx)
 	host.mu.Lock()
+	terms := make([]*terminal, 0, len(host.sessions))
 	for _, t := range host.sessions {
-		w.app.Machine.StopShell(t.session)
+		terms = append(terms, t)
 	}
 	host.mu.Unlock()
+	for _, t := range terms {
+		w.app.Machine.StopShell(t.session)
+	}
+	if w.app != nil && w.app.Registry != nil {
+		w.app.Registry.CloseAllBrowsers()
+	}
+	tidyDone := make(chan struct{})
+	go func() {
+		for _, t := range terms {
+			t.tidy.Wait()
+		}
+		close(tidyDone)
+	}()
+	select {
+	case <-tidyDone:
+	case <-time.After(10 * time.Second):
+	}
 	return 0
 }

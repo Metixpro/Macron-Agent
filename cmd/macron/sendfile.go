@@ -20,9 +20,9 @@ func (t *terminal) FilePath(name string) (string, fs.FileInfo, error) {
 		return "", nil, err
 	}
 	f.Close()
-	abs, _, err := t.app.Machine.HostPath(t.session, name)
-	if err != nil {
-		return "", nil, err
+	abs, inside, err := t.app.Machine.HostPath(t.session, name)
+	if err != nil || !inside || !t.app.Machine.Inside(t.session, name) {
+		return "", nil, fmt.Errorf("outside workspace")
 	}
 	return abs, info, nil
 }

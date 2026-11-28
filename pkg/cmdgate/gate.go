@@ -2,8 +2,10 @@ package cmdgate
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -157,32 +159,53 @@ func Normal(cmd string) string { return strings.Join(strings.Fields(Clean(cmd)),
 
 func Glob(pattern, s string) bool {
 	p, t := []rune(strings.ToLower(pattern)), []rune(strings.ToLower(s))
-	var match func(i, j int) bool
-	match = func(i, j int) bool {
-		for i < len(p) {
-			switch p[i] {
-			case '*':
-				for k := j; k <= len(t); k++ {
-					if match(i+1, k) {
-						return true
-					}
-				}
-				return false
-			case '?':
-				if j >= len(t) {
-					return false
-				}
-			default:
-				if j >= len(t) || p[i] != t[j] {
-					return false
-				}
-			}
-			i++
-			j++
+	pi, ti := 0, 0
+	starIdx, matchIdx := -1, 0
+	for ti < len(t) {
+		switch {
+		case pi < len(p) && (p[pi] == '?' || p[pi] == t[ti]):
+			pi++
+			ti++
+		case pi < len(p) && p[pi] == '*':
+			starIdx = pi
+			matchIdx = ti
+			pi++
+		case starIdx != -1:
+			pi = starIdx + 1
+			matchIdx++
+			ti = matchIdx
+		default:
+			return false
 		}
-		return j == len(t)
 	}
-	return match(0, 0)
+	for pi < len(p) && p[pi] == '*' {
+		pi++
+	}
+	return pi == len(p)
+}
+
+var (
+	auditBearerRe = regexp.MustCompile(`(?i)\b(authorization\s*[:=]\s*bearer\s+|bearer\s+)[A-Za-z0-9._~+/=-]{8,}`)
+	auditTokenRe  = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|xox[baprs]-[A-Za-z0-9-]{12,}|AKIA[0-9A-Z]{16})\b`)
+	auditParamRe  = regexp.MustCompile(`(?i)\b(api[_-]?key|token|secret|password|pass)\s*([=:])\s*([^\s'"]{6,})`)
+)
+
+func redactCmd(cmd string) string {
+	cmd = auditBearerRe.ReplaceAllString(cmd, "${1}[REDACTED]")
+	cmd = auditTokenRe.ReplaceAllString(cmd, "[REDACTED]")
+	cmd = auditParamRe.ReplaceAllString(cmd, "${1}${2}[REDACTED]")
+	return cmd
+}
+
+func simpleGlobSafe(pattern, norm string) bool {
+	if strings.HasPrefix(norm, "[") || !strings.ContainsAny(pattern, "*?") {
+		return false
+	}
+	sc := Parse(norm)
+	if len(sc.Pipelines) != 1 || len(sc.Pipelines[0]) != 1 || len(sc.Nested) != 0 || len(sc.Pipelines[0][0].Redirs) != 0 {
+		return false
+	}
+	return Glob(pattern, norm)
 }
 
 func (g *Gate) policy() Policy {
@@ -199,10 +222,11 @@ func (g *Gate) policy() Policy {
 }
 
 func (g *Gate) audit(sessionID string, o Origin, cmd, decision, decider, rule string) {
+	safeCmd := redactCmd(cmd)
 	if g.Store != nil {
-		g.Store.Audit(Entry{At: time.Now(), Session: sessionID, Origin: o, Command: cmd, Decision: decision, Decider: decider, Rule: rule})
+		g.Store.Audit(Entry{At: time.Now(), Session: sessionID, Origin: o, Command: safeCmd, Decision: decision, Decider: decider, Rule: rule})
 	}
-	log.Printf("🛡 gate: %s by %s (%s, %s): %s", decision, decider, o, rule, shorten(cmd, 160))
+	log.Printf("🛡 gate: %s by %s (%s, %s): %s", decision, decider, o, rule, shorten(safeCmd, 160))
 }
 
 func (g *Gate) Check(ctx context.Context, sessionID, command string) Verdict {
@@ -214,7 +238,10 @@ func (g *Gate) CheckCode(ctx context.Context, sessionID, language, code string) 
 	if len(findings) == 0 {
 		return Verdict{Allow: true}
 	}
-	return g.decide(ctx, sessionID, "["+language+" code] "+shorten(code, 600), findings)
+	sum := sha256.Sum256([]byte(language + "\x00" + Clean(code)))
+	key := fmt.Sprintf("[%s code %x] ", language, sum[:6]) + shorten(code, 600)
+	shown := "[" + language + " code] " + shorten(code, 600)
+	return g.decideAs(ctx, sessionID, key, shown, findings)
 }
 
 type Action struct {
@@ -269,7 +296,7 @@ func (g *Gate) decideAs(ctx context.Context, sessionID, key, shown string, findi
 	}
 	if g.Store != nil {
 		for _, a := range g.Store.Allowlist() {
-			if a == norm || strings.ContainsAny(a, "*?") && Glob(a, norm) {
+			if a == norm || simpleGlobSafe(a, norm) {
 				if worst > Safe {
 					g.audit(sessionID, origin, norm, "allowed", "allowlist", rule)
 				}

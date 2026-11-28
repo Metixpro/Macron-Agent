@@ -9,12 +9,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
 
 const defaultThreadID = "default"
+
+var validThreadIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+func validThreadID(tid string) bool {
+	return validThreadIDRe.MatchString(tid) && !strings.Contains(tid, "..")
+}
 
 type ThreadSummary struct {
 	ID      string `json:"id"`
@@ -59,12 +66,21 @@ func (p *project) loadThreadsLocked() {
 	if err == nil {
 		var idx threadIndex
 		if json.Unmarshal(raw, &idx) == nil && len(idx.Threads) > 0 {
-			p.activeThread = idx.Active
-			p.threads = idx.Threads
-			if p.activeThread == "" {
-				p.activeThread = p.threads[0].ID
+			var filtered []ThreadSummary
+			for _, th := range idx.Threads {
+				if validThreadID(th.ID) {
+					filtered = append(filtered, th)
+				}
 			}
-			return
+			if len(filtered) > 0 {
+				p.threads = filtered
+				if validThreadID(idx.Active) {
+					p.activeThread = idx.Active
+				} else {
+					p.activeThread = p.threads[0].ID
+				}
+				return
+			}
 		}
 	}
 	p.activeThread = defaultThreadID
@@ -84,8 +100,27 @@ func (p *project) saveThreadsLocked() {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(p.threadsFile()), 0o700)
-	_ = os.WriteFile(p.threadsFile(), raw, 0o600)
+	target := p.threadsFile()
+	dir := filepath.Dir(target)
+	_ = os.MkdirAll(dir, 0o700)
+	tmp, err := os.CreateTemp(dir, "."+p.id+"-threads-*.tmp")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return
+	}
+	_ = os.Chmod(tmpName, 0o600)
+	if err := os.Rename(tmpName, target); err != nil {
+		_ = os.Remove(tmpName)
+	}
 }
 
 func (p *project) syncActiveThreadLocked() {
@@ -143,6 +178,9 @@ func (p *project) syncActiveThreadLocked() {
 }
 
 func (p *project) readThreadBlocks(tid string) ([]Block, time.Time) {
+	if tid != "" && !validThreadID(tid) {
+		return nil, time.Time{}
+	}
 	f, err := os.Open(p.threadFile(tid))
 	if err != nil {
 		return nil, time.Time{}
@@ -154,6 +192,9 @@ func (p *project) readThreadBlocks(tid string) ([]Block, time.Time) {
 	for sc.Scan() {
 		var b Block
 		if json.Unmarshal(sc.Bytes(), &b) == nil {
+			if b.Kind == "assistant" {
+				b.Text = stripInternalNotes(b.Text)
+			}
 			blocks = append(blocks, b)
 		}
 	}
@@ -218,11 +259,11 @@ func (p *project) startNewThread(sess Session) ThreadSummary {
 
 func (p *project) switchThread(tid string) error {
 	tid = strings.TrimSpace(tid)
-	if tid == "" {
-		return errors.New("thread id is required")
+	if tid == "" || !validThreadID(tid) {
+		return errors.New("invalid thread id")
 	}
 	p.mu.Lock()
-	if p.live.Running {
+	if p.live.Running || p.starting {
 		p.mu.Unlock()
 		return errors.New("stop the current job first")
 	}
@@ -260,11 +301,11 @@ func (p *project) switchThread(tid string) error {
 
 func (p *project) deleteThread(tid string) error {
 	tid = strings.TrimSpace(tid)
-	if tid == "" {
-		return errors.New("thread id is required")
+	if tid == "" || !validThreadID(tid) {
+		return errors.New("invalid thread id")
 	}
 	p.mu.Lock()
-	if p.live.Running {
+	if p.live.Running || p.starting {
 		p.mu.Unlock()
 		return errors.New("stop the current job first")
 	}

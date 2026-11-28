@@ -89,6 +89,9 @@ type DayPoint struct {
 }
 
 func (s *Store) DailySeries(ctx context.Context, n int) ([]DayPoint, error) {
+	if n <= 0 {
+		return nil, nil
+	}
 	local := s.now().In(s.loc)
 	points := make([]DayPoint, n)
 	index := map[string]int{}

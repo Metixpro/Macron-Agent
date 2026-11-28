@@ -12,6 +12,8 @@ func (c *console) options() []tea.ProgramOption { return nil }
 
 func (c *console) attach(*tea.Program) {}
 
+func (c *console) resume() {}
+
 func (c *console) pause() {}
 
 func (c *console) close() {}

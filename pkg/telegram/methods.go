@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 )
@@ -256,12 +257,36 @@ func (b *Bot) EditMarkup(ctx context.Context, chatID, messageID int64, kb *Inlin
 	return err
 }
 
-func (b *Bot) SendPoll(ctx context.Context, chatID int64, question string, options []string, multiple bool, opts SendOptions) (*Message, error) {
+func truncatePollText(text string, maxRunes int) string {
+	if utf8.RuneCountInString(text) <= maxRunes {
+		return text
+	}
+	return textutil.TruncateRunes(text, maxRunes-1, "…")
+}
+
+func formatPollOptions(options []string) ([]map[string]string, error) {
+	if len(options) < 2 {
+		return nil, fmt.Errorf("a poll needs 2 to 10 options, got %d", len(options))
+	}
+	if len(options) > 10 {
+		options = options[:10]
+	}
 	opt := make([]map[string]string, 0, len(options))
 	for _, o := range options {
-		opt = append(opt, map[string]string{"text": o})
+		if strings.TrimSpace(o) == "" {
+			return nil, errors.New("poll options must not be empty")
+		}
+		opt = append(opt, map[string]string{"text": truncatePollText(o, 100)})
 	}
-	p := map[string]any{"chat_id": chatID, "question": question, "options": opt, "is_anonymous": false, "type": "regular"}
+	return opt, nil
+}
+
+func (b *Bot) SendPoll(ctx context.Context, chatID int64, question string, options []string, multiple bool, opts SendOptions) (*Message, error) {
+	opt, err := formatPollOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	p := map[string]any{"chat_id": chatID, "question": truncatePollText(question, 300), "options": opt, "is_anonymous": false, "type": "regular"}
 	if multiple {
 		p["allows_multiple_answers"] = true
 	}
@@ -279,13 +304,19 @@ type Quiz struct {
 }
 
 func (b *Bot) SendQuiz(ctx context.Context, chatID int64, question string, options []string, q Quiz, opts SendOptions) (*Message, error) {
-	opt := make([]map[string]string, 0, len(options))
-	for _, o := range options {
-		opt = append(opt, map[string]string{"text": o})
+	opt, err := formatPollOptions(options)
+	if err != nil {
+		return nil, err
 	}
-	p := map[string]any{"chat_id": chatID, "question": question, "options": opt, "type": "quiz", "correct_option_id": q.Correct}
+	if q.Correct < 0 || q.Correct >= len(opt) {
+		return nil, fmt.Errorf("quiz answer %d is outside the available options", q.Correct)
+	}
+	p := map[string]any{"chat_id": chatID, "question": truncatePollText(question, 300), "options": opt, "type": "quiz", "correct_option_ids": []int{q.Correct}}
+	// Recent Bot API servers accept the list. Older self-hosted servers
+	// still use the single index and ignore the new field.
+	p["correct_option_id"] = q.Correct
 	if q.Explanation != "" {
-		p["explanation"] = textutil.TruncateRunes(q.Explanation, 200, "…")
+		p["explanation"] = truncatePollText(q.Explanation, 200)
 	}
 	opts.apply(p)
 	var m Message
@@ -296,11 +327,11 @@ func (b *Bot) SendQuiz(ctx context.Context, chatID int64, question string, optio
 }
 
 func (b *Bot) SendOpenPoll(ctx context.Context, chatID int64, question string, options []string, multiple, anonymous bool, opts SendOptions) (*Message, error) {
-	opt := make([]map[string]string, 0, len(options))
-	for _, o := range options {
-		opt = append(opt, map[string]string{"text": o})
+	opt, err := formatPollOptions(options)
+	if err != nil {
+		return nil, err
 	}
-	p := map[string]any{"chat_id": chatID, "question": question, "options": opt, "is_anonymous": anonymous, "type": "regular"}
+	p := map[string]any{"chat_id": chatID, "question": truncatePollText(question, 300), "options": opt, "is_anonymous": anonymous, "type": "regular"}
 	if multiple {
 		p["allows_multiple_answers"] = true
 	}
@@ -330,7 +361,7 @@ func (b *Bot) SendMediaGroup(ctx context.Context, chatID int64, items []MediaIte
 	for i, it := range items {
 		m := map[string]string{"type": it.Type, "media": fmt.Sprintf("attach://f%d", i)}
 		if it.Caption != "" {
-			m["caption"], m["parse_mode"] = textutil.TruncateRunes(it.Caption, 1000, "…"), "HTML"
+			m["caption"], m["parse_mode"] = SafeHTMLCaption(it.Caption, 1024), "HTML"
 		}
 		media = append(media, m)
 	}

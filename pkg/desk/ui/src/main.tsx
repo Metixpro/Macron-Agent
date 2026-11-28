@@ -1,8 +1,13 @@
 import { createRoot } from "react-dom/client";
-import { applyTheme } from "./actions";
+import { applyDensity, applyMotion, applyTheme } from "./actions";
 import { App } from "./App";
+import { applyLang } from "./i18n";
 import { getState } from "./store";
-import "./styles.css";
+import "./styles/index.css";
 
-applyTheme(getState().theme);
+const initial = getState();
+applyTheme(initial.theme);
+applyDensity(initial.density);
+applyMotion(initial.motion);
+applyLang(initial.lang);
 createRoot(document.getElementById("root") as HTMLElement).render(<App />);

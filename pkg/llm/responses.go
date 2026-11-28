@@ -395,7 +395,7 @@ func readResponsesStream(body io.Reader, onDelta func(string), tools *toolGate) 
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
 	argBytes := 0
 	name := ""
-	for sc.Scan() && !completed {
+	for !completed && sc.Scan() {
 		if text.Len()+thought.Len()+argBytes > maxStreamText {
 			return fail(ErrTooLarge)
 		}
@@ -497,9 +497,6 @@ func readResponsesStream(body io.Reader, onDelta func(string), tools *toolGate) 
 			m := final.message()
 			text.WriteString(m.Content)
 			thought.WriteString(m.ReasoningContent)
-			if m.Content != "" {
-				gate.push(m.Content)
-			}
 			for i, tc := range m.ToolCalls {
 				calls[i] = &tc
 			}
@@ -513,6 +510,7 @@ func readResponsesStream(body io.Reader, onDelta func(string), tools *toolGate) 
 		}
 	}
 	out.Message.Content, out.Message.ReasoningContent = text.String(), thought.String()
+	gate.flush(out.Message.Content)
 	idx := make([]int, 0, len(calls))
 	for i := range calls {
 		idx = append(idx, i)

@@ -2,7 +2,9 @@ package desk
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -36,13 +38,19 @@ func sanitizeUploadName(name string) string {
 	if stem == "" {
 		stem = "file"
 	}
-	if len(stem) > 80 {
-		stem = stem[:80]
+	if r := []rune(stem); len(r) > 80 {
+		stem = string(r[:80])
 	}
-	if len(ext) > 16 {
-		ext = ext[:16]
+	if r := []rune(ext); len(r) > 16 {
+		ext = string(r[:16])
 	}
 	return stem + ext
+}
+
+func randomHex(nBytes int) string {
+	b := make([]byte, nBytes)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func ensureUploadExcluded(projectDir string) {
@@ -147,6 +155,19 @@ func (s *Server) uploadAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dir := filepath.Join(p.path, uploadDirName)
+	if fi, err := os.Lstat(dir); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			writeErr(w, http.StatusForbidden, errors.New("path must stay inside the project folder"))
+			return
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if _, _, err := resolveInside(p.path, uploadDirName); err != nil {
+		writeErr(w, http.StatusForbidden, err)
+		return
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -154,8 +175,12 @@ func (s *Server) uploadAPI(w http.ResponseWriter, r *http.Request) {
 	ensureUploadExcluded(p.path)
 
 	safe := sanitizeUploadName(rawName)
-	stamped := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), safe)
-	abs := filepath.Join(dir, stamped)
+	stamped := fmt.Sprintf("%d-%s-%s", time.Now().UnixMilli(), randomHex(4), safe)
+	abs, _, err := resolveInside(p.path, filepath.Join(uploadDirName, stamped))
+	if err != nil {
+		writeErr(w, http.StatusForbidden, err)
+		return
+	}
 	if err := os.WriteFile(abs, data, 0o600); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

@@ -126,11 +126,15 @@ func (r *Registry) registerInfoTools() {
 			if fn == "" {
 				fn = "event.ics"
 			}
+			rel, err := r.ensureWorkspaceRel(sessionID, fn)
+			if err != nil || rel == "." {
+				return "error: " + fmt.Sprint(err), nil
+			}
 			ics := GenerateICalendar(title, desc, loc, start, end)
-			if err := r.Machine.WriteFile(sessionID, fn, []byte(ics)); err != nil {
+			if err := r.Machine.WriteFile(sessionID, rel, []byte(ics)); err != nil {
 				return "error: " + err.Error(), nil
 			}
-			return fmt.Sprintf("Calendar event %q (%s, %s) saved to %s; send it so the user can add it to their calendar.", title, start.Format("2006-01-02 15:04 MST"), length, fn), nil
+			return fmt.Sprintf("Calendar event %q (%s, %s) saved to %s; send it so the user can add it to their calendar.", title, start.Format("2006-01-02 15:04 MST"), length, rel), nil
 		})
 
 	r.add(ToolIranMessenger,
@@ -181,8 +185,8 @@ func (r *Registry) registerInfoTools() {
 			rp := strArg(args, "remote_path")
 			lp := strArg(args, "local_path")
 			ep := strArg(args, "endpoint")
-			if act == "upload" {
-				if refused := r.gateSend(ctx, sessionID, strings.TrimSpace(prov+" storage"), "upload "+lp+" → "+rp+" "+ep); refused != "" {
+			if act == "upload" || strings.TrimSpace(ep) != "" {
+				if refused := r.gateSend(ctx, sessionID, strings.TrimSpace(prov+" storage"), strings.TrimSpace(act+" "+lp+" → "+rp+" "+ep)); refused != "" {
 					return refused, nil
 				}
 			}

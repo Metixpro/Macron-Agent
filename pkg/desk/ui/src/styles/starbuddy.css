@@ -1,0 +1,458 @@
+/* StarBuddy Living Companion Motion & Physics (GPU transform + opacity) */
+
+.starbuddy,
+.starbuddy-stage {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  position: relative;
+  user-select: none;
+}
+
+.starbuddy svg,
+.starbuddy-stage svg {
+  display: block;
+  overflow: visible;
+}
+
+.starbuddy-stage[role="button"] {
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+/* Shared SVG Sub-part Origins */
+.starbuddy .sb-character {
+  transform-origin: 60px 84px;
+  animation: sb-breathe 4.4s ease-in-out infinite;
+  transition: transform 240ms var(--ease);
+}
+
+.starbuddy-stage .sb-character {
+  transform-origin: 64px 72px;
+  animation: sb-float 4.2s ease-in-out infinite;
+  transition: transform 240ms var(--ease);
+}
+
+.starbuddy-stage .sb-ground {
+  transform-origin: 64px 116px;
+  animation: sb-shadow 4.2s ease-in-out infinite;
+}
+
+.starbuddy .sb-aura,
+.starbuddy-stage .sb-aura,
+.starbuddy-peek .sb-aura {
+  transform-origin: 50% 54%;
+  animation: sb-aura-pulse 3.8s ease-in-out infinite;
+}
+
+.sb-face {
+  transition: transform 80ms linear;
+}
+
+.sb-eyes {
+  transition: transform 90ms ease-out;
+}
+
+.sb-s1 {
+  animation: sb-twinkle 3.1s ease-in-out infinite;
+}
+
+.sb-s2 {
+  animation: sb-twinkle 4.1s ease-in-out 0.9s infinite;
+}
+
+.sb-s3 {
+  animation: sb-twinkle 3.6s ease-in-out 1.9s infinite;
+}
+
+.sb-z1 {
+  animation: sb-zzz-rise 2.8s ease-in-out infinite;
+}
+
+.sb-z2 {
+  animation: sb-zzz-rise 2.8s ease-in-out 0.7s infinite;
+}
+
+.sb-qmark {
+  transform-origin: 96px 24px;
+  animation: sb-q-bob 1.8s ease-in-out infinite;
+}
+
+.sb-burst {
+  transform-origin: 64px 56px;
+  animation: sb-burst-pop 0.7s var(--ease-spring) forwards;
+}
+
+/* ── Composer Peeking StarBuddy ── */
+.starbuddy-peek {
+  position: absolute;
+  inset-inline-end: 20px;
+  bottom: calc(100% - 7px);
+  z-index: 3;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  transform-origin: 50% 92%;
+  transition: transform 240ms var(--ease-spring), opacity 180ms var(--ease);
+  filter: drop-shadow(0 4px 12px rgba(100, 128, 210, 0.22));
+}
+
+.starbuddy-peek:hover {
+  transform: translateY(-2.5px) scale(1.045);
+  filter: drop-shadow(0 6px 16px rgba(130, 158, 235, 0.34));
+}
+
+.box-stage:has(.box.busy) .starbuddy-peek {
+  bottom: calc(100% - 7px);
+}
+
+.starbuddy-peek.tucked {
+  opacity: 0;
+  transform: translateY(14px) scale(0.84);
+  pointer-events: none;
+}
+
+.starbuddy-peek svg {
+  display: block;
+  overflow: visible;
+}
+
+.starbuddy-peek .sb-character {
+  transform-origin: 60px 67px;
+  animation: sb-breathe 4.2s ease-in-out infinite;
+}
+
+.starbuddy-peek .sb-paw-l {
+  transform-origin: 35px 66px;
+}
+
+.starbuddy-peek .sb-paw-r {
+  transform-origin: 85px 66px;
+}
+
+/* ── Behavioral Mood Choreography ── */
+/* Typing */
+.mood-typing .sb-character {
+  animation: sb-attentive 2.6s ease-in-out infinite;
+}
+
+/* Working */
+.mood-working .sb-character {
+  animation: sb-work-bob 1.15s ease-in-out infinite;
+}
+
+.mood-working .sb-aura {
+  animation: sb-aura-work 1.1s ease-in-out infinite;
+}
+
+.mood-working .sb-paw-l {
+  animation: sb-paw-tap 0.85s ease-in-out infinite;
+}
+
+.mood-working .sb-paw-r {
+  animation: sb-paw-tap 0.85s ease-in-out 0.42s infinite;
+}
+
+/* Streaming (reacts dynamically to live stream chunks) */
+.mood-streaming .sb-character {
+  animation: sb-stream-glide 0.92s ease-in-out infinite;
+}
+
+.mood-streaming.sb-pulse .sb-aura {
+  transform: scale(1.12);
+  opacity: 1;
+}
+
+/* Approval / Asking (Amber curious tilt) */
+.mood-asking .sb-character {
+  animation: sb-curious-tilt 2.2s ease-in-out infinite;
+}
+
+.starbuddy-peek.mood-asking {
+  filter: drop-shadow(0 4px 14px rgba(245, 158, 11, 0.34));
+}
+
+/* Success (Celebratory spring hop) */
+.mood-success .sb-character {
+  animation: sb-celebrate 0.86s var(--ease-spring) 2;
+}
+
+.starbuddy-peek.mood-success {
+  filter: drop-shadow(0 5px 16px rgba(52, 211, 153, 0.34));
+}
+
+/* Error (Controlled empathetic shake) */
+.mood-error .sb-character {
+  animation: sb-error-shake 0.55s var(--ease) 1;
+}
+
+/* Speaking */
+.mood-speaking .sb-character {
+  animation: sb-speak-bob 0.72s ease-in-out infinite;
+}
+
+/* Offline (Peaceful resting sleep) */
+.mood-offline {
+  filter: saturate(0.45) opacity(0.76);
+}
+
+.mood-offline .sb-character {
+  animation: sb-sleep-breathe 5.8s ease-in-out infinite;
+}
+
+/* Playful Spring Poke on Click */
+.poked .sb-character {
+  animation: sb-poke-spring 0.72s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+/* Pause when hidden or reduced motion */
+.sb-paused *,
+.sb-paused {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starbuddy *,
+  .starbuddy-stage *,
+  .starbuddy-peek * {
+    animation: none !important;
+  }
+}
+
+/* ── Keyframes (Squash & Stretch + Anticipation + Secondary Motion) ── */
+@keyframes sb-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-2.4px) scale(0.988, 1.022);
+  }
+}
+
+@keyframes sb-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-6px) scale(0.99, 1.018);
+  }
+}
+
+@keyframes sb-shadow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.32;
+  }
+  50% {
+    transform: scale(0.84);
+    opacity: 0.18;
+  }
+}
+
+@keyframes sb-attentive {
+  0%,
+  100% {
+    transform: translateY(-1.5px) scale(1.01, 0.99);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.02, 1.01);
+  }
+}
+
+@keyframes sb-work-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.02, 0.97);
+  }
+  45% {
+    transform: translateY(-2.5px) scale(0.97, 1.04);
+  }
+}
+
+@keyframes sb-stream-glide {
+  0%,
+  100% {
+    transform: translateY(-1px) rotate(-1.2deg) scale(1.01);
+  }
+  50% {
+    transform: translateY(-4.5px) rotate(1.2deg) scale(0.985, 1.03);
+  }
+}
+
+@keyframes sb-speak-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-3px) scale(0.99, 1.025);
+  }
+}
+
+@keyframes sb-curious-tilt {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(-1px);
+  }
+  32% {
+    transform: rotate(-6deg) translateY(-3px);
+  }
+  70% {
+    transform: rotate(4.5deg) translateY(-2px);
+  }
+}
+
+@keyframes sb-celebrate {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  16% {
+    transform: translateY(2px) scale(1.08, 0.91);
+  }
+  46% {
+    transform: translateY(-11px) scale(0.93, 1.09);
+  }
+  72% {
+    transform: translateY(1px) scale(1.04, 0.96);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+
+@keyframes sb-poke-spring {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  15% {
+    transform: translateY(2.5px) scale(1.1, 0.89);
+  }
+  44% {
+    transform: translateY(-10px) scale(0.92, 1.1);
+  }
+  68% {
+    transform: translateY(1px) scale(1.05, 0.95);
+  }
+  84% {
+    transform: translateY(-2px) scale(0.99, 1.02);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+
+@keyframes sb-error-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4.5px) rotate(-3deg);
+  }
+  45% {
+    transform: translateX(4px) rotate(2.5deg);
+  }
+  70% {
+    transform: translateX(-2.5px) rotate(-1.5deg);
+  }
+}
+
+@keyframes sb-sleep-breathe {
+  0%,
+  100% {
+    transform: translateY(2px) scale(1.02, 0.97);
+  }
+  50% {
+    transform: translateY(0) scale(0.99, 1.01);
+  }
+}
+
+@keyframes sb-aura-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes sb-aura-work {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+}
+
+@keyframes sb-paw-tap {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2.8px) rotate(-5deg);
+  }
+}
+
+@keyframes sb-twinkle {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.88);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes sb-zzz-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px) scale(0.85);
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(4px, -10px) scale(1.08);
+  }
+}
+
+@keyframes sb-q-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(5deg);
+  }
+}
+
+@keyframes sb-burst-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.32);
+  }
+}

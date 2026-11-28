@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -48,7 +49,11 @@ type MemoryStates struct {
 func (s *MemoryStates) PluginState(key string) State {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.states[key]
+	st := s.states[key]
+	if st.Env != nil {
+		st.Env = maps.Clone(st.Env)
+	}
+	return st
 }
 
 func (s *MemoryStates) SetPluginState(key string, st State) error {
@@ -56,6 +61,9 @@ func (s *MemoryStates) SetPluginState(key string, st State) error {
 	defer s.mu.Unlock()
 	if s.states == nil {
 		s.states = map[string]State{}
+	}
+	if st.Env != nil {
+		st.Env = maps.Clone(st.Env)
 	}
 	s.states[key] = st
 	return nil
@@ -187,11 +195,13 @@ type Manager struct {
 	Reserved func(name string) bool
 
 	mu      sync.RWMutex
+	stateMu sync.Mutex
 	plugins map[string]*plugin
 	index   map[string]toolRef
 	order   []string
 	life    context.Context
 	stop    context.CancelFunc
+	closed  bool
 }
 
 func (m *Manager) init() {
@@ -229,6 +239,10 @@ func (m *Manager) canRun() error {
 
 func (m *Manager) Reload(ctx context.Context) {
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return
+	}
 	m.init()
 	old := m.plugins
 	next := map[string]*plugin{}
@@ -384,6 +398,9 @@ type namedServerConfig = struct {
 }
 
 func (m *Manager) rebuildLocked() {
+	if m.closed {
+		return
+	}
 	index := map[string]toolRef{}
 	keys := make([]string, 0, len(m.plugins))
 	for k := range m.plugins {
@@ -609,6 +626,7 @@ func (m *Manager) runScript(ctx context.Context, p *plugin, sessionID, tool stri
 
 type mcpSession struct {
 	mu         sync.Mutex
+	closed     bool
 	t          transport
 	tools      []mcpTool
 	status     string
@@ -628,6 +646,7 @@ func (s *mcpSession) close() {
 	defer s.dial.Unlock()
 	s.mu.Lock()
 	t := s.t
+	s.closed = true
 	s.t, s.status = nil, StatusOff
 	s.mu.Unlock()
 	if t != nil {
@@ -647,6 +666,10 @@ func (m *Manager) reconnect(ctx context.Context, p *plugin) error {
 	s.dial.Lock()
 	defer s.dial.Unlock()
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return errors.New("MCP session is closed")
+	}
 	if s.t != nil && s.t.alive() && s.status == StatusReady {
 		s.mu.Unlock()
 		return nil
@@ -657,8 +680,19 @@ func (m *Manager) reconnect(ctx context.Context, p *plugin) error {
 	if old != nil {
 		old.close()
 	}
-	t, tools, name, err := m.dial(ctx, p)
+	dialCtx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(m.life, cancel)
+	defer stop()
+	defer cancel()
+	t, tools, name, err := m.dial(dialCtx, p)
 	s.mu.Lock()
+	if m.life.Err() != nil {
+		s.mu.Unlock()
+		if t != nil {
+			t.close()
+		}
+		return m.life.Err()
+	}
 	if err != nil {
 		s.status, s.err = StatusError, tail(err.Error(), 400)
 		log.Printf("plugins: MCP server %s: %v", p.srv.ID, err)
@@ -691,6 +725,7 @@ func (m *Manager) dial(ctx context.Context, p *plugin) (transport, []mcpTool, st
 			if err == nil {
 				return t, tools, name, nil
 			}
+			t.close()
 			if c.Transport == "http" || !errors.As(err, &hs) || (hs.status != 400 && hs.status != 404 && hs.status != 405) {
 				return nil, nil, "", err
 			}
@@ -750,6 +785,9 @@ func (m *Manager) callMCP(ctx context.Context, p *plugin, sessionID, tool string
 			s.mu.Lock()
 			t = s.t
 			s.mu.Unlock()
+			if t == nil {
+				return nil, errors.New("MCP transport closed")
+			}
 		}
 		cctx, cancel := context.WithTimeout(ctx, p.srv.callTimeout())
 		defer cancel()
@@ -924,22 +962,27 @@ func (m *Manager) SetEnv(ctx context.Context, key, name, value string) error {
 }
 
 func (m *Manager) update(ctx context.Context, key string, change func(*State)) error {
+	m.stateMu.Lock()
 	m.mu.RLock()
 	_, ok := m.plugins[key]
 	m.mu.RUnlock()
 	if !ok {
+		m.stateMu.Unlock()
 		return errors.New("no such plugin")
 	}
 	st := m.states().PluginState(key)
 	change(&st)
 	if err := m.states().SetPluginState(key, st); err != nil {
+		m.stateMu.Unlock()
 		return err
 	}
+	m.stateMu.Unlock()
 	m.Reload(ctx)
 	return nil
 }
 
 func (m *Manager) AddServers(ctx context.Context, list []ServerConfig) ([]string, error) {
+	m.stateMu.Lock()
 	panel := m.states().PanelServers()
 	taken := map[string]bool{}
 	m.mu.RLock()
@@ -950,6 +993,7 @@ func (m *Manager) AddServers(ctx context.Context, list []ServerConfig) ([]string
 	var keys []string
 	for _, c := range list {
 		if err := c.Check(); err != nil {
+			m.stateMu.Unlock()
 			return nil, err
 		}
 		base := c.ID
@@ -961,8 +1005,10 @@ func (m *Manager) AddServers(ctx context.Context, list []ServerConfig) ([]string
 		keys = append(keys, "@"+c.ID)
 	}
 	if err := m.states().SetPanelServers(panel); err != nil {
+		m.stateMu.Unlock()
 		return nil, err
 	}
+	m.stateMu.Unlock()
 	m.Reload(ctx)
 	return keys, nil
 }
@@ -979,14 +1025,17 @@ func (m *Manager) Wait(key string, d time.Duration) Info {
 }
 
 func (m *Manager) Delete(ctx context.Context, key string) error {
+	m.stateMu.Lock()
 	m.mu.RLock()
 	p := m.plugins[key]
 	m.mu.RUnlock()
 	if p == nil {
+		m.stateMu.Unlock()
 		return errors.New("no such plugin")
 	}
 	switch p.source {
 	case SourceFile:
+		m.stateMu.Unlock()
 		return fmt.Errorf("it is defined in %s: remove it there (it can be turned off here)", filepath.Base(m.MCPFile))
 	case SourcePanel:
 		var keep []ServerConfig
@@ -996,24 +1045,30 @@ func (m *Manager) Delete(ctx context.Context, key string) error {
 			}
 		}
 		if err := m.states().SetPanelServers(keep); err != nil {
+			m.stateMu.Unlock()
 			return err
 		}
 	case SourceFolder:
 		dir := filepath.Join(m.Dir, p.key)
 		if !idRe.MatchString(p.key) || filepath.Dir(dir) != filepath.Clean(m.Dir) {
+			m.stateMu.Unlock()
 			return errors.New("not a plugin folder")
 		}
 		if err := os.RemoveAll(dir); err != nil {
+			m.stateMu.Unlock()
 			return err
 		}
 	}
 	_ = m.states().SetPluginState(key, State{})
+	m.stateMu.Unlock()
 	m.Reload(ctx)
 	return nil
 }
 
 func (m *Manager) Close() {
 	m.mu.Lock()
+	m.closed = true
+	m.index, m.order = nil, nil
 	if m.stop != nil {
 		m.stop()
 	}
@@ -1213,13 +1268,23 @@ func (m *Manager) writePlugin(id string, files map[string]fileData) error {
 	}
 	final := filepath.Join(m.Dir, id)
 	old := final + ".old-" + hex.EncodeToString(suffix)
+	hadOld := false
 	if _, err := os.Lstat(final); err == nil {
 		if err := os.Rename(final, old); err != nil {
 			return err
 		}
-		defer os.RemoveAll(old)
+		hadOld = true
 	}
-	return os.Rename(tmp, final)
+	if err := os.Rename(tmp, final); err != nil {
+		if hadOld {
+			_ = os.Rename(old, final)
+		}
+		return err
+	}
+	if hadOld {
+		_ = os.RemoveAll(old)
+	}
+	return nil
 }
 
 func (m *Manager) InstallDeps(ctx context.Context, key string) (string, error) {
@@ -1276,7 +1341,11 @@ type TestResult struct {
 func (m *Manager) Test(ctx context.Context, key string) ([]TestResult, error) {
 	m.mu.RLock()
 	p := m.plugins[key]
+	closed := m.closed
 	m.mu.RUnlock()
+	if closed {
+		return nil, errors.New("plugin manager is closed")
+	}
 	if p == nil {
 		return nil, errors.New("no such plugin")
 	}
@@ -1285,17 +1354,19 @@ func (m *Manager) Test(ctx context.Context, key string) ([]TestResult, error) {
 	}
 	if p.kind == KindMCP {
 		start := time.Now()
-		p.mcp.close()
 		cctx, cancel := context.WithTimeout(ctx, mcpStartTimeout)
 		defer cancel()
-		err := m.reconnect(cctx, p)
+		stop := context.AfterFunc(m.life, cancel)
+		defer stop()
+		t, tools, _, err := m.dial(cctx, p)
+		if t != nil {
+			defer t.close()
+		}
 		r := TestResult{Tool: p.srv.ID, OK: err == nil, Took: time.Since(start)}
 		if err != nil {
 			r.Output = err.Error()
 		} else {
-			p.mcp.mu.Lock()
-			r.Output = fmt.Sprintf("%d tools", len(p.mcp.tools))
-			p.mcp.mu.Unlock()
+			r.Output = fmt.Sprintf("%d tools", len(tools))
 		}
 		return []TestResult{r}, nil
 	}

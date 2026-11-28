@@ -66,6 +66,12 @@ jobs:
       - name: build and test the universal Windows installer
         shell: pwsh
         run: tests/windows/build-installer.ps1
+      - name: upload Windows installer preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: macron-windows-setup
+          path: packaging/windows/out/Macron-Setup-*.exe
+          retention-days: 7
       - name: the Windows installer parses
         shell: pwsh
         run: |

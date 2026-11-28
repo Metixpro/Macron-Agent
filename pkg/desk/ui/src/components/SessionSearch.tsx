@@ -75,7 +75,7 @@ export function SessionSearch() {
   const jump = async (hit: SearchHit) => {
     closeDialog();
     if (getState().current !== hit.projectId) {
-      await openProject(hit.projectId);
+      if (!(await openProject(hit.projectId))) return;
     }
     if (hit.threadId && getState().activeThread !== hit.threadId) {
       await switchThread(hit.threadId);

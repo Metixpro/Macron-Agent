@@ -1,0 +1,228 @@
+:root {
+  /* Typography */
+  --font: "Geist Variable", "Estedad Variable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono Variable", "Cascadia Mono", "SF Mono", Consolas, Menlo, monospace;
+
+  /* 4px Spatial Scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* Layout Dimensions */
+  --side-w: 256px;
+  --comp-w: 336px;
+  --col: 740px;
+  --header-h: 44px;
+  --frame-gap: 0px;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r: 10px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  /* Motion Language */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snappy: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+
+  /* Density Tokens (comfortable default) */
+  --text-base: 14px;
+  --text-sm: 13px;
+  --text-xs: 12px;
+  --leading-base: 1.64;
+  --msg-gap: 20px;
+  --pad-feed-x: 28px;
+  --feed-py: 24px;
+  --row-py: 7px;
+  --bubble-py: 10px;
+  --bubble-px: 15px;
+  --tool-py: 6px;
+  --composer-pt: 36px;
+  --composer-pb: 16px;
+  --composer-input-h: 44px;
+  --composer-input-pt: 12px;
+  --composer-tb-py: 6px;
+  --comp-pad: 14px;
+  --comp-gap: 12px;
+  --stg-scroll-py: 28px;
+  --stg-scroll-px: 36px;
+  --stg-gap: 20px;
+  --stg-row-py: 13px;
+  --stg-card-pad: 14px 16px;
+  --stg-nav-py: 6px;
+  --ctrl-h: 32px;
+}
+
+[data-density="compact"] {
+  --text-base: 13px;
+  --text-sm: 12px;
+  --text-xs: 11px;
+  --leading-base: 1.48;
+  --col: 820px;
+  --header-h: 40px;
+  --frame-gap: 5px;
+  --msg-gap: 11px;
+  --pad-feed-x: 18px;
+  --feed-py: 14px;
+  --row-py: 4px;
+  --bubble-py: 7px;
+  --bubble-px: 12px;
+  --tool-py: 4px;
+  --composer-pt: 32px;
+  --composer-pb: 10px;
+  --composer-input-h: 38px;
+  --composer-input-pt: 9px;
+  --composer-tb-py: 4px;
+  --comp-pad: 10px;
+  --comp-gap: 8px;
+  --stg-scroll-py: 18px;
+  --stg-scroll-px: 24px;
+  --stg-gap: 12px;
+  --stg-row-py: 8px;
+  --stg-card-pad: 10px 12px;
+  --stg-nav-py: 4px;
+  --ctrl-h: 28px;
+}
+
+[data-density="spacious"] {
+  --text-base: 15px;
+  --text-sm: 14px;
+  --text-xs: 12.5px;
+  --leading-base: 1.78;
+  --col: 680px;
+  --header-h: 54px;
+  --frame-gap: 12px;
+  --msg-gap: 30px;
+  --pad-feed-x: 40px;
+  --feed-py: 34px;
+  --row-py: 10px;
+  --bubble-py: 14px;
+  --bubble-px: 19px;
+  --tool-py: 9px;
+  --composer-pt: 42px;
+  --composer-pb: 22px;
+  --composer-input-h: 50px;
+  --composer-input-pt: 14px;
+  --composer-tb-py: 8px;
+  --comp-pad: 18px;
+  --comp-gap: 16px;
+  --stg-scroll-py: 38px;
+  --stg-scroll-px: 48px;
+  --stg-gap: 28px;
+  --stg-row-py: 18px;
+  --stg-card-pad: 18px 20px;
+  --stg-nav-py: 8.5px;
+  --ctrl-h: 36px;
+}
+
+:root[dir="rtl"] {
+  --leading-base: 1.78;
+}
+
+:root[dir="rtl"][data-density="compact"] {
+  --leading-base: 1.62;
+}
+
+:root[dir="rtl"][data-density="spacious"] {
+  --leading-base: 1.92;
+}
+
+/* Signature Macron Obsidian Dark Theme (OpenBot-inspired deep neutral carbon) */
+[data-theme="dark"] {
+  --frame: #09090b;
+  --side: #0e0e11;
+  --bg: #131316;
+  --raised: #1a1a1f;
+  --elevated: #222228;
+  --sunk: #0b0b0e;
+  --glass: rgba(19, 19, 22, 0.86);
+  --glass-strong: rgba(22, 22, 27, 0.96);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --chrome-hi: rgba(255, 255, 255, 0.06);
+  --chrome-lo: rgba(0, 0, 0, 0.45);
+  --hover: rgba(255, 255, 255, 0.05);
+  --hover-2: rgba(255, 255, 255, 0.09);
+  --active: rgba(255, 255, 255, 0.085);
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.12);
+  --text: #f3f3f6;
+  --text-2: #c9c9d2;
+  --dim: #8d8d99;
+  --faint: #5b5b66;
+  --ink: #f3f3f6;
+  --on-ink: #0e0e10;
+  --accent: #eceef4;
+  --on-accent: #101014;
+  --brand-blue: #38bdf8;
+  --link: #8eb2ff;
+  --user: #202026;
+  --ok: #3fcf8e;
+  --warn: #e5a93c;
+  --amber: #e5a93c;
+  --fail: #ef6b64;
+  --focus: rgba(236, 238, 244, 0.28);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.34);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.48), 0 24px 56px -14px rgba(0, 0, 0, 0.76);
+  --scrim: rgba(6, 6, 8, 0.68);
+  color-scheme: dark;
+}
+
+/* Signature Macron Paper Light Theme */
+[data-theme="light"] {
+  --frame: #ecece9;
+  --side: #f3f3f0;
+  --bg: #faf9f7;
+  --raised: #ffffff;
+  --elevated: #ffffff;
+  --sunk: #f0f0ec;
+  --glass: rgba(250, 249, 247, 0.86);
+  --glass-strong: rgba(255, 255, 255, 0.96);
+  --glass-line: rgba(20, 20, 24, 0.085);
+  --chrome-hi: rgba(255, 255, 255, 0.92);
+  --chrome-lo: rgba(20, 20, 24, 0.05);
+  --hover: rgba(20, 20, 24, 0.044);
+  --hover-2: rgba(20, 20, 24, 0.085);
+  --active: rgba(20, 20, 24, 0.075);
+  --line: #e5e5e0;
+  --line-2: #d3d3cc;
+  --text: #16161a;
+  --text-2: #3e3e46;
+  --dim: #6c6c76;
+  --faint: #9b9ba6;
+  --ink: #16161a;
+  --on-ink: #faf9f7;
+  --accent: #2d3d63;
+  --on-accent: #f8f9fc;
+  --brand-blue: #0284c7;
+  --link: #2554c7;
+  --user: #efefe9;
+  --ok: #1d8058;
+  --warn: #b06c12;
+  --amber: #b06c12;
+  --fail: #c43c32;
+  --focus: rgba(45, 61, 99, 0.24);
+  --shadow-sm: 0 2px 8px rgba(15, 15, 20, 0.06);
+  --shadow: 0 1px 2px rgba(15, 15, 20, 0.05), 0 18px 40px -12px rgba(15, 15, 20, 0.14);
+  --scrim: rgba(236, 236, 233, 0.64);
+  color-scheme: light;
+}
+
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

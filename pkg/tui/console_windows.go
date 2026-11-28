@@ -35,8 +35,12 @@ type console struct {
 	mu     sync.Mutex
 	p      *tea.Program
 	paused bool
+	reset  bool
 	done   chan struct{}
 	closed bool
+	wg     sync.WaitGroup
+	readWG sync.WaitGroup
+	readMu sync.Mutex
 }
 
 func newConsole() *console {
@@ -79,9 +83,17 @@ func (c *console) attach(p *tea.Program) {
 		return
 	}
 	c.mu.Lock()
+	if c.closed || c.p != nil {
+		c.mu.Unlock()
+		return
+	}
 	c.p = p
+	c.wg.Add(1)
 	c.mu.Unlock()
-	go c.watchSize()
+	go func() {
+		defer c.wg.Done()
+		c.watchSize()
+	}()
 }
 
 func (c *console) watchSize() {
@@ -114,10 +126,24 @@ func (c *console) pause() {
 		return
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return
+	}
 	c.paused = true
-	c.mu.Unlock()
 	_ = windows.SetEvent(c.cancel)
 	_ = windows.SetConsoleMode(c.in, c.orig)
+}
+
+func (c *console) resume() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.paused && !c.closed {
+		c.paused, c.reset = false, true
+	}
 }
 
 func (c *console) close() {
@@ -130,28 +156,46 @@ func (c *console) close() {
 		return
 	}
 	c.closed = true
-	c.mu.Unlock()
 	close(c.done)
 	_ = windows.SetEvent(c.cancel)
+	c.mu.Unlock()
+	c.wg.Wait()
+	c.readWG.Wait()
+	if c.cancel != 0 && c.cancel != windows.InvalidHandle {
+		_ = windows.CloseHandle(c.cancel)
+	}
 	_ = windows.SetConsoleMode(c.in, c.orig)
 }
 
 func (c *console) Read(b []byte) (int, error) {
+	// A restored Bubble Tea program can start its next reader while the
+	// previous reader is unwinding from cancellation.
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
+
+	c.mu.Lock()
+	if c.closed || c.paused {
+		c.mu.Unlock()
+		return 0, cancelreader.ErrCanceled
+	}
+	c.readWG.Add(1)
+	if c.reset {
+		c.reset = false
+		_ = windows.ResetEvent(c.cancel)
+		_ = c.raw()
+		_ = windows.FlushConsoleInputBuffer(c.in)
+		c.queue, c.split, c.high = nil, vtSplitter{}, 0
+	}
+	p := c.p
+	c.mu.Unlock()
+	defer c.readWG.Done()
 	for {
 		c.mu.Lock()
-		if c.closed {
-			c.mu.Unlock()
+		canceled := c.closed || c.paused
+		c.mu.Unlock()
+		if canceled {
 			return 0, cancelreader.ErrCanceled
 		}
-		if c.paused {
-			c.paused = false
-			_ = windows.ResetEvent(c.cancel)
-			_ = c.raw()
-			_ = windows.FlushConsoleInputBuffer(c.in)
-			c.queue, c.split = nil, vtSplitter{}
-		}
-		p := c.p
-		c.mu.Unlock()
 		if len(c.queue) > 0 {
 			part := c.queue[0]
 			if part.msg != nil {
@@ -169,11 +213,11 @@ func (c *console) Read(b []byte) (int, error) {
 			}
 			return n, nil
 		}
-		ev, err := windows.WaitForMultipleObjects([]windows.Handle{c.in, c.cancel}, false, windows.INFINITE)
+		ev, err := windows.WaitForMultipleObjects([]windows.Handle{c.cancel, c.in}, false, windows.INFINITE)
 		if err != nil {
 			return 0, err
 		}
-		if ev == windows.WAIT_OBJECT_0+1 {
+		if ev == windows.WAIT_OBJECT_0 {
 			return 0, cancelreader.ErrCanceled
 		}
 		rs, err := c.records()

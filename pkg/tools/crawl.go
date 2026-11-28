@@ -103,9 +103,14 @@ func (r *Registry) CrawlToKnowledgeBaseWithTimeout(ctx context.Context, sessionI
 	if pageTimeoutSec > 120 {
 		pageTimeoutSec = 120
 	}
-	if destFolder = strings.Trim(strings.TrimSpace(destFolder), "/"); destFolder == "" {
+	if destFolder = strings.TrimSpace(destFolder); destFolder == "" {
 		destFolder = "knowledge_base"
 	}
+	cleanDest, err := r.ensureWorkspaceRel(sessionID, destFolder)
+	if err != nil || cleanDest == "." {
+		return nil, fmt.Errorf("folder must stay inside the workspace")
+	}
+	destFolder = cleanDest
 	start, err := netclient.ValidateURL(startURL)
 	if err != nil {
 		return nil, err

@@ -97,8 +97,10 @@ func (b *Bot) scrub(err error) error {
 	if errors.As(err, &api) {
 		return err
 	}
-	if msg := err.Error(); strings.Contains(msg, b.Token) {
-		return &scrubbedError{msg: strings.ReplaceAll(msg, b.Token, "<token>"), err: err}
+	if b.Token != "" {
+		if msg := err.Error(); strings.Contains(msg, b.Token) {
+			return &scrubbedError{msg: strings.ReplaceAll(msg, b.Token, "<token>"), err: err}
+		}
 	}
 	return err
 }
@@ -135,7 +137,11 @@ func (b *Bot) decode(resp *http.Response, out any) error {
 		if code == 0 {
 			code = resp.StatusCode
 		}
-		return &APIError{Code: code, Description: ar.Description, RetryAfter: ar.Parameters.RetryAfter}
+		description := ar.Description
+		if b.Token != "" {
+			description = strings.ReplaceAll(description, b.Token, "<token>")
+		}
+		return &APIError{Code: code, Description: description, RetryAfter: ar.Parameters.RetryAfter}
 	}
 	if b.OnSent != nil && len(ar.Result) > 0 && (ar.Result[0] == '{' || ar.Result[0] == '[') && bytes.Contains(ar.Result, []byte(`"message_id"`)) {
 		type sentMsg struct {
@@ -167,6 +173,32 @@ func (b *Bot) decode(resp *http.Response, out any) error {
 	return nil
 }
 
+func waitRetry(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func retryDelay(err error, attempt int) time.Duration {
+	var api *APIError
+	if !errors.As(err, &api) {
+		return 0
+	}
+	switch {
+	case api.Code == http.StatusTooManyRequests && attempt < 3 && api.RetryAfter <= 30:
+		return time.Duration(max(api.RetryAfter, 1)) * time.Second
+	case api.Code >= 500 && api.Code < 600 && attempt < 2:
+		return time.Duration(attempt+1) * 500 * time.Millisecond
+	default:
+		return 0
+	}
+}
+
 func (b *Bot) call(ctx context.Context, method string, payload, out any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -185,16 +217,13 @@ func (b *Bot) call(ctx context.Context, method string, payload, out any) error {
 		err = b.decode(resp, out)
 		resp.Body.Close()
 
-		var api *APIError
-		if errors.As(err, &api) && api.Code == http.StatusTooManyRequests && attempt == 0 && api.RetryAfter > 0 && api.RetryAfter <= 30 {
-			select {
-			case <-time.After(time.Duration(api.RetryAfter) * time.Second):
-				continue
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+		delay := retryDelay(err, attempt)
+		if delay == 0 {
+			return b.scrub(err)
 		}
-		return b.scrub(err)
+		if err := waitRetry(ctx, delay); err != nil {
+			return err
+		}
 	}
 }
 
@@ -506,17 +535,69 @@ func (b *Bot) uploadMany(ctx context.Context, method string, chatID int64, field
 }
 
 func (b *Bot) postForm(ctx context.Context, method string, fields map[string]any, files []namedFile, out any) error {
+	type uploadPosition struct {
+		reader io.Seeker
+		offset int64
+	}
+	var positions []uploadPosition
+	canReplay := true
+	for _, file := range files {
+		reader, ok := file.file.Reader.(io.Seeker)
+		if !ok {
+			canReplay = false
+			break
+		}
+		offset, err := reader.Seek(0, io.SeekCurrent)
+		if err != nil {
+			canReplay = false
+			break
+		}
+		positions = append(positions, uploadPosition{reader: reader, offset: offset})
+	}
+	for attempt := 0; ; attempt++ {
+		written, err := b.postFormOnce(ctx, method, fields, files, out)
+		delay := retryDelay(err, attempt)
+		if !canReplay || delay == 0 {
+			return b.scrub(err)
+		}
+		// A server can reject the upload before it consumes the body.
+		// Let the previous writer release the readers before seeking.
+		select {
+		case <-written:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if err := waitRetry(ctx, delay); err != nil {
+			return err
+		}
+		for _, position := range positions {
+			if _, err := position.reader.Seek(position.offset, io.SeekStart); err != nil {
+				return b.scrub(fmt.Errorf("rewind Telegram upload: %w", err))
+			}
+		}
+	}
+}
+
+func (b *Bot) postFormOnce(ctx context.Context, method string, fields map[string]any, files []namedFile, out any) (<-chan struct{}, error) {
 	pr, pw := io.Pipe()
+	defer pr.Close()
 	mw := multipart.NewWriter(pw)
+	written := make(chan struct{})
 	go func() {
+		defer close(written)
 		err := func() error {
 			for k, v := range fields {
-				if s, ok := v.(string); ok {
-					_ = mw.WriteField(k, s)
-					continue
+				value, ok := v.(string)
+				if !ok {
+					raw, err := json.Marshal(v)
+					if err != nil {
+						return err
+					}
+					value = string(raw)
 				}
-				raw, _ := json.Marshal(v)
-				_ = mw.WriteField(k, string(raw))
+				if err := mw.WriteField(k, value); err != nil {
+					return err
+				}
 			}
 			for _, f := range files {
 				h := make(textproto.MIMEHeader)
@@ -536,71 +617,26 @@ func (b *Bot) postForm(ctx context.Context, method string, fields map[string]any
 	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.APIURL+"/"+method, pr)
 	if err != nil {
-		_ = pr.Close()
-		return b.scrub(err)
+		return written, err
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	resp, err := b.UploadClient.Do(req)
 	if err != nil {
-		_ = pr.CloseWithError(err)
-		return b.scrub(err)
+		return written, err
 	}
 	defer resp.Body.Close()
-	return b.scrub(b.decode(resp, out))
+	return written, b.decode(resp, out)
 }
 
 func (b *Bot) upload(ctx context.Context, method, field string, chatID int64, f File, caption string, extra map[string]string, opts SendOptions) error {
-	pr, pw := io.Pipe()
-	mw := multipart.NewWriter(pw)
-	name := filepath.Base(f.Name)
-
-	jsonFields := map[string]any{}
-	opts.apply(jsonFields)
-
-	go func() {
-		err := func() error {
-			_ = mw.WriteField("chat_id", fmt.Sprint(chatID))
-			if caption != "" {
-				_ = mw.WriteField("caption", textutil.TruncateRunes(caption, 1000, "…"))
-				_ = mw.WriteField("parse_mode", "HTML")
-			}
-			for k, v := range extra {
-				_ = mw.WriteField(k, v)
-			}
-			for k, v := range jsonFields {
-				if s, ok := v.(string); ok {
-					_ = mw.WriteField(k, s)
-					continue
-				}
-				raw, _ := json.Marshal(v)
-				_ = mw.WriteField(k, string(raw))
-			}
-			h := make(textproto.MIMEHeader)
-			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, field, quoteEscaper.Replace(name)))
-			h.Set("Content-Type", "application/octet-stream")
-			part, err := mw.CreatePart(h)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(part, f.Reader); err != nil {
-				return err
-			}
-			return mw.Close()
-		}()
-		_ = pw.CloseWithError(err)
-	}()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.APIURL+"/"+method, pr)
-	if err != nil {
-		_ = pr.Close()
-		return b.scrub(err)
+	fields := make(map[string]any, len(extra)+2)
+	for k, v := range extra {
+		fields[k] = v
 	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	resp, err := b.UploadClient.Do(req)
-	if err != nil {
-		_ = pr.CloseWithError(err)
-		return b.scrub(err)
+	if caption = SafeHTMLCaption(caption, 1024); caption != "" {
+		fields["caption"] = caption
+		fields["parse_mode"] = "HTML"
 	}
-	defer resp.Body.Close()
-	return b.scrub(b.decode(resp, nil))
+	opts.apply(fields)
+	return b.uploadMany(ctx, method, chatID, fields, []namedFile{{field: field, file: f}})
 }

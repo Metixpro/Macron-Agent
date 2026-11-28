@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Metixpro/macron-agent/pkg/machine"
 )
@@ -53,6 +54,11 @@ func (s *Server) projectFilesAPI(w http.ResponseWriter, r *http.Request) {
 	var exact, prefix, contains []string
 	scanned := 0
 
+	baseReal, berr := evalPathAncestor(p.path)
+	if berr != nil {
+		baseReal = p.path
+	}
+
 	_ = filepath.WalkDir(p.path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -66,6 +72,15 @@ func (s *Server) projectFilesAPI(w http.ResponseWriter, r *http.Request) {
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			real, rerr := filepath.EvalSymlinks(path)
+			if rerr != nil {
+				return nil
+			}
+			if relCheck, cerr := filepath.Rel(baseReal, real); cerr != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
+				return nil
+			}
 		}
 		scanned++
 		if scanned > maxScanned {
@@ -123,8 +138,31 @@ type GitChange struct {
 }
 
 func runGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	full := append([]string{"-C", dir}, args...)
+	full := append([]string{"-c", "core.quotepath=false", "-C", dir}, args...)
 	return machine.Hide(exec.CommandContext(ctx, "git", full...)).Output()
+}
+
+func evalPathAncestor(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	cur := abs
+	var tail []string
+	for {
+		if real, err := filepath.EvalSymlinks(cur); err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				real = filepath.Join(real, tail[i])
+			}
+			return real, nil
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return abs, nil
+		}
+		tail = append(tail, filepath.Base(cur))
+		cur = parent
+	}
 }
 
 func resolveInside(base, rel string) (string, string, error) {
@@ -141,6 +179,15 @@ func resolveInside(base, rel string) (string, string, error) {
 	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
 		return "", "", errors.New("path must stay inside the project folder")
 	}
+	baseReal, berr := evalPathAncestor(base)
+	absReal, aerr := evalPathAncestor(abs)
+	if berr != nil || aerr != nil {
+		return "", "", errors.New("path must stay inside the project folder")
+	}
+	rr, rerr := filepath.Rel(baseReal, absReal)
+	if rerr != nil || rr == ".." || strings.HasPrefix(rr, ".."+string(filepath.Separator)) {
+		return "", "", errors.New("symlink escapes the project folder")
+	}
 	return abs, filepath.ToSlash(clean), nil
 }
 
@@ -153,6 +200,9 @@ func (s *Server) changesAPI(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	branchOut, err := runGit(ctx, p.path, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		branchOut, err = runGit(ctx, p.path, "symbolic-ref", "--short", "HEAD")
+	}
 	if err != nil {
 		writeJSON(w, map[string]any{"git": false, "branch": "", "files": []GitChange{}})
 		return
@@ -288,7 +338,11 @@ func (s *Server) diffAPI(w http.ResponseWriter, r *http.Request) {
 
 	truncated := false
 	if len(text) > maxDiffBytes {
-		text = text[:maxDiffBytes] + "\n… (diff truncated)\n"
+		cut := maxDiffBytes
+		for cut > 0 && !utf8.RuneStart(text[cut]) {
+			cut--
+		}
+		text = text[:cut] + "\n… (diff truncated)\n"
 		truncated = true
 	}
 	writeJSON(w, map[string]any{"path": rel, "diff": text, "truncated": truncated})
@@ -333,7 +387,7 @@ func (s *Server) revertAPI(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Tracked file: unstage and restore from HEAD.
 		_, _ = runGit(ctx, p.path, "reset", "HEAD", "--", rel)
-		if out, err := machine.Hide(exec.CommandContext(ctx, "git", "-C", p.path, "checkout", "HEAD", "--", rel)).CombinedOutput(); err != nil {
+		if out, err := machine.Hide(exec.CommandContext(ctx, "git", "-c", "core.quotepath=false", "-C", p.path, "checkout", "HEAD", "--", rel)).CombinedOutput(); err != nil {
 			msg := strings.TrimSpace(string(out))
 			if msg == "" {
 				msg = err.Error()

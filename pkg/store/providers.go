@@ -136,6 +136,8 @@ func (s *Store) RecordProviderResult(ctx context.Context, id int64, ok bool, lat
 }
 
 func (s *Store) RefreshProviderSettings(ctx context.Context) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	rows, err := s.db.QueryContext(ctx, `SELECT k,v FROM settings WHERE k IN (?,?)`, SettingActiveProvider, SettingFailover)
 	if err != nil {
 		return err

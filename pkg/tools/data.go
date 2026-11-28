@@ -47,6 +47,9 @@ func (r *Registry) registerDataTools() {
 				if name == "" {
 					return "error: dsn_env is required: put the connection string in config.env (macron config set NAME '...') and pass NAME", nil
 				}
+				if isBlockedSecretEnv(name) {
+					return fmt.Sprintf("error: %s is a protected credential and cannot be used as dsn_env", name), nil
+				}
 				if target = os.Getenv(name); target == "" {
 					return fmt.Sprintf("error: %s is not set: macron config set %s '<connection string>' and restart", name, name), nil
 				}
@@ -112,11 +115,15 @@ func (r *Registry) registerDataTools() {
 			if outFile == "" {
 				outFile = "dashboard.html"
 			}
+			rel, err := r.ensureWorkspaceRel(sessionID, outFile)
+			if err != nil || rel == "." {
+				return "error saving dashboard: output_file must stay inside the workspace", nil
+			}
 			html := GenerateHTMLDashboard(title, nil, nil, nil)
-			if err := r.Machine.WriteFile(sessionID, outFile, []byte(html)); err != nil {
+			if err := r.Machine.WriteFile(sessionID, rel, []byte(html)); err != nil {
 				return "error saving dashboard: " + err.Error(), nil
 			}
-			return fmt.Sprintf("✅ Interactive HTML dashboard generated at `%s`.", outFile), nil
+			return fmt.Sprintf("✅ Interactive HTML dashboard generated at `%s`.", rel), nil
 		})
 
 	r.add(ToolOpenAPICall,

@@ -62,6 +62,13 @@ func (t *transcript) render(md *markdown, width int) string {
 	t.renderedVersion = t.version
 	return t.cached
 }
+
+type historyCache struct {
+	text   string
+	width  int
+	height int
+}
+
 func newViewport() *viewport.Model          { v := viewport.New(80, 20); return &v }
 func (m *model) addBlock(b transcriptBlock) { m.home = false; m.log.add(b) }
 func (m *model) scrollHistory(lines int) {
@@ -77,8 +84,9 @@ func (m *model) scrollHistory(lines int) {
 }
 func (m model) historyView(height int) string {
 	w := m.contentWidth()
+	h := max(height, 1)
 	m.history.Width = w
-	m.history.Height = max(height, 1)
+	m.history.Height = h
 	text := m.log.render(m.md, w)
 	if m.running && strings.TrimSpace(m.stream) != "" {
 		live := m.streamView
@@ -87,7 +95,13 @@ func (m model) historyView(height int) string {
 		}
 		text += "\n\n" + terminalText(live)
 	}
-	m.history.SetContent(text)
+	if m.histCache == nil || m.histCache.text != text || m.histCache.width != w || m.histCache.height != h {
+		m.history.SetContent(text)
+		m.history.SetYOffset(m.history.YOffset)
+		if m.histCache != nil {
+			m.histCache.text, m.histCache.width, m.histCache.height = text, w, h
+		}
+	}
 	if m.follow {
 		m.history.GotoBottom()
 	}

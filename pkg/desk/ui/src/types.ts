@@ -420,3 +420,44 @@ export interface SearchHit {
   snippet: string;
   at: number;
 }
+
+export interface BrowserTab {
+  index: number;
+  url: string;
+  title: string;
+  active: boolean;
+}
+
+export interface BrowserViewport {
+  width: number;
+  height: number;
+}
+
+export interface BrowserInputPayload {
+  type: "wheel" | "mouse_move" | "mouse_down" | "mouse_up" | "click" | "insert_text" | "press" | "key_down" | "key_up";
+  x?: number;
+  y?: number;
+  deltaX?: number;
+  deltaY?: number;
+  button?: "left" | "middle" | "right";
+  clickCount?: number;
+  key?: string;
+  text?: string;
+  modifiers?: number;
+}
+
+export interface BrowserState {
+  available: boolean;
+  open: boolean;
+  live?: boolean;
+  agentActive?: boolean;
+  takeover?: boolean;
+  takeoverReason?: string;
+  url?: string;
+  title?: string;
+  updated?: number;
+  hasScreenshot: boolean;
+  output?: string;
+  tabs?: BrowserTab[];
+  viewport?: BrowserViewport;
+}

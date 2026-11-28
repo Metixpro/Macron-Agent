@@ -189,6 +189,14 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 	return sb, "", nil
 }
 
+func isSubpath(parent, child string) bool {
+	if parent == "" || child == "" {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(child))
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func (sb *sandbox) wrap(top, dir string, argv []string) []string {
 	if sb.backend != SandboxBwrap || sb.bwrap == "" {
 		return argv
@@ -203,26 +211,6 @@ func (sb *sandbox) wrap(top, dir string, argv []string) []string {
 	}
 	if isDir("/var/tmp") {
 		a = append(a, "--tmpfs", "/var/tmp")
-	}
-
-	for _, p := range sb.hide {
-		switch fi, err := os.Stat(p); {
-		case err != nil:
-		case fi.IsDir():
-			a = append(a, "--tmpfs", p)
-		default:
-			a = append(a, "--ro-bind", "/dev/null", p)
-		}
-	}
-
-	if sb.macronHome != "" && isDir(sb.macronHome) {
-		a = append(a, "--tmpfs", sb.macronHome)
-		for _, sub := range []string{"venv", "skills", "plugins", "browsers", "browser-agent"} {
-			p := filepath.Join(sb.macronHome, sub)
-			if isDir(p) {
-				a = append(a, "--ro-bind", p, p)
-			}
-		}
 	}
 
 	for _, p := range sb.ro {
@@ -244,11 +232,46 @@ func (sb *sandbox) wrap(top, dir string, argv []string) []string {
 		}
 	}
 
-	if sb.base != "" && top != sb.base && isDir(sb.base) {
+	cleanTop := filepath.Clean(top)
+	topInMacron := sb.macronHome != "" && (cleanTop == filepath.Clean(sb.macronHome) || isSubpath(sb.macronHome, top))
+	topInBase := sb.base != "" && (cleanTop == filepath.Clean(sb.base) || isSubpath(sb.base, top))
+	if !topInMacron && !topInBase {
+		a = append(a, "--bind", top, top)
+	}
+
+	if sb.macronHome != "" && isDir(sb.macronHome) {
+		a = append(a, "--tmpfs", sb.macronHome)
+		for _, sub := range []string{"venv", "skills", "plugins", "browsers", "browser-agent"} {
+			p := filepath.Join(sb.macronHome, sub)
+			if isDir(p) {
+				a = append(a, "--ro-bind", p, p)
+			}
+		}
+	}
+
+	if sb.base != "" && cleanTop != filepath.Clean(sb.base) && isDir(sb.base) {
 		a = append(a, "--tmpfs", sb.base)
 	}
 
-	a = append(a, "--bind", top, top, "--chdir", dir, "--unshare-pid", "--die-with-parent", "--new-session")
+	if topInMacron || topInBase {
+		a = append(a, "--bind", top, top)
+	}
+
+	for _, p := range sb.hide {
+		cleanP := filepath.Clean(p)
+		if cleanP == cleanTop || isSubpath(cleanP, top) {
+			continue
+		}
+		switch fi, err := os.Stat(p); {
+		case err != nil:
+		case fi.IsDir():
+			a = append(a, "--tmpfs", p)
+		default:
+			a = append(a, "--ro-bind", "/dev/null", p)
+		}
+	}
+
+	a = append(a, "--chdir", dir, "--unshare-pid", "--die-with-parent", "--new-session")
 	if sb.noNet {
 		a = append(a, "--unshare-net")
 	}

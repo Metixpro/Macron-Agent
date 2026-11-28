@@ -1,16 +1,38 @@
 import { useSyncExternalStore } from "react";
 import { local } from "./format";
 import type { Lang } from "./i18n";
-import type { Ask, Block, ChangesResponse, Info, Live, Mode, ProviderDetail, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
+import type { Ask, Block, BrowserState, ChangesResponse, Info, Live, Mode, ProviderDetail, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
 
 export type Theme = "system" | "dark" | "light";
-export type RightTab = "plan" | "changes";
+export type Density = "compact" | "comfortable" | "spacious";
+export type MotionPref = "full" | "reduced";
+export type RightTab = "plan" | "changes" | "activity" | "browser";
+
+export type SettingsSectionId =
+  | "general"
+  | "appearance"
+  | "language"
+  | "providers"
+  | "routing"
+  | "moa"
+  | "parameters"
+  | "soul"
+  | "memory"
+  | "mcp"
+  | "skills"
+  | "connections"
+  | "servers"
+  | "execution"
+  | "approvals"
+  | "diagnostics"
+  | "updates"
+  | "about";
 
 export type Dialog =
   | { kind: "ask"; ask: Ask }
   | { kind: "palette"; mode: "root" | "models" }
   | { kind: "folder" }
-  | { kind: "settings" }
+  | { kind: "settings"; section?: SettingsSectionId }
   | { kind: "status" }
   | { kind: "search" }
   | { kind: "server-add" }
@@ -38,18 +60,29 @@ export interface State {
   live: Live;
   lastTook: number;
   dialog: Dialog;
+  settingsBg: SettingsSectionId | null;
   errorAlert: string | null;
   theme: Theme;
+  density: Density;
+  motion: MotionPref;
   lang: Lang;
   sideOpen: boolean;
+  sideCollapsed: boolean;
+  sideWidth: number;
   planOpen: boolean;
   changesOpen: boolean;
+  companionOpen: boolean;
   rightTab: RightTab;
   changes: ChangesResponse | null;
+  browserView: BrowserState | null;
   activeThread: string;
   threads: ThreadSummary[];
   update: UpdateStatus | null;
   unseen: boolean;
+  composerTyping: boolean;
+  composerCaretRatio: number;
+  lastTurnResult: { ok: boolean; at: number } | null;
+  audioLevel: number;
 }
 
 const emptyInfo: Info = {
@@ -68,6 +101,8 @@ const emptyInfo: Info = {
   services: 0,
 };
 
+const clampSideWidth = (w: number) => Math.max(216, Math.min(360, Number.isFinite(w) ? Math.round(w) : 256));
+
 let state: State = {
   online: null,
   machine: "",
@@ -85,18 +120,29 @@ let state: State = {
   live: { running: false },
   lastTook: 0,
   dialog: null,
+  settingsBg: null,
   errorAlert: null,
   theme: local.get<Theme>("theme", "system"),
+  density: local.get<Density>("density", "comfortable"),
+  motion: local.get<MotionPref>("motion", "full"),
   lang: local.get<Lang>("lang", "en"),
   sideOpen: false,
+  sideCollapsed: local.get<boolean>("sideCollapsed", false),
+  sideWidth: clampSideWidth(local.get<number>("sideWidth", 256)),
   planOpen: local.get("planOpen", true),
   changesOpen: local.get("changesOpen", false),
+  companionOpen: local.get("companionOpen", false),
   rightTab: "plan",
   changes: null,
+  browserView: null,
   activeThread: "default",
   threads: [],
   update: null,
   unseen: false,
+  composerTyping: false,
+  composerCaretRatio: 0.5,
+  lastTurnResult: null,
+  audioLevel: 0,
 };
 
 const listeners = new Set<() => void>();

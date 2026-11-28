@@ -39,6 +39,15 @@ func (r *Registry) applyPatch(ctx context.Context, sessionID string, args map[st
 	if len(files) == 0 {
 		return "error: no file headers (--- a/file, +++ b/file) in the patch", nil
 	}
+	for _, f := range files {
+		rel, err := r.ensureWorkspaceRel(sessionID, path.Join(dir, f))
+		if err != nil {
+			return "error: " + err.Error(), nil
+		}
+		if refused := r.gatePath(ctx, sessionID, ToolApplyPatch, rel); refused != "" {
+			return refused, nil
+		}
+	}
 	id := make([]byte, 6)
 	_, _ = rand.Read(id)
 	name := scratchDir + "/patch-" + hex.EncodeToString(id) + ".diff"
@@ -110,10 +119,9 @@ func patchFiles(patch string) (strip string, files []string) {
 }
 
 func checkPatchDir(dir string) error {
-	for _, part := range strings.Split(dir, "/") {
-		if part == ".." {
-			return fmt.Errorf("the folder must be inside the workspace")
-		}
+	clean, err := cleanPath(dir)
+	if err != nil || clean == "" {
+		return fmt.Errorf("the folder must be inside the workspace")
 	}
 	return nil
 }

@@ -947,6 +947,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 	noTools := &textTools{}
 	warned := false
 	overflowed := false
+	modelRedirects := 0
 	toolsCapped := false
 	failures, nudges, nudgedAt := 0, 0, 0
 	denied, emptied := false, false
@@ -1098,7 +1099,24 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		}
 		shown = ""
 		resp, err := a.completeRobust(modelCtx, messages, lay.input, offered, stream, noTools, work.len() > 0)
+		if err != nil && llm.IsContextOverflow(err) && modelCtx.Err() == nil && !overflowed {
+			overflowed = true
+			meter.overflowed(meter.used(messages))
+			before := estimateTokens(messages)
+			shortenedLayout := lay
+			out := a.compactNow(modelCtx, messages, &shortenedLayout, meter, work, res, req, l)
+			if estimateTokens(out) >= before {
+				out = shrinkHard(out, &shortenedLayout)
+			}
+			if estimateTokens(out) < before {
+				messages, lay = out, shortenedLayout
+				if modelCtx.Err() == nil {
+					resp, err = a.completeRobust(modelCtx, messages, lay.input, offered, stream, noTools, work.len() > 0)
+				}
+			}
+		}
 		if modelDone() && ctx.Err() == nil {
+			modelRedirects++
 			cut := strings.TrimSpace(shown)
 			if l.OnText != nil {
 				l.OnText("")
@@ -1110,6 +1128,9 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 					messages = append(messages, late...)
 				}
 			}
+			if modelRedirects > maxSteps {
+				return stop(stopSteps)
+			}
 			step--
 			continue
 		}
@@ -1120,20 +1141,6 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 			log.Printf("agent: the provider takes at most %d tools a call (%d were sent); the rest wait", n, len(offered))
 			step--
 			continue
-		}
-		if err != nil && llm.IsContextOverflow(err) && ctx.Err() == nil && !overflowed {
-
-			overflowed = true
-			meter.overflowed(meter.used(messages))
-			before := estimateTokens(messages)
-			out := a.compactNow(ctx, messages, &lay, meter, work, res, req, l)
-			if estimateTokens(out) >= before {
-				out = shrinkHard(out, &lay)
-			}
-			if estimateTokens(out) < before {
-				messages = out
-				resp, err = a.completeRobust(ctx, messages, lay.input, offered, onText, noTools, work.len() > 0)
-			}
 		}
 		if err == nil && errors.Is(ctx.Err(), context.Canceled) {
 
@@ -1491,7 +1498,7 @@ func (a *Agent) do(ctx context.Context, req Request) (out *Result, err error) {
 		} else {
 			stalled = 0
 		}
-		if req.Extensions != 0 && stalled >= 2 {
+		if (req.Extensions != 0 && stalled >= 2) || stalled >= 3 {
 
 			log.Printf("agent: session %s keeps repeating the same call; stopping", req.SessionID)
 			return a.finishEarly(ctx, res, work, messages, known, leak, req, stopRepeat), nil
@@ -1822,7 +1829,7 @@ func (a *Agent) wrapUp(ctx context.Context, messages []llm.Message, req Request,
 	compactToolOutputs(light, contextBudgetRunes/8)
 	dropOldImages(light, -1)
 	light = append(light, llm.Message{Role: "user", Content: note})
-	resp, err := a.LLM.Complete(wctx, llm.Request{Messages: light, FailFast: true})
+	resp, err := a.client(wctx).Complete(wctx, llm.Request{Messages: light, FailFast: true})
 	if err != nil || strings.TrimSpace(resp.Message.Content) == "" {
 		return stoppedText(req.Lang, steps, why, req.AutoContinue)
 	}

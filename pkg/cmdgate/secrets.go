@@ -24,16 +24,17 @@ var (
 )
 
 func private(text string) bool {
-	for _, m := range secretFileRe.FindAllStringSubmatchIndex(text, -1) {
-		match := text[m[0]:m[1]]
+	norm := strings.ReplaceAll(text, `\`, "/")
+	for _, m := range secretFileRe.FindAllStringSubmatchIndex(norm, -1) {
+		match := norm[m[0]:m[1]]
 		if strings.HasSuffix(match, ".pub") {
 			continue
 		}
-		if m[2] >= 0 && sshPublic[text[m[2]:m[3]]] {
+		if m[2] >= 0 && sshPublic[norm[m[2]:m[3]]] {
 			continue
 		}
-		start := strings.LastIndexAny(text[:m[0]], " \t\"'=,[(") + 1
-		before := strings.ToLower(strings.TrimRight(text[:start], " \t\"'=,[("))
+		start := strings.LastIndexAny(norm[:m[0]], " \t\"'=,[(") + 1
+		before := strings.ToLower(strings.TrimRight(norm[:start], " \t\"'=,[("))
 		if strings.HasSuffix(before, "-i") || strings.HasSuffix(before, "identityfile") {
 			continue
 		}
@@ -54,7 +55,8 @@ func leaks(name string, c Cmd, add func(Level, string, string, ...string)) {
 		if keyUsers[name] && (i > 0 && c.Words[i-1] == "-i" || strings.HasPrefix(w, "-i")) {
 			continue
 		}
-		if private(w) || secretDirRe.MatchString(w) {
+		nw := strings.ReplaceAll(w, `\`, "/")
+		if private(w) || secretDirRe.MatchString(nw) {
 			add(Dangerous, "secret-file", reason, w)
 		}
 	}
