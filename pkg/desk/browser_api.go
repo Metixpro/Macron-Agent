@@ -858,4 +858,3 @@ func (s *Server) setProjectBrowserProfileAPI(w http.ResponseWriter, r *http.Requ
 	p.emit("browser", map[string]any{"browser": st})
 	writeJSON(w, map[string]any{"profile": prof, "browser": st})
 }
-

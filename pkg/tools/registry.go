@@ -64,8 +64,8 @@ type Registry struct {
 	dl         downloader
 	cookiePool CookiePool
 
-	userCookies func(sessionID string) []Cookie
-	rotations   rotationLimiter
+	userCookies     func(sessionID string) []Cookie
+	rotations       rotationLimiter
 	browser         *browserRuntime
 	browserPool     *browserPool
 	poolOnce        sync.Once
